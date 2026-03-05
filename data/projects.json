@@ -1,0 +1,53 @@
+[
+  {
+    "slug": "learning-hub",
+    "title": "Learning Hub Dashboard",
+    "description": "A student-facing dashboard that tracks course progress, displays learning milestones, and surfaces personalized recommendations — rebuilt from a Google Sheets prototype into a polished React application.",
+    "accentColor": "#00f0ff",
+    "techStack": ["React", "Next.js", "Faker.js", "Recharts"],
+    "metrics": {
+      "headline": "Reduced student lookup time by 60%",
+      "items": [
+        "Tracks 500+ mock student records",
+        "Real-time progress visualization",
+        "Filterable by course, grade, and status"
+      ]
+    },
+    "problem": "Student progress was scattered across multiple Google Sheets with no unified view. Teachers spent significant time manually cross-referencing data to identify struggling students.",
+    "solution": "Built a React dashboard that consolidates student data into an interactive, filterable interface with progress visualizations, trend charts, and at-a-glance status indicators."
+  },
+  {
+    "slug": "kanban",
+    "title": "Admin Kanban Dashboard",
+    "description": "A drag-and-drop workflow board for school administrators to manage tasks, track projects, and coordinate team activities — transformed from a spreadsheet-based system into an interactive React app.",
+    "accentColor": "#a855f7",
+    "techStack": ["React", "dnd-kit", "Faker.js", "Framer Motion"],
+    "metrics": {
+      "headline": "Streamlined admin workflows by 40%",
+      "items": [
+        "Drag-and-drop task management",
+        "4-column workflow (To Do → Done)",
+        "Task detail modals with rich metadata"
+      ]
+    },
+    "problem": "Administrative task tracking relied on shared spreadsheets with no visual workflow. Tasks fell through the cracks and priorities were unclear.",
+    "solution": "Created a Kanban board with drag-and-drop columns, task cards with metadata, and visual workflow stages. Mock data simulates a realistic school administration environment."
+  },
+  {
+    "slug": "grading-app",
+    "title": "Assessment Grading App",
+    "description": "A rubric-based grading tool with score calculation, grade distribution charts, and performance analytics — evolved from manual grading sheets into an interactive assessment platform.",
+    "accentColor": "#10b981",
+    "techStack": ["React", "Chart.js", "Faker.js", "TypeScript"],
+    "metrics": {
+      "headline": "Reduced grading time by 40%",
+      "items": [
+        "Rubric-based scoring with auto-calculation",
+        "Grade distribution visualizations",
+        "Class and individual performance analytics"
+      ]
+    },
+    "problem": "Grading was done on paper rubrics, then manually entered into spreadsheets. No visibility into grade distributions or student performance trends.",
+    "solution": "Built a grading interface with interactive rubrics, automatic score calculation, and rich chart visualizations for grade distributions and performance trends over time."
+  }
+]

@@ -1,26 +1,160 @@
 @import "tailwindcss";
 
+/* ============================================
+   DESIGN TOKENS — Matthew's EdTech Portfolio
+   ============================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Core palette */
+  --cyan-primary: #00f0ff;
+  --cyan-dim: #00f0ff60;
+  --cyan-glow: #00f0ff15;
+  --purple-secondary: #a855f7;
+  --purple-dim: #a855f760;
+  --purple-glow: #a855f715;
+  --orange-learning: #f97316;
+  --orange-dim: #f9731660;
+  --orange-glow: #f9731615;
+  --green-infra: #10b981;
+  --green-dim: #10b98160;
+  --green-glow: #10b98115;
+
+  /* Dark backgrounds */
+  --dark-void: #06060e;
+  --dark-bg: #0a0a14;
+  --dark-surface: #12122a;
+  --dark-elevated: #1a1a3a;
+  --dark-border: #1e1e40;
+
+  /* Text */
+  --text-primary: #e8e8f0;
+  --text-secondary: #9494b8;
+  --text-muted: #5a5a7a;
+
+  /* Mode-aware accent (default: Portfolio/purple) */
+  --color-accent: var(--purple-secondary);
+  --color-accent-dim: var(--purple-dim);
+  --color-accent-glow: var(--purple-glow);
+  --color-accent-rgb: 168, 85, 247;
+
+  /* Layout */
+  --sidebar-width: 260px;
+
+  /* Transitions */
+  --transition-accent: color 0.4s ease, background-color 0.4s ease, border-color 0.4s ease,
+    box-shadow 0.4s ease;
 }
+
+/* Learning mode overrides */
+[data-mode="learning"] {
+  --color-accent: var(--orange-learning);
+  --color-accent-dim: var(--orange-dim);
+  --color-accent-glow: var(--orange-glow);
+  --color-accent-rgb: 249, 115, 22;
+}
+
+/* ============================================
+   TAILWIND v4 THEME EXTENSION
+   ============================================ */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-cyan-primary: var(--cyan-primary);
+  --color-cyan-dim: var(--cyan-dim);
+  --color-cyan-glow: var(--cyan-glow);
+  --color-purple-secondary: var(--purple-secondary);
+  --color-purple-dim: var(--purple-dim);
+  --color-purple-glow: var(--purple-glow);
+  --color-orange-learning: var(--orange-learning);
+  --color-orange-dim: var(--orange-dim);
+  --color-orange-glow: var(--orange-glow);
+  --color-green-infra: var(--green-infra);
+  --color-green-dim: var(--green-dim);
+  --color-green-glow: var(--green-glow);
+
+  --color-dark-void: var(--dark-void);
+  --color-dark-bg: var(--dark-bg);
+  --color-dark-surface: var(--dark-surface);
+  --color-dark-elevated: var(--dark-elevated);
+  --color-dark-border: var(--dark-border);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-accent: var(--color-accent);
+  --color-accent-dim: var(--color-accent-dim);
+  --color-accent-glow: var(--color-accent-glow);
+
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ============================================
+   BASE STYLES
+   ============================================ */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--dark-bg);
+  color: var(--text-primary);
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dark-void);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--dark-elevated);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-dim);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-accent-glow);
+  color: var(--color-accent);
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--cyan-primary), var(--purple-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-accent {
+  background: linear-gradient(135deg, var(--color-accent), var(--cyan-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Subtle noise texture overlay */
+.noise-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Glow effect behind accent elements */
+.accent-glow {
+  box-shadow: 0 0 20px rgba(var(--color-accent-rgb), 0.15),
+    0 0 60px rgba(var(--color-accent-rgb), 0.05);
 }
