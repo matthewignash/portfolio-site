@@ -1,0 +1,172 @@
+<style>
+/* ================================================
+   COMPETENCY & ATL DASHBOARD (cat- prefix)
+   Teacher analytics for AISC competencies + ATL
+   ================================================ */
+
+/* Container */
+.cat-container { padding: 4px 0; }
+
+/* Section titles */
+.cat-section-title {
+  font-size: 15px; font-weight: 700; color: #1e293b;
+  margin: 20px 0 10px; padding-bottom: 6px;
+  border-bottom: 2px solid #e2e8f0;
+}
+.cat-section-title:first-child { margin-top: 4px; }
+
+/* Empty & loading states */
+.cat-empty {
+  text-align: center; padding: 40px 20px; color: #64748b;
+}
+.cat-empty-icon { font-size: 36px; margin-bottom: 8px; }
+.cat-empty-title { font-size: 16px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+.cat-empty-text { font-size: 13px; max-width: 400px; margin: 0 auto; }
+.cat-loading {
+  text-align: center; padding: 40px 20px; font-size: 14px; color: #64748b;
+}
+
+/* Info note (select a map prompt) */
+.cat-info-note {
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+  padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #1e40af;
+}
+.cat-info-note-icon { margin-right: 6px; }
+
+/* Summary cards */
+.cat-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px; margin-bottom: 16px;
+}
+.cat-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 14px; text-align: center;
+}
+.cat-card-value {
+  font-size: 24px; font-weight: 800; color: #0f172a; line-height: 1.2;
+}
+.cat-card-label {
+  font-size: 12px; color: #64748b; margin-top: 2px;
+}
+.cat-card-sub {
+  font-size: 12px; color: #94a3b8; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cat-card-value.green { color: #16a34a; }
+.cat-card-value.amber { color: #d97706; }
+.cat-card-value.red { color: #dc2626; }
+
+/* Competency bars */
+.cat-comp-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.cat-comp-row:last-child { border-bottom: none; }
+
+.cat-comp-label {
+  font-size: 13px; font-weight: 600; color: #334155;
+  width: 160px; min-width: 120px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cat-comp-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.cat-comp-bar-container {
+  flex: 1; height: 14px; background: #f1f5f9; border-radius: 7px;
+  overflow: hidden; position: relative;
+}
+.cat-comp-bar-fill {
+  height: 100%; border-radius: 7px; min-width: 4px;
+  transition: width 0.3s;
+}
+.cat-comp-score-marker {
+  position: absolute; top: 0; height: 100%; width: 3px;
+  border-radius: 2px; opacity: 0.8;
+}
+.cat-comp-value {
+  font-size: 12px; font-weight: 700; color: #334155;
+  width: 45px; text-align: right; white-space: nowrap; flex-shrink: 0;
+}
+.cat-comp-students {
+  font-size: 12px; color: #94a3b8; width: 60px; text-align: right;
+  white-space: nowrap; flex-shrink: 0;
+}
+
+/* Gap warning card */
+.cat-gap-warning {
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
+  padding: 10px 14px; margin-top: 10px; font-size: 13px; color: #92400e;
+}
+
+/* ATL category bars */
+.cat-atl-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.cat-atl-row:last-child { border-bottom: none; }
+
+.cat-atl-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+.cat-atl-label {
+  font-size: 13px; font-weight: 600; color: #334155;
+  width: 130px; min-width: 100px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cat-atl-bar-container {
+  flex: 1; height: 14px; background: #f1f5f9; border-radius: 7px;
+  overflow: hidden;
+}
+.cat-atl-bar-fill {
+  height: 100%; border-radius: 7px; min-width: 4px;
+  transition: width 0.3s;
+}
+.cat-atl-value {
+  font-size: 12px; font-weight: 700; color: #334155;
+  width: 50px; text-align: right; white-space: nowrap; flex-shrink: 0;
+}
+.cat-atl-respondents {
+  font-size: 12px; color: #94a3b8; white-space: nowrap; flex-shrink: 0;
+}
+
+/* Students needing support list */
+.cat-support-list { margin-top: 10px; }
+
+.cat-support-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border: 1px solid #fee2e2; border-radius: 6px;
+  margin-bottom: 6px; background: #fff;
+}
+.cat-support-name {
+  font-size: 13px; font-weight: 600; color: #334155; flex: 1;
+}
+.cat-support-category {
+  font-size: 12px; color: #64748b; margin: 0 10px;
+}
+.cat-support-badge {
+  font-size: 12px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; white-space: nowrap;
+  background: #fee2e2; color: #991b1b;
+}
+
+/* Support toggle */
+.cat-support-toggle {
+  font-size: 13px; font-weight: 600; color: #334155;
+  cursor: pointer; padding: 8px 0; display: flex; align-items: center; gap: 6px;
+}
+.cat-support-toggle:hover { color: #0f172a; }
+.cat-support-toggle:focus-visible { outline: 3px solid #14b8a6; outline-offset: 1px; border-radius: 4px; }
+.cat-support-chevron {
+  font-size: 12px; color: #94a3b8; transition: transform 0.15s;
+}
+.cat-support-toggle.expanded .cat-support-chevron { transform: rotate(90deg); }
+
+/* Section separator */
+.cat-separator {
+  height: 1px; background: #e2e8f0; margin: 20px 0;
+}
+
+/* All-well message */
+.cat-all-well {
+  background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;
+  padding: 10px 14px; font-size: 13px; color: #166534;
+}
+</style>

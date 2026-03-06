@@ -1,0 +1,511 @@
+<style>
+/* ================================================
+   SELF-ASSESSMENT STYLES (sa- prefix)
+   ================================================ */
+
+/* Section container */
+.sa-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.sa-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 12px;
+}
+
+/* Confidence rating bar */
+.sa-rating-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sa-rating-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.sa-rating-btn {
+  width: 100%;
+  padding: 8px 4px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.sa-rating-btn:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+/* Level-specific selected states */
+.sa-rating-btn.selected.sa-level-1 {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.sa-rating-btn.selected.sa-level-2 {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.sa-rating-btn.selected.sa-level-3 {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.sa-rating-btn.selected.sa-level-4 {
+  border-color: #10b981;
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.sa-rating-label {
+  font-size: 12px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Reflection note textarea */
+.sa-note-area {
+  width: 100%;
+  min-height: 60px;
+  max-height: 120px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  color: #334155;
+  box-sizing: border-box;
+}
+
+.sa-note-area:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.sa-note-area::placeholder {
+  color: #94a3b8;
+}
+
+/* Character counter */
+.sa-char-count {
+  text-align: right;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.sa-char-count.near-limit {
+  color: #f59e0b;
+}
+
+.sa-char-count.at-limit {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* Save button row */
+.sa-save-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sa-save-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3b82f6;
+  background: white;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sa-save-btn:hover {
+  background: #eff6ff;
+}
+
+.sa-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Save confirmation */
+.sa-save-status {
+  font-size: 12px;
+  color: #059669;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.sa-save-status.visible {
+  opacity: 1;
+}
+
+/* ================================================
+   TEACHER-FACING SELF-ASSESSMENT DISPLAY
+   ================================================ */
+
+/* Inline display in pending approvals + hex detail */
+.sa-teacher-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+/* Colored rating badge */
+.sa-teacher-rating-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.sa-teacher-rating-badge.sa-level-1 {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.sa-teacher-rating-badge.sa-level-2 {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.sa-teacher-rating-badge.sa-level-3 {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.sa-teacher-rating-badge.sa-level-4 {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+/* Quoted note text */
+.sa-teacher-note {
+  font-size: 12px;
+  color: #475569;
+  font-style: italic;
+  background: #f8fafc;
+  padding: 2px 8px;
+  border-radius: 4px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================================================
+   SELF-ASSESSMENT V2: GOAL, EVIDENCE, SUMMARY
+   ================================================ */
+
+/* Goal input */
+.sa-goal-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #334155;
+  box-sizing: border-box;
+}
+
+.sa-goal-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.sa-goal-input::placeholder {
+  color: #94a3b8;
+}
+
+.sa-goal-char-count {
+  text-align: right;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+/* Evidence section */
+.sa-evidence-section {
+  margin-top: 12px;
+}
+
+.sa-evidence-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.sa-evidence-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+
+.sa-evidence-row input {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #334155;
+  box-sizing: border-box;
+}
+
+.sa-evidence-row input::placeholder {
+  color: #94a3b8;
+}
+
+.sa-evidence-row input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.sa-evidence-row .sa-ev-label {
+  width: 30%;
+  min-width: 80px;
+}
+
+.sa-evidence-row .sa-ev-url {
+  flex: 1;
+  min-width: 120px;
+}
+
+.sa-evidence-remove {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sa-evidence-remove:hover {
+  background: #fef2f2;
+}
+
+.sa-evidence-add-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-top: 2px;
+}
+
+.sa-evidence-add-btn:hover {
+  text-decoration: underline;
+}
+
+/* Teacher-facing goal display */
+.sa-teacher-goal {
+  font-size: 12px;
+  color: #475569;
+  font-style: italic;
+  background: #f0fdf4;
+  padding: 4px 10px;
+  border-radius: 4px;
+  margin-top: 4px;
+  border-left: 3px solid #10b981;
+}
+
+/* Teacher-facing evidence link list */
+.sa-teacher-evidence-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.sa-teacher-evidence-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3b82f6;
+  background: #eff6ff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.sa-teacher-evidence-link:hover {
+  background: #dbeafe;
+  text-decoration: underline;
+}
+
+/* ================================================
+   TEACHER SELF-ASSESSMENT SUMMARY
+   ================================================ */
+
+.sa-summary-section {
+  margin-top: 16px;
+}
+
+.sa-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.sa-summary-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.sa-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #667eea;
+  line-height: 1.2;
+}
+
+.sa-summary-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 4px;
+}
+
+/* Distribution bar chart */
+.sa-distribution-bar {
+  margin-bottom: 16px;
+}
+
+.sa-distribution-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.sa-distribution-label {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.sa-distribution-track {
+  flex: 1;
+  height: 16px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sa-distribution-fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.sa-distribution-fill.sa-level-1 { background: linear-gradient(90deg, #ef4444, #f87171); }
+.sa-distribution-fill.sa-level-2 { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.sa-distribution-fill.sa-level-3 { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.sa-distribution-fill.sa-level-4 { background: linear-gradient(90deg, #10b981, #34d399); }
+
+.sa-distribution-count {
+  width: 28px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  text-align: right;
+}
+
+/* Confidence gap alert */
+.sa-gap-alert {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 12px;
+}
+
+.sa-gap-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 8px;
+}
+
+.sa-gap-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: #78350f;
+}
+
+.sa-gap-item .sa-gap-student {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sa-gap-item .sa-gap-hex {
+  flex: 1;
+  color: #92400e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* C2: Emoji labels for low WIDA bracket */
+.sa-emoji-labels .sa-rating-btn {
+  font-size: 14px;
+  padding: 10px 12px;
+}
+</style>

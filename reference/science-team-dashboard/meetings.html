@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Department Meetings</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>
+    body { margin: 0; padding: 0; background: #f5f6f8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .app-container { max-width: 960px; margin: 0 auto; padding: 12px 16px; }
+    .app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #dee2e6; }
+    .app-header h1 { font-size: 1.25rem; font-weight: 600; margin: 0; color: #1a1a2e; }
+    .header-actions { display: flex; gap: 6px; }
+    .error-banner { display: none; margin-bottom: 12px; }
+    .success-banner { display: none; margin-bottom: 12px; }
+    .loading-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: #6c757d; }
+    .loading-container .spinner-border { width: 2.5rem; height: 2.5rem; margin-bottom: 12px; }
+
+    /* Filter bar */
+    .filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .filter-bar .form-control-sm, .filter-bar .form-select-sm { font-size: 0.8rem; }
+    .search-input { flex: 1; min-width: 160px; max-width: 300px; }
+
+    /* Meeting row */
+    .meeting-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 6px; background: #fff; cursor: pointer; transition: all 0.15s ease; }
+    .meeting-row:hover { border-color: #c5cdd8; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    .meeting-date { font-size: 0.78rem; color: #6c757d; white-space: nowrap; min-width: 56px; text-align: center; }
+    .meeting-date .date-day { font-size: 1.1rem; font-weight: 700; color: #333; line-height: 1.2; }
+    .meeting-date .date-month { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .meeting-info { flex: 1; min-width: 0; }
+    .meeting-title { font-size: 0.9rem; font-weight: 500; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meeting-meta { font-size: 0.73rem; color: #6c757d; margin-top: 2px; display: flex; gap: 10px; align-items: center; }
+    .meeting-counts { display: flex; gap: 10px; align-items: center; font-size: 0.73rem; color: #6c757d; white-space: nowrap; }
+    .meeting-counts i { margin-right: 2px; }
+
+    /* Status badges */
+    .status-badge { font-size: 0.68rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+    .status-draft { background: #e9ecef; color: #495057; }
+    .status-scheduled { background: #cfe2ff; color: #084298; }
+    .status-inprogress { background: #fff3cd; color: #664d03; }
+    .status-finalized { background: #d1e7dd; color: #0f5132; }
+
+    /* Detail view */
+    .detail-header { margin-bottom: 16px; }
+    .detail-back { font-size: 0.83rem; color: #6c757d; text-decoration: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+    .detail-back:hover { color: #333; }
+    .detail-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .detail-title { font-size: 1.15rem; font-weight: 600; color: #1a1a2e; margin: 0; }
+    .detail-meta { font-size: 0.8rem; color: #6c757d; margin-top: 4px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .detail-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* Tabs */
+    .detail-tabs { margin-bottom: 16px; }
+    .detail-tabs .nav-link { font-size: 0.83rem; padding: 6px 14px; color: #6c757d; }
+    .detail-tabs .nav-link.active { font-weight: 600; color: #0d6efd; }
+    .tab-badge { font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; background: #e9ecef; color: #495057; margin-left: 4px; vertical-align: middle; }
+
+    /* Agenda items */
+    .agenda-item { border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; background: #fff; }
+    .agenda-item-header { display: flex; align-items: flex-start; gap: 8px; }
+    .agenda-number { font-size: 0.78rem; font-weight: 700; color: #0d6efd; min-width: 22px; height: 22px; border-radius: 50%; background: #e7f1ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .agenda-item-info { flex: 1; min-width: 0; }
+    .agenda-item-title { font-size: 0.87rem; font-weight: 500; color: #333; }
+    .agenda-item-meta { font-size: 0.73rem; color: #6c757d; margin-top: 2px; }
+    .agenda-notes { margin-top: 8px; padding-top: 8px; border-top: 1px solid #f0f0f0; font-size: 0.83rem; color: #555; white-space: pre-wrap; }
+    .agenda-notes-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; margin-bottom: 4px; }
+    .agenda-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .agenda-actions .btn { font-size: 0.73rem; padding: 2px 6px; }
+
+    /* Attendee row */
+    .attendee-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #f0f0f0; }
+    .attendee-row:last-child { border-bottom: none; }
+    .attendee-avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.7rem; font-weight: 600; flex-shrink: 0; }
+    .attendee-info { flex: 1; min-width: 0; }
+    .attendee-name { font-size: 0.85rem; font-weight: 500; color: #333; }
+    .role-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 8px; font-weight: 600; margin-left: 6px; }
+    .role-organizer { background: #cfe2ff; color: #084298; }
+    .role-notetaker { background: #e2e3f1; color: #432874; }
+    .role-attendee { background: #e9ecef; color: #495057; }
+    .attendance-check { width: 16px; height: 16px; accent-color: #198754; cursor: pointer; }
+
+    /* Decision row */
+    .decision-row { border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; background: #fff; border-left: 3px solid #198754; }
+    .decision-text { font-size: 0.87rem; font-weight: 500; color: #333; }
+    .decision-context { font-size: 0.78rem; color: #6c757d; margin-top: 4px; }
+    .decision-meta { font-size: 0.7rem; color: #adb5bd; margin-top: 4px; }
+
+    /* Action item row */
+    .action-item-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #f0f0f0; font-size: 0.83rem; }
+    .action-item-row:last-child { border-bottom: none; }
+    .action-item-row.overdue { background: #fff8f6; }
+    .action-desc { flex: 1; min-width: 0; color: #333; }
+    .action-assignee { font-size: 0.78rem; color: #6c757d; white-space: nowrap; }
+    .action-due { font-size: 0.78rem; white-space: nowrap; }
+    .action-due.overdue { color: #dc3545; font-weight: 600; }
+    .action-status-select { font-size: 0.73rem; padding: 1px 4px; width: auto; }
+    .kanban-btn { font-size: 0.68rem; padding: 1px 6px; white-space: nowrap; }
+    .kanban-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 8px; background: #d1e7dd; color: #0f5132; white-space: nowrap; }
+
+    /* Action items dashboard */
+    .action-group-header { font-size: 0.8rem; font-weight: 600; padding: 8px 14px; margin-top: 8px; color: #495057; background: #f8f9fa; border-radius: 6px; }
+    .action-group-header.overdue-group { color: #dc3545; background: #fff8f6; }
+    .dashboard-action-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #f0f0f0; font-size: 0.83rem; }
+    .dashboard-action-row:last-child { border-bottom: none; }
+    .dashboard-action-row.overdue { background: #fff8f6; }
+    .action-meeting-link { font-size: 0.73rem; color: #0d6efd; cursor: pointer; white-space: nowrap; text-decoration: none; }
+    .action-meeting-link:hover { text-decoration: underline; }
+
+    /* Inline form */
+    .inline-form { border: 1px solid #dee2e6; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; background: #fafbfc; }
+    .inline-form .form-label { font-size: 0.73rem; margin-bottom: 2px; }
+    .inline-form .form-control-sm, .inline-form .form-select-sm { font-size: 0.8rem; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 30px 20px; color: #adb5bd; font-size: 0.85rem; }
+    .empty-state i { font-size: 1.8rem; margin-bottom: 8px; display: block; }
+
+    /* Section card */
+    .section-card { background: #fff; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+    .section-card-body { padding: 12px 0; }
+
+    /* Priority dot */
+    .priority-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .priority-dot.low { background: #adb5bd; }
+    .priority-dot.normal { background: #0d6efd; }
+    .priority-dot.high { background: #fd7e14; }
+    .priority-dot.urgent { background: #dc3545; }
+
+    /* Finalized overlay */
+    .finalized-banner { background: #d1e7dd; border: 1px solid #badbcc; border-radius: 8px; padding: 8px 14px; margin-bottom: 12px; font-size: 0.8rem; color: #0f5132; display: flex; align-items: center; gap: 6px; }
+
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <div id="error-banner" class="alert alert-danger error-banner alert-dismissible" role="alert">
+      <span id="error-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideError()"></button>
+    </div>
+    <div id="success-banner" class="alert alert-success success-banner alert-dismissible" role="alert">
+      <span id="success-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideSuccess()"></button>
+    </div>
+  </div>
+
+  <div id="loading-spinner" class="loading-container">
+    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+    <div>Loading meetings...</div>
+  </div>
+
+  <div id="app-content" class="app-container" style="display: none;"></div>
+
+  <!-- New Meeting Modal -->
+  <div class="modal fade" id="newMeetingModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title">New Meeting</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Template</label>
+            <select id="nm-template" class="form-select form-select-sm" onchange="handleTemplateChange()"></select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Title</label>
+            <input type="text" id="nm-title" class="form-control form-control-sm">
+          </div>
+          <div class="row mb-2">
+            <div class="col">
+              <label class="form-label small mb-1">Date</label>
+              <input type="date" id="nm-date" class="form-control form-control-sm">
+            </div>
+            <div class="col">
+              <label class="form-label small mb-1">Start Time</label>
+              <input type="time" id="nm-start" class="form-control form-control-sm" value="14:00">
+            </div>
+            <div class="col">
+              <label class="form-label small mb-1">End Time</label>
+              <input type="time" id="nm-end" class="form-control form-control-sm" value="15:00">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Location</label>
+            <input type="text" id="nm-location" class="form-control form-control-sm" placeholder="e.g. Room 204 or Virtual" value="Room 204">
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="nm-create-btn" class="btn btn-sm btn-primary" onclick="handleCreateMeeting()">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Meeting Confirmation Modal -->
+  <div class="modal fade" id="deleteMeetingModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title">Delete Meeting</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <p class="mb-0 small">Are you sure you want to delete this meeting and all its data? This cannot be undone.</p>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="confirm-delete-meeting-btn" class="btn btn-sm btn-danger" onclick="confirmDeleteMeeting()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Finalize Confirmation Modal -->
+  <div class="modal fade" id="finalizeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title">Finalize Meeting</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <p class="mb-0 small">Finalizing will lock all meeting data. This cannot be undone. Continue?</p>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="confirm-finalize-btn" class="btn btn-sm btn-success" onclick="confirmFinalizeMeeting()">Finalize</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+  /* ============================================================
+     SECTION 2: APPLICATION STATE
+     ============================================================ */
+
+  var AppState = {
+    currentUser: null,
+    meetings: [],
+    templates: [],
+    isLoading: true,
+    currentView: 'list',
+    activeMeetingId: null,
+    meetingDetail: null,
+    activeTab: 'agenda',
+    searchQuery: '',
+    statusFilter: '',
+    dateFrom: '',
+    dateTo: '',
+    actionFilterAssignee: '',
+    actionFilterStatus: '',
+    allActionItems: [],
+    editingAgendaId: null,
+    pendingDeleteMeetingId: null,
+    submitting: false,
+    staffList: []
+  };
+
+  /* ============================================================
+     SECTION 3: HELPER FUNCTIONS
+     ============================================================ */
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function getInitials(name) {
+    if (!name) return '?';
+    var parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  function getAvatarColor(email) {
+    var hash = 0;
+    for (var i = 0; i < email.length; i++) { hash = email.charCodeAt(i) + ((hash << 5) - hash); hash = hash & hash; }
+    return 'hsl(' + (Math.abs(hash) % 360) + ', 55%, 45%)';
+  }
+
+  function formatRelativeTime(timestamp) {
+    if (!timestamp) return { relative: '', full: '' };
+    var now = new Date(); var date = new Date(timestamp);
+    var diffSeconds = Math.floor((now - date) / 1000);
+    var relative;
+    if (diffSeconds < 60) relative = 'just now';
+    else if (diffSeconds < 3600) { var m = Math.floor(diffSeconds / 60); relative = m === 1 ? '1 minute ago' : m + ' minutes ago'; }
+    else if (diffSeconds < 86400) { var h = Math.floor(diffSeconds / 3600); relative = h === 1 ? '1 hour ago' : h + ' hours ago'; }
+    else if (diffSeconds < 604800) { var d = Math.floor(diffSeconds / 86400); relative = d === 1 ? '1 day ago' : d + ' days ago'; }
+    else relative = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    var full = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return { relative: relative, full: full };
+  }
+
+  function isActionOverdue(item) {
+    if (item.status === 'Completed' || item.status === 'Cancelled') return false;
+    if (!item.dueDate) return false;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    return new Date(item.dueDate + 'T00:00:00') < today;
+  }
+
+  function formatDueDate(dateStr) {
+    if (!dateStr) return { display: '', isOverdue: false };
+    var due = new Date(dateStr + 'T00:00:00');
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+    var display;
+    if (diffDays === 0) display = 'Today';
+    else if (diffDays === 1) display = 'Tomorrow';
+    else if (diffDays === -1) display = 'Yesterday';
+    else if (diffDays > 1 && diffDays <= 7) display = 'In ' + diffDays + ' days';
+    else display = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { display: display, isOverdue: due < today };
+  }
+
+  function getAssigneeName(email) {
+    if (!email || email === 'ALL') return 'Everyone';
+    for (var i = 0; i < AppState.staffList.length; i++) {
+      if (AppState.staffList[i].Email === email) return AppState.staffList[i].DisplayName;
+    }
+    var parts = email.split('@');
+    if (parts.length > 0) {
+      var name = parts[0];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+    return email;
+  }
+
+  function getStatusBadgeClass(status) {
+    if (status === 'Draft') return 'status-badge status-draft';
+    if (status === 'Scheduled') return 'status-badge status-scheduled';
+    if (status === 'In Progress') return 'status-badge status-inprogress';
+    if (status === 'Finalized') return 'status-badge status-finalized';
+    return 'status-badge status-draft';
+  }
+
+  function formatTime(timeStr) {
+    if (!timeStr) return '';
+    var parts = timeStr.split(':');
+    var h = parseInt(parts[0], 10);
+    var m = parts[1];
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return h + ':' + m + ' ' + ampm;
+  }
+
+  function getMeetingCounts(meeting) {
+    return {
+      attendees: meeting.attendeeCount || 0,
+      actionItems: meeting.actionItemCount || 0
+    };
+  }
+
+  function canEditMeeting(meeting) {
+    if (!AppState.currentUser) return false;
+    if (meeting.status === 'Finalized') return false;
+    return AppState.currentUser.isAdmin || meeting.organizer === AppState.currentUser.email;
+  }
+
+  function isOrganizerOrAdmin(meeting) {
+    if (!AppState.currentUser) return false;
+    return AppState.currentUser.isAdmin || meeting.organizer === AppState.currentUser.email;
+  }
+
+  /* ============================================================
+     SECTION 4: RENDERING FUNCTIONS
+     ============================================================ */
+
+  function renderApp() {
+    var spinner = document.getElementById('loading-spinner');
+    var content = document.getElementById('app-content');
+    if (AppState.isLoading) { spinner.style.display = 'flex'; content.style.display = 'none'; return; }
+    spinner.style.display = 'none';
+    content.style.display = 'block';
+    if (AppState.currentView === 'list') renderListView();
+    else if (AppState.currentView === 'detail') renderDetailView();
+    else if (AppState.currentView === 'actions') renderActionsView();
+  }
+
+  /* --- LIST VIEW --- */
+
+  function renderListView() {
+    var content = document.getElementById('app-content');
+    var isAdmin = AppState.currentUser && AppState.currentUser.isAdmin;
+    var html = '';
+
+    // Header
+    html += '<div class="app-header">';
+    html += '<h1><i class="bi bi-journal-text"></i> Department Meetings</h1>';
+    html += '<div class="header-actions">';
+    html += '<button class="btn btn-outline-secondary btn-sm" onclick="handleNavigateToActions()"><i class="bi bi-list-check"></i> Action Items</button>';
+    if (isAdmin) html += '<button class="btn btn-primary btn-sm" onclick="handleNewMeeting()"><i class="bi bi-plus-lg"></i> New Meeting</button>';
+    html += '</div></div>';
+
+    // Filter bar
+    html += '<div class="filter-bar">';
+    html += '<input type="text" class="form-control form-control-sm search-input" placeholder="Search meetings..." value="' + escapeHtml(AppState.searchQuery) + '" oninput="handleSearchInput(this.value)">';
+    html += '<select class="form-select form-select-sm" style="width:auto;" onchange="handleStatusFilter(this.value)">';
+    html += '<option value=""' + (AppState.statusFilter === '' ? ' selected' : '') + '>All Status</option>';
+    var statuses = ['Draft', 'Scheduled', 'In Progress', 'Finalized'];
+    for (var s = 0; s < statuses.length; s++) {
+      html += '<option value="' + statuses[s] + '"' + (AppState.statusFilter === statuses[s] ? ' selected' : '') + '>' + statuses[s] + '</option>';
+    }
+    html += '</select>';
+    html += '<input type="date" class="form-control form-control-sm" style="width:auto;" value="' + AppState.dateFrom + '" onchange="handleDateFromFilter(this.value)" title="From date">';
+    html += '<input type="date" class="form-control form-control-sm" style="width:auto;" value="' + AppState.dateTo + '" onchange="handleDateToFilter(this.value)" title="To date">';
+    html += '</div>';
+
+    // Filter meetings
+    var meetings = getFilteredMeetings();
+    if (meetings.length === 0) {
+      html += '<div class="empty-state"><i class="bi bi-journal-text"></i><p>No meetings found</p></div>';
+    } else {
+      for (var i = 0; i < meetings.length; i++) {
+        html += renderMeetingRow(meetings[i]);
+      }
+      html += '<div style="font-size:0.73rem;color:#adb5bd;text-align:center;padding:8px;">Showing ' + meetings.length + ' meeting' + (meetings.length !== 1 ? 's' : '') + '</div>';
+    }
+
+    content.innerHTML = html;
+  }
+
+  function getFilteredMeetings() {
+    var result = [];
+    var query = AppState.searchQuery.toLowerCase();
+    for (var i = 0; i < AppState.meetings.length; i++) {
+      var m = AppState.meetings[i];
+      if (AppState.statusFilter && m.status !== AppState.statusFilter) continue;
+      if (AppState.dateFrom && m.date < AppState.dateFrom) continue;
+      if (AppState.dateTo && m.date > AppState.dateTo) continue;
+      if (query) {
+        var found = m.title.toLowerCase().indexOf(query) > -1;
+        if (!found && m.location) found = m.location.toLowerCase().indexOf(query) > -1;
+        if (!found) continue;
+      }
+      result.push(m);
+    }
+    return result;
+  }
+
+  function renderMeetingRow(meeting) {
+    var dateObj = new Date(meeting.date + 'T00:00:00');
+    var day = dateObj.getDate();
+    var month = dateObj.toLocaleDateString('en-US', { month: 'short' });
+    var counts = getMeetingCounts(meeting);
+    var html = '<div class="meeting-row" onclick="handleNavigateToDetail(\'' + meeting.meetingId + '\')">';
+    html += '<div class="meeting-date"><div class="date-day">' + day + '</div><div class="date-month">' + month + '</div></div>';
+    html += '<div class="meeting-info">';
+    html += '<div class="meeting-title">' + escapeHtml(meeting.title) + '</div>';
+    html += '<div class="meeting-meta">';
+    html += '<span>' + formatTime(meeting.startTime) + ' - ' + formatTime(meeting.endTime) + '</span>';
+    html += '<span>' + escapeHtml(meeting.location) + '</span>';
+    html += '</div></div>';
+    html += '<div class="meeting-counts">';
+    html += '<span><i class="bi bi-people"></i> ' + counts.attendees + '</span>';
+    html += '<span><i class="bi bi-list-check"></i> ' + counts.actionItems + '</span>';
+    html += '</div>';
+    html += '<span class="' + getStatusBadgeClass(meeting.status) + '">' + escapeHtml(meeting.status) + '</span>';
+    html += '</div>';
+    return html;
+  }
+
+  /* --- DETAIL VIEW --- */
+
+  function renderDetailView() {
+    var content = document.getElementById('app-content');
+    if (!AppState.meetingDetail) {
+      content.innerHTML = '<div class="loading-container"><div class="spinner-border text-primary" role="status"></div><div>Loading meeting...</div></div>';
+      return;
+    }
+    var detail = AppState.meetingDetail;
+    var meeting = detail.meeting;
+    var editable = canEditMeeting(meeting);
+    var isOrgAdmin = isOrganizerOrAdmin(meeting);
+    var html = '';
+
+    // Back button
+    html += '<a class="detail-back" onclick="handleNavigateToList()"><i class="bi bi-arrow-left"></i> Back to Meetings</a>';
+
+    // Finalized banner
+    if (meeting.status === 'Finalized') {
+      var fDate = formatRelativeTime(meeting.finalizedDate);
+      html += '<div class="finalized-banner"><i class="bi bi-lock-fill"></i> Finalized ' + escapeHtml(fDate.relative) + ' by ' + escapeHtml(getAssigneeName(meeting.finalizedBy)) + '</div>';
+    }
+
+    // Title row
+    html += '<div class="detail-header">';
+    html += '<div class="detail-title-row">';
+    html += '<div><h2 class="detail-title">' + escapeHtml(meeting.title) + '</h2>';
+    html += '<div class="detail-meta">';
+    html += '<span><i class="bi bi-calendar3"></i> ' + new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + '</span>';
+    html += '<span><i class="bi bi-clock"></i> ' + formatTime(meeting.startTime) + ' - ' + formatTime(meeting.endTime) + '</span>';
+    html += '<span><i class="bi bi-geo-alt"></i> ' + escapeHtml(meeting.location) + '</span>';
+    html += '<span><i class="bi bi-person"></i> ' + escapeHtml(getAssigneeName(meeting.organizer)) + '</span>';
+    html += '<span class="' + getStatusBadgeClass(meeting.status) + '">' + escapeHtml(meeting.status) + '</span>';
+    html += '</div></div>';
+
+    // Action buttons
+    html += '<div class="detail-actions">';
+    if (meeting.status === 'Scheduled' && isOrgAdmin) {
+      html += '<button class="btn btn-sm btn-warning" onclick="handleStartMeeting()"><i class="bi bi-play-fill"></i> Start</button>';
+    }
+    if ((meeting.status === 'In Progress' || meeting.status === 'Scheduled') && isOrgAdmin) {
+      html += '<button class="btn btn-sm btn-success" onclick="handleFinalizeMeeting()"><i class="bi bi-lock"></i> Finalize</button>';
+    }
+    if (isOrgAdmin && meeting.status !== 'Finalized') {
+      html += '<button class="btn btn-sm btn-outline-danger" onclick="handleDeleteMeeting(\'' + meeting.meetingId + '\')"><i class="bi bi-trash"></i></button>';
+    }
+    html += '</div>';
+    html += '</div></div>';
+
+    // Nav tabs
+    var tabs = [
+      { key: 'agenda', label: 'Agenda', icon: 'bi-list-ol', count: detail.agendaItems.length },
+      { key: 'attendees', label: 'Attendees', icon: 'bi-people', count: detail.attendees.length },
+      { key: 'decisions', label: 'Decisions', icon: 'bi-check2-circle', count: detail.decisions.length },
+      { key: 'actionItems', label: 'Action Items', icon: 'bi-list-check', count: detail.actionItems.length }
+    ];
+    html += '<ul class="nav nav-tabs detail-tabs">';
+    for (var t = 0; t < tabs.length; t++) {
+      var active = AppState.activeTab === tabs[t].key ? ' active' : '';
+      html += '<li class="nav-item"><a class="nav-link' + active + '" href="#" onclick="handleTabSwitch(\'' + tabs[t].key + '\'); return false;"><i class="bi ' + tabs[t].icon + '"></i> ' + tabs[t].label + '<span class="tab-badge">' + tabs[t].count + '</span></a></li>';
+    }
+    html += '</ul>';
+
+    // Tab content
+    if (AppState.activeTab === 'agenda') html += renderAgendaTab(detail, editable, meeting);
+    else if (AppState.activeTab === 'attendees') html += renderAttendeesTab(detail, editable, meeting);
+    else if (AppState.activeTab === 'decisions') html += renderDecisionsTab(detail, editable, meeting);
+    else if (AppState.activeTab === 'actionItems') html += renderActionItemsTab(detail, meeting);
+
+    content.innerHTML = html;
+  }
+
+  function renderAgendaTab(detail, editable, meeting) {
+    var items = detail.agendaItems;
+    var isInProgress = meeting.status === 'In Progress';
+    var html = '<div class="section-card"><div class="section-card-body">';
+    if (items.length === 0) {
+      html += '<div class="empty-state"><i class="bi bi-list-ol"></i><p>No agenda items</p></div>';
+    }
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      html += '<div class="agenda-item">';
+      html += '<div class="agenda-item-header">';
+      html += '<span class="agenda-number">' + item.sortOrder + '</span>';
+      html += '<div class="agenda-item-info">';
+      html += '<div class="agenda-item-title">' + escapeHtml(item.title) + '</div>';
+      html += '<div class="agenda-item-meta">';
+      if (item.presenter) html += '<span><i class="bi bi-person"></i> ' + escapeHtml(getAssigneeName(item.presenter)) + '</span>';
+      if (item.timeAllocation) html += '<span style="margin-left:8px;"><i class="bi bi-clock"></i> ' + item.timeAllocation + ' min</span>';
+      html += '</div></div>';
+      if (editable) {
+        html += '<div class="agenda-actions">';
+        html += '<button class="btn btn-outline-danger btn-sm" onclick="handleDeleteAgendaItem(\'' + item.agendaId + '\')" title="Delete"><i class="bi bi-trash"></i></button>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Notes
+      if (isInProgress) {
+        html += '<div class="agenda-notes"><div class="agenda-notes-label">Notes</div>';
+        html += '<textarea class="form-control form-control-sm" rows="3" onblur="handleSaveNotes(\'' + item.agendaId + '\', this.value)" placeholder="Add meeting notes...">' + escapeHtml(item.notes) + '</textarea>';
+        html += '</div>';
+      } else if (item.notes) {
+        html += '<div class="agenda-notes"><div class="agenda-notes-label">Notes</div>' + escapeHtml(item.notes) + '</div>';
+      }
+      html += '</div>';
+    }
+
+    // Add agenda item form
+    if (editable) {
+      html += '<div class="inline-form">';
+      html += '<div class="row g-2">';
+      html += '<div class="col-md-5"><input type="text" id="add-agenda-title" class="form-control form-control-sm" placeholder="Agenda item title"></div>';
+      html += '<div class="col-md-3"><select id="add-agenda-presenter" class="form-select form-select-sm">';
+      for (var j = 0; j < AppState.staffList.length; j++) {
+        html += '<option value="' + escapeHtml(AppState.staffList[j].Email) + '">' + escapeHtml(AppState.staffList[j].DisplayName) + '</option>';
+      }
+      html += '</select></div>';
+      html += '<div class="col-md-2"><input type="number" id="add-agenda-time" class="form-control form-control-sm" placeholder="Min" value="10" min="1"></div>';
+      html += '<div class="col-md-2"><button class="btn btn-sm btn-primary w-100" onclick="handleAddAgendaItem()"><i class="bi bi-plus"></i> Add</button></div>';
+      html += '</div></div>';
+    }
+
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderAttendeesTab(detail, editable, meeting) {
+    var attendees = detail.attendees;
+    var isFinalized = meeting.status === 'Finalized';
+    var html = '<div class="section-card"><div class="section-card-body">';
+    if (attendees.length === 0) {
+      html += '<div class="empty-state"><i class="bi bi-people"></i><p>No attendees</p></div>';
+    }
+    for (var i = 0; i < attendees.length; i++) {
+      var att = attendees[i];
+      html += '<div class="attendee-row">';
+      html += '<div class="attendee-avatar" style="background:' + getAvatarColor(att.email) + '">' + getInitials(att.name) + '</div>';
+      html += '<div class="attendee-info"><span class="attendee-name">' + escapeHtml(att.name) + '</span>';
+      var roleClass = att.role === 'Organizer' ? 'role-organizer' : att.role === 'Note Taker' ? 'role-notetaker' : 'role-attendee';
+      html += '<span class="role-badge ' + roleClass + '">' + escapeHtml(att.role) + '</span></div>';
+      if (!isFinalized) {
+        html += '<label style="font-size:0.73rem;color:#6c757d;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="attendance-check"' + (att.attended ? ' checked' : '') + ' onchange="handleToggleAttendance(\'' + att.attendeeId + '\', this.checked)"> Present</label>';
+      } else {
+        html += '<span style="font-size:0.73rem;' + (att.attended ? 'color:#198754;' : 'color:#dc3545;') + '">' + (att.attended ? '<i class="bi bi-check-circle-fill"></i> Present' : '<i class="bi bi-x-circle"></i> Absent') + '</span>';
+      }
+      if (editable && att.role !== 'Organizer') {
+        html += '<button class="btn btn-sm btn-outline-danger" style="font-size:0.68rem;padding:1px 4px;" onclick="handleRemoveAttendee(\'' + att.meetingId + '\', \'' + att.attendeeId + '\')" title="Remove"><i class="bi bi-x"></i></button>';
+      }
+      html += '</div>';
+    }
+
+    // Add attendee
+    if (editable) {
+      html += '<div class="inline-form"><div class="row g-2">';
+      html += '<div class="col-md-5"><select id="add-attendee-email" class="form-select form-select-sm">';
+      html += '<option value="">Select staff member...</option>';
+      for (var si = 0; si < AppState.staffList.length; si++) {
+        html += '<option value="' + escapeHtml(AppState.staffList[si].Email) + '">' + escapeHtml(AppState.staffList[si].DisplayName) + '</option>';
+      }
+      html += '</select></div>';
+      html += '<div class="col-md-4"><select id="add-attendee-role" class="form-select form-select-sm">';
+      html += '<option value="Attendee">Attendee</option><option value="Note Taker">Note Taker</option>';
+      html += '</select></div>';
+      html += '<div class="col-md-3"><button class="btn btn-sm btn-primary w-100" onclick="handleAddAttendee()"><i class="bi bi-plus"></i> Add</button></div>';
+      html += '</div></div>';
+    }
+
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderDecisionsTab(detail, editable, meeting) {
+    var decisions = detail.decisions;
+    var isFinalized = meeting.status === 'Finalized';
+    var html = '<div class="section-card"><div class="section-card-body" style="padding:12px;">';
+    if (decisions.length === 0) {
+      html += '<div class="empty-state"><i class="bi bi-check2-circle"></i><p>No decisions recorded</p></div>';
+    }
+    for (var i = 0; i < decisions.length; i++) {
+      var dec = decisions[i];
+      html += '<div class="decision-row">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+      html += '<div class="decision-text">' + escapeHtml(dec.decision) + '</div>';
+      if (editable && !isFinalized) {
+        html += '<button class="btn btn-sm btn-outline-danger" style="font-size:0.68rem;padding:1px 4px;flex-shrink:0;margin-left:8px;" onclick="handleDeleteDecision(\'' + dec.decisionId + '\')"><i class="bi bi-trash"></i></button>';
+      }
+      html += '</div>';
+      if (dec.context) html += '<div class="decision-context">' + escapeHtml(dec.context) + '</div>';
+      var agTitle = '';
+      if (dec.agendaId) {
+        for (var a = 0; a < detail.agendaItems.length; a++) {
+          if (detail.agendaItems[a].agendaId === dec.agendaId) { agTitle = detail.agendaItems[a].title; break; }
+        }
+      }
+      html += '<div class="decision-meta">';
+      if (agTitle) html += '<span>Linked to: ' + escapeHtml(agTitle) + '</span> &middot; ';
+      html += '<span>' + formatRelativeTime(dec.timestamp).relative + '</span>';
+      html += '</div></div>';
+    }
+
+    // Add decision form
+    if (editable && !isFinalized) {
+      html += '<div class="inline-form" style="margin-top:8px;">';
+      html += '<div class="mb-2"><label class="form-label">Decision</label><input type="text" id="add-decision-text" class="form-control form-control-sm" placeholder="What was decided?"></div>';
+      html += '<div class="mb-2"><label class="form-label">Context (optional)</label><input type="text" id="add-decision-context" class="form-control form-control-sm" placeholder="Brief reasoning"></div>';
+      html += '<div class="row g-2"><div class="col-md-8">';
+      html += '<select id="add-decision-agenda" class="form-select form-select-sm"><option value="">No linked agenda item</option>';
+      for (var ag = 0; ag < detail.agendaItems.length; ag++) {
+        html += '<option value="' + detail.agendaItems[ag].agendaId + '">' + escapeHtml(detail.agendaItems[ag].title) + '</option>';
+      }
+      html += '</select></div>';
+      html += '<div class="col-md-4"><button class="btn btn-sm btn-primary w-100" onclick="handleAddDecision()"><i class="bi bi-plus"></i> Add Decision</button></div></div>';
+      html += '</div>';
+    }
+
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderActionItemsTab(detail, meeting) {
+    var items = detail.actionItems;
+    var html = '<div class="section-card"><div class="section-card-body">';
+    if (items.length === 0) {
+      html += '<div class="empty-state"><i class="bi bi-list-check"></i><p>No action items</p></div>';
+    }
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var overdue = isActionOverdue(item);
+      html += '<div class="action-item-row' + (overdue ? ' overdue' : '') + '">';
+      html += '<div class="action-desc">' + escapeHtml(item.description) + '</div>';
+      html += '<span class="action-assignee">' + escapeHtml(getAssigneeName(item.assignee)) + '</span>';
+      if (item.dueDate) {
+        var dueFmt = formatDueDate(item.dueDate);
+        html += '<span class="action-due' + (overdue ? ' overdue' : '') + '">' + escapeHtml(dueFmt.display) + (overdue ? ' !' : '') + '</span>';
+      }
+      // Status dropdown
+      html += '<select class="form-select form-select-sm action-status-select" onchange="handleUpdateActionStatus(\'' + item.actionId + '\', this.value)">';
+      var actionStatuses = ['Open', 'In Progress', 'Completed', 'Cancelled'];
+      for (var s = 0; s < actionStatuses.length; s++) {
+        html += '<option value="' + actionStatuses[s] + '"' + (item.status === actionStatuses[s] ? ' selected' : '') + '>' + actionStatuses[s] + '</option>';
+      }
+      html += '</select>';
+      // Kanban button
+      if (item.kanbanCardId) {
+        html += '<span class="kanban-badge" title="Kanban card: ' + escapeHtml(item.kanbanCardId) + '"><i class="bi bi-kanban"></i> On Kanban</span>';
+      } else if (item.status !== 'Completed' && item.status !== 'Cancelled') {
+        html += '<button class="btn btn-sm btn-outline-primary kanban-btn" onclick="handleSendToKanban(\'' + item.actionId + '\')"><i class="bi bi-kanban"></i> Send</button>';
+      }
+      // Delete
+      html += '<button class="btn btn-sm btn-outline-danger" style="font-size:0.68rem;padding:1px 4px;" onclick="handleDeleteActionItem(\'' + item.actionId + '\')"><i class="bi bi-trash"></i></button>';
+      html += '</div>';
+    }
+
+    // Add action item form (always available, even after finalization)
+    html += '<div class="inline-form">';
+    html += '<div class="row g-2">';
+    html += '<div class="col-md-4"><input type="text" id="add-action-desc" class="form-control form-control-sm" placeholder="Action item description"></div>';
+    html += '<div class="col-md-3"><select id="add-action-assignee" class="form-select form-select-sm">';
+    for (var j = 0; j < AppState.staffList.length; j++) {
+      html += '<option value="' + escapeHtml(AppState.staffList[j].Email) + '">' + escapeHtml(AppState.staffList[j].DisplayName) + '</option>';
+    }
+    html += '</select></div>';
+    html += '<div class="col-md-3"><input type="date" id="add-action-due" class="form-control form-control-sm"></div>';
+    html += '<div class="col-md-2"><button class="btn btn-sm btn-primary w-100" onclick="handleAddActionItem()"><i class="bi bi-plus"></i> Add</button></div>';
+    html += '</div></div>';
+
+    html += '</div></div>';
+    return html;
+  }
+
+  /* --- ACTION ITEMS DASHBOARD --- */
+
+  function renderActionsView() {
+    var content = document.getElementById('app-content');
+    var html = '';
+    html += '<a class="detail-back" onclick="handleNavigateToList()"><i class="bi bi-arrow-left"></i> Back to Meetings</a>';
+    html += '<div class="app-header"><h1><i class="bi bi-list-check"></i> Action Items Dashboard</h1></div>';
+
+    // Filters
+    html += '<div class="filter-bar">';
+    html += '<select class="form-select form-select-sm" style="width:auto;" onchange="handleActionFilterAssignee(this.value)">';
+    html += '<option value="">All Assignees</option>';
+    for (var u = 0; u < AppState.staffList.length; u++) {
+      var s = AppState.staffList[u];
+      html += '<option value="' + escapeHtml(s.Email) + '"' + (AppState.actionFilterAssignee === s.Email ? ' selected' : '') + '>' + escapeHtml(s.DisplayName) + '</option>';
+    }
+    html += '</select>';
+    html += '<select class="form-select form-select-sm" style="width:auto;" onchange="handleActionFilterStatus(this.value)">';
+    html += '<option value="">All Status</option>';
+    var aStatuses = ['Open', 'In Progress', 'Completed', 'Cancelled'];
+    for (var s = 0; s < aStatuses.length; s++) {
+      html += '<option value="' + aStatuses[s] + '"' + (AppState.actionFilterStatus === aStatuses[s] ? ' selected' : '') + '>' + aStatuses[s] + '</option>';
+    }
+    html += '</select></div>';
+
+    // Group items
+    var items = AppState.allActionItems;
+    var filtered = [];
+    for (var i = 0; i < items.length; i++) {
+      if (AppState.actionFilterAssignee && items[i].assignee !== AppState.actionFilterAssignee) continue;
+      if (AppState.actionFilterStatus && items[i].status !== AppState.actionFilterStatus) continue;
+      filtered.push(items[i]);
+    }
+
+    var overdueItems = [], openItems = [], completedItems = [];
+    for (var f = 0; f < filtered.length; f++) {
+      if (isActionOverdue(filtered[f])) overdueItems.push(filtered[f]);
+      else if (filtered[f].status === 'Completed' || filtered[f].status === 'Cancelled') completedItems.push(filtered[f]);
+      else openItems.push(filtered[f]);
+    }
+
+    if (filtered.length === 0) {
+      html += '<div class="empty-state"><i class="bi bi-list-check"></i><p>No action items found</p></div>';
+    } else {
+      if (overdueItems.length > 0) {
+        html += '<div class="action-group-header overdue-group"><i class="bi bi-exclamation-triangle"></i> Overdue (' + overdueItems.length + ')</div>';
+        html += '<div class="section-card"><div class="section-card-body">';
+        for (var o = 0; o < overdueItems.length; o++) html += renderDashboardActionRow(overdueItems[o], true);
+        html += '</div></div>';
+      }
+      if (openItems.length > 0) {
+        html += '<div class="action-group-header"><i class="bi bi-circle"></i> Open / In Progress (' + openItems.length + ')</div>';
+        html += '<div class="section-card"><div class="section-card-body">';
+        for (var p = 0; p < openItems.length; p++) html += renderDashboardActionRow(openItems[p], false);
+        html += '</div></div>';
+      }
+      if (completedItems.length > 0) {
+        html += '<div class="action-group-header"><i class="bi bi-check-circle"></i> Completed / Cancelled (' + completedItems.length + ')</div>';
+        html += '<div class="section-card"><div class="section-card-body">';
+        for (var c = 0; c < completedItems.length; c++) html += renderDashboardActionRow(completedItems[c], false);
+        html += '</div></div>';
+      }
+    }
+
+    content.innerHTML = html;
+  }
+
+  function renderDashboardActionRow(item, isOverdue) {
+    var html = '<div class="dashboard-action-row' + (isOverdue ? ' overdue' : '') + '">';
+    html += '<div class="action-desc" style="flex:1;">' + escapeHtml(item.description) + '</div>';
+    html += '<span class="action-assignee">' + escapeHtml(getAssigneeName(item.assignee)) + '</span>';
+    if (item.dueDate) {
+      var dueFmt = formatDueDate(item.dueDate);
+      html += '<span class="action-due' + (isOverdue ? ' overdue' : '') + '">' + escapeHtml(dueFmt.display) + '</span>';
+    }
+    html += '<span class="' + getStatusBadgeClass(item.status === 'Open' ? 'Draft' : item.status === 'In Progress' ? 'In Progress' : item.status === 'Completed' ? 'Finalized' : 'Scheduled') + '" style="font-size:0.65rem;">' + escapeHtml(item.status) + '</span>';
+    if (item.meetingTitle) {
+      html += '<a class="action-meeting-link" onclick="handleActionRowClick(\'' + item.meetingId + '\')">' + escapeHtml(item.meetingTitle.length > 25 ? item.meetingTitle.substring(0, 25) + '...' : item.meetingTitle) + '</a>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  /* ============================================================
+     SECTION 5: EVENT HANDLERS
+     ============================================================ */
+
+  // Navigation
+  function handleNavigateToList() {
+    AppState.currentView = 'list'; AppState.activeMeetingId = null; AppState.meetingDetail = null; AppState.activeTab = 'agenda'; renderApp();
+  }
+
+  function handleNavigateToDetail(meetingId) {
+    AppState.currentView = 'detail'; AppState.activeMeetingId = meetingId; AppState.meetingDetail = null;
+    renderApp();
+    google.script.run.withSuccessHandler(function(detail) {
+      AppState.meetingDetail = detail; renderApp();
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to load meeting details.'); handleNavigateToList();
+    }).getMeetingDetail(meetingId);
+  }
+
+  function handleNavigateToActions() {
+    AppState.currentView = 'actions'; AppState.allActionItems = [];
+    renderApp();
+    google.script.run.withSuccessHandler(function(items) {
+      AppState.allActionItems = items; renderActionsView();
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to load action items.');
+    }).getOpenActionItems();
+  }
+
+  function handleTabSwitch(tab) { AppState.activeTab = tab; renderApp(); }
+
+  // List filters
+  var searchTimeout = null;
+  function handleSearchInput(value) {
+    AppState.searchQuery = value;
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(function() { renderListView(); }, 200);
+  }
+  function handleStatusFilter(value) { AppState.statusFilter = value; renderListView(); }
+  function handleDateFromFilter(value) { AppState.dateFrom = value; renderListView(); }
+  function handleDateToFilter(value) { AppState.dateTo = value; renderListView(); }
+
+  // New meeting
+  function handleNewMeeting() {
+    var select = document.getElementById('nm-template');
+    var html = '';
+    for (var i = 0; i < AppState.templates.length; i++) {
+      html += '<option value="' + AppState.templates[i].templateId + '">' + escapeHtml(AppState.templates[i].name) + '</option>';
+    }
+    select.innerHTML = html;
+    var today = new Date().toISOString().split('T')[0];
+    document.getElementById('nm-date').value = today;
+    handleTemplateChange();
+    var modal = new bootstrap.Modal(document.getElementById('newMeetingModal'));
+    modal.show();
+  }
+
+  function handleTemplateChange() {
+    var templateId = document.getElementById('nm-template').value;
+    for (var i = 0; i < AppState.templates.length; i++) {
+      if (AppState.templates[i].templateId === templateId) {
+        var dateVal = document.getElementById('nm-date').value || new Date().toISOString().split('T')[0];
+        var dateObj = new Date(dateVal + 'T00:00:00');
+        var dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        document.getElementById('nm-title').value = AppState.templates[i].defaultTitle.replace('{DATE}', dateStr);
+        break;
+      }
+    }
+  }
+
+  function handleCreateMeeting() {
+    var templateId = document.getElementById('nm-template').value;
+    var date = document.getElementById('nm-date').value;
+    var startTime = document.getElementById('nm-start').value;
+    var endTime = document.getElementById('nm-end').value;
+    var location = document.getElementById('nm-location').value;
+    if (!date) { showError('Date is required.'); return; }
+
+    var btn = document.getElementById('nm-create-btn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    google.script.run.withSuccessHandler(function(result) {
+      btn.disabled = false; btn.innerHTML = 'Create';
+      var modal = bootstrap.Modal.getInstance(document.getElementById('newMeetingModal'));
+      if (modal) modal.hide();
+      showSuccess('Meeting created.');
+      loadMeetings();
+      handleNavigateToDetail(result.meetingId);
+    }).withFailureHandler(function(error) {
+      btn.disabled = false; btn.innerHTML = 'Create';
+      showError(error.message || 'Failed to create meeting.');
+    }).createMeetingFromTemplate(templateId, date, startTime, endTime, location);
+  }
+
+  // Delete meeting
+  function handleDeleteMeeting(meetingId) {
+    AppState.pendingDeleteMeetingId = meetingId;
+    var modal = new bootstrap.Modal(document.getElementById('deleteMeetingModal'));
+    modal.show();
+  }
+
+  function confirmDeleteMeeting() {
+    if (!AppState.pendingDeleteMeetingId) return;
+    var btn = document.getElementById('confirm-delete-meeting-btn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    google.script.run.withSuccessHandler(function() {
+      btn.disabled = false; btn.innerHTML = 'Delete';
+      AppState.pendingDeleteMeetingId = null;
+      var modal = bootstrap.Modal.getInstance(document.getElementById('deleteMeetingModal'));
+      if (modal) modal.hide();
+      showSuccess('Meeting deleted.');
+      loadMeetings();
+      handleNavigateToList();
+    }).withFailureHandler(function(error) {
+      btn.disabled = false; btn.innerHTML = 'Delete';
+      showError(error.message || 'Failed to delete meeting.');
+    }).deleteMeeting(AppState.pendingDeleteMeetingId);
+  }
+
+  // Finalize / Start
+  function handleFinalizeMeeting() {
+    var modal = new bootstrap.Modal(document.getElementById('finalizeModal'));
+    modal.show();
+  }
+
+  function confirmFinalizeMeeting() {
+    var btn = document.getElementById('confirm-finalize-btn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    google.script.run.withSuccessHandler(function() {
+      btn.disabled = false; btn.innerHTML = 'Finalize';
+      var modal = bootstrap.Modal.getInstance(document.getElementById('finalizeModal'));
+      if (modal) modal.hide();
+      showSuccess('Meeting finalized.');
+      loadMeetings();
+      handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      btn.disabled = false; btn.innerHTML = 'Finalize';
+      showError(error.message || 'Failed to finalize meeting.');
+    }).finalizeMeeting(AppState.activeMeetingId);
+  }
+
+  function handleStartMeeting() {
+    google.script.run.withSuccessHandler(function() {
+      showSuccess('Meeting started.');
+      loadMeetings();
+      handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to start meeting.');
+    }).startMeeting(AppState.activeMeetingId);
+  }
+
+  // Agenda items
+  function handleAddAgendaItem() {
+    var title = document.getElementById('add-agenda-title').value.trim();
+    if (!title) { showError('Agenda item title is required.'); return; }
+    var presenter = document.getElementById('add-agenda-presenter').value;
+    var time = parseInt(document.getElementById('add-agenda-time').value, 10) || 10;
+    google.script.run.withSuccessHandler(function() {
+      showSuccess('Agenda item added.'); handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to add agenda item.');
+    }).addAgendaItem(AppState.activeMeetingId, { title: title, presenter: presenter, timeAllocation: time });
+  }
+
+  function handleDeleteAgendaItem(agendaId) {
+    google.script.run.withSuccessHandler(function() {
+      handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to delete agenda item.');
+    }).deleteAgendaItem(agendaId);
+  }
+
+  function handleSaveNotes(agendaId, value) {
+    google.script.run.withSuccessHandler(function() {}).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to save notes.');
+    }).updateAgendaItem(agendaId, { notes: value });
+  }
+
+  // Attendees
+  function handleAddAttendee() {
+    var email = document.getElementById('add-attendee-email').value;
+    var role = document.getElementById('add-attendee-role').value;
+    google.script.run.withSuccessHandler(function() {
+      handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to add attendee.');
+    }).addAttendee(AppState.activeMeetingId, email, role);
+  }
+
+  function handleRemoveAttendee(meetingId, attendeeId) {
+    google.script.run.withSuccessHandler(function() {
+      handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to remove attendee.');
+    }).removeAttendee(meetingId, attendeeId);
+  }
+
+  function handleToggleAttendance(attendeeId, attended) {
+    google.script.run.withSuccessHandler(function() {}).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to update attendance.');
+    }).updateAttendance(AppState.activeMeetingId, attendeeId, attended);
+  }
+
+  // Decisions
+  function handleAddDecision() {
+    var text = document.getElementById('add-decision-text').value.trim();
+    if (!text) { showError('Decision text is required.'); return; }
+    var context = document.getElementById('add-decision-context').value.trim();
+    var agendaId = document.getElementById('add-decision-agenda').value;
+    google.script.run.withSuccessHandler(function() {
+      showSuccess('Decision recorded.'); handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to add decision.');
+    }).addDecision(AppState.activeMeetingId, { decision: text, context: context, agendaId: agendaId || null });
+  }
+
+  function handleDeleteDecision(decisionId) {
+    google.script.run.withSuccessHandler(function() {
+      handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to delete decision.');
+    }).deleteDecision(decisionId);
+  }
+
+  // Action items
+  function handleAddActionItem() {
+    var desc = document.getElementById('add-action-desc').value.trim();
+    if (!desc) { showError('Description is required.'); return; }
+    var assignee = document.getElementById('add-action-assignee').value;
+    var dueDate = document.getElementById('add-action-due').value;
+    google.script.run.withSuccessHandler(function() {
+      showSuccess('Action item added.'); handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to add action item.');
+    }).addActionItem(AppState.activeMeetingId, { description: desc, assignee: assignee, dueDate: dueDate || null });
+  }
+
+  function handleUpdateActionStatus(actionId, status) {
+    google.script.run.withSuccessHandler(function() {
+      handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to update action item.');
+    }).updateActionItem(actionId, { status: status });
+  }
+
+  function handleDeleteActionItem(actionId) {
+    google.script.run.withSuccessHandler(function() {
+      handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to delete action item.');
+    }).deleteActionItem(actionId);
+  }
+
+  function handleSendToKanban(actionId) {
+    google.script.run.withSuccessHandler(function() {
+      showSuccess('Sent to Kanban board.'); handleNavigateToDetail(AppState.activeMeetingId);
+    }).withFailureHandler(function(error) {
+      showError(error.message || 'Failed to send to Kanban.');
+    }).sendToKanban(actionId);
+  }
+
+  // Action items dashboard
+  function handleActionFilterAssignee(value) { AppState.actionFilterAssignee = value; renderActionsView(); }
+  function handleActionFilterStatus(value) { AppState.actionFilterStatus = value; renderActionsView(); }
+  function handleActionRowClick(meetingId) { AppState.activeTab = 'actionItems'; handleNavigateToDetail(meetingId); }
+
+  /* ============================================================
+     SECTION 6: ERROR HANDLING & UTILITIES
+     ============================================================ */
+
+  function showError(message) {
+    var banner = document.getElementById('error-banner');
+    document.getElementById('error-message').textContent = message;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 5000);
+  }
+  function hideError() { document.getElementById('error-banner').style.display = 'none'; }
+  function showSuccess(message) {
+    var banner = document.getElementById('success-banner');
+    document.getElementById('success-message').textContent = message;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 3000);
+  }
+  function hideSuccess() { document.getElementById('success-banner').style.display = 'none'; }
+
+  /* ============================================================
+     SECTION 7: INITIALIZATION
+     ============================================================ */
+
+  var loadCount = 0;
+  function checkLoaded() {
+    loadCount++;
+    if (loadCount >= 4) { AppState.isLoading = false; renderApp(); }
+  }
+
+  function loadCurrentUser() {
+    google.script.run.withSuccessHandler(function(user) {
+      AppState.currentUser = user;
+      if (AppState.isLoading) checkLoaded(); else renderApp();
+    }).withFailureHandler(function() {
+      showError('Failed to identify user.');
+      if (AppState.isLoading) checkLoaded();
+    }).getCurrentUser();
+  }
+
+  function loadMeetings() {
+    google.script.run.withSuccessHandler(function(meetings) {
+      AppState.meetings = meetings;
+      if (AppState.isLoading) checkLoaded(); else if (AppState.currentView === 'list') renderListView();
+    }).withFailureHandler(function() {
+      showError('Failed to load meetings.');
+      if (AppState.isLoading) checkLoaded();
+    }).getMeetings();
+  }
+
+  function loadTemplates() {
+    google.script.run.withSuccessHandler(function(templates) {
+      AppState.templates = templates;
+      if (AppState.isLoading) checkLoaded();
+    }).withFailureHandler(function() {
+      showError('Failed to load templates.');
+      if (AppState.isLoading) checkLoaded();
+    }).getTemplates();
+  }
+
+  function loadStaff() {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        AppState.staffList = data || [];
+        if (AppState.isLoading) checkLoaded();
+        else renderApp();
+      })
+      .withFailureHandler(function() {
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getStaff();
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    loadCurrentUser();
+    loadMeetings();
+    loadTemplates();
+    loadStaff();
+  });
+
+  </script>
+</body>
+</html>

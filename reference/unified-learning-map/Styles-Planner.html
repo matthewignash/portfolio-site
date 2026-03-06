@@ -1,0 +1,504 @@
+<style>
+/* ============================================================================
+   STUDENT PLANNER STYLES (pln- prefix)
+   My Planner tab: task dashboard + schedule view
+   ============================================================================ */
+
+/* Layout: two-panel (task list left, schedule right) */
+.pln-layout {
+  display: flex;
+  gap: 20px;
+  height: calc(100vh - 120px);
+  padding: 16px;
+}
+
+.pln-task-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pln-schedule-panel {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+/* Stats bar: 4 summary cards */
+.pln-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 10px;
+}
+
+.pln-stat-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.pln-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1.2;
+}
+
+.pln-stat-value.danger { color: #dc2626; }
+.pln-stat-value.warning { color: #d97706; }
+.pln-stat-value.info { color: #2563eb; }
+
+.pln-stat-label {
+  font-size: 12px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* Filter bar: chip buttons */
+.pln-filter-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pln-filter-chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pln-filter-chip:hover {
+  background: #f3f4f6;
+}
+
+.pln-filter-chip.active {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+.pln-filter-chip.active.danger {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.pln-filter-count {
+  display: inline-block;
+  background: rgba(255,255,255,0.25);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* Task list: scrollable container */
+.pln-task-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+/* Individual task card */
+.pln-task-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  border-left: 4px solid #d1d5db;
+}
+
+.pln-task-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border-color: #93c5fd;
+}
+
+/* Urgency border colors */
+.pln-task-card.overdue {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+}
+
+.pln-task-card.due-today {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+
+.pln-task-card.due-soon {
+  border-left-color: #eab308;
+  background: #fefce8;
+}
+
+.pln-task-card.upcoming {
+  border-left-color: #3b82f6;
+}
+
+.pln-task-card.completed {
+  border-left-color: #10b981;
+  opacity: 0.65;
+}
+
+.pln-task-card.no-deadline {
+  border-left-color: #d1d5db;
+}
+
+/* Task card content */
+.pln-task-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 32px;
+  text-align: center;
+}
+
+.pln-task-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pln-task-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pln-task-map {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.pln-task-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.pln-task-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pln-task-badge.due {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pln-task-badge.due.overdue {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.pln-task-badge.time {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.pln-task-badge.status {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.pln-task-badge.status.in_progress {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.pln-task-badge.status.completed, .pln-task-badge.status.mastered {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+/* Reorder buttons */
+.pln-task-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.pln-reorder-btn {
+  width: 24px;
+  height: 20px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.pln-reorder-btn:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+/* Empty state */
+.pln-empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: #6b7280;
+}
+
+.pln-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.pln-empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.pln-empty-text {
+  font-size: 14px;
+}
+
+/* Schedule placeholder (for Sub-Story 3) */
+.pln-schedule-placeholder {
+  background: #f8fafc;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 32px 20px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.pln-schedule-placeholder-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.pln-schedule-placeholder-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.pln-schedule-placeholder-text {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Schedule section (Sub-Story 3 - structure ready) */
+.pln-schedule-header {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.pln-whats-next {
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.pln-whats-next-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pln-whats-next-class {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e40af;
+  margin-top: 4px;
+}
+
+.pln-whats-next-time {
+  font-size: 13px;
+  color: #3b82f6;
+  margin-top: 2px;
+}
+
+.pln-block-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.pln-block-card.current {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.pln-block-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.pln-block-class {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.pln-block-room {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.pln-block-tasks {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.pln-block-task-chip {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pln-weekly-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.pln-weekly-day {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.pln-weekly-day.today {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.pln-weekly-day-name {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 2px;
+}
+
+.pln-weekly-day-type {
+  color: #6b7280;
+}
+
+.pln-connect-prompt {
+  text-align: center;
+  padding: 20px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+/* ================================================
+   UNIT CHECKLIST (ucl- prefix)
+   ================================================ */
+.ucl-section { margin-bottom: 12px; }
+.ucl-section-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; }
+.ucl-section-header:hover { background: #f1f5f9; }
+.ucl-section-title { font-size: 14px; font-weight: 600; color: #1e293b; }
+.ucl-chevron { font-size: 12px; color: #94a3b8; }
+.ucl-section-body { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.ucl-unit-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.ucl-unit-header { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; transition: background 0.15s; }
+.ucl-unit-header:hover { background: #f8fafc; }
+.ucl-unit-info { flex: 1; min-width: 0; }
+.ucl-unit-title { font-size: 14px; font-weight: 500; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ucl-unit-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+.ucl-progress-bar { width: 80px; height: 6px; background: #e2e8f0; border-radius: 3px; flex-shrink: 0; }
+.ucl-progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.ucl-lesson-list { padding: 4px 14px 10px; border-top: 1px solid #f1f5f9; }
+.ucl-lesson-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; color: #475569; }
+.ucl-status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.ucl-lesson-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ucl-lesson-hex-count { font-size: 12px; color: #94a3b8; white-space: nowrap; }
+
+/* Focus-visible keyboard navigation (WCAG 2.4.7) */
+.pln-task-card:focus-visible,
+.pln-filter-chip:focus-visible,
+.pln-schedule-block:focus-visible,
+.stl-task-item:focus-visible,
+.stl-checkbox:focus-visible,
+.ucl-unit-header:focus-visible,
+.ucl-lesson-item:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+/* C6: Strategy awareness banner */
+.pln-strategy-banner {
+  background: #f0fdf4;
+  border-left: 3px solid #22c55e;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pln-strategy-banner-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.pln-strategy-banner-text {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.4;
+}
+.pln-strategy-banner-label {
+  font-weight: 600;
+  color: #16a34a;
+  font-size: 12px;
+}
+</style>

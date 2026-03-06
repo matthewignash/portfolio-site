@@ -1,0 +1,736 @@
+<script>
+// =====================================================
+// PROMPT BUILDER & ENHANCED SUPPORT SCRIPTS (pb- prefix)
+// Stories: E1-S1, E1-S2, E2-S1, E2-S2, E2-S3
+// ES5 ONLY — no const, let, =>, template literals, .includes()
+// =====================================================
+
+// ================================================
+// WIDA-to-UDL Mapping Table (E2-S1)
+// Uses ACTUAL backend strategy strings from getUdlStrategies()
+// ================================================
+
+var PB_WIDA_UDL_MAP = {
+  low: {
+    minLevel: 1, maxLevel: 2,
+    representation: [
+      'Visual aids and diagrams',
+      'Video demonstrations',
+      'Vocabulary support',
+      'Graphic organizers',
+      'Multiple examples and non-examples'
+    ],
+    actionExpression: [
+      'Scaffolded practice',
+      'Collaborative work options',
+      'Choice in assignment format',
+      'Assistive technology'
+    ],
+    engagement: [
+      'Collaborative learning',
+      'Cultural relevance',
+      'Varied difficulty levels',
+      'Immediate feedback'
+    ]
+  },
+  mid: {
+    minLevel: 3, maxLevel: 4,
+    representation: [
+      'Vocabulary support',
+      'Graphic organizers',
+      'Highlighting key information',
+      'Multiple examples and non-examples'
+    ],
+    actionExpression: [
+      'Scaffolded practice',
+      'Collaborative work options',
+      'Self-assessment checklists',
+      'Progress monitoring tools'
+    ],
+    engagement: [
+      'Collaborative learning',
+      'Student choice and autonomy',
+      'Goal-setting opportunities',
+      'Relevant real-world connections'
+    ]
+  },
+  high: {
+    minLevel: 5, maxLevel: 6,
+    representation: [
+      'Highlighting key information',
+      'Vocabulary support'
+    ],
+    actionExpression: [
+      'Self-assessment checklists',
+      'Collaborative work options'
+    ],
+    engagement: [
+      'Student choice and autonomy',
+      'Goal-setting opportunities'
+    ]
+  }
+};
+
+// ================================================
+// E1-S2: SUPPORT DETAIL PANEL
+// ================================================
+
+function openSupportDetailPanel() {
+  var panel = document.getElementById('pbDetailPanel');
+  if (!panel) return;
+
+  var data = sspHexInfoCache;
+  if (!data) return;
+
+  renderSupportDetailContent(data);
+  panel.style.display = 'block';
+  pbDetailPanelOpen = true;
+}
+
+function closeSupportDetailPanel() {
+  var panel = document.getElementById('pbDetailPanel');
+  if (panel) panel.style.display = 'none';
+  pbDetailPanelOpen = false;
+}
+
+function renderSupportDetailContent(data) {
+  var body = document.getElementById('pbDetailBody');
+  if (!body) return;
+
+  var html = '';
+
+  // Section 1: Accommodation groups
+  if (data.reminders && data.reminders.length > 0) {
+    html += '<div class="pb-detail-section">';
+    html += '<div class="pb-detail-section-title">Accommodations by Type</div>';
+    for (var r = 0; r < data.reminders.length; r++) {
+      var rem = data.reminders[r];
+      html += '<div class="pb-accom-group">';
+      html += '<div class="pb-accom-label">' + escapeHtml(rem.label) + ' <span class="pb-accom-count">(' + rem.count + ')</span></div>';
+      html += '<div class="pb-accom-students">';
+      for (var s = 0; s < rem.students.length; s++) {
+        html += '<span class="pb-student-chip">' + escapeHtml(rem.students[s]) + '</span>';
+      }
+      html += '</div></div>';
+    }
+    html += '</div>';
+  }
+
+  // Section 2: WIDA student cards
+  if (data.widaStudents && data.widaStudents.length > 0) {
+    html += '<div class="pb-detail-section">';
+    html += '<div class="pb-detail-section-title">EAL Students (WIDA)</div>';
+    for (var w = 0; w < data.widaStudents.length; w++) {
+      var ws = data.widaStudents[w];
+      html += '<div class="pb-wida-card">';
+      html += '<div class="pb-wida-card-header">';
+      html += '<span class="pb-wida-name">' + escapeHtml(ws.name) + '</span>';
+      html += '<span class="pb-wida-level pb-wida-level-' + ws.level + '">WIDA ' + ws.level + '</span>';
+      html += '</div>';
+
+      // Domain mini-bars (L/S/R/W)
+      var domains = ws.domains || { listening: 0, speaking: 0, reading: 0, writing: 0 };
+      html += '<div class="pb-wida-domains">';
+      var domainList = [
+        { key: 'listening', abbr: 'L' },
+        { key: 'speaking', abbr: 'S' },
+        { key: 'reading', abbr: 'R' },
+        { key: 'writing', abbr: 'W' }
+      ];
+      for (var d = 0; d < domainList.length; d++) {
+        var dl = domainList[d];
+        var level = parseInt(domains[dl.key]) || 0;
+        var pct = Math.round((level / 6) * 100);
+        html += '<div class="pb-domain-row">';
+        html += '<span class="pb-domain-abbr">' + dl.abbr + '</span>';
+        html += '<div class="pb-domain-bar"><div class="pb-domain-fill" style="width:' + pct + '%"></div></div>';
+        html += '<span class="pb-domain-val">' + level + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Top 3 strategies
+      if (ws.strategies && ws.strategies.length > 0) {
+        html += '<div class="pb-wida-strategies">';
+        var stratLimit = Math.min(ws.strategies.length, 3);
+        for (var st = 0; st < stratLimit; st++) {
+          html += '<span class="pb-strategy-tag">' + escapeHtml(ws.strategies[st]) + '</span>';
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Empty state
+  if (html === '') {
+    html = '<div style="color:#94a3b8; font-size:13px; padding:8px 0;">No detailed support data available.</div>';
+  }
+
+  body.innerHTML = html;
+}
+
+function openProfilesFromHex() {
+  closeSupportDetailPanel();
+  // Navigate to Integrations tab where support import card is, or open roster modal
+  var tab = document.querySelector('[data-view="integrations"]');
+  if (tab) switchTab(tab);
+}
+
+// ================================================
+// E2-S1: CONTEXTUAL UDL STRATEGY SELECTOR
+// ================================================
+
+function renderHexUdlSelector(hex) {
+  var section = document.getElementById('pbUdlSelectorSection');
+  if (!section) return;
+
+  // Only show in teacher mode
+  if (currentViewMode !== 'teacher') {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+
+  // Determine WIDA suggestions from cached support data
+  pbSuggestedUdl = computeWidaUdlSuggestions();
+
+  // Load existing selections from hex.lessonPlan.udl
+  var lp = hex.lessonPlan || {};
+  var udl = lp.udl || {};
+  pbSelectedUdl = {
+    representation: (udl.representation || []).slice(0),
+    actionExpression: (udl.actionExpression || []).slice(0),
+    engagement: (udl.engagement || []).slice(0)
+  };
+
+  // Populate planning notes
+  var notesEl = document.getElementById('pbPlanningNotes');
+  if (notesEl) {
+    notesEl.value = (lp.planningNotes) || '';
+  }
+
+  // Ensure UDL strategies are loaded (reuse lesson ref data cache)
+  ensurePbUdlStrategiesLoaded(function() {
+    renderPbUdlChips('representation');
+    renderPbUdlChips('actionExpression');
+    renderPbUdlChips('engagement');
+    updatePbUdlBadge();
+  });
+}
+
+function ensurePbUdlStrategiesLoaded(callback) {
+  // Only consider cache valid if strategies have actually loaded (non-empty arrays)
+  if (pbUdlStrategiesCache && pbUdlStrategiesCache.representation && pbUdlStrategiesCache.representation.length > 0) {
+    if (callback) callback();
+    return;
+  }
+  // If lesson editor has already loaded them, reuse
+  if (typeof lessonUdlStrategiesCache !== 'undefined' && lessonUdlStrategiesCache) {
+    pbUdlStrategiesCache = lessonUdlStrategiesCache;
+    if (callback) callback();
+    return;
+  }
+  // Otherwise load from backend
+  pbUdlStrategiesCache = { representation: [], actionExpression: [], engagement: [] };
+  var loaded = 0;
+  var principles = ['representation', 'actionExpression', 'engagement'];
+  for (var p = 0; p < principles.length; p++) {
+    (function(principle) {
+      google.script.run
+        .withSuccessHandler(function(data) {
+          pbUdlStrategiesCache[principle] = data || [];
+          loaded++;
+          if (loaded >= 3 && callback) callback();
+        })
+        .withFailureHandler(function() {
+          loaded++;
+          if (loaded >= 3 && callback) callback();
+        })
+        .getUdlStrategies(principle);
+    })(principles[p]);
+  }
+}
+
+function computeWidaUdlSuggestions() {
+  var suggestions = { representation: [], actionExpression: [], engagement: [] };
+
+  if (!sspHexInfoCache || !sspHexInfoCache.widaStudents || sspHexInfoCache.widaStudents.length === 0) {
+    return suggestions;
+  }
+
+  // Find lowest WIDA level among students
+  var minLevel = 7;
+  for (var i = 0; i < sspHexInfoCache.widaStudents.length; i++) {
+    var lvl = sspHexInfoCache.widaStudents[i].level;
+    if (lvl > 0 && lvl < minLevel) minLevel = lvl;
+  }
+  if (minLevel > 6) return suggestions;
+
+  // Determine bracket
+  var bracket = null;
+  if (minLevel <= 2) bracket = PB_WIDA_UDL_MAP.low;
+  else if (minLevel <= 4) bracket = PB_WIDA_UDL_MAP.mid;
+  else bracket = PB_WIDA_UDL_MAP.high;
+
+  if (bracket) {
+    suggestions.representation = bracket.representation || [];
+    suggestions.actionExpression = bracket.actionExpression || [];
+    suggestions.engagement = bracket.engagement || [];
+  }
+
+  return suggestions;
+}
+
+function renderPbUdlChips(principle) {
+  var container = document.getElementById('pbChips-' + principle);
+  if (!container) return;
+
+  var strategies = (pbUdlStrategiesCache && pbUdlStrategiesCache[principle]) ? pbUdlStrategiesCache[principle] : [];
+  if (strategies.length === 0) {
+    container.innerHTML = '<span style="font-size:11px; color:#94a3b8;">Loading...</span>';
+    return;
+  }
+
+  var selectedSet = {};
+  var selected = pbSelectedUdl[principle] || [];
+  for (var s = 0; s < selected.length; s++) {
+    selectedSet[selected[s]] = true;
+  }
+
+  var suggestedSet = {};
+  var suggested = pbSuggestedUdl[principle] || [];
+  for (var sg = 0; sg < suggested.length; sg++) {
+    suggestedSet[suggested[sg]] = true;
+  }
+
+  var html = '';
+  for (var i = 0; i < strategies.length; i++) {
+    var strat = strategies[i];
+    var isSelected = selectedSet[strat] ? true : false;
+    var isSuggested = suggestedSet[strat] && !isSelected;
+    var cls = 'pb-udl-chip';
+    if (isSelected) cls += ' pb-confirmed';
+    else if (isSuggested) cls += ' pb-suggested';
+    html += '<span class="' + cls + '" data-principle="' + principle + '" data-strategy="' + escapeHtml(strat) + '" onclick="togglePbUdlChip(this)">' + escapeHtml(strat) + '</span>';
+  }
+  container.innerHTML = html;
+}
+
+function togglePbUdlChip(el) {
+  var principle = el.getAttribute('data-principle');
+  var strategy = el.getAttribute('data-strategy');
+
+  var arr = pbSelectedUdl[principle] || [];
+  var idx = -1;
+  for (var i = 0; i < arr.length; i++) {
+    if (arr[i] === strategy) { idx = i; break; }
+  }
+
+  if (idx >= 0) {
+    arr.splice(idx, 1);
+  } else {
+    arr.push(strategy);
+  }
+  pbSelectedUdl[principle] = arr;
+
+  renderPbUdlChips(principle);
+  updatePbUdlBadge();
+
+  // Write to hex.lessonPlan.udl (auto-save to in-memory map)
+  syncPbUdlToHex();
+}
+
+function syncPbUdlToHex() {
+  if (!selectedHexId) return;
+  var hex = findHexById(selectedHexId);
+  if (!hex) return;
+
+  if (!hex.lessonPlan) hex.lessonPlan = {};
+  if (!hex.lessonPlan.udl) hex.lessonPlan.udl = {};
+
+  hex.lessonPlan.udl.representation = pbSelectedUdl.representation.slice(0);
+  hex.lessonPlan.udl.actionExpression = pbSelectedUdl.actionExpression.slice(0);
+  hex.lessonPlan.udl.engagement = pbSelectedUdl.engagement.slice(0);
+
+  // Re-render hex grid to update UDL badge
+  if (typeof renderHexGrid === 'function') renderHexGrid();
+}
+
+function updatePbUdlBadge() {
+  var total = 0;
+  var principles = ['representation', 'actionExpression', 'engagement'];
+  for (var p = 0; p < principles.length; p++) {
+    total += (pbSelectedUdl[principles[p]] || []).length;
+  }
+  var badge = document.getElementById('pbUdlSectionBadge');
+  if (badge) {
+    badge.textContent = total > 0 ? String(total) : '';
+    badge.className = total > 0 ? 'pb-udl-section-badge pb-has-selections' : 'pb-udl-section-badge';
+  }
+}
+
+// ================================================
+// E2-S3: PLANNING NOTES + SAVE
+// ================================================
+
+function onPbPlanningNotesChange(value) {
+  if (!selectedHexId) return;
+  var hex = findHexById(selectedHexId);
+  if (!hex) return;
+
+  if (!hex.lessonPlan) hex.lessonPlan = {};
+  hex.lessonPlan.planningNotes = value;
+}
+
+// ================================================
+// E2-S2: AI PROMPT BUILDER
+// ================================================
+
+// ================================================
+// STRATEGIC TEACHER — SBAR-to-Style Mapping (Silver, Strong & Perini)
+// Maps SBAR domains to primary/secondary learning styles
+// ================================================
+
+var PB_STYLE_STRATEGY_MAP = {
+  KU: { primary: 'mastery', secondary: 'understanding' },
+  TT: { primary: 'understanding', secondary: 'selfExpressive' },
+  C:  { primary: 'interpersonal', secondary: 'fourStyle' }
+};
+
+var PB_STRAT_RECOMMENDATIONS = {
+  mastery: [
+    { name: 'New American Lecture', tip: 'Chunk content into 10-min segments with pause-and-process cycles using a visual organizer' },
+    { name: 'Graduated Difficulty', tip: 'Offer 3 difficulty levels so students self-select and build confidence through achievable challenge' },
+    { name: 'Direct Instruction', tip: 'Model the skill explicitly, then move through guided practice to independent application' }
+  ],
+  understanding: [
+    { name: 'Compare and Contrast', tip: 'Have students use criteria-based comparison to find patterns and draw evidence-based conclusions' },
+    { name: 'Reading for Meaning', tip: 'Give provocative statements before reading; students find evidence to support or refute each claim' },
+    { name: 'Concept Attainment', tip: 'Present yes/no examples so students discover critical attributes of the concept inductively' }
+  ],
+  selfExpressive: [
+    { name: 'Inductive Learning', tip: 'Give students items to group by their own criteria, then label groups and predict patterns' },
+    { name: 'Metaphorical Expression', tip: 'Students create metaphors to represent the topic, revealing understanding through creative analogy' },
+    { name: 'Mind\'s Eye', tip: 'Read a descriptive passage; students visualize, sketch, and discuss how imagery deepens comprehension' }
+  ],
+  interpersonal: [
+    { name: 'Reciprocal Learning', tip: 'Pairs alternate summarizing and questioning roles to process content through peer teaching' },
+    { name: 'Jigsaw', tip: 'Each student becomes expert on one section, then teaches home team members for mutual accountability' },
+    { name: 'Community Circle', tip: 'Structured round-robin sharing where every voice is heard, building empathy and classroom community' }
+  ],
+  fourStyle: [
+    { name: 'Task Rotation', tip: 'Rotate through 4 tasks: mastery recall, understanding analysis, creative expression, and collaborative discussion' },
+    { name: 'Window Notes', tip: '4-quadrant notes capturing Facts, Questions, Ideas, and Feelings for multi-perspective processing' },
+    { name: 'Circle of Knowledge', tip: 'Inner/outer circle discussion format alternating between active participation and analytical observation' }
+  ]
+};
+
+function pbBuildStrategyBlock(hex) {
+  var curriculum = hex.curriculum || {};
+  var sbarArr = [];
+  if (curriculum.sbarDomains) {
+    if (typeof curriculum.sbarDomains === 'string') sbarArr = curriculum.sbarDomains.split(',');
+    else if (Array.isArray(curriculum.sbarDomains)) sbarArr = curriculum.sbarDomains;
+  }
+
+  // Map SBAR domains to styles
+  var styleSet = {};
+  var i, mapping;
+  for (i = 0; i < sbarArr.length; i++) {
+    var domain = sbarArr[i].trim();
+    mapping = PB_STYLE_STRATEGY_MAP[domain];
+    if (mapping) {
+      styleSet[mapping.primary] = (styleSet[mapping.primary] || 0) + 2;
+      styleSet[mapping.secondary] = (styleSet[mapping.secondary] || 0) + 1;
+    }
+  }
+
+  // Fallback to fourStyle if no SBAR domains
+  if (Object.keys(styleSet).length === 0) {
+    styleSet['fourStyle'] = 1;
+  }
+
+  // Sort styles by score descending, pick top 2
+  var styleArr = [];
+  for (var key in styleSet) {
+    if (styleSet.hasOwnProperty(key)) {
+      styleArr.push({ key: key, score: styleSet[key] });
+    }
+  }
+  styleArr.sort(function(a, b) { return b.score - a.score; });
+
+  var topStyles = styleArr.slice(0, 2);
+  var lines = [];
+  for (i = 0; i < topStyles.length; i++) {
+    var styleKey = topStyles[i].key;
+    var recs = PB_STRAT_RECOMMENDATIONS[styleKey];
+    if (!recs) continue;
+    var styleLabel = styleKey.charAt(0).toUpperCase() + styleKey.substring(1);
+    if (styleKey === 'selfExpressive') styleLabel = 'Self-Expressive';
+    if (styleKey === 'fourStyle') styleLabel = 'Four-Style';
+    lines.push('   ' + styleLabel + ' Style:');
+    for (var r = 0; r < recs.length; r++) {
+      lines.push('   - ' + recs[r].name + ': ' + recs[r].tip);
+    }
+  }
+
+  return lines;
+}
+
+var pbCurrentDepth = 'quick';
+
+function openPromptBuilder() {
+  var overlay = document.getElementById('pbPromptOverlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  pbCurrentDepth = 'quick';
+  updatePbDepthButtons();
+  generatePbPrompt();
+}
+
+function closePromptBuilder() {
+  var overlay = document.getElementById('pbPromptOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function setPbDepth(depth) {
+  pbCurrentDepth = depth;
+  updatePbDepthButtons();
+  generatePbPrompt();
+}
+
+function updatePbDepthButtons() {
+  var depths = ['quick', 'standard', 'detailed'];
+  for (var i = 0; i < depths.length; i++) {
+    var btnId = 'pbDepth' + depths[i].charAt(0).toUpperCase() + depths[i].substring(1);
+    var btn = document.getElementById(btnId);
+    if (btn) {
+      if (depths[i] === pbCurrentDepth) {
+        btn.className = 'pb-depth-btn pb-depth-active';
+      } else {
+        btn.className = 'pb-depth-btn';
+      }
+    }
+  }
+}
+
+function generatePbPrompt() {
+  if (!selectedHexId) return;
+  var hex = findHexById(selectedHexId);
+  if (!hex) return;
+
+  var data = sspHexInfoCache || {};
+
+  // Build context summary (non-editable visual above textarea)
+  var summaryHtml = '';
+  summaryHtml += '<div class="pb-ctx-item"><strong>Hex:</strong> ' + escapeHtml(hex.label || 'Untitled') + '</div>';
+  if (data.totalStudentsWithProfiles) {
+    summaryHtml += '<div class="pb-ctx-item"><strong>Profiles:</strong> ' + data.totalStudentsWithProfiles + ' students</div>';
+  }
+  if (data.widaStudents && data.widaStudents.length > 0) {
+    summaryHtml += '<div class="pb-ctx-item"><strong>EAL:</strong> ' + data.widaStudents.length + ' WIDA</div>';
+  }
+  var udlCount = (pbSelectedUdl.representation || []).length + (pbSelectedUdl.actionExpression || []).length + (pbSelectedUdl.engagement || []).length;
+  summaryHtml += '<div class="pb-ctx-item"><strong>UDL:</strong> ' + udlCount + ' selected</div>';
+  var summaryEl = document.getElementById('pbContextSummary');
+  if (summaryEl) summaryEl.innerHTML = summaryHtml;
+
+  // Build prompt text
+  var prompt = buildPromptText(hex, data, pbCurrentDepth);
+  var textarea = document.getElementById('pbPromptTextarea');
+  if (textarea) textarea.value = prompt;
+}
+
+function buildPromptText(hex, data, depth) {
+  var lines = [];
+  var curriculum = hex.curriculum || {};
+  var inlineContent = hex.inlineContent || {};
+  var lp = hex.lessonPlan || {};
+
+  lines.push('CONTEXT: LESSON DIFFERENTIATION PLAN');
+  lines.push('');
+  lines.push('I am planning a lesson for a learning activity with these characteristics:');
+  lines.push('');
+  lines.push('TOPIC & CONTENT:');
+  lines.push('- Hex Label: ' + (hex.label || 'Untitled'));
+  var contentDesc = (inlineContent.body) ? inlineContent.body.substring(0, 200) : 'Not specified';
+  lines.push('- Content Description: ' + contentDesc);
+  lines.push('- Key Language Use: ' + formatKeyLanguageUse(curriculum.keyLanguageUse));
+
+  var sbarArr = [];
+  if (curriculum.sbarDomains) {
+    if (typeof curriculum.sbarDomains === 'string') sbarArr = curriculum.sbarDomains.split(',');
+    else if (Array.isArray(curriculum.sbarDomains)) sbarArr = curriculum.sbarDomains;
+  }
+  lines.push('- Subject Area Tags: ' + (sbarArr.length > 0 ? sbarArr.join(', ') : 'None'));
+
+  var atlArr = [];
+  if (curriculum.atlSkills) {
+    if (typeof curriculum.atlSkills === 'string') atlArr = curriculum.atlSkills.split(',');
+    else if (Array.isArray(curriculum.atlSkills)) atlArr = curriculum.atlSkills;
+  }
+  lines.push('- ATL Skills: ' + (atlArr.length > 0 ? atlArr.join(', ') : 'None'));
+
+  // Standards
+  var stdNames = getHexStandardNamesForPrompt(hex.id);
+  lines.push('- Standards: ' + (stdNames.length > 0 ? stdNames.join('; ') : 'None aligned'));
+
+  lines.push('');
+  lines.push('STUDENT CONTEXT:');
+
+  if (data && data.totalStudentsWithProfiles > 0) {
+    lines.push('- ' + data.totalStudentsWithProfiles + ' students have support profiles in assigned classes');
+
+    if (data.reminders) {
+      for (var r = 0; r < data.reminders.length; r++) {
+        var rem = data.reminders[r];
+        lines.push('- ' + rem.count + ' student(s) benefit from: ' + rem.label);
+      }
+    }
+
+    if (data.widaStudents && data.widaStudents.length > 0) {
+      lines.push('- ' + data.widaStudents.length + ' EAL students with WIDA profiles:');
+      for (var w = 0; w < data.widaStudents.length; w++) {
+        var ws = data.widaStudents[w];
+        var dom = ws.domains || { listening: 0, speaking: 0, reading: 0, writing: 0 };
+        lines.push('  - WIDA Level ' + ws.level + ' (L:' + (dom.listening || 0) + ' S:' + (dom.speaking || 0) + ' R:' + (dom.reading || 0) + ' W:' + (dom.writing || 0) + ')');
+      }
+    }
+  } else {
+    lines.push('- No students with support profiles in assigned classes');
+  }
+
+  lines.push('');
+  lines.push('CURRENT UDL STRATEGIES SELECTED:');
+  lines.push('- Representation: ' + (pbSelectedUdl.representation.length > 0 ? pbSelectedUdl.representation.join(', ') : 'None selected'));
+  lines.push('- Action & Expression: ' + (pbSelectedUdl.actionExpression.length > 0 ? pbSelectedUdl.actionExpression.join(', ') : 'None selected'));
+  lines.push('- Engagement: ' + (pbSelectedUdl.engagement.length > 0 ? pbSelectedUdl.engagement.join(', ') : 'None selected'));
+
+  lines.push('');
+  lines.push('RESEARCH-INFORMED FRAMEWORKS TO APPLY:');
+  lines.push('');
+  lines.push('1. Integrated Language & Content (ILC) Fundamentals:');
+  lines.push('   - Building Up Ideas: How will students build disciplinary ideas through peer interaction, text, and evidence?');
+  lines.push('   - Filling Information Gaps: Design activities requiring meaningful communication to fill genuine information gaps');
+  lines.push('   - Interacting with Peers: Plan a continuum from structured to open-ended peer interaction');
+  lines.push('   - Scaffolding Language: Include modeling, sentence frames, vocabulary in context, and text deconstruction/construction');
+  lines.push('');
+  lines.push('2. Translanguaging Pedagogy (Garcia):');
+  lines.push('   - Stance: Honor students\' full linguistic repertoires as resources for learning');
+  lines.push('   - Design: Create space for multilingual word walls, cognate awareness, and strategic language groupings');
+  lines.push('   - Shifts: Plan for responsive translanguaging moments (students as language experts, co-learning)');
+  lines.push('');
+  lines.push('3. IB Language Support Strategies (Thomson):');
+  lines.push('   - Vocabulary checks and pre-teaching key terms');
+  lines.push('   - Think-aloud modeling of academic language');
+  lines.push('   - Elaborated input with extended thinking time');
+  lines.push('   - Student-to-student verbal interaction opportunities');
+  lines.push('   - BICS to CALP bridging activities');
+  lines.push('');
+  lines.push('4. Universal Design for Learning:');
+  lines.push('   - Multiple means of representation, action/expression, and engagement');
+  lines.push('   - Reduce barriers while maintaining rigorous learning goals');
+  lines.push('');
+  lines.push('ASSET-BASED FRAMING:');
+  lines.push('- Focus on what supports enable student success, not deficits');
+  lines.push('- Recognize linguistic diversity as a strength');
+  lines.push('- Build on students\' prior knowledge and cultural assets');
+  lines.push('');
+  lines.push('5. Strategic Teaching Strategies (Silver, Strong & Perini):');
+  var stratBlock = pbBuildStrategyBlock(hex);
+  for (var sb = 0; sb < stratBlock.length; sb++) {
+    lines.push(stratBlock[sb]);
+  }
+  lines.push('');
+
+  // Depth-specific task
+  if (depth === 'quick') {
+    lines.push('TASK: Provide 3-5 specific, actionable differentiation strategies for this activity that address the student support needs listed above. Keep it concise and practical.');
+  } else if (depth === 'standard') {
+    lines.push('TASK: Create a differentiation plan for this activity that includes:');
+    lines.push('1. Specific scaffolds for EAL students at each WIDA level present');
+    lines.push('2. Accommodation implementation notes for each accommodation type listed');
+    lines.push('3. Language supports (sentence frames, vocabulary, visuals) appropriate to the Key Language Use');
+    lines.push('4. At least one translanguaging opportunity');
+    lines.push('5. A brief note on how the selected UDL strategies will be implemented');
+  } else {
+    lines.push('TASK: Create a comprehensive, research-informed differentiation plan for this activity that includes:');
+    lines.push('1. Detailed scaffolds for EAL students at each WIDA level present, with specific examples');
+    lines.push('2. Accommodation implementation notes for every accommodation type listed');
+    lines.push('3. Language supports mapped to the Key Language Use:');
+    lines.push('   - Sentence frames (at least 2 per WIDA level range)');
+    lines.push('   - Vocabulary pre-teaching plan');
+    lines.push('   - Visual supports description');
+    lines.push('   - Text deconstruction/construction approach');
+    lines.push('4. ILC Fundamentals integration:');
+    lines.push('   - One "Building Up Ideas" activity');
+    lines.push('   - One "Filling Information Gaps" activity');
+    lines.push('   - One "Interacting with Peers" structured interaction');
+    lines.push('   - Language scaffolding progression');
+    lines.push('5. Translanguaging opportunities:');
+    lines.push('   - How students can use home language as a resource');
+    lines.push('   - Cognate awareness connections');
+    lines.push('   - Multilingual resource suggestions');
+    lines.push('6. IB strategy implementation:');
+    lines.push('   - Think-aloud script excerpt');
+    lines.push('   - Elaborated input examples');
+    lines.push('   - Student interaction protocol');
+    lines.push('7. Full UDL implementation plan for each selected strategy');
+    lines.push('8. Assessment differentiation aligned to accommodations');
+    lines.push('');
+    lines.push('Use asset-based language throughout. Frame all supports in terms of enabling success.');
+  }
+
+  return lines.join('\n');
+}
+
+function formatKeyLanguageUse(klu) {
+  if (!klu) return 'Not specified';
+  var map = {
+    narrate: 'Narrate (recount, sequence events, tell stories)',
+    inform: 'Inform (define, describe, compare, classify)',
+    explain: 'Explain (analyze cause/effect, justify, interpret)',
+    argue: 'Argue (persuade, evaluate, debate claims with evidence)'
+  };
+  return map[klu] || klu;
+}
+
+function getHexStandardNamesForPrompt(hexId) {
+  var result = [];
+  if (typeof hexStandardsCache !== 'undefined' && hexStandardsCache && hexStandardsCache[String(hexId)]) {
+    var stds = hexStandardsCache[String(hexId)];
+    for (var i = 0; i < stds.length; i++) {
+      result.push(((stds[i].code || '') + ' ' + (stds[i].description || '')).trim());
+    }
+  }
+  return result;
+}
+
+function copyPbPrompt() {
+  var textarea = document.getElementById('pbPromptTextarea');
+  if (!textarea) return;
+
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textarea.value).then(function() {
+        showToast('Prompt copied to clipboard!', 'success');
+      }, function() {
+        // Fallback
+        document.execCommand('copy');
+        showToast('Prompt copied to clipboard!', 'success');
+      });
+    } else {
+      document.execCommand('copy');
+      showToast('Prompt copied to clipboard!', 'success');
+    }
+  } catch (e) {
+    showToast('Could not copy. Please select all and copy manually.', 'warning');
+  }
+}
+</script>

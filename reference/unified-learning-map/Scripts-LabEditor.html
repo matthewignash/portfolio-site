@@ -1,0 +1,987 @@
+<script>
+// ============================================================================
+// Scripts-LabEditor.html — Student Lab Report Editor
+//
+// Renders inside contentModalBody (same pattern as Cornell Notes, self-assessment).
+// Each template section appears as a card with textarea.
+// Auto-save per-section with 300ms debounce.
+//
+// State variables (defined in Scripts-Core.html):
+//   labEditorData          — { assignment, template, submission, sectionData }
+//   labEditorSectionContent — { sectionKey: { content, structuredData, wordCount } }
+//   labEditorDirty         — { sectionKey: true } tracking unsaved sections
+//   labEditorSaveTimers    — { sectionKey: timeoutId } per-section debounce
+//
+// All code is ES5. No const, let, =>, template literals, or .includes().
+// ============================================================================
+
+
+/**
+ * Entry point — called from openStudentHexPanel when hex.type === 'lab'.
+ * Shows loading spinner, calls getStudentLabContext RPC.
+ *
+ * @param {string} hexId
+ * @param {Object} hex - The hex object
+ */
+function labEditorOpen(hexId, hex) {
+  var expectedHexId = String(hexId);
+  var bodyEl = document.getElementById('contentModalBody');
+  bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">' +
+    '<div style="font-size:24px;margin-bottom:8px;">&#129514;</div>' +
+    'Loading lab editor...</div>';
+
+  // Initialize state
+  labEditorData = {
+    _expectedHexId: expectedHexId,
+    hexId: hexId,
+    hex: hex,
+    assignment: null,
+    template: null,
+    submission: null,
+    sectionData: []
+  };
+  labEditorSectionContent = {};
+  labEditorDirty = {};
+  labEditorSaveTimers = {};
+
+  google.script.run
+    .withSuccessHandler(function(context) {
+      // Stale-response guard
+      if (!labEditorData || String(labEditorData._expectedHexId) !== expectedHexId) return;
+
+      if (!context) {
+        bodyEl.innerHTML = '<div class="lab-placeholder">' +
+          '<div class="lab-placeholder-icon">&#129514;</div>' +
+          '<div class="lab-placeholder-title">Lab Report</div>' +
+          '<div class="lab-placeholder-text">' +
+          'Your teacher is still setting up this lab assignment. Check back soon!</div>' +
+          '</div>';
+        return;
+      }
+
+      labEditorData.assignment = context.assignment;
+      labEditorData.template = context.template;
+      labEditorData.submission = context.submission;
+      labEditorData.sectionData = context.sectionData || [];
+
+      labEditorRender();
+    })
+    .withFailureHandler(function(err) {
+      // Stale-response guard
+      if (!labEditorData || String(labEditorData._expectedHexId) !== expectedHexId) return;
+
+      bodyEl.innerHTML = '<div class="lab-placeholder">' +
+        '<div class="lab-placeholder-icon">&#9888;&#65039;</div>' +
+        '<div class="lab-placeholder-text">' +
+        'Could not load lab editor: ' + escapeHtml(err.message) + '</div>' +
+        '</div>';
+    })
+    .getStudentLabContext(hexId);
+}
+
+
+/**
+ * Render all sections into contentModalBody.
+ * Shows teacher instructions, then section cards.
+ */
+function labEditorRender() {
+  var bodyEl = document.getElementById('contentModalBody');
+  var d = labEditorData;
+  if (!d || !d.template) return;
+
+  var sections = d.template.sectionsJson || [];
+  var scaffoldLevel = (d.assignment && d.assignment.scaffoldLevel) ? d.assignment.scaffoldLevel : 'medium';
+
+  // Sort sections by sequence
+  sections.sort(function(a, b) {
+    return (a.sequence || 0) - (b.sequence || 0);
+  });
+
+  // Determine read-only mode from submission status
+  var subStatus = (d.submission && d.submission.status) ? String(d.submission.status) : '';
+  labEditorReadOnly = (subStatus === 'submitted' || subStatus === 'scored');
+
+  var html = '';
+
+  // Status banner
+  if (subStatus) {
+    if (subStatus === 'submitted') {
+      html += '<div class="lab-status-banner lab-status-submitted">';
+      html += '&#9989; <strong>Submitted</strong>';
+      if (d.submission.submittedAt) html += ' on ' + escapeHtml(d.submission.submittedAt);
+      if (parseInt(d.submission.revisionNumber || 0, 10) > 0) {
+        html += ' <span class="lab-version-badge">Revision ' +
+          escapeHtml(String(d.submission.revisionNumber)) + '</span>';
+      }
+      html += '</div>';
+    } else if (subStatus === 'scored') {
+      html += '<div class="lab-status-banner lab-status-scored">';
+      html += '&#127942; <strong>Scored</strong>';
+      if (d.submission.submittedAt) html += ' on ' + escapeHtml(d.submission.submittedAt);
+      if (parseInt(d.submission.revisionNumber || 0, 10) > 0) {
+        html += ' <span class="lab-version-badge">Revision ' +
+          escapeHtml(String(d.submission.revisionNumber)) + '</span>';
+      }
+      html += '</div>';
+      // Results placeholder — filled by labEditorLoadResults after render
+      html += '<div id="labEditorResultsContainer">' +
+        '<div style="text-align:center;padding:20px;color:#94a3b8;">Loading scores...</div></div>';
+      if (d.submission.exportDocUrl) {
+        html += '<a class="lab-results-doc-link" href="' + escapeHtml(d.submission.exportDocUrl) +
+          '" target="_blank">&#128196; View as Google Doc</a>';
+      }
+    } else if (subStatus === 'returned') {
+      html += '<div class="lab-status-banner lab-status-returned">';
+      html += '&#128260; <strong>Returned for revision</strong>';
+      if (parseInt(d.submission.revisionNumber || 0, 10) > 0) {
+        html += ' <span class="lab-version-badge">Revision ' +
+          escapeHtml(String(d.submission.revisionNumber)) + '</span>';
+      }
+      // Parse teacher feedback from embeddedSheetsJson
+      var returnData = null;
+      if (d.submission.embeddedSheetsJson) {
+        try { returnData = JSON.parse(d.submission.embeddedSheetsJson); } catch (e) { /* ignore */ }
+      }
+      if (returnData && returnData.returnFeedback) {
+        html += '<div class="lab-return-feedback"><strong>Teacher feedback:</strong> ' +
+          escapeHtml(returnData.returnFeedback) + '</div>';
+      }
+      html += '</div>';
+    } else {
+      html += '<div class="lab-status-banner lab-status-draft">';
+      html += '&#9998; <strong>Draft</strong> &#8212; auto-saving as you type';
+      html += '</div>';
+    }
+  }
+
+  // Teacher instructions
+  if (d.assignment && d.assignment.instructions) {
+    html += '<div class="lab-editor-instructions">' +
+      '<strong>Teacher Instructions:</strong> ' +
+      escapeHtml(d.assignment.instructions) + '</div>';
+  }
+
+  // Assignment title
+  if (d.assignment && d.assignment.title) {
+    html += '<div style="font-size:15px;font-weight:600;color:#0d9488;margin-bottom:12px;">' +
+      escapeHtml(d.assignment.title) + '</div>';
+  }
+
+  // Due date
+  if (d.assignment && d.assignment.dueDate) {
+    var dueDateStr = escapeHtml(d.assignment.dueDate);
+    html += '<div style="font-size:12px;color:#64748b;margin-bottom:16px;">' +
+      'Due: ' + dueDateStr + '</div>';
+  }
+
+  // Render each section
+  var sectionCount = 0;
+  for (var i = 0; i < sections.length; i++) {
+    var sec = sections[i];
+    var secKey = sec.sectionId;
+
+    // Skip disabled sections (from sectionOverrides)
+    if (sec._override_enabled === false) continue;
+
+    // Find existing data for this section
+    var existingData = null;
+    for (var j = 0; j < d.sectionData.length; j++) {
+      if (String(d.sectionData[j].sectionKey) === String(secKey)) {
+        existingData = d.sectionData[j];
+        break;
+      }
+    }
+
+    html += labEditorRenderSection(sec, existingData, scaffoldLevel);
+    sectionCount++;
+  }
+
+  if (sectionCount === 0) {
+    html += '<div style="text-align:center;padding:30px;color:#94a3b8;">' +
+      'No sections are enabled for this assignment.</div>';
+  }
+
+  bodyEl.innerHTML = html;
+
+  // Initialize word counts after DOM is rendered
+  labEditorInitWordCounts();
+
+  // Load score results if submission is scored
+  if (subStatus === 'scored' && d.submission && d.submission.submissionId) {
+    labEditorLoadResults(d.submission.submissionId);
+  }
+
+  // Show/hide Submit button in footer
+  var submitBtn = document.getElementById('labSubmitBtn');
+  if (submitBtn) {
+    if (!labEditorReadOnly && (subStatus === 'draft' || subStatus === 'returned' || subStatus === '')) {
+      submitBtn.style.display = '';
+    } else {
+      submitBtn.style.display = 'none';
+    }
+  }
+}
+
+
+/**
+ * Render a single section card.
+ *
+ * @param {Object} section - Template section definition
+ * @param {Object|null} sectionData - Existing saved data or null
+ * @param {string} scaffoldLevel - 'high', 'medium', 'low', or 'none'
+ * @returns {string} HTML string
+ */
+function labEditorRenderSection(section, sectionData, scaffoldLevel) {
+  var secKey = section.sectionId;
+  var content = (sectionData && sectionData.contentMarkup) ? String(sectionData.contentMarkup) : '';
+  var wordCount = (sectionData && sectionData.wordCount) ? parseInt(sectionData.wordCount, 10) : 0;
+
+  // Initialize section content cache
+  labEditorSectionContent[secKey] = {
+    content: content,
+    structuredData: (sectionData && sectionData.structuredDataJson) ? String(sectionData.structuredDataJson) : '',
+    wordCount: wordCount
+  };
+
+  // Parse structured data
+  var structuredData = null;
+  var structuredStr = (sectionData && sectionData.structuredDataJson) ? String(sectionData.structuredDataJson) : '';
+  if (structuredStr) {
+    try { structuredData = JSON.parse(structuredStr); } catch (e) { structuredData = null; }
+  }
+
+  var inputType = section.inputType || 'richtext';
+  var readOnly = labEditorReadOnly || false;
+
+  var html = '<div class="lab-editor-section" id="labEditorSec-' + escapeHtml(secKey) + '"' +
+    ' data-inputtype="' + escapeHtml(inputType) + '">';
+
+  // Header: title + required badge
+  html += '<div class="lab-editor-section-header">';
+  html += '<span class="lab-editor-section-title">' + escapeHtml(section.title || 'Untitled Section') + '</span>';
+  if (section.required) {
+    html += ' <span class="lab-editor-required">Required</span>';
+  }
+  // Section type badge
+  if (section.sectionType) {
+    html += ' <span style="font-size:10px;color:#94a3b8;margin-left:4px;">' +
+      escapeHtml(section.sectionType.replace(/_/g, ' ')) + '</span>';
+  }
+  html += '</div>';
+
+  // Prompt text
+  if (section.promptText) {
+    html += '<div class="lab-editor-prompt">' + escapeHtml(section.promptText) + '</div>';
+  }
+
+  // Help text (collapsible — auto-expanded for high scaffold assignments)
+  if (section.helpText) {
+    var helpExpanded = (scaffoldLevel === 'high');
+    var helpLinkText = helpExpanded ? 'Hide guidance' : 'Show guidance';
+    var helpDisplay = helpExpanded ? '' : ' style="display:none;"';
+    html += '<div class="lab-editor-help-toggle">' +
+      '<a href="#" onclick="labEditorToggleHelp(\'' + escapeHtml(secKey) + '\');return false;">' +
+      helpLinkText + '</a></div>';
+    html += '<div class="lab-editor-help" id="labEditorHelp-' + escapeHtml(secKey) + '"' + helpDisplay + '>' +
+      escapeHtml(section.helpText) + '</div>';
+  }
+
+  // Scaffold hints
+  html += labEditorRenderScaffold(section, scaffoldLevel);
+
+  // Input area — dispatch to type-specific renderer or fallback to textarea
+  var inputHtml = '';
+  try {
+    if (inputType === 'structured') {
+      inputHtml = labRenderTitlePage(secKey, structuredData, readOnly);
+    } else if (inputType === 'structured_table') {
+      inputHtml = labRenderVariablesTable(secKey, structuredData, readOnly);
+    } else if (inputType === 'list') {
+      inputHtml = labRenderList(secKey, structuredData, readOnly);
+    } else if (inputType === 'ordered_list') {
+      inputHtml = labRenderOrderedList(secKey, structuredData, readOnly);
+    } else if (inputType === 'richtext_checklist') {
+      inputHtml = labRenderChecklist(secKey, structuredData, readOnly);
+    } else if (inputType === 'data_table') {
+      inputHtml = labRenderDataTable(secKey, structuredData, readOnly);
+    } else if (inputType === 'structured_list') {
+      inputHtml = labRenderBibliography(secKey, structuredData, readOnly);
+    } else if (inputType === 'richtext' || inputType === 'richtext_embed') {
+      inputHtml = labRichRender(secKey, content, readOnly);
+    }
+  } catch (renderErr) {
+    // Fallback to textarea on renderer error
+    inputHtml = '';
+  }
+
+  if (inputHtml) {
+    html += inputHtml;
+  } else {
+    // Default: richtext textarea (also used as fallback)
+    html += '<textarea class="lab-editor-input" id="labEditorInput-' + escapeHtml(secKey) + '"' +
+      ' oninput="labEditorOnInput(\'' + escapeHtml(secKey) + '\')"' +
+      ' placeholder="Start typing your response..."' +
+      (readOnly ? ' disabled' : '') +
+      '>' + escapeHtml(content) + '</textarea>';
+  }
+
+  // Meta row: word count + save status
+  html += '<div class="lab-editor-meta">';
+
+  // Word count
+  var wcLabel = wordCount + ' words';
+  if (section.wordGuidance) {
+    var minW = section.wordGuidance.min || 0;
+    var maxW = section.wordGuidance.max || '?';
+    wcLabel += ' (target: ' + minW + '\u2013' + maxW + ')';
+  }
+  html += '<span class="lab-editor-wordcount" id="labEditorWC-' + escapeHtml(secKey) + '">' +
+    wcLabel + '</span>';
+
+  // Version history link (shown when revisions exist)
+  if (labEditorData && labEditorData.submission &&
+      parseInt(labEditorData.submission.revisionNumber || 0, 10) > 0) {
+    html += '<a href="#" class="lab-version-btn" onclick="labEditorShowHistory(\'' +
+      escapeHtml(secKey) + '\');return false;">View History</a>';
+  }
+
+  // Save status
+  html += '<span class="lab-editor-status" id="labEditorStatus-' + escapeHtml(secKey) + '"></span>';
+
+  html += '</div>'; // .lab-editor-meta
+  html += '</div>'; // .lab-editor-section
+
+  return html;
+}
+
+
+/**
+ * Render scaffold hints (sentence starters, guide questions) for a section.
+ *
+ * @param {Object} section - Template section with scaffoldLevels
+ * @param {string} scaffoldLevel - Current scaffold level
+ * @returns {string} HTML string (may be empty)
+ */
+function labEditorRenderScaffold(section, scaffoldLevel) {
+  if (scaffoldLevel === 'none') return '';
+  if (!section.scaffoldLevels) return '';
+
+  var levelData = section.scaffoldLevels[scaffoldLevel];
+  if (!levelData) return '';
+
+  var html = '';
+
+  if (levelData.sentenceStarters && levelData.sentenceStarters.length > 0) {
+    html += '<div class="lab-editor-scaffold">';
+    html += '<div class="lab-editor-scaffold-label">Sentence starters:</div>';
+    for (var i = 0; i < levelData.sentenceStarters.length; i++) {
+      html += '<div class="lab-editor-scaffold-item">\u201C' +
+        escapeHtml(levelData.sentenceStarters[i]) + '\u201D</div>';
+    }
+    html += '</div>';
+  }
+
+  if (levelData.guideQuestions && levelData.guideQuestions.length > 0) {
+    html += '<div class="lab-editor-scaffold">';
+    html += '<div class="lab-editor-scaffold-label">Guide questions:</div>';
+    for (var j = 0; j < levelData.guideQuestions.length; j++) {
+      html += '<div class="lab-editor-scaffold-item">' +
+        escapeHtml(levelData.guideQuestions[j]) + '</div>';
+    }
+    html += '</div>';
+  }
+
+  return html;
+}
+
+
+/**
+ * Handle input on a section textarea.
+ * Updates word count immediately, debounces save (300ms).
+ *
+ * @param {string} sectionKey
+ */
+function labEditorOnInput(sectionKey) {
+  // Skip if read-only (submitted)
+  if (labEditorReadOnly) return;
+
+  // Update word count immediately
+  labEditorUpdateWordCount(sectionKey);
+
+  // Mark dirty
+  labEditorDirty[sectionKey] = true;
+
+  // Debounce save (300ms per section)
+  if (labEditorSaveTimers[sectionKey]) {
+    clearTimeout(labEditorSaveTimers[sectionKey]);
+  }
+  labEditorSaveTimers[sectionKey] = setTimeout(function() {
+    labEditorSaveSectionDraft(sectionKey);
+  }, 300);
+}
+
+
+/**
+ * Update word count display for a section.
+ * Colors: under min = amber, in range = green, over max = red.
+ *
+ * @param {string} sectionKey
+ */
+function labEditorUpdateWordCount(sectionKey) {
+  var text = '';
+  var input = document.getElementById('labEditorInput-' + sectionKey);
+
+  if (input) {
+    if (input.tagName === 'TEXTAREA') {
+      // Plain textarea
+      text = input.value.trim();
+      if (labEditorSectionContent[sectionKey]) {
+        labEditorSectionContent[sectionKey].content = input.value;
+      }
+    } else {
+      // Contenteditable div (rich editor)
+      text = (typeof labRichStripHtml === 'function') ?
+        labRichStripHtml(input.innerHTML).trim() : (input.textContent || '').trim();
+      if (labEditorSectionContent[sectionKey]) {
+        labEditorSectionContent[sectionKey].content = input.innerHTML;
+      }
+    }
+  } else {
+    // Structured type — extract text from cache
+    var sc = labEditorSectionContent[sectionKey];
+    if (sc && sc.content) {
+      text = sc.content.trim();
+    } else if (sc && sc.structuredData) {
+      // Parse structuredData to extract text
+      var secEl = document.getElementById('labEditorSec-' + sectionKey);
+      var iType = secEl ? (secEl.getAttribute('data-inputtype') || '') : '';
+      try {
+        var parsed = JSON.parse(sc.structuredData);
+        text = labExtractTextFromStructured(iType, parsed).trim();
+      } catch (e) {
+        text = '';
+      }
+    }
+  }
+
+  var count = text.length > 0 ? text.split(/\s+/).length : 0;
+
+  // Update cache word count
+  if (labEditorSectionContent[sectionKey]) {
+    labEditorSectionContent[sectionKey].wordCount = count;
+  }
+
+  var wcEl = document.getElementById('labEditorWC-' + sectionKey);
+  if (!wcEl) return;
+
+  // Find section definition for word guidance
+  var sections = (labEditorData && labEditorData.template) ?
+    (labEditorData.template.sectionsJson || []) : [];
+  var section = null;
+  for (var i = 0; i < sections.length; i++) {
+    if (String(sections[i].sectionId) === String(sectionKey)) {
+      section = sections[i];
+      break;
+    }
+  }
+
+  var label = count + ' words';
+  var colorClass = 'lab-editor-wordcount';
+
+  if (section && section.wordGuidance) {
+    var minW = section.wordGuidance.min || 0;
+    var maxW = section.wordGuidance.max || null;
+    label += ' (target: ' + minW + '\u2013' + (maxW || '?') + ')';
+
+    if (minW && count < minW) {
+      colorClass += ' lab-editor-wc-under';
+      label += ' \u2014 Under target';
+    } else if (maxW && count > maxW) {
+      colorClass += ' lab-editor-wc-over';
+      label += ' \u2014 Over target';
+    } else if (count > 0) {
+      colorClass += ' lab-editor-wc-ok';
+      label += ' \u2014 On target';
+    }
+  }
+
+  wcEl.className = colorClass;
+  wcEl.textContent = label;
+}
+
+
+/**
+ * Save a section draft via RPC.
+ * Auto-creates submission on first save.
+ *
+ * @param {string} sectionKey
+ */
+function labEditorSaveSectionDraft(sectionKey) {
+  if (!labEditorData || !labEditorDirty[sectionKey]) return;
+  labEditorDirty[sectionKey] = false;
+
+  var sc = labEditorSectionContent[sectionKey];
+  if (!sc) return;
+
+  var statusEl = document.getElementById('labEditorStatus-' + sectionKey);
+  if (statusEl) {
+    statusEl.textContent = 'Saving...';
+    statusEl.className = 'lab-editor-status';
+  }
+
+  var assignmentId = labEditorData.assignment.assignmentId;
+  var submissionId = (labEditorData.submission && labEditorData.submission.submissionId)
+    ? labEditorData.submission.submissionId : '';
+
+  var expectedHexId = labEditorData._expectedHexId;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      // Stale-response guard
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+
+      // Capture submissionId from first save
+      if (result && result.submissionId) {
+        if (!labEditorData.submission) {
+          labEditorData.submission = { submissionId: result.submissionId, status: 'draft' };
+        } else if (!labEditorData.submission.submissionId) {
+          labEditorData.submission.submissionId = result.submissionId;
+        }
+      }
+
+      if (statusEl) {
+        statusEl.textContent = 'Saved';
+        statusEl.className = 'lab-editor-status lab-editor-status-saved';
+        setTimeout(function() {
+          if (statusEl && statusEl.textContent === 'Saved') {
+            statusEl.textContent = '';
+          }
+        }, 2000);
+      }
+    })
+    .withFailureHandler(function(err) {
+      // Stale-response guard
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+
+      if (statusEl) {
+        statusEl.textContent = 'Save failed';
+        statusEl.className = 'lab-editor-status lab-editor-status-error';
+      }
+      // Re-mark dirty so next input triggers retry
+      labEditorDirty[sectionKey] = true;
+    })
+    .saveLabSectionDraft(assignmentId, submissionId, sectionKey, sc.content, sc.structuredData || '', sc.wordCount);
+}
+
+
+/**
+ * Toggle help text visibility for a section.
+ *
+ * @param {string} sectionKey
+ */
+function labEditorToggleHelp(sectionKey) {
+  var helpEl = document.getElementById('labEditorHelp-' + sectionKey);
+  if (!helpEl) return;
+
+  var isVisible = helpEl.style.display !== 'none';
+  helpEl.style.display = isVisible ? 'none' : 'block';
+
+  // Update toggle link text
+  var secEl = document.getElementById('labEditorSec-' + sectionKey);
+  if (secEl) {
+    var toggleLinks = secEl.getElementsByClassName('lab-editor-help-toggle');
+    if (toggleLinks.length > 0) {
+      var link = toggleLinks[0].getElementsByTagName('a')[0];
+      if (link) {
+        link.textContent = isVisible ? 'Show guidance' : 'Hide guidance';
+      }
+    }
+  }
+}
+
+
+/**
+ * Initialize word counts and color states after DOM render.
+ */
+function labEditorInitWordCounts() {
+  if (!labEditorData || !labEditorData.template) return;
+
+  var sections = labEditorData.template.sectionsJson || [];
+  for (var i = 0; i < sections.length; i++) {
+    labEditorUpdateWordCount(sections[i].sectionId);
+  }
+}
+
+
+/**
+ * Check if all required sections have content.
+ *
+ * @returns {Object} { ready: boolean, missing: [string] }
+ */
+function labEditorCheckRequired() {
+  var missing = [];
+  if (!labEditorData || !labEditorData.template) return { ready: false, missing: ['No template loaded'] };
+
+  var sections = labEditorData.template.sectionsJson || [];
+  for (var i = 0; i < sections.length; i++) {
+    var sec = sections[i];
+    if (sec._override_enabled === false) continue;
+    if (!sec.required) continue;
+
+    var sc = labEditorSectionContent[sec.sectionId];
+    var hasContent = false;
+    if (sc) {
+      if (sc.content && sc.content.trim().length > 0) {
+        // Strip HTML for richtext sections — empty editors may have <br> or <p><br></p>
+        var plainCheck = (typeof labRichStripHtml === 'function') ?
+          labRichStripHtml(sc.content).trim() : sc.content.trim();
+        if (plainCheck.length > 0) hasContent = true;
+      }
+      if (sc.structuredData && sc.structuredData.trim().length > 2) hasContent = true; // > 2 to ignore "{}"
+    }
+    if (!hasContent) {
+      missing.push(sec.title || sec.sectionId);
+    }
+  }
+
+  return { ready: missing.length === 0, missing: missing };
+}
+
+
+/**
+ * Submit the lab report. Called from the Submit button in the modal footer.
+ * Validates required sections, confirms with student, calls RPC.
+ */
+function labEditorSubmit() {
+  if (!labEditorData || !labEditorData.assignment) return;
+  if (labEditorSubmitting) return;
+
+  var check = labEditorCheckRequired();
+  if (!check.ready) {
+    var msg = 'Missing required sections: ' + check.missing.join(', ');
+    showToast(msg, 'error');
+    return;
+  }
+
+  var confirmMsg = 'Submit your lab report? You will not be able to edit until your teacher returns it for revision.';
+  if (!confirm(confirmMsg)) return;
+
+  labEditorSubmitting = true;
+  var expectedHexId = labEditorData._expectedHexId;
+  var assignmentId = labEditorData.assignment.assignmentId;
+
+  // Flush any pending saves first
+  for (var key in labEditorDirty) {
+    if (labEditorDirty.hasOwnProperty(key) && labEditorDirty[key]) {
+      if (labEditorSaveTimers[key]) clearTimeout(labEditorSaveTimers[key]);
+      labEditorSaveSectionDraft(key);
+    }
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+      labEditorSubmitting = false;
+
+      if (result && result.success) {
+        // Update local state
+        if (!labEditorData.submission) {
+          labEditorData.submission = {};
+        }
+        labEditorData.submission.status = 'submitted';
+        labEditorData.submission.submittedAt = result.submittedAt || '';
+        if (result.submissionId) labEditorData.submission.submissionId = result.submissionId;
+
+        // Re-render to show submitted state
+        labEditorRender();
+        showToast('Lab report submitted!', 'success');
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+      labEditorSubmitting = false;
+      showToast(friendlyError(err), 'error');
+    })
+    .submitLabReport(assignmentId);
+}
+
+
+// ============================================================================
+// VERSION HISTORY (Story 2.6)
+// ============================================================================
+
+/**
+ * Show/hide version history panel for a section.
+ * Fetches revision list on first open, caches for session.
+ *
+ * @param {string} secKey - Section key
+ */
+function labEditorShowHistory(secKey) {
+  var panelId = 'labVersionPanel-' + secKey;
+  var existing = document.getElementById(panelId);
+
+  // Toggle off if already showing
+  if (existing) {
+    existing.parentNode.removeChild(existing);
+    return;
+  }
+
+  if (!labEditorData || !labEditorData.submission) return;
+  var submissionId = labEditorData.submission.submissionId;
+  if (!submissionId) return;
+
+  // Check cache first
+  if (labVersionCache && labVersionCache[submissionId]) {
+    labEditorRenderHistoryPanel_(secKey, labVersionCache[submissionId]);
+    return;
+  }
+
+  // Show loading placeholder
+  var secEl = document.getElementById('labEditorSec-' + secKey);
+  if (!secEl) return;
+  var panel = document.createElement('div');
+  panel.id = panelId;
+  panel.className = 'lab-version-panel';
+  panel.innerHTML = '<div style="padding:10px;color:#94a3b8;font-size:12px;">Loading history\u2026</div>';
+  secEl.appendChild(panel);
+
+  var expectedHexId = labEditorData._expectedHexId;
+
+  google.script.run
+    .withSuccessHandler(function(revisions) {
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+      if (!labVersionCache) labVersionCache = {};
+      labVersionCache[submissionId] = revisions || [];
+      labEditorRenderHistoryPanel_(secKey, revisions || []);
+    })
+    .withFailureHandler(function(err) {
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+      var p = document.getElementById(panelId);
+      if (p) p.innerHTML = '<div style="padding:10px;color:#dc2626;font-size:12px;">' +
+        escapeHtml(friendlyError(err)) + '</div>';
+    })
+    .getLabRevisionHistory(submissionId);
+}
+
+
+/**
+ * Render the revision history panel for a section.
+ * @private
+ *
+ * @param {string} secKey - Section key
+ * @param {Array} revisions - Array of { revisionNumber, createdAt, sections: [{sectionKey, wordCount}] }
+ */
+function labEditorRenderHistoryPanel_(secKey, revisions) {
+  var panelId = 'labVersionPanel-' + secKey;
+  var secEl = document.getElementById('labEditorSec-' + secKey);
+  if (!secEl) return;
+
+  // Remove existing panel
+  var existing = document.getElementById(panelId);
+  if (existing) existing.parentNode.removeChild(existing);
+
+  if (!revisions || revisions.length === 0) return;
+
+  var html = '<div class="lab-version-panel-header">Revision History</div>';
+
+  // Show newest first
+  for (var i = revisions.length - 1; i >= 0; i--) {
+    var rev = revisions[i];
+
+    // Find this section's data in the revision
+    var secData = null;
+    for (var s = 0; s < rev.sections.length; s++) {
+      if (String(rev.sections[s].sectionKey) === String(secKey)) {
+        secData = rev.sections[s];
+        break;
+      }
+    }
+
+    var label = 'Revision ' + rev.revisionNumber;
+    if (rev.createdAt) label += ' (' + escapeHtml(String(rev.createdAt).substring(0, 10)) + ')';
+
+    html += '<div class="lab-version-item">';
+    html += '<span class="lab-version-item-label">' + label + '</span>';
+    if (secData) {
+      html += '<span class="lab-version-item-wc">' + secData.wordCount + ' words</span>';
+      html += '<a href="#" class="lab-version-view-link" onclick="labEditorViewVersion(\'' +
+        escapeHtml(secKey) + '\',' + rev.revisionNumber + ');return false;">View</a>';
+    } else {
+      html += '<span class="lab-version-item-wc" style="color:#94a3b8;">Not in this revision</span>';
+    }
+    html += '</div>';
+  }
+
+  var panel = document.createElement('div');
+  panel.id = panelId;
+  panel.className = 'lab-version-panel';
+  panel.innerHTML = html;
+  secEl.appendChild(panel);
+}
+
+
+/**
+ * View a specific revision snapshot of a section (read-only).
+ *
+ * @param {string} secKey - Section key
+ * @param {number} revNum - Revision number to view
+ */
+function labEditorViewVersion(secKey, revNum) {
+  if (!labEditorData || !labEditorData.submission) return;
+  var submissionId = labEditorData.submission.submissionId;
+  var expectedHexId = labEditorData._expectedHexId;
+  var viewId = 'labVersionView-' + secKey;
+
+  // Remove existing view
+  var existingView = document.getElementById(viewId);
+  if (existingView) existingView.parentNode.removeChild(existingView);
+
+  var panelEl = document.getElementById('labVersionPanel-' + secKey);
+  if (!panelEl) return;
+
+  // Show loading in panel
+  var viewDiv = document.createElement('div');
+  viewDiv.id = viewId;
+  viewDiv.className = 'lab-version-view';
+  viewDiv.innerHTML = '<div style="padding:8px;color:#94a3b8;font-size:12px;">Loading revision\u2026</div>';
+  panelEl.appendChild(viewDiv);
+
+  google.script.run
+    .withSuccessHandler(function(versionData) {
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+      var v = document.getElementById(viewId);
+      if (!v) return;
+
+      if (!versionData) {
+        v.innerHTML = '<div style="padding:8px;color:#94a3b8;font-size:12px;">Version not found.</div>';
+        return;
+      }
+
+      var viewHtml = '<div class="lab-version-view-header">';
+      viewHtml += 'Revision ' + versionData.revisionNumber + ' snapshot';
+      viewHtml += '<a href="#" class="lab-version-view-close" ' +
+        'onclick="var el=document.getElementById(\'' + viewId + '\');' +
+        'if(el)el.parentNode.removeChild(el);return false;">Close</a>';
+      viewHtml += '</div>';
+      viewHtml += '<div class="lab-version-view-content">';
+
+      if (versionData.contentMarkup) {
+        // Sanitize for display
+        var sanitized = (typeof labRichSanitize === 'function') ?
+          labRichSanitize(versionData.contentMarkup) : escapeHtml(versionData.contentMarkup);
+        viewHtml += sanitized;
+      }
+      if (versionData.structuredDataJson) {
+        viewHtml += '<pre style="font-size:11px;white-space:pre-wrap;color:#64748b;">' +
+          escapeHtml(versionData.structuredDataJson) + '</pre>';
+      }
+      viewHtml += '</div>';
+      viewHtml += '<div class="lab-version-view-meta">' + versionData.wordCount + ' words</div>';
+
+      v.innerHTML = viewHtml;
+    })
+    .withFailureHandler(function(err) {
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+      var v = document.getElementById(viewId);
+      if (v) v.innerHTML = '<div style="padding:8px;color:#dc2626;font-size:12px;">' +
+        escapeHtml(friendlyError(err)) + '</div>';
+    })
+    .getLabSectionVersion(submissionId, secKey, revNum);
+}
+
+
+/**
+ * Load and render scoring results for a scored submission.
+ * Called after labEditorRender when status is 'scored'.
+ *
+ * @param {string} submissionId
+ */
+function labEditorLoadResults(submissionId) {
+  if (!submissionId) return;
+
+  var expectedHexId = labEditorData ? labEditorData._expectedHexId : '';
+
+  google.script.run
+    .withSuccessHandler(function(summary) {
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+      labEditorRenderResults(summary);
+    })
+    .withFailureHandler(function(err) {
+      if (!labEditorData || String(labEditorData._expectedHexId) !== String(expectedHexId)) return;
+      var container = document.getElementById('labEditorResultsContainer');
+      if (container) {
+        container.innerHTML = '<div style="padding:12px;color:#dc2626;font-size:12px;">' +
+          escapeHtml(friendlyError(err)) + '</div>';
+      }
+    })
+    .getLabScoreSummary(submissionId);
+}
+
+
+/**
+ * Render the score results card inside the editor.
+ *
+ * @param {Object} summary - from getLabScoreSummary
+ */
+function labEditorRenderResults(summary) {
+  var container = document.getElementById('labEditorResultsContainer');
+  if (!container || !summary) return;
+
+  var html = '<div class="lab-results-card">';
+
+  // Score summary
+  html += '<div class="lab-results-summary">';
+  html += '<span class="lab-results-score">' + escapeHtml(String(summary.totalWeightedScore)) + '</span>';
+  html += '<span class="lab-results-divider">/</span>';
+  html += '<span class="lab-results-max">' + escapeHtml(String(summary.totalMaxWeightedScore)) + '</span>';
+  html += '<span class="lab-results-pct">' + escapeHtml(String(summary.percentage)) + '%</span>';
+  if (summary.scaleLabel) {
+    html += '<span class="lab-results-label">' + escapeHtml(summary.scaleLabel) + '</span>';
+  }
+  html += '</div>';
+
+  // Per-criterion breakdown
+  var criteria = summary.criteria || [];
+  if (criteria.length > 0) {
+    html += '<div class="lab-results-criteria">';
+    for (var c = 0; c < criteria.length; c++) {
+      var crit = criteria[c];
+      html += '<div class="lab-results-criterion">';
+      html += '<div class="lab-results-criterion-header">';
+      html += '<span class="lab-results-criterion-title">' + escapeHtml(crit.title || '') + '</span>';
+      html += '<span class="lab-results-criterion-score">' +
+        escapeHtml(String(crit.score)) + '/' + escapeHtml(String(crit.maxScore)) + '</span>';
+      if (crit.scaleLabel) {
+        html += '<span class="lab-results-criterion-label">' + escapeHtml(crit.scaleLabel) + '</span>';
+      }
+      html += '</div>';
+      if (crit.feedback) {
+        html += '<div class="lab-results-criterion-feedback">' + escapeHtml(crit.feedback) + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Dimension scores
+  var dims = summary.dimensionScores || {};
+  var dimKeys = Object.keys(dims);
+  if (dimKeys.length > 0) {
+    html += '<div class="lab-results-dimensions">';
+    html += '<div class="lab-results-dim-title">Scientific Thinking Dimensions</div>';
+    for (var d = 0; d < dimKeys.length; d++) {
+      var dimCode = dimKeys[d];
+      var pct = dims[dimCode] || 0;
+      html += '<div class="lab-results-dim-bar">';
+      html += '<span class="lab-results-dim-code">' + escapeHtml(dimCode) + '</span>';
+      html += '<div class="lab-results-dim-track"><div class="lab-results-dim-fill" style="width:' + pct + '%"></div></div>';
+      html += '<span class="lab-results-dim-pct">' + pct + '%</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+</script>

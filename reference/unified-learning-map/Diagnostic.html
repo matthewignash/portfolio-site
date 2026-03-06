@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Map Builder - Diagnostic</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+background: #f1f5f9;
+padding: 20px;
+    }
+.diagnostic {
+background: white;
+border-radius: 12px;
+padding: 24px;
+max-width: 800px;
+margin: 0 auto;
+box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+h1 { color: #1a202c; margin-bottom: 16px; }
+.status {
+padding: 12px;
+border-radius: 8px;
+margin-bottom: 12px;
+font-family: monospace;
+font-size: 13px;
+    }
+.status.pending { background: #fef3c7; color: #92400e; }
+.status.success { background: #d1fae5; color: #065f46; }
+.status.error { background: #fee2e2; color: #991b1b; }
+.log {
+background: #f8fafc;
+border: 1px solid #e2e8f0;
+border-radius: 8px;
+padding: 16px;
+margin-top: 16px;
+max-height: 400px;
+overflow-y: auto;
+    }
+.log-entry {
+font-family: monospace;
+font-size: 12px;
+margin-bottom: 4px;
+color: #475569;
+    }
+.log-entry.error { color: #dc2626; font-weight: 600; }
+button {
+background: #667eea;
+color: white;
+border: none;
+padding: 10px 20px;
+border-radius: 8px;
+cursor: pointer;
+font-weight: 600;
+margin-top: 12px;
+    }
+button:hover { background: #5568d3; }
+</style>
+</head>
+<body>
+<div class="diagnostic">
+<h1>🔍 Builder Diagnostic Mode</h1>
+<p style="color: #64748b; margin-bottom: 20px;">Checking what's preventing Builder from loading...</p>
+<div id="status1" class="status pending">⏳ Step 1: Checking environment...</div>
+<div id="status2" class="status pending">⏳ Step 2: Loading user data...</div>
+<div id="status3" class="status pending">⏳ Step 3: Loading maps...</div>
+<div id="status4" class="status pending">⏳ Step 4: Rendering builder...</div>
+<button onclick="location.reload()">🔄 Retry</button>
+<button onclick="window.open(getScriptUrl() + '?page=builder', '_blank')">🚀 Open in New Tab</button>
+<div class="log">
+<strong>Diagnostic Log:</strong>
+<div id="logOutput"></div>
+</div>
+</div>
+<script>
+const logs = [];
+function log(message, isError = false) {
+const timestamp = new Date().toLocaleTimeString();
+const logEntry = `[${timestamp}] ${message}`;
+logs.push({message: logEntry, isError});
+const logOutput = document.getElementById('logOutput');
+const entry = document.createElement('div');
+entry.className = 'log-entry' + (isError ? ' error' : '');
+entry.textContent = logEntry;
+logOutput.appendChild(entry);
+console.log(logEntry);
+    }
+function updateStatus(step, status, message) {
+const statusEl = document.getElementById(`status${step}`);
+statusEl.className = `status ${status}`;
+statusEl.textContent = message;
+    }
+// Start diagnostics
+window.addEventListener('DOMContentLoaded', async () => {
+log('=== DIAGNOSTIC START ===');
+// Step 1: Environment check
+try {
+log('Checking google.script.run availability...');
+if (typeof google === 'undefined' || !google.script || !google.script.run) {
+throw new Error('google.script.run not available!');
+        }
+updateStatus(1, 'success', '✅ Step 1: Environment OK');
+log('✓ google.script.run is available');
+      } catch (err) {
+updateStatus(1, 'error', '❌ Step 1: Environment check failed');
+log('ERROR: ' + err.message, true);
+return;
+      }
+// Step 2: Get user
+try {
+log('Calling getCurrentUser()...');
+const user = await runAsync('getCurrentUser');
+updateStatus(2, 'success', `✅ Step 2: User loaded (${user.email})`);
+log(`✓ User: ${user.email} (${user.role})`);
+      } catch (err) {
+updateStatus(2, 'error', '❌ Step 2: Failed to load user');
+log('ERROR calling getCurrentUser: ' + err.message, true);
+return;
+      }
+// Step 3: Get maps
+let maps = [];
+try {
+log('Calling getMaps()...');
+maps = await runAsync('getMaps');
+updateStatus(3, 'success', `✅ Step 3: Found ${maps.length} map(s)`);
+log(`✓ Maps returned: ${maps.length}`);
+if (maps.length === 0) {
+updateStatus(4, 'error', '❌ Step 4: No maps to display');
+log('ERROR: No maps in database! Run createTestMap() in Apps Script.', true);
+return;
+        }
+// Log first map details
+log(`First map: "${maps[0].title}" (ID: ${maps[0].mapId})`);
+log(`Hexes in first map: ${maps[0].hexes ? maps[0].hexes.length : 0}`);
+      } catch (err) {
+updateStatus(3, 'error', '❌ Step 3: Failed to load maps');
+log('ERROR calling getMaps: ' + err.message, true);
+return;
+      }
+// Step 4: Would render builder
+try {
+updateStatus(4, 'success', '✅ Step 4: Ready to render!');
+log('✓ All data loaded successfully');
+log('');
+log('=== DIAGNOSTIC COMPLETE ===');
+log('Builder.html should work! If you see this, the backend is fine.');
+log('The issue is likely in the rendering code.');
+      } catch (err) {
+updateStatus(4, 'error', '❌ Step 4: Render failed');
+log('ERROR: ' + err.message, true);
+      }
+    });
+function runAsync(functionName, ...args) {
+return new Promise((resolve, reject) => {
+google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          [functionName](...args);
+      });
+    }
+function getScriptUrl() {
+return window.location.href.split('?')[0];
+    }
+</script>
+</body>
+</html>

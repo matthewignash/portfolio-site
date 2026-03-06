@@ -1,0 +1,844 @@
+<script>
+/**
+ * Module_Reporting.html — Executive Dashboard
+ *
+ * Aggregates KPIs from all 6 modules into a single summary view.
+ * Features: KPI cards, Chart.js charts, collapsible detail sections.
+ * Admin-only module.
+ */
+
+App.ModuleRegistry.reporting = {
+
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      summaryData: null,
+      expandedSections: {},
+      detailCache: {},
+      charts: {}
+    };
+
+    // ── Section config ──
+    var SECTIONS = [
+      { key: 'observations',       title: 'Observations',       icon: '\uD83D\uDC41' },
+      { key: 'growth_plans',       title: 'Growth Plans',       icon: '\uD83C\uDF31' },
+      { key: 'projects',           title: 'Projects',           icon: '\uD83D\uDCC5' },
+      { key: 'change_management',  title: 'Change Management',  icon: '\uD83D\uDD04' },
+      { key: 'accreditation',      title: 'Accreditation',      icon: '\u2705' },
+      { key: 'kanban',             title: 'Strategic Kanban',    icon: '\uD83D\uDCCB' },
+      { key: 'pd',                 title: 'PD Tracking',        icon: '\uD83D\uDCDA' },
+      { key: 'feedback',           title: '360 Feedback',       icon: '\uD83D\uDD04' },
+      { key: 'wellness',           title: 'Wellness',           icon: '\uD83D\uDC9A' },
+      { key: 'leadership',         title: 'Leadership Investment', icon: '\uD83C\uDFAF' }
+    ];
+
+    // ── Build Layout ──
+    container.innerHTML =
+      '<div class="rpt-header">' +
+        '<div>' +
+          '<div class="rpt-header__title">Executive Dashboard</div>' +
+          '<div class="rpt-header__timestamp" id="rpt-timestamp"></div>' +
+        '</div>' +
+        '<div class="rpt-header__actions">' +
+          '<button class="btn btn-sm btn-outline" id="rpt-refresh-btn">Refresh</button>' +
+          '<button class="btn btn-sm btn-outline" id="rpt-print-btn">Print</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="rpt-kpi-grid" class="rpt-kpi-grid"></div>' +
+      '<div id="rpt-chart-row" class="rpt-chart-row"></div>' +
+      '<div id="rpt-sections"></div>';
+
+    // ── Bind buttons ──
+    var refreshBtn = container.querySelector('#rpt-refresh-btn');
+    var printBtn = container.querySelector('#rpt-print-btn');
+    if (refreshBtn) refreshBtn.addEventListener('click', refreshData);
+    if (printBtn) printBtn.addEventListener('click', function() { window.print(); });
+
+    // ── Status helper ──
+    function statusClass(value, thresholds) {
+      if (value >= thresholds.good) return 'good';
+      if (value >= thresholds.warning) return 'warning';
+      return 'danger';
+    }
+
+    // ── Safe value helper ──
+    function safe(obj, key, fallback) {
+      if (!obj || obj.error) return fallback !== undefined ? fallback : 0;
+      return obj[key] !== undefined ? obj[key] : (fallback !== undefined ? fallback : 0);
+    }
+
+    // ── Load Executive Summary ──
+    function loadSummary() {
+      LoadingSpinner.show(container.querySelector('#rpt-kpi-grid'));
+      ServerAPI.getExecutiveSummary()
+        .then(function(data) {
+          state.summaryData = data;
+          renderKPICards(data);
+          renderCharts(data);
+          renderSections(data);
+          var ts = container.querySelector('#rpt-timestamp');
+          if (ts) ts.textContent = 'Updated: ' + formatTimestamp(data.generatedAt);
+        })
+        .catch(function(err) {
+          container.querySelector('#rpt-kpi-grid').innerHTML =
+            '<div class="rpt-empty" style="grid-column:1/-1">Failed to load dashboard: ' + err.message + '</div>';
+        });
+    }
+
+    function formatTimestamp(iso) {
+      if (!iso) return '';
+      var d = new Date(iso);
+      return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    // ══════════════════════════════════
+    //  KPI Cards
+    // ══════════════════════════════════
+    function renderKPICards(data) {
+      var grid = container.querySelector('#rpt-kpi-grid');
+      var obs = data.observations || {};
+      var gp = data.growthPlans || {};
+      var pj = data.projects || {};
+      var cm = data.changeMgmt || {};
+      var acc = data.accreditation || {};
+
+      var cards = [
+        {
+          icon: '\uD83D\uDC41',
+          label: 'Observation Coverage',
+          value: safe(obs, 'coveragePercent') + '%',
+          sub: safe(obs, 'teachersOverdue') + ' overdue',
+          subDanger: safe(obs, 'teachersOverdue') > 0,
+          status: statusClass(safe(obs, 'coveragePercent'), { good: 80, warning: 60 })
+        },
+        {
+          icon: '\uD83C\uDF31',
+          label: 'Growth Plans Active',
+          value: safe(gp, 'activePercent') + '%',
+          sub: safe(gp, 'overdueCheckins') + ' overdue check-ins',
+          subDanger: safe(gp, 'overdueCheckins') > 0,
+          status: statusClass(
+            safe(gp, 'overdueCheckins') === 0 ? 100 : (safe(gp, 'overdueCheckins') <= 3 ? 70 : 0),
+            { good: 80, warning: 60 }
+          )
+        },
+        {
+          icon: '\uD83D\uDCC5',
+          label: 'Project Health',
+          value: safe(pj, 'onTrackPercent') + '%',
+          sub: safe(pj, 'overdueCount') + ' overdue',
+          subDanger: safe(pj, 'overdueCount') > 0,
+          status: statusClass(
+            safe(pj, 'overdueCount') === 0 ? 100 : (safe(pj, 'overdueCount') <= 2 ? 70 : 0),
+            { good: 80, warning: 60 }
+          )
+        },
+        {
+          icon: '\uD83D\uDD04',
+          label: 'Change Readiness',
+          value: safe(cm, 'avgReadiness', 0).toFixed ? safe(cm, 'avgReadiness', 0).toFixed(1) : safe(cm, 'avgReadiness', 0) + ' / 5',
+          sub: safe(cm, 'gapCount') + ' gap' + (safe(cm, 'gapCount') !== 1 ? 's' : ''),
+          subDanger: safe(cm, 'gapCount') > 0,
+          status: statusClass(safe(cm, 'avgReadiness') * 20, { good: 80, warning: 60 })
+        },
+        {
+          icon: '\u2705',
+          label: 'Accreditation Progress',
+          value: safe(acc, 'greenPercent') + '%',
+          sub: acc.visitCountdown !== null && acc.visitCountdown !== undefined
+            ? acc.visitCountdown + ' days to visit'
+            : 'No visit scheduled',
+          subDanger: false,
+          status: statusClass(safe(acc, 'greenPercent'), { good: 75, warning: 50 })
+        },
+        {
+          icon: '\uD83D\uDCDA',
+          label: 'PD Participation',
+          value: safe(data.pd || {}, 'totalAttended'),
+          sub: safe(data.pd || {}, 'totalCreditHours') + ' credit hours',
+          subDanger: false,
+          status: statusClass(safe(data.pd || {}, 'totalAttended') > 0 ? 100 : 0, { good: 80, warning: 40 })
+        },
+        {
+          icon: '\uD83D\uDD04',
+          label: 'Feedback Completion',
+          value: safe(data.feedback || {}, 'completionRate') + '%',
+          sub: safe(data.feedback || {}, 'openCycles') + ' open cycles',
+          subDanger: false,
+          status: statusClass(safe(data.feedback || {}, 'completionRate'), { good: 80, warning: 50 })
+        },
+        {
+          icon: '\uD83D\uDC9A',
+          label: 'Avg Wellness Score',
+          value: safe(data.wellness || {}, 'avgScore').toFixed ? safe(data.wellness || {}, 'avgScore').toFixed(1) : safe(data.wellness || {}, 'avgScore'),
+          sub: safe(data.wellness || {}, 'checkinRate') + '% check-in rate',
+          subDanger: safe(data.wellness || {}, 'activeAlerts') > 0,
+          status: statusClass(safe(data.wellness || {}, 'avgScore') * 20, { good: 70, warning: 50 })
+        }
+      ];
+
+      var html = '';
+      for (var i = 0; i < cards.length; i++) {
+        var c = cards[i];
+        html +=
+          '<div class="rpt-kpi-card rpt-kpi-card--' + c.status + '">' +
+            '<div class="rpt-kpi-card__icon">' + c.icon + '</div>' +
+            '<div class="rpt-kpi-card__value">' + c.value + '</div>' +
+            '<div class="rpt-kpi-card__label">' + c.label + '</div>' +
+            '<div class="rpt-kpi-card__sub' + (c.subDanger ? ' rpt-kpi-card__sub--danger' : '') + '">' + c.sub + '</div>' +
+          '</div>';
+      }
+      grid.innerHTML = html;
+    }
+
+    // ══════════════════════════════════
+    //  Charts (using Chart.js)
+    // ══════════════════════════════════
+    function renderCharts(data) {
+      var row = container.querySelector('#rpt-chart-row');
+      if (!row) return;
+
+      // Destroy existing charts
+      if (state.charts.doughnut) { state.charts.doughnut.destroy(); state.charts.doughnut = null; }
+      if (state.charts.bar) { state.charts.bar.destroy(); state.charts.bar = null; }
+
+      // Check if Chart.js is available
+      if (typeof Chart === 'undefined') {
+        row.innerHTML = '<div class="rpt-empty" style="grid-column:1/-1">Chart.js not loaded</div>';
+        return;
+      }
+
+      row.innerHTML =
+        '<div class="rpt-chart-card">' +
+          '<div class="rpt-chart-card__title">Growth Plan Status Distribution</div>' +
+          '<canvas id="rpt-chart-doughnut" class="rpt-chart-card__canvas"></canvas>' +
+        '</div>' +
+        '<div class="rpt-chart-card">' +
+          '<div class="rpt-chart-card__title">Module Health Overview</div>' +
+          '<canvas id="rpt-chart-bar" class="rpt-chart-card__canvas"></canvas>' +
+        '</div>';
+
+      // Doughnut: Growth Plan status distribution
+      var gp = data.growthPlans || {};
+      var dist = gp.statusDistribution || {};
+      var doughnutCtx = container.querySelector('#rpt-chart-doughnut');
+      if (doughnutCtx) {
+        state.charts.doughnut = new Chart(doughnutCtx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Draft', 'Active', 'Mid-Year Review', 'Final Review', 'Completed'],
+            datasets: [{
+              data: [
+                dist.draft || 0,
+                dist.active || 0,
+                dist.mid_year_review || 0,
+                dist.final_review || 0,
+                dist.completed || 0
+              ],
+              backgroundColor: ['#9ca3af', '#3b82f6', '#06b6d4', '#8b5cf6', '#22c55e'],
+              borderWidth: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } }
+            },
+            cutout: '60%'
+          }
+        });
+      }
+
+      // Bar chart: Module health percentages
+      var obs = data.observations || {};
+      var pj = data.projects || {};
+      var cm = data.changeMgmt || {};
+      var acc = data.accreditation || {};
+      var barCtx = container.querySelector('#rpt-chart-bar');
+      if (barCtx) {
+        var values = [
+          safe(obs, 'coveragePercent'),
+          safe(gp, 'activePercent'),
+          safe(pj, 'onTrackPercent'),
+          Math.round(safe(cm, 'avgReadiness') * 20),
+          safe(acc, 'greenPercent')
+        ];
+        var colors = [];
+        for (var v = 0; v < values.length; v++) {
+          if (values[v] >= 75) colors.push('#22c55e');
+          else if (values[v] >= 50) colors.push('#f59e0b');
+          else colors.push('#ef4444');
+        }
+        state.charts.bar = new Chart(barCtx, {
+          type: 'bar',
+          data: {
+            labels: ['Observations', 'Growth Plans', 'Projects', 'Change Mgmt', 'Accreditation'],
+            datasets: [{
+              label: 'Health %',
+              data: values,
+              backgroundColor: colors,
+              borderRadius: 4,
+              barPercentage: 0.6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } } },
+              x: { grid: { display: false } }
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: function(ctx) { return ctx.parsed.y + '%'; } } }
+            }
+          }
+        });
+      }
+    }
+
+    // ══════════════════════════════════
+    //  Collapsible Detail Sections
+    // ══════════════════════════════════
+    function renderSections(data) {
+      var wrapper = container.querySelector('#rpt-sections');
+      if (!wrapper) return;
+
+      var html = '';
+      for (var i = 0; i < SECTIONS.length; i++) {
+        var sec = SECTIONS[i];
+        var badge = getSectionBadge(sec.key, data);
+        html +=
+          '<div class="rpt-section" data-section="' + sec.key + '">' +
+            '<div class="rpt-section__header" data-toggle="' + sec.key + '">' +
+              '<div class="rpt-section__left">' +
+                '<span>' + sec.icon + '</span>' +
+                '<span class="rpt-section__title">' + sec.title + '</span>' +
+                badge +
+              '</div>' +
+              '<span class="rpt-section__toggle" data-chevron="' + sec.key + '">\u25BC</span>' +
+            '</div>' +
+            '<div class="rpt-section__body" id="rpt-body-' + sec.key + '"></div>' +
+          '</div>';
+      }
+      wrapper.innerHTML = html;
+
+      // Bind toggle clicks
+      var headers = wrapper.querySelectorAll('.rpt-section__header');
+      for (var h = 0; h < headers.length; h++) {
+        headers[h].addEventListener('click', function() {
+          toggleSection(this.getAttribute('data-toggle'));
+        });
+      }
+    }
+
+    function getSectionBadge(key, data) {
+      var obs = data.observations || {};
+      var gp = data.growthPlans || {};
+      var pj = data.projects || {};
+      var cm = data.changeMgmt || {};
+      var acc = data.accreditation || {};
+      var kb = data.kanban || {};
+
+      switch (key) {
+        case 'observations':
+          var ov = safe(obs, 'teachersOverdue');
+          if (ov > 0) return '<span class="rpt-section__badge rpt-section__badge--danger">' + ov + ' overdue</span>';
+          return '<span class="rpt-section__badge rpt-section__badge--good">On track</span>';
+
+        case 'growth_plans':
+          var oc = safe(gp, 'overdueCheckins');
+          if (oc > 0) return '<span class="rpt-section__badge rpt-section__badge--warning">' + oc + ' overdue</span>';
+          return '<span class="rpt-section__badge rpt-section__badge--good">' + safe(gp, 'totalPlans') + ' plans</span>';
+
+        case 'projects':
+          var po = safe(pj, 'overdueCount');
+          if (po > 0) return '<span class="rpt-section__badge rpt-section__badge--danger">' + po + ' overdue</span>';
+          return '<span class="rpt-section__badge rpt-section__badge--good">' + safe(pj, 'activeCount') + ' active</span>';
+
+        case 'change_management':
+          var gc = safe(cm, 'gapCount');
+          if (gc > 0) return '<span class="rpt-section__badge rpt-section__badge--warning">' + gc + ' gaps</span>';
+          return '<span class="rpt-section__badge rpt-section__badge--good">' + safe(cm, 'totalActive') + ' active</span>';
+
+        case 'accreditation':
+          var rc = safe(acc, 'redCount');
+          if (rc > 0) return '<span class="rpt-section__badge rpt-section__badge--danger">' + rc + ' gaps</span>';
+          return '<span class="rpt-section__badge rpt-section__badge--good">' + safe(acc, 'greenPercent') + '% ready</span>';
+
+        case 'kanban':
+          return '<span class="rpt-section__badge rpt-section__badge--info">' + safe(kb, 'totalCards') + ' cards</span>';
+
+        default:
+          return '';
+      }
+    }
+
+    function toggleSection(key) {
+      var isOpen = state.expandedSections[key];
+      var body = container.querySelector('#rpt-body-' + key);
+      var chevron = container.querySelector('[data-chevron="' + key + '"]');
+
+      if (isOpen) {
+        // Collapse
+        state.expandedSections[key] = false;
+        if (body) body.className = 'rpt-section__body';
+        if (chevron) chevron.className = 'rpt-section__toggle';
+      } else {
+        // Expand
+        state.expandedSections[key] = true;
+        if (body) body.className = 'rpt-section__body rpt-section__body--open';
+        if (chevron) chevron.className = 'rpt-section__toggle rpt-section__toggle--open';
+
+        // Load detail if not cached
+        if (!state.detailCache[key]) {
+          if (body) body.innerHTML = '<div class="rpt-empty">Loading...</div>';
+
+          // Leadership section uses its own API
+          var loadPromise;
+          if (key === 'leadership') {
+            var userId = App.getUser() ? App.getUser().id : '';
+            loadPromise = ServerAPI.getLeadershipInvestmentReport(userId);
+          } else {
+            loadPromise = ServerAPI.getReportingModuleDetail(key);
+          }
+
+          loadPromise
+            .then(function(detail) {
+              state.detailCache[key] = detail;
+              renderSectionDetail(key, detail);
+            })
+            .catch(function(err) {
+              if (body) body.innerHTML = '<div class="rpt-empty">Error: ' + err.message + '</div>';
+            });
+        } else {
+          renderSectionDetail(key, state.detailCache[key]);
+        }
+      }
+    }
+
+    // ══════════════════════════════════
+    //  Section Detail Renderers
+    // ══════════════════════════════════
+    function renderSectionDetail(key, detail) {
+      var body = container.querySelector('#rpt-body-' + key);
+      if (!body) return;
+
+      switch (key) {
+        case 'observations':
+          renderObservationDetail(body, detail);
+          break;
+        case 'growth_plans':
+          renderGrowthPlanDetail(body, detail);
+          break;
+        case 'projects':
+          renderProjectDetail(body, detail);
+          break;
+        case 'change_management':
+          renderChangeMgmtDetail(body, detail);
+          break;
+        case 'accreditation':
+          renderAccreditationDetail(body, detail);
+          break;
+        case 'kanban':
+          renderKanbanDetail(body, detail);
+          break;
+        case 'leadership':
+          renderLeadershipDetail(body, detail);
+          break;
+        default:
+          body.innerHTML = '<div class="rpt-empty">No detail view available</div>';
+      }
+    }
+
+    // ── Observations Detail ──
+    function renderObservationDetail(body, detail) {
+      var html = '';
+
+      // Department bar chart
+      var chart = detail.departmentChart || {};
+      var labels = chart.labels || [];
+      var data = chart.data || [];
+      var maxVal = 0;
+      for (var i = 0; i < data.length; i++) { if (data[i] > maxVal) maxVal = data[i]; }
+      if (maxVal === 0) maxVal = 1;
+
+      if (labels.length > 0) {
+        html += '<h4 style="margin-bottom:var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">Observations by Department</h4>';
+        html += '<div class="rpt-bar-list">';
+        for (var d = 0; d < labels.length; d++) {
+          var pct = Math.round((data[d] / maxVal) * 100);
+          html +=
+            '<div class="rpt-bar-item">' +
+              '<div class="rpt-bar-item__label">' + labels[d] + '</div>' +
+              '<div class="rpt-bar-item__track"><div class="rpt-bar-item__fill" style="width:' + pct + '%"></div></div>' +
+              '<div class="rpt-bar-item__value">' + (data[d] % 1 === 0 ? data[d] : data[d].toFixed(1)) + '</div>' +
+            '</div>';
+        }
+        html += '</div>';
+      }
+
+      // Priority list
+      var priority = detail.priorityList || [];
+      if (priority.length > 0) {
+        html += '<h4 style="margin:var(--space-lg) 0 var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">Priority Teachers (Most Overdue)</h4>';
+        html += '<div class="rpt-alert-list">';
+        for (var p = 0; p < priority.length; p++) {
+          var t = priority[p];
+          html +=
+            '<div class="rpt-alert-item">' +
+              '<span class="rpt-alert-item__name">' + (t.teacher ? t.teacher.name : 'Unknown') + '</span>' +
+              '<span class="rpt-alert-item__meta">' + (t.teacher ? t.teacher.department : '') + '</span>' +
+              '<span class="rpt-alert-item__value">' + t.daysSinceLastVisit + ' days</span>' +
+            '</div>';
+        }
+        html += '</div>';
+      }
+
+      body.innerHTML = html || '<div class="rpt-empty">No observation data available</div>';
+    }
+
+    // ── Growth Plans Detail ──
+    function renderGrowthPlanDetail(body, detail) {
+      var html = '';
+      var stats = detail.statusDistribution || {};
+      var total = (stats.total || 0);
+      if (total === 0) {
+        total = (stats.draft || 0) + (stats.active || 0) + (stats.mid_year_review || 0) + (stats.final_review || 0) + (stats.completed || 0);
+      }
+      if (total === 0) total = 1;
+
+      // Stacked bar
+      var segments = [
+        { key: 'draft',            label: 'Draft',            color: '#9ca3af' },
+        { key: 'active',           label: 'Active',           color: '#3b82f6' },
+        { key: 'mid_year_review',  label: 'Mid-Year Review',  color: '#06b6d4' },
+        { key: 'final_review',     label: 'Final Review',     color: '#8b5cf6' },
+        { key: 'completed',        label: 'Completed',        color: '#22c55e' }
+      ];
+
+      html += '<h4 style="margin-bottom:var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">Status Distribution</h4>';
+      html += '<div class="rpt-stacked-bar">';
+      for (var s = 0; s < segments.length; s++) {
+        var val = stats[segments[s].key] || 0;
+        var pct = Math.round((val / total) * 100);
+        if (pct > 0) {
+          html += '<div class="rpt-stacked-bar__segment" style="width:' + pct + '%;background:' + segments[s].color + '" title="' + segments[s].label + ': ' + val + '"></div>';
+        }
+      }
+      html += '</div>';
+
+      // Legend
+      html += '<div class="rpt-legend">';
+      for (var l = 0; l < segments.length; l++) {
+        var count = stats[segments[l].key] || 0;
+        html += '<div class="rpt-legend__item"><span class="rpt-legend__dot" style="background:' + segments[l].color + '"></span>' + segments[l].label + ' (' + count + ')</div>';
+      }
+      html += '</div>';
+
+      // Overdue plans
+      var overdue = detail.overduePlans || [];
+      if (overdue.length > 0) {
+        html += '<h4 style="margin:var(--space-lg) 0 var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">Overdue Check-ins</h4>';
+        html += '<div class="rpt-alert-list">';
+        for (var o = 0; o < overdue.length; o++) {
+          html +=
+            '<div class="rpt-alert-item">' +
+              '<span class="rpt-alert-item__name">' + (overdue[o].staffName || 'Unknown') + '</span>' +
+              '<span class="rpt-alert-item__meta">' + (overdue[o].department || '') + '</span>' +
+              '<span class="rpt-alert-item__value">Last: ' + (overdue[o].lastMeetingDate ? formatTimestamp(overdue[o].lastMeetingDate) : 'Never') + '</span>' +
+            '</div>';
+        }
+        html += '</div>';
+      }
+
+      body.innerHTML = html || '<div class="rpt-empty">No growth plan data available</div>';
+    }
+
+    // ── Projects Detail ──
+    function renderProjectDetail(body, detail) {
+      var html = '';
+      var breakdown = detail.statusBreakdown || {};
+      var statuses = ['planning', 'active', 'on_hold', 'completed', 'cancelled'];
+      var statusColors = { planning: '#9ca3af', active: '#3b82f6', on_hold: '#f59e0b', completed: '#22c55e', cancelled: '#ef4444' };
+
+      html += '<h4 style="margin-bottom:var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">Status Breakdown</h4>';
+      html += '<div style="display:flex;gap:var(--space-md);flex-wrap:wrap;margin-bottom:var(--space-lg)">';
+      for (var s = 0; s < statuses.length; s++) {
+        var count = breakdown[statuses[s]] || 0;
+        var color = statusColors[statuses[s]] || '#9ca3af';
+        html += '<span class="rpt-score" style="background:' + color + '22;color:' + color + '">' + statuses[s].replace('_', ' ') + ': ' + count + '</span>';
+      }
+      html += '</div>';
+
+      // Overdue projects
+      var overdue = detail.overdueProjects || [];
+      if (overdue.length > 0) {
+        html += '<h4 style="margin-bottom:var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">Overdue Projects</h4>';
+        html += '<div class="rpt-alert-list">';
+        for (var o = 0; o < overdue.length; o++) {
+          html +=
+            '<div class="rpt-alert-item">' +
+              '<span class="rpt-alert-item__name">' + (overdue[o].title || 'Untitled') + '</span>' +
+              '<span class="rpt-alert-item__meta">Owner: ' + (overdue[o].ownerName || 'Unassigned') + '</span>' +
+              '<span class="rpt-alert-item__value">Due: ' + (overdue[o].targetEndDate ? formatTimestamp(overdue[o].targetEndDate) : 'N/A') + '</span>' +
+            '</div>';
+        }
+        html += '</div>';
+      }
+
+      body.innerHTML = html || '<div class="rpt-empty">No project data available</div>';
+    }
+
+    // ── Change Management Detail ──
+    function renderChangeMgmtDetail(body, detail) {
+      var comparison = detail.initiativeComparison || [];
+      if (comparison.length === 0) {
+        body.innerHTML = '<div class="rpt-empty">No change initiatives found</div>';
+        return;
+      }
+
+      var html = '<table class="rpt-table">';
+      html += '<thead><tr><th>Initiative</th><th>Champion</th><th>Readiness</th><th>Lippitt Phase</th><th>Status</th></tr></thead>';
+      html += '<tbody>';
+      for (var i = 0; i < comparison.length; i++) {
+        var item = comparison[i];
+        var score = item.overallReadiness || 0;
+        var scoreClass = score >= 4 ? 'good' : (score >= 3 ? 'warning' : 'danger');
+        html +=
+          '<tr>' +
+            '<td><strong>' + (item.title || '') + '</strong></td>' +
+            '<td>' + (item.championName || '') + '</td>' +
+            '<td><span class="rpt-score rpt-score--' + scoreClass + '">' + (typeof score === 'number' ? score.toFixed(1) : score) + '</span></td>' +
+            '<td>' + (item.currentLippittPhase || 'N/A') + '</td>' +
+            '<td>' + Components.StatusBadge.render(item.status || 'unknown') + '</td>' +
+          '</tr>';
+      }
+      html += '</tbody></table>';
+
+      body.innerHTML = html;
+    }
+
+    // ── Accreditation Detail ──
+    function renderAccreditationDetail(body, detail) {
+      var frameworks = detail.frameworks || [];
+      if (frameworks.length === 0) {
+        body.innerHTML = '<div class="rpt-empty">No accreditation frameworks found</div>';
+        return;
+      }
+
+      var html = '';
+      for (var f = 0; f < frameworks.length; f++) {
+        var fw = frameworks[f];
+        var total = (fw.greenCount || 0) + (fw.amberCount || 0) + (fw.redCount || 0);
+        if (total === 0) total = fw.standardCount || 1;
+
+        html += '<h4 style="margin-bottom:var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">' + (fw.name || 'Framework') + '</h4>';
+
+        // RAG stacked bar
+        html += '<div class="rpt-stacked-bar">';
+        var greenPct = Math.round(((fw.greenCount || 0) / total) * 100);
+        var amberPct = Math.round(((fw.amberCount || 0) / total) * 100);
+        var redPct = Math.round(((fw.redCount || 0) / total) * 100);
+        if (greenPct > 0) html += '<div class="rpt-stacked-bar__segment rpt-stacked-bar__segment--green" style="width:' + greenPct + '%" title="Green: ' + fw.greenCount + '"></div>';
+        if (amberPct > 0) html += '<div class="rpt-stacked-bar__segment rpt-stacked-bar__segment--amber" style="width:' + amberPct + '%" title="Amber: ' + fw.amberCount + '"></div>';
+        if (redPct > 0) html += '<div class="rpt-stacked-bar__segment rpt-stacked-bar__segment--red" style="width:' + redPct + '%" title="Red: ' + fw.redCount + '"></div>';
+        html += '</div>';
+
+        // Legend
+        html += '<div class="rpt-legend">';
+        html += '<div class="rpt-legend__item"><span class="rpt-legend__dot" style="background:#22c55e"></span>Ready (' + (fw.greenCount || 0) + ')</div>';
+        html += '<div class="rpt-legend__item"><span class="rpt-legend__dot" style="background:#f59e0b"></span>Partial (' + (fw.amberCount || 0) + ')</div>';
+        html += '<div class="rpt-legend__item"><span class="rpt-legend__dot" style="background:#ef4444"></span>Gaps (' + (fw.redCount || 0) + ')</div>';
+        html += '</div>';
+
+        if (f < frameworks.length - 1) html += '<hr style="margin:var(--space-lg) 0;border-color:var(--color-border)">';
+      }
+
+      body.innerHTML = html;
+    }
+
+    // ── Kanban Detail ──
+    function renderKanbanDetail(body, detail) {
+      var summaries = detail.boardSummaries || [];
+      if (summaries.length === 0) {
+        body.innerHTML = '<div class="rpt-empty">No active boards found</div>';
+        return;
+      }
+
+      var html = '<table class="rpt-table">';
+      html += '<thead><tr><th>Board</th><th>Cards</th><th>Column Distribution</th></tr></thead>';
+      html += '<tbody>';
+      for (var b = 0; b < summaries.length; b++) {
+        var board = summaries[b];
+        var colHtml = '';
+        var cols = board.columnBreakdown || {};
+        var colKeys = Object.keys(cols);
+        for (var c = 0; c < colKeys.length; c++) {
+          if (c > 0) colHtml += ' &middot; ';
+          colHtml += colKeys[c] + ': ' + cols[colKeys[c]];
+        }
+        html +=
+          '<tr>' +
+            '<td><strong>' + (board.title || 'Board') + '</strong></td>' +
+            '<td>' + (board.cardCount || 0) + '</td>' +
+            '<td style="font-size:var(--font-size-xs);color:var(--color-text-secondary)">' + colHtml + '</td>' +
+          '</tr>';
+      }
+      html += '</tbody></table>';
+
+      body.innerHTML = html;
+    }
+
+    // ── Leadership Investment Detail ──
+    function renderLeadershipDetail(body, detail) {
+      if (!detail || detail.error) {
+        body.innerHTML = '<div class="rpt-empty">' + (detail ? detail.error : 'No data available') + '</div>';
+        return;
+      }
+
+      var html = '';
+      var score = detail.investmentScore || 0;
+      var dims = detail.dimensions || {};
+
+      // Investment score gauge
+      var scoreClass = score >= 70 ? 'good' : (score >= 40 ? 'warning' : 'danger');
+      html += '<div class="rpt-invest-header">';
+      html += '<div class="rpt-invest-gauge rpt-invest-gauge--' + scoreClass + '">';
+      html += '<div class="rpt-invest-gauge__score">' + score + '</div>';
+      html += '<div class="rpt-invest-gauge__label">/ 100</div>';
+      html += '</div>';
+      html += '<div class="rpt-invest-gauge__title">Investment Score for ' + (detail.supervisor ? detail.supervisor.name : 'Admin') + '</div>';
+      html += '</div>';
+
+      // Dimension breakdown bars
+      html += '<h4 style="margin:var(--space-lg) 0 var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">Investment Dimensions</h4>';
+      var dimConfig = [
+        { key: 'observations', label: 'Observations Conducted', icon: '\uD83D\uDC41', color: '#3b82f6' },
+        { key: 'feedback', label: 'Feedback Submitted', icon: '\uD83D\uDD04', color: '#7c3aed' },
+        { key: 'growthPlans', label: 'Growth Plan Engagement', icon: '\uD83C\uDF31', color: '#059669' },
+        { key: 'coaching', label: 'Coaching Facilitated', icon: '\uD83E\uDD1D', color: '#d97706' },
+        { key: 'pd', label: 'PD Facilitated', icon: '\uD83D\uDCDA', color: '#0891b2' }
+      ];
+
+      html += '<div class="rpt-invest-dims">';
+      dimConfig.forEach(function(dc) {
+        var dim = dims[dc.key] || {};
+        var dimScore = dim.score || 0;
+        var maxScore = dim.maxScore || 1;
+        var pct = Math.round((dimScore / maxScore) * 100);
+
+        html += '<div class="rpt-invest-dim">';
+        html += '<div class="rpt-invest-dim__header">';
+        html += '<span>' + dc.icon + ' ' + dc.label + '</span>';
+        html += '<span class="rpt-invest-dim__score">' + dimScore + '/' + maxScore + '</span>';
+        html += '</div>';
+        html += '<div class="rpt-invest-dim__bar"><div class="rpt-invest-dim__fill" style="width:' + pct + '%;background:' + dc.color + '"></div></div>';
+
+        // Detail stats
+        var det = dim.detail || {};
+        var detailParts = [];
+        if (dc.key === 'observations') {
+          if (det.totalObservations !== undefined) detailParts.push(det.totalObservations + ' observations');
+          if (det.teachersCovered !== undefined) detailParts.push(det.teachersCovered + '/' + (det.totalTeachers || 0) + ' teachers covered');
+        } else if (dc.key === 'feedback') {
+          if (det.totalSubmitted !== undefined) detailParts.push(det.totalSubmitted + ' responses submitted');
+          if (det.recipientCount !== undefined) detailParts.push(det.recipientCount + ' recipients');
+        } else if (dc.key === 'growthPlans') {
+          if (det.meetingsAttended !== undefined) detailParts.push(det.meetingsAttended + ' meetings');
+          if (det.commentsWritten !== undefined) detailParts.push(det.commentsWritten + ' comments');
+        } else if (dc.key === 'coaching') {
+          if (det.meetingsFacilitated !== undefined) detailParts.push(det.meetingsFacilitated + ' meetings facilitated');
+        } else if (dc.key === 'pd') {
+          if (det.sessionsFacilitated !== undefined) detailParts.push(det.sessionsFacilitated + ' sessions facilitated');
+        }
+        if (detailParts.length > 0) {
+          html += '<div class="rpt-invest-dim__detail">' + detailParts.join(' \u2022 ') + '</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+
+      // Per-staff investment table
+      var perStaff = detail.perStaffInvestment || [];
+      if (perStaff.length > 0) {
+        html += '<h4 style="margin:var(--space-lg) 0 var(--space-sm);font-size:var(--font-size-sm);font-weight:600;">Investment by Staff Member</h4>';
+        html += '<table class="rpt-table">';
+        html += '<thead><tr><th>Staff</th><th>Department</th><th>Observations</th><th>Feedback</th><th>Total</th></tr></thead>';
+        html += '<tbody>';
+        perStaff.forEach(function(ps) {
+          html += '<tr>';
+          html += '<td><strong>' + (ps.staffName || '') + '</strong></td>';
+          html += '<td>' + (ps.department || '') + '</td>';
+          html += '<td>' + (ps.observations || 0) + '</td>';
+          html += '<td>' + (ps.feedbackSubmissions || 0) + '</td>';
+          html += '<td><strong>' + (ps.totalTouchpoints || 0) + '</strong></td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      // Radar chart for dimensions
+      html += '<div style="max-width:350px;margin:var(--space-lg) auto"><canvas id="rpt-invest-radar"></canvas></div>';
+
+      body.innerHTML = html;
+
+      // Render radar chart
+      var radarCanvas = document.getElementById('rpt-invest-radar');
+      if (radarCanvas && typeof Chart !== 'undefined') {
+        var radarLabels = dimConfig.map(function(dc) { return dc.label.split(' ')[0]; });
+        var radarValues = dimConfig.map(function(dc) {
+          var dim = dims[dc.key] || {};
+          return dim.maxScore > 0 ? Math.round((dim.score / dim.maxScore) * 100) : 0;
+        });
+        var radarColors = dimConfig.map(function(dc) { return dc.color; });
+
+        new Chart(radarCanvas, {
+          type: 'radar',
+          data: {
+            labels: radarLabels,
+            datasets: [{
+              label: 'Investment %',
+              data: radarValues,
+              backgroundColor: 'rgba(124, 58, 237, 0.15)',
+              borderColor: 'rgba(124, 58, 237, 0.8)',
+              borderWidth: 2,
+              pointBackgroundColor: radarColors,
+              pointRadius: 5
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              r: {
+                beginAtZero: true, max: 100,
+                ticks: { stepSize: 25, backdropColor: 'transparent' },
+                pointLabels: { font: { size: 11, weight: 'bold' } }
+              }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+    }
+
+    // ── Refresh ──
+    function refreshData() {
+      state.detailCache = {};
+      state.expandedSections = {};
+      loadSummary();
+    }
+
+    // ── Initial load ──
+    loadSummary();
+
+    return {
+      onActivate: function() {
+        refreshData();
+      }
+    };
+  }
+};
+</script>

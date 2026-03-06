@@ -1,0 +1,1689 @@
+<script>
+/**
+ * Kanban Module — Strategic Plan board with drag-and-drop cards
+ *
+ * Registers as App.ModuleRegistry.kanban.
+ * Admin-only module: board/column/card CRUD, drag-and-drop.
+ * Features: checklists, activity log, analytics, swimlanes, bulk ops, search.
+ */
+
+App.ModuleRegistry.kanban = {
+
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      boards: [],
+      currentBoardId: null,
+      boardData: null,       // { board, columns, cards }
+      filters: { assignee: '', priority: '', category: '', labels: [], search: '' },
+      isAdmin: App.getUser() && App.getUser().isAdmin,
+      currentView: 'board',   // 'board' | 'activity' | 'analytics'
+      viewMode: 'columns',    // 'columns' | 'swimlanes'
+      swimlaneGroupBy: 'assignee', // 'assignee' | 'label' | 'category'
+      bulkMode: false,
+      selectedCardIds: []
+    };
+
+    // ── DOM Refs ──
+    var els = {};
+
+    // ── Build Layout ──
+    function buildLayout() {
+      container.innerHTML = '';
+
+      // Sub-nav (Board / Activity / Analytics)
+      var subNav = ClientUtils.el('div', { className: 'kanban-sub-nav' });
+      els.subNavBoard = ClientUtils.el('div', {
+        className: 'kanban-sub-nav__item active',
+        onClick: function() { switchView('board'); }
+      }, ['Board']);
+      subNav.appendChild(els.subNavBoard);
+
+      els.subNavActivity = ClientUtils.el('div', {
+        className: 'kanban-sub-nav__item',
+        onClick: function() { switchView('activity'); }
+      }, ['Activity']);
+      subNav.appendChild(els.subNavActivity);
+
+      if (state.isAdmin) {
+        els.subNavAnalytics = ClientUtils.el('div', {
+          className: 'kanban-sub-nav__item',
+          onClick: function() { switchView('analytics'); }
+        }, ['Analytics']);
+        subNav.appendChild(els.subNavAnalytics);
+      }
+      container.appendChild(subNav);
+
+      // Toolbar
+      var toolbar = ClientUtils.el('div', { className: 'kanban-toolbar' });
+      els.toolbar = toolbar;
+
+      // Board selector
+      var boardGroup = ClientUtils.el('div', { className: 'form-group' });
+      boardGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Board']));
+      els.boardSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() { loadBoard(els.boardSelect.value); }
+      });
+      boardGroup.appendChild(els.boardSelect);
+      toolbar.appendChild(boardGroup);
+
+      // Search input
+      var searchWrap = ClientUtils.el('div', { className: 'kanban-search-wrap form-group' });
+      searchWrap.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Search']));
+      var searchInner = ClientUtils.el('div', { className: 'kanban-search-wrap' });
+      els.searchInput = ClientUtils.el('input', {
+        type: 'text',
+        className: 'form-input',
+        placeholder: 'Search cards...'
+      });
+      els.searchInput.addEventListener('input', function() {
+        state.filters.search = els.searchInput.value.trim().toLowerCase();
+        renderCurrentView();
+      });
+      els.searchClear = ClientUtils.el('button', {
+        className: 'kanban-search-clear',
+        onClick: function() {
+          els.searchInput.value = '';
+          state.filters.search = '';
+          renderCurrentView();
+        }
+      }, ['\u00D7']);
+      searchInner.appendChild(els.searchInput);
+      searchInner.appendChild(els.searchClear);
+      searchWrap.appendChild(searchInner);
+      els.searchCount = ClientUtils.el('span', { className: 'kanban-search-count' });
+      searchWrap.appendChild(els.searchCount);
+      toolbar.appendChild(searchWrap);
+
+      // Priority filter
+      var prioGroup = ClientUtils.el('div', { className: 'form-group' });
+      prioGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Priority']));
+      els.priorityFilter = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() {
+          state.filters.priority = els.priorityFilter.value;
+          renderCurrentView();
+        }
+      });
+      els.priorityFilter.innerHTML = '<option value="">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>';
+      prioGroup.appendChild(els.priorityFilter);
+      toolbar.appendChild(prioGroup);
+
+      // Category filter (PARA)
+      var catFilterGroup = ClientUtils.el('div', { className: 'form-group' });
+      catFilterGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Category']));
+      els.categoryFilter = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() {
+          state.filters.category = els.categoryFilter.value;
+          renderCurrentView();
+        }
+      });
+      els.categoryFilter.innerHTML = '<option value="">All</option><option value="project">Project</option><option value="area">Area</option><option value="resource">Resource</option><option value="archive">Archive</option>';
+      catFilterGroup.appendChild(els.categoryFilter);
+      toolbar.appendChild(catFilterGroup);
+
+      // Label filter area
+      var labelGroup = ClientUtils.el('div', { className: 'form-group' });
+      labelGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Labels']));
+      els.labelFilter = ClientUtils.el('div', { className: 'kanban-label-filter' });
+      labelGroup.appendChild(els.labelFilter);
+      toolbar.appendChild(labelGroup);
+
+      // Actions (admin only)
+      if (state.isAdmin) {
+        var actions = ClientUtils.el('div', { className: 'kanban-toolbar__actions' });
+
+        // View toggle
+        els.viewToggle = ClientUtils.el('button', {
+          className: 'btn btn-secondary btn-sm',
+          onClick: toggleViewMode
+        }, ['Swimlanes']);
+        actions.appendChild(els.viewToggle);
+
+        // Bulk toggle
+        els.bulkToggle = ClientUtils.el('button', {
+          className: 'btn btn-secondary btn-sm',
+          onClick: toggleBulkMode
+        }, ['Bulk Select']);
+        actions.appendChild(els.bulkToggle);
+
+        // Clear filters
+        actions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-secondary btn-sm',
+          onClick: clearFilters
+        }, ['Clear']));
+
+        actions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-secondary btn-sm',
+          onClick: openBoardSettings
+        }, ['Board Settings']));
+        // Export Board Summary (BASB Express — intermediate packets)
+        actions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-secondary btn-sm',
+          onClick: exportBoardSummary
+        }, ['Export']));
+
+        actions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-primary btn-sm',
+          onClick: function() { openCardForm(null); }
+        }, ['+ New Card']));
+        toolbar.appendChild(actions);
+      } else {
+        // Non-admin clear filters
+        toolbar.appendChild(ClientUtils.el('div', { className: 'form-group' }, [
+          ClientUtils.el('label', { className: 'form-label' }, ['\u00A0']),
+          ClientUtils.el('button', {
+            className: 'btn btn-secondary btn-sm',
+            onClick: clearFilters
+          }, ['Clear'])
+        ]));
+      }
+
+      container.appendChild(toolbar);
+
+      // Bulk action bar (hidden by default)
+      els.bulkBar = ClientUtils.el('div', { className: 'kanban-bulk-bar', style: 'display:none;' });
+      els.bulkCount = ClientUtils.el('span', { className: 'kanban-bulk-bar__count' }, ['0 selected']);
+      els.bulkBar.appendChild(els.bulkCount);
+
+      // Bulk move dropdown
+      var bulkMoveSelect = ClientUtils.el('select', { className: 'btn' });
+      bulkMoveSelect.innerHTML = '<option value="">Move to...</option>';
+      els.bulkMoveSelect = bulkMoveSelect;
+      bulkMoveSelect.addEventListener('change', function() {
+        if (bulkMoveSelect.value) bulkMove(bulkMoveSelect.value);
+        bulkMoveSelect.value = '';
+      });
+      els.bulkBar.appendChild(bulkMoveSelect);
+
+      // Bulk priority dropdown
+      var bulkPrioSelect = ClientUtils.el('select', { className: 'btn' });
+      bulkPrioSelect.innerHTML = '<option value="">Set Priority...</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>';
+      bulkPrioSelect.addEventListener('change', function() {
+        if (bulkPrioSelect.value) bulkSetPriority(bulkPrioSelect.value);
+        bulkPrioSelect.value = '';
+      });
+      els.bulkBar.appendChild(bulkPrioSelect);
+
+      // Bulk delete button
+      els.bulkBar.appendChild(ClientUtils.el('button', {
+        className: 'btn btn--danger',
+        onClick: bulkDelete
+      }, ['Delete Selected']));
+
+      container.appendChild(els.bulkBar);
+
+      // Main content area
+      els.content = ClientUtils.el('div', { className: 'kanban-board' });
+      container.appendChild(els.content);
+    }
+
+    // ── View Switching ──
+    function switchView(view) {
+      state.currentView = view;
+      // Update sub-nav active state
+      els.subNavBoard.classList.toggle('active', view === 'board');
+      els.subNavActivity.classList.toggle('active', view === 'activity');
+      if (els.subNavAnalytics) els.subNavAnalytics.classList.toggle('active', view === 'analytics');
+      // Show/hide toolbar elements for non-board views
+      els.toolbar.style.display = view === 'board' ? '' : 'none';
+      if (els.bulkBar) els.bulkBar.style.display = 'none';
+      if (state.bulkMode && view !== 'board') {
+        state.bulkMode = false;
+        state.selectedCardIds = [];
+      }
+      renderCurrentView();
+    }
+
+    function renderCurrentView() {
+      switch (state.currentView) {
+        case 'board': renderBoard(); break;
+        case 'activity': renderActivityView(); break;
+        case 'analytics': renderAnalyticsView(); break;
+      }
+    }
+
+    // ── Load Boards ──
+    async function loadBoards() {
+      try {
+        state.boards = await ServerAPI.getActiveBoards();
+        populateBoardSelect();
+        if (state.boards.length > 0) {
+          var boardId = state.currentBoardId || state.boards[0].id;
+          await loadBoard(boardId);
+        } else {
+          els.content.innerHTML = '<div class="empty-state"><div class="empty-state__icon">&#128203;</div><div class="empty-state__text">No boards yet</div><div class="empty-state__sub">Create a board to get started.</div></div>';
+        }
+      } catch (e) {
+        Toast.error('Failed to load boards: ' + e.message);
+      }
+    }
+
+    function populateBoardSelect() {
+      els.boardSelect.innerHTML = '';
+      state.boards.forEach(function(b) {
+        var opt = ClientUtils.el('option', { value: b.id }, [b.title]);
+        if (b.id === state.currentBoardId) opt.selected = true;
+        els.boardSelect.appendChild(opt);
+      });
+    }
+
+    // ── Load Board Data ──
+    async function loadBoard(boardId) {
+      if (!boardId) return;
+      state.currentBoardId = boardId;
+      els.boardSelect.value = boardId;
+      LoadingSpinner.show(els.content);
+      try {
+        state.boardData = await ServerAPI.getBoardData(boardId);
+        populateLabelFilter();
+        populateBulkMoveDropdown();
+        renderCurrentView();
+      } catch (e) {
+        Toast.error('Failed to load board: ' + e.message);
+      } finally {
+        LoadingSpinner.hide(els.content);
+      }
+    }
+
+    // ── Populate Label Filter ──
+    function populateLabelFilter() {
+      els.labelFilter.innerHTML = '';
+      if (!state.boardData) return;
+      var labelsSet = {};
+      state.boardData.cards.forEach(function(card) {
+        if (card.labelList) {
+          card.labelList.forEach(function(l) { labelsSet[l] = true; });
+        }
+      });
+      var allLabels = Object.keys(labelsSet).sort();
+      allLabels.forEach(function(label) {
+        var isActive = state.filters.labels.indexOf(label) !== -1;
+        var chip = ClientUtils.el('span', {
+          className: 'kanban-label-chip' + (isActive ? ' active' : ''),
+          onClick: function() {
+            var idx = state.filters.labels.indexOf(label);
+            if (idx === -1) {
+              state.filters.labels.push(label);
+            } else {
+              state.filters.labels.splice(idx, 1);
+            }
+            populateLabelFilter();
+            renderCurrentView();
+          }
+        }, [label]);
+        els.labelFilter.appendChild(chip);
+      });
+    }
+
+    // ── Populate Bulk Move Dropdown ──
+    function populateBulkMoveDropdown() {
+      if (!els.bulkMoveSelect || !state.boardData) return;
+      els.bulkMoveSelect.innerHTML = '<option value="">Move to...</option>';
+      state.boardData.columns.forEach(function(col) {
+        els.bulkMoveSelect.appendChild(ClientUtils.el('option', { value: col.id }, [col.title]));
+      });
+    }
+
+    // ── Get Filtered Cards ──
+    function getFilteredCards() {
+      if (!state.boardData) return [];
+      var allCards = state.boardData.cards;
+
+      var filtered = allCards.filter(function(card) {
+        // Category filter (PARA)
+        if (state.filters.category && (card.category || '') !== state.filters.category) return false;
+        // Priority filter
+        if (state.filters.priority && card.priority !== state.filters.priority) return false;
+        // Assignee filter
+        if (state.filters.assignee) {
+          var hasAssignee = card.assignees && card.assignees.some(function(a) {
+            return a.id === state.filters.assignee;
+          });
+          if (!hasAssignee) return false;
+        }
+        // Label filter
+        if (state.filters.labels.length > 0) {
+          var hasLabel = state.filters.labels.some(function(l) {
+            return card.labelList && card.labelList.indexOf(l) !== -1;
+          });
+          if (!hasLabel) return false;
+        }
+        // Search filter
+        if (state.filters.search) {
+          var searchStr = state.filters.search;
+          var inTitle = (card.title || '').toLowerCase().indexOf(searchStr) !== -1;
+          var inDesc = (card.description || '').toLowerCase().indexOf(searchStr) !== -1;
+          var inLabels = (card.labels || '').toLowerCase().indexOf(searchStr) !== -1;
+          if (!inTitle && !inDesc && !inLabels) return false;
+        }
+        return true;
+      });
+
+      // Update search count
+      if (state.filters.search && els.searchCount) {
+        els.searchCount.textContent = filtered.length + ' of ' + allCards.length;
+      } else if (els.searchCount) {
+        els.searchCount.textContent = '';
+      }
+
+      return filtered;
+    }
+
+    // ── Render Board ──
+    function renderBoard() {
+      if (!state.boardData) return;
+      els.content.innerHTML = '';
+      els.content.className = 'kanban-board';
+
+      var columns = state.boardData.columns;
+      var filteredCards = getFilteredCards();
+
+      if (state.viewMode === 'swimlanes') {
+        renderSwimlanes(columns, filteredCards);
+        return;
+      }
+
+      // Standard columns view
+      columns.forEach(function(col) {
+        var colCards = filteredCards.filter(function(c) { return c.column_id === col.id; });
+        var colEl = renderColumn(col, colCards);
+        els.content.appendChild(colEl);
+      });
+    }
+
+    // ── Render Column ──
+    function renderColumn(col, cards) {
+      var colEl = ClientUtils.el('div', { className: 'kanban-column', dataset: { columnId: col.id } });
+
+      // Header with colored top border
+      var headerEl = ClientUtils.el('div', { className: 'kanban-column__header' });
+      headerEl.style.borderBottomColor = col.color || 'var(--color-border)';
+
+      var titleEl = ClientUtils.el('span', { className: 'kanban-column__title' }, [col.title]);
+
+      // Count badge with WIP warning
+      var countCls = 'kanban-column__count';
+      if (col.wip_limit > 0 && cards.length > col.wip_limit) {
+        countCls += ' warning';
+      }
+      var countLabel = String(cards.length);
+      if (col.wip_limit > 0) countLabel += ' / ' + col.wip_limit;
+      var countEl = ClientUtils.el('span', { className: countCls }, [countLabel]);
+
+      headerEl.appendChild(titleEl);
+      headerEl.appendChild(countEl);
+      colEl.appendChild(headerEl);
+
+      // Cards container (drop zone)
+      var cardsContainer = ClientUtils.el('div', { className: 'kanban-column__cards', dataset: { columnId: col.id } });
+
+      if (cards.length === 0) {
+        cardsContainer.appendChild(ClientUtils.el('div', { className: 'kanban-column__empty' }, ['No cards']));
+      } else {
+        cards.forEach(function(card) {
+          cardsContainer.appendChild(renderCard(card, col));
+        });
+      }
+
+      // Drag-and-drop events on the cards container (admin only)
+      if (state.isAdmin) {
+        cardsContainer.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          cardsContainer.classList.add('drag-over');
+        });
+        cardsContainer.addEventListener('dragleave', function(e) {
+          if (!cardsContainer.contains(e.relatedTarget)) {
+            cardsContainer.classList.remove('drag-over');
+          }
+        });
+        cardsContainer.addEventListener('drop', function(e) {
+          e.preventDefault();
+          cardsContainer.classList.remove('drag-over');
+          var cardId = e.dataTransfer.getData('text/plain');
+          if (cardId) handleDrop(cardId, col.id);
+        });
+      }
+
+      colEl.appendChild(cardsContainer);
+      return colEl;
+    }
+
+    // ── Render Card ──
+    function renderCard(card, col) {
+      // Check overdue
+      var isOverdue = false;
+      var isDoneColumn = state.boardData.columns.length > 0 &&
+        col.id === state.boardData.columns[state.boardData.columns.length - 1].id;
+
+      if (card.due_date && !isDoneColumn) {
+        var dueDate = new Date(card.due_date);
+        isOverdue = dueDate < new Date();
+      }
+
+      var cardCls = 'kanban-card' + (isOverdue ? ' overdue' : '');
+      if (state.bulkMode) cardCls += ' kanban-card--bulk-mode';
+      if (state.selectedCardIds.indexOf(card.id) !== -1) cardCls += ' kanban-card--selected';
+
+      var cardEl = ClientUtils.el('div', {
+        className: cardCls,
+        dataset: { cardId: card.id },
+        onClick: function(e) {
+          if (state.bulkMode) {
+            toggleCardSelection(card.id);
+            return;
+          }
+          if (cardEl._wasDragged) { cardEl._wasDragged = false; return; }
+          openCardDetail(card);
+        }
+      });
+
+      // Bulk checkbox
+      if (state.bulkMode) {
+        var cb = ClientUtils.el('input', {
+          type: 'checkbox',
+          className: 'kanban-card__checkbox'
+        });
+        cb.checked = state.selectedCardIds.indexOf(card.id) !== -1;
+        cb.addEventListener('click', function(e) { e.stopPropagation(); });
+        cb.addEventListener('change', function() { toggleCardSelection(card.id); });
+        cardEl.appendChild(cb);
+      }
+
+      // Draggable (admin only, not in bulk mode)
+      if (state.isAdmin && !state.bulkMode) {
+        cardEl.setAttribute('draggable', 'true');
+        cardEl.addEventListener('dragstart', function(e) {
+          e.dataTransfer.setData('text/plain', card.id);
+          e.dataTransfer.effectAllowed = 'move';
+          cardEl.classList.add('dragging');
+        });
+        cardEl.addEventListener('dragend', function() {
+          cardEl.classList.remove('dragging');
+          cardEl._wasDragged = true;
+          setTimeout(function() { cardEl._wasDragged = false; }, 100);
+        });
+      }
+
+      // Title
+      cardEl.appendChild(ClientUtils.el('div', { className: 'kanban-card__title' }, [card.title]));
+
+      // Key Takeaway (progressive summarization — BASB Distill)
+      if (card.key_takeaway) {
+        cardEl.appendChild(ClientUtils.el('div', { className: 'kanban-card__takeaway' }, [card.key_takeaway]));
+      }
+
+      // Badges row: PARA category + priority
+      var badgesRow = ClientUtils.el('div', { className: 'kanban-card__badges' });
+
+      // PARA category badge (BASB Organize)
+      if (card.category) {
+        badgesRow.appendChild(ClientUtils.el('span', { className: 'para-badge para-' + card.category }, [card.category]));
+      }
+
+      // Priority badge (hide for low)
+      if (card.priority && card.priority !== 'low') {
+        var prioClass = 'kanban-priority priority-' + card.priority;
+        badgesRow.appendChild(ClientUtils.el('span', { className: prioClass }, [card.priority]));
+      }
+
+      if (badgesRow.childNodes.length > 0) cardEl.appendChild(badgesRow);
+
+      // Labels (max 3)
+      if (card.labelList && card.labelList.length > 0) {
+        var labelsEl = ClientUtils.el('div', { className: 'kanban-card__labels' });
+        var shown = card.labelList.slice(0, 3);
+        shown.forEach(function(label) {
+          labelsEl.appendChild(ClientUtils.el('span', { className: 'label-chip' }, [label]));
+        });
+        if (card.labelList.length > 3) {
+          labelsEl.appendChild(ClientUtils.el('span', { className: 'label-chip' }, ['+' + (card.labelList.length - 3)]));
+        }
+        cardEl.appendChild(labelsEl);
+      }
+
+      // Checklist progress badge
+      if (card.checklistTotal > 0) {
+        var clCls = 'kanban-card__checklist';
+        if (card.checklistChecked === card.checklistTotal) clCls += ' complete';
+        cardEl.appendChild(ClientUtils.el('span', { className: clCls }, [
+          card.checklistChecked + '/' + card.checklistTotal + ' \u2713'
+        ]));
+      }
+
+      // Meta row: avatars + due date
+      var metaEl = ClientUtils.el('div', { className: 'kanban-card__meta' });
+
+      if (card.assignees && card.assignees.length > 0) {
+        var avatarsEl = ClientUtils.el('div', { className: 'kanban-avatars' });
+        var shownAssignees = card.assignees.slice(0, 3);
+        shownAssignees.forEach(function(a) {
+          avatarsEl.appendChild(ClientUtils.el('span', {
+            className: 'avatar-sm',
+            title: a.first_name + ' ' + a.last_name
+          }, [ClientUtils.initials(a.first_name, a.last_name)]));
+        });
+        if (card.assignees.length > 3) {
+          avatarsEl.appendChild(ClientUtils.el('span', { className: 'avatar-overflow' }, ['+' + (card.assignees.length - 3)]));
+        }
+        metaEl.appendChild(avatarsEl);
+      } else {
+        metaEl.appendChild(ClientUtils.el('span'));
+      }
+
+      if (card.due_date) {
+        var dueCls = 'kanban-card__due' + (isOverdue ? ' overdue' : '');
+        metaEl.appendChild(ClientUtils.el('span', { className: dueCls }, [ClientUtils.formatDate(card.due_date)]));
+      }
+
+      cardEl.appendChild(metaEl);
+
+      return cardEl;
+    }
+
+    // ── Swimlanes ──
+    function renderSwimlanes(columns, filteredCards) {
+      els.content.innerHTML = '';
+      els.content.className = '';
+
+      var swimContainer = ClientUtils.el('div', { className: 'kanban-swimlanes' });
+
+      // Group by toggle
+      var groupToggle = ClientUtils.el('div', { style: 'margin-bottom:0.75rem; display:flex; gap:0.5rem; align-items:center;' });
+      groupToggle.appendChild(ClientUtils.el('span', { style: 'font-size:0.85rem; font-weight:500;' }, ['Group by:']));
+
+      var btnAssignee = ClientUtils.el('button', {
+        className: 'btn btn-sm ' + (state.swimlaneGroupBy === 'assignee' ? 'btn-primary' : 'btn-secondary'),
+        onClick: function() { state.swimlaneGroupBy = 'assignee'; renderBoard(); }
+      }, ['Assignee']);
+      var btnLabel = ClientUtils.el('button', {
+        className: 'btn btn-sm ' + (state.swimlaneGroupBy === 'label' ? 'btn-primary' : 'btn-secondary'),
+        onClick: function() { state.swimlaneGroupBy = 'label'; renderBoard(); }
+      }, ['Label']);
+      var btnCategory = ClientUtils.el('button', {
+        className: 'btn btn-sm ' + (state.swimlaneGroupBy === 'category' ? 'btn-primary' : 'btn-secondary'),
+        onClick: function() { state.swimlaneGroupBy = 'category'; renderBoard(); }
+      }, ['Category']);
+      groupToggle.appendChild(btnAssignee);
+      groupToggle.appendChild(btnLabel);
+      groupToggle.appendChild(btnCategory);
+      swimContainer.appendChild(groupToggle);
+
+      // Build groups
+      var groups = {};
+      if (state.swimlaneGroupBy === 'assignee') {
+        filteredCards.forEach(function(card) {
+          if (card.assignees && card.assignees.length > 0) {
+            card.assignees.forEach(function(a) {
+              var key = a.first_name + ' ' + a.last_name;
+              if (!groups[key]) groups[key] = [];
+              groups[key].push(card);
+            });
+          } else {
+            if (!groups['Unassigned']) groups['Unassigned'] = [];
+            groups['Unassigned'].push(card);
+          }
+        });
+      } else if (state.swimlaneGroupBy === 'category') {
+        var catLabels = { project: 'Project', area: 'Area', resource: 'Resource', archive: 'Archive' };
+        filteredCards.forEach(function(card) {
+          var catKey = card.category ? (catLabels[card.category] || card.category) : 'Uncategorized';
+          if (!groups[catKey]) groups[catKey] = [];
+          groups[catKey].push(card);
+        });
+      } else {
+        filteredCards.forEach(function(card) {
+          if (card.labelList && card.labelList.length > 0) {
+            card.labelList.forEach(function(l) {
+              if (!groups[l]) groups[l] = [];
+              groups[l].push(card);
+            });
+          } else {
+            if (!groups['No Label']) groups['No Label'] = [];
+            groups['No Label'].push(card);
+          }
+        });
+      }
+
+      // Header row
+      var groupLabels = { assignee: 'Person', label: 'Label', category: 'Category' };
+      var headerRow = ClientUtils.el('div', { className: 'kanban-swimlane__header-row' });
+      headerRow.appendChild(ClientUtils.el('div', { className: 'kanban-swimlane__col-header' }, [
+        groupLabels[state.swimlaneGroupBy] || 'Group'
+      ]));
+      columns.forEach(function(col) {
+        headerRow.appendChild(ClientUtils.el('div', { className: 'kanban-swimlane__col-header' }, [col.title]));
+      });
+      swimContainer.appendChild(headerRow);
+
+      // Rows
+      var groupKeys = Object.keys(groups).sort();
+      groupKeys.forEach(function(groupKey) {
+        var row = ClientUtils.el('div', { className: 'kanban-swimlane__row' });
+
+        // Label cell
+        row.appendChild(ClientUtils.el('div', { className: 'kanban-swimlane__label' }, [groupKey]));
+
+        // Column cells
+        columns.forEach(function(col) {
+          var cell = ClientUtils.el('div', { className: 'kanban-swimlane__cell' });
+          var cellCards = groups[groupKey].filter(function(c) { return c.column_id === col.id; });
+          cellCards.forEach(function(card) {
+            var miniCard = ClientUtils.el('div', {
+              className: 'kanban-card',
+              style: 'cursor:pointer;',
+              onClick: function() { openCardDetail(card); }
+            });
+            miniCard.appendChild(ClientUtils.el('div', { className: 'kanban-card__title' }, [card.title]));
+            if (card.priority && card.priority !== 'low') {
+              miniCard.appendChild(ClientUtils.el('span', { className: 'kanban-priority priority-' + card.priority }, [card.priority]));
+            }
+            cell.appendChild(miniCard);
+          });
+          if (cellCards.length === 0) {
+            cell.appendChild(ClientUtils.el('div', { style: 'color:var(--text-muted);font-size:0.75rem;text-align:center;padding:0.25rem;' }, ['\u2014']));
+          }
+          row.appendChild(cell);
+        });
+
+        swimContainer.appendChild(row);
+      });
+
+      if (groupKeys.length === 0) {
+        swimContainer.appendChild(ClientUtils.el('div', { className: 'empty-state' }, [
+          ClientUtils.el('div', { className: 'empty-state__text' }, ['No cards match current filters'])
+        ]));
+      }
+
+      els.content.appendChild(swimContainer);
+    }
+
+    // ── Toggle View Mode ──
+    function toggleViewMode() {
+      state.viewMode = state.viewMode === 'columns' ? 'swimlanes' : 'columns';
+      els.viewToggle.textContent = state.viewMode === 'columns' ? 'Swimlanes' : 'Columns';
+      renderBoard();
+    }
+
+    // ── Handle Drop ──
+    async function handleDrop(cardId, targetColumnId) {
+      var colCards = state.boardData.cards.filter(function(c) { return c.column_id === targetColumnId; });
+      var maxPos = 0;
+      colCards.forEach(function(c) { if (Number(c.position) > maxPos) maxPos = Number(c.position); });
+      var newPosition = maxPos + 1;
+
+      try {
+        await ServerAPI.moveCard(cardId, targetColumnId, newPosition);
+        await loadBoard(state.currentBoardId);
+        Toast.success('Card moved');
+      } catch (e) {
+        Toast.error('Failed to move card: ' + e.message);
+      }
+    }
+
+    // ── Card Detail Modal ──
+    function openCardDetail(card) {
+      var body = ClientUtils.el('div');
+
+      // Meta grid
+      var meta = ClientUtils.el('div', { className: 'kanban-detail__meta' });
+
+      meta.appendChild(makeMetaItem('Priority', StatusBadge.html(card.priority, {
+        critical: 'badge-danger', high: 'badge-warning', medium: 'badge-info', low: 'badge-neutral'
+      })));
+
+      if (card.due_date) {
+        meta.appendChild(makeMetaItem('Due Date', ClientUtils.escapeHtml(ClientUtils.formatDate(card.due_date))));
+      }
+
+      if (card.assignees && card.assignees.length > 0) {
+        var names = card.assignees.map(function(a) { return ClientUtils.escapeHtml(a.first_name + ' ' + a.last_name); }).join(', ');
+        meta.appendChild(makeMetaItem('Assigned To', names));
+      }
+
+      if (card.category) {
+        meta.appendChild(makeMetaItem('Category', '<span class="para-badge para-' + ClientUtils.escapeHtml(card.category) + '">' + ClientUtils.escapeHtml(card.category) + '</span>'));
+      }
+
+      if (card.labelList && card.labelList.length > 0) {
+        var labelsHtml = card.labelList.map(function(l) { return '<span class="label-chip">' + ClientUtils.escapeHtml(l) + '</span>'; }).join(' ');
+        meta.appendChild(makeMetaItem('Labels', labelsHtml));
+      }
+
+      meta.appendChild(makeMetaItem('Created By', ClientUtils.escapeHtml(card.createdByName || 'Unknown')));
+
+      body.appendChild(meta);
+
+      // Key Takeaway (progressive summarization)
+      if (card.key_takeaway) {
+        var takeawayBox = ClientUtils.el('div', { className: 'kanban-detail__takeaway' });
+        takeawayBox.appendChild(ClientUtils.el('span', { className: 'kanban-detail__takeaway-label' }, ['Key Takeaway']));
+        takeawayBox.appendChild(ClientUtils.el('div', { className: 'kanban-detail__takeaway-text' }, [card.key_takeaway]));
+        body.appendChild(takeawayBox);
+      }
+
+      // Description
+      if (card.description) {
+        body.appendChild(ClientUtils.el('div', { className: 'kanban-detail__description' }, [card.description]));
+      }
+
+      // Mobile move dropdown (admin only)
+      if (state.isAdmin && state.boardData) {
+        var moveGroup = ClientUtils.el('div', { className: 'kanban-move-select form-group' });
+        moveGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Move to column']));
+        var moveSelect = ClientUtils.el('select', { className: 'form-select' });
+        moveSelect.innerHTML = '<option value="">-- Select --</option>';
+        state.boardData.columns.forEach(function(col) {
+          var opt = ClientUtils.el('option', { value: col.id }, [col.title]);
+          if (col.id === card.column_id) opt.disabled = true;
+          moveSelect.appendChild(opt);
+        });
+        moveSelect.addEventListener('change', async function() {
+          if (!moveSelect.value) return;
+          Modal.close();
+          await handleDrop(card.id, moveSelect.value);
+        });
+        moveGroup.appendChild(moveSelect);
+        body.appendChild(moveGroup);
+      }
+
+      // ── Checklist Section ──
+      body.appendChild(ClientUtils.el('h4', { style: 'margin-top:var(--space-lg); margin-bottom:var(--space-sm); font-size:var(--font-size-sm); font-weight:600; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;' }, ['Checklist']));
+
+      var checklistContainer = ClientUtils.el('div');
+      body.appendChild(checklistContainer);
+
+      // Add checklist item form (admin only)
+      if (state.isAdmin) {
+        var addForm = ClientUtils.el('div', { className: 'kanban-checklist__add' });
+        var clInput = ClientUtils.el('input', { type: 'text', className: 'form-input', placeholder: 'Add checklist item...' });
+        var clAddBtn = ClientUtils.el('button', {
+          className: 'btn btn-primary btn-sm',
+          onClick: async function() {
+            var text = clInput.value.trim();
+            if (!text) return;
+            clAddBtn.disabled = true;
+            try {
+              var item = await ServerAPI.createChecklistItem(card.id, text);
+              clInput.value = '';
+              appendChecklistItem(checklistContainer, item, card);
+              // Update card face count
+              card.checklistTotal = (card.checklistTotal || 0) + 1;
+            } catch (e) {
+              Toast.error('Failed to add item: ' + e.message);
+            } finally {
+              clAddBtn.disabled = false;
+            }
+          }
+        }, ['Add']);
+        clInput.addEventListener('keypress', function(e) {
+          if (e.key === 'Enter') clAddBtn.click();
+        });
+        addForm.appendChild(clInput);
+        addForm.appendChild(clAddBtn);
+        body.appendChild(addForm);
+      }
+
+      // ── Comments Section ──
+      body.appendChild(ClientUtils.el('h4', { style: 'margin-top:var(--space-lg); margin-bottom:var(--space-sm); font-size:var(--font-size-sm); font-weight:600; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;' }, ['Comments']));
+
+      var commentsList = ClientUtils.el('div', { className: 'kanban-comments__list' });
+      commentsList.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm' }, ['Loading comments...']));
+      body.appendChild(commentsList);
+
+      // Comment form
+      var commentForm = ClientUtils.el('div', { className: 'kanban-comment-form' });
+      var commentInput = ClientUtils.el('textarea', { className: 'form-textarea', placeholder: 'Add a comment...' });
+      var postBtn = ClientUtils.el('button', {
+        className: 'btn btn-primary btn-sm',
+        onClick: async function() {
+          var text = commentInput.value.trim();
+          if (!text) return;
+          postBtn.disabled = true;
+          try {
+            var newComment = await ServerAPI.createComment(card.id, text);
+            commentInput.value = '';
+            appendComment(commentsList, newComment);
+            Toast.success('Comment posted');
+          } catch (e) {
+            Toast.error('Failed to post comment: ' + e.message);
+          } finally {
+            postBtn.disabled = false;
+          }
+        }
+      }, ['Post']);
+      commentForm.appendChild(commentInput);
+      commentForm.appendChild(postBtn);
+      body.appendChild(commentForm);
+
+      // ── Activity Section ──
+      body.appendChild(ClientUtils.el('h4', { style: 'margin-top:var(--space-lg); margin-bottom:var(--space-sm); font-size:var(--font-size-sm); font-weight:600; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;' }, ['Activity']));
+
+      var activityList = ClientUtils.el('div');
+      activityList.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm' }, ['Loading activity...']));
+      body.appendChild(activityList);
+
+      // Modal actions
+      var actions = [];
+      // Copy Summary (BASB Express — intermediate packet)
+      actions.push({
+        label: 'Copy Summary', className: 'btn-secondary', onClick: function() {
+          var columnTitle = '';
+          if (state.boardData) {
+            var col = state.boardData.columns.filter(function(c) { return c.id === card.column_id; })[0];
+            if (col) columnTitle = col.title;
+          }
+          var lines = ['**' + card.title + '**'];
+          if (card.category) lines.push('Category: ' + card.category.charAt(0).toUpperCase() + card.category.slice(1));
+          if (columnTitle) lines.push('Status: ' + columnTitle);
+          if (card.priority) lines.push('Priority: ' + card.priority);
+          if (card.key_takeaway) lines.push('Key Takeaway: ' + card.key_takeaway);
+          if (card.assignees && card.assignees.length > 0) {
+            lines.push('Owner: ' + card.assignees.map(function(a) { return a.first_name + ' ' + a.last_name; }).join(', '));
+          }
+          if (card.due_date) lines.push('Due: ' + ClientUtils.formatDate(card.due_date));
+          if (card.description) lines.push('---');
+          if (card.description) lines.push(card.description);
+          navigator.clipboard.writeText(lines.join('\n')).then(function() {
+            Toast.success('Card summary copied to clipboard');
+          });
+        }
+      });
+      if (state.isAdmin) {
+        actions.push({ label: 'Edit', className: 'btn-secondary', onClick: function() { Modal.close(); openCardForm(card); } });
+        actions.push({
+          label: 'Delete', className: 'btn-danger', onClick: function() {
+            if (confirm('Delete this card and all its data? This cannot be undone.')) {
+              Modal.close();
+              deleteCard(card.id);
+            }
+          }
+        });
+      }
+      actions.push({ label: 'Close', className: 'btn-secondary', onClick: function() { Modal.close(); } });
+
+      Modal.open(card.title, body, actions);
+
+      // Load async data
+      loadChecklists(card, checklistContainer);
+      loadComments(card.id, commentsList);
+      loadCardActivity(card.id, activityList);
+    }
+
+    function makeMetaItem(label, valueHtml) {
+      var item = ClientUtils.el('div', { className: 'kanban-detail__meta-item' });
+      item.innerHTML = '<span class="kanban-detail__meta-label">' + ClientUtils.escapeHtml(label) + '</span>' + valueHtml;
+      return item;
+    }
+
+    // ── Checklists in Detail Modal ──
+    async function loadChecklists(card, containerEl) {
+      try {
+        var items = await ServerAPI.getCardChecklists(card.id);
+        containerEl.innerHTML = '';
+        if (items.length === 0) {
+          containerEl.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm' }, ['No checklist items yet.']));
+        } else {
+          items.forEach(function(item) {
+            appendChecklistItem(containerEl, item, card);
+          });
+        }
+      } catch (e) {
+        containerEl.innerHTML = '';
+        containerEl.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm' }, ['Failed to load checklist.']));
+      }
+    }
+
+    function appendChecklistItem(containerEl, item, card) {
+      // Remove placeholder
+      var placeholder = containerEl.querySelector('.text-muted');
+      if (placeholder) placeholder.remove();
+
+      var rowCls = 'kanban-checklist__item' + (item.isChecked ? ' checked' : '');
+      var row = ClientUtils.el('div', { className: rowCls, dataset: { itemId: item.id } });
+
+      var checkbox = ClientUtils.el('input', { type: 'checkbox' });
+      checkbox.checked = item.isChecked;
+      checkbox.disabled = !state.isAdmin;
+      checkbox.addEventListener('change', async function() {
+        try {
+          var updated = await ServerAPI.updateChecklistItem(item.id, { is_checked: checkbox.checked });
+          row.classList.toggle('checked', updated.isChecked);
+          // Update card counts
+          if (updated.isChecked) {
+            card.checklistChecked = (card.checklistChecked || 0) + 1;
+          } else {
+            card.checklistChecked = Math.max(0, (card.checklistChecked || 0) - 1);
+          }
+        } catch (e) {
+          checkbox.checked = !checkbox.checked;
+          Toast.error('Failed to update item');
+        }
+      });
+
+      var textEl = ClientUtils.el('span', { className: 'kanban-checklist__text' }, [item.text]);
+
+      row.appendChild(checkbox);
+      row.appendChild(textEl);
+
+      if (state.isAdmin) {
+        var delBtn = ClientUtils.el('button', {
+          className: 'kanban-checklist__delete',
+          onClick: async function() {
+            try {
+              await ServerAPI.deleteChecklistItem(item.id);
+              row.remove();
+              card.checklistTotal = Math.max(0, (card.checklistTotal || 0) - 1);
+              if (item.isChecked) {
+                card.checklistChecked = Math.max(0, (card.checklistChecked || 0) - 1);
+              }
+            } catch (e) {
+              Toast.error('Failed to delete item');
+            }
+          }
+        }, ['\u00D7']);
+        row.appendChild(delBtn);
+      }
+
+      containerEl.appendChild(row);
+    }
+
+    // ── Comments ──
+    async function loadComments(cardId, listEl) {
+      try {
+        var comments = await ServerAPI.getCardComments(cardId);
+        listEl.innerHTML = '';
+        if (comments.length === 0) {
+          listEl.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm' }, ['No comments yet.']));
+        } else {
+          comments.forEach(function(c) { appendComment(listEl, c); });
+        }
+      } catch (e) {
+        listEl.innerHTML = '';
+        listEl.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm' }, ['Failed to load comments.']));
+      }
+    }
+
+    function appendComment(listEl, comment) {
+      var placeholder = listEl.querySelector('.text-muted');
+      if (placeholder) placeholder.remove();
+
+      var commentEl = ClientUtils.el('div', { className: 'kanban-comment' });
+      var header = ClientUtils.el('div', { className: 'kanban-comment__header' }, [
+        ClientUtils.el('span', { className: 'kanban-comment__author' }, [comment.authorName]),
+        ClientUtils.el('span', { className: 'kanban-comment__time' }, [ClientUtils.timeAgo(comment.createdAt)])
+      ]);
+      var content = ClientUtils.el('div', { className: 'kanban-comment__content' }, [comment.content]);
+
+      commentEl.appendChild(header);
+      commentEl.appendChild(content);
+      listEl.appendChild(commentEl);
+    }
+
+    // ── Card Activity in Detail Modal ──
+    async function loadCardActivity(cardId, listEl) {
+      try {
+        var entries = await ServerAPI.getCardActivity(cardId);
+        listEl.innerHTML = '';
+        if (entries.length === 0) {
+          listEl.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm' }, ['No activity recorded.']));
+        } else {
+          entries.forEach(function(e) { appendActivityEntry(listEl, e); });
+        }
+      } catch (e) {
+        listEl.innerHTML = '';
+        listEl.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm' }, ['Failed to load activity.']));
+      }
+    }
+
+    function formatActivityDesc(entry) {
+      var user = '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong>';
+      switch (entry.actionType) {
+        case 'card_created':
+          return user + ' created this card';
+        case 'card_moved':
+          return user + ' moved card from <em>' + ClientUtils.escapeHtml(entry.oldValue || '?') + '</em> to <em>' + ClientUtils.escapeHtml(entry.newValue || '?') + '</em>';
+        case 'card_updated':
+          return user + ' updated <em>' + ClientUtils.escapeHtml(entry.fieldName || '') + '</em>';
+        case 'card_deleted':
+          return user + ' deleted card';
+        case 'comment_added':
+          return user + ' added a comment';
+        case 'checklist_added':
+          return user + ' added checklist item: <em>' + ClientUtils.escapeHtml(entry.newValue || '') + '</em>';
+        case 'checklist_toggled':
+          return user + ' ' + (entry.newValue === 'checked' ? 'completed' : 'unchecked') + ' a checklist item';
+        default:
+          return user + ' performed ' + ClientUtils.escapeHtml(entry.actionType);
+      }
+    }
+
+    function appendActivityEntry(listEl, entry) {
+      var el = ClientUtils.el('div', { className: 'kanban-activity__entry' });
+
+      var icon = ClientUtils.el('div', { className: 'kanban-activity__icon' }, [entry.userInitials]);
+      var desc = ClientUtils.el('div', { className: 'kanban-activity__desc' });
+      desc.innerHTML = formatActivityDesc(entry);
+      var time = ClientUtils.el('div', { className: 'kanban-activity__time' }, [ClientUtils.timeAgo(entry.createdAt)]);
+
+      el.appendChild(icon);
+      el.appendChild(desc);
+      el.appendChild(time);
+      listEl.appendChild(el);
+    }
+
+    // ── Activity View (board-level) ──
+    async function renderActivityView() {
+      if (!state.currentBoardId) return;
+      els.content.innerHTML = '';
+      els.content.className = '';
+
+      var wrapper = ClientUtils.el('div', { style: 'padding:0.5rem;' });
+      wrapper.appendChild(ClientUtils.el('h3', { className: 'kanban-section-title' }, ['Board Activity']));
+
+      var listEl = ClientUtils.el('div', { className: 'kanban-activity__board-list' });
+      listEl.appendChild(ClientUtils.el('div', { className: 'loading-spinner' }));
+      wrapper.appendChild(listEl);
+      els.content.appendChild(wrapper);
+
+      try {
+        var entries = await ServerAPI.getBoardActivity(state.currentBoardId, 100);
+        listEl.innerHTML = '';
+        if (entries.length === 0) {
+          listEl.appendChild(ClientUtils.el('div', { className: 'empty-state' }, [
+            ClientUtils.el('div', { className: 'empty-state__text' }, ['No activity recorded yet'])
+          ]));
+        } else {
+          entries.forEach(function(entry) {
+            var el = ClientUtils.el('div', { className: 'kanban-activity__board-entry' });
+
+            var icon = ClientUtils.el('div', { className: 'kanban-activity__icon' }, [entry.userInitials]);
+
+            var descWrap = ClientUtils.el('div', { style: 'flex:1;' });
+            var cardTitle = ClientUtils.el('span', { className: 'kanban-activity__card-title' }, [entry.cardTitle || 'Card']);
+            descWrap.appendChild(cardTitle);
+            descWrap.appendChild(ClientUtils.el('br'));
+            var descSpan = ClientUtils.el('span', { className: 'kanban-activity__desc' });
+            descSpan.innerHTML = formatActivityDesc(entry);
+            descWrap.appendChild(descSpan);
+
+            var time = ClientUtils.el('div', { className: 'kanban-activity__time' }, [ClientUtils.timeAgo(entry.createdAt)]);
+
+            el.appendChild(icon);
+            el.appendChild(descWrap);
+            el.appendChild(time);
+            listEl.appendChild(el);
+          });
+        }
+      } catch (e) {
+        listEl.innerHTML = '';
+        listEl.appendChild(ClientUtils.el('div', { className: 'text-muted' }, ['Failed to load activity: ' + e.message]));
+      }
+    }
+
+    // ── Analytics View ──
+    async function renderAnalyticsView() {
+      if (!state.currentBoardId) return;
+      els.content.innerHTML = '';
+      els.content.className = '';
+
+      var wrapper = ClientUtils.el('div', { style: 'padding:0.5rem;' });
+      wrapper.appendChild(ClientUtils.el('h3', { className: 'kanban-section-title' }, ['Board Analytics']));
+      wrapper.appendChild(ClientUtils.el('div', { className: 'loading-spinner' }));
+      els.content.appendChild(wrapper);
+
+      try {
+        var data = await ServerAPI.getKanbanAnalytics(state.currentBoardId);
+        wrapper.innerHTML = '';
+        wrapper.appendChild(ClientUtils.el('h3', { className: 'kanban-section-title' }, ['Board Analytics']));
+
+        // KPI cards
+        var statsGrid = ClientUtils.el('div', { className: 'stats-grid' });
+
+        statsGrid.appendChild(makeStatCard('Total Cards', data.totalCards, 'var(--primary, #4361ee)'));
+        statsGrid.appendChild(makeStatCard('Completed', data.completedCards, 'var(--success, #28a745)'));
+        statsGrid.appendChild(makeStatCard('Overdue', data.overdueCount, 'var(--danger, #dc3545)'));
+        statsGrid.appendChild(makeStatCard('Avg Cycle Time', data.avgCycleTime !== null ? data.avgCycleTime + 'd' : 'N/A', 'var(--warning, #ffc107)'));
+
+        wrapper.appendChild(statsGrid);
+
+        // Charts
+        var chartsGrid = ClientUtils.el('div', { className: 'kanban-analytics__charts' });
+
+        // Cards by Column (bar chart)
+        var colChartCard = ClientUtils.el('div', { className: 'kanban-analytics__chart-card' });
+        colChartCard.appendChild(ClientUtils.el('div', { className: 'kanban-analytics__chart-title' }, ['Cards by Column']));
+        var colCanvas = ClientUtils.el('canvas', { style: 'max-height:250px;' });
+        colChartCard.appendChild(colCanvas);
+        chartsGrid.appendChild(colChartCard);
+
+        // Cards by Priority (doughnut chart)
+        var prioChartCard = ClientUtils.el('div', { className: 'kanban-analytics__chart-card' });
+        prioChartCard.appendChild(ClientUtils.el('div', { className: 'kanban-analytics__chart-title' }, ['Cards by Priority']));
+        var prioCanvas = ClientUtils.el('canvas', { style: 'max-height:250px;' });
+        prioChartCard.appendChild(prioCanvas);
+        chartsGrid.appendChild(prioChartCard);
+
+        // Cards by PARA Category (doughnut chart)
+        var catChartCard = ClientUtils.el('div', { className: 'kanban-analytics__chart-card' });
+        catChartCard.appendChild(ClientUtils.el('div', { className: 'kanban-analytics__chart-title' }, ['Cards by Category (PARA)']));
+        var catCanvas = ClientUtils.el('canvas', { style: 'max-height:250px;' });
+        catChartCard.appendChild(catCanvas);
+        chartsGrid.appendChild(catChartCard);
+
+        wrapper.appendChild(chartsGrid);
+
+        // Render charts after DOM is attached
+        setTimeout(function() {
+          // Bar chart: cards by column
+          new Chart(colCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+              labels: data.cardsByColumn.map(function(c) { return c.columnTitle; }),
+              datasets: [{
+                label: 'Cards',
+                data: data.cardsByColumn.map(function(c) { return c.count; }),
+                backgroundColor: ['#4361ee', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe']
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            }
+          });
+
+          // Doughnut chart: cards by priority
+          var prioColors = { High: '#dc3545', Medium: '#ffc107', Low: '#28a745', None: '#6c757d' };
+          new Chart(prioCanvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+              labels: data.cardsByPriority.map(function(p) { return p.priority; }),
+              datasets: [{
+                data: data.cardsByPriority.map(function(p) { return p.count; }),
+                backgroundColor: data.cardsByPriority.map(function(p) { return prioColors[p.priority] || '#999'; })
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { position: 'bottom' } }
+            }
+          });
+
+          // Doughnut chart: cards by PARA category
+          if (data.cardsByCategory && data.cardsByCategory.length > 0) {
+            var catColors = { Project: '#3b82f6', Area: '#22c55e', Resource: '#f59e0b', Archive: '#9ca3af', Uncategorized: '#d1d5db' };
+            new Chart(catCanvas.getContext('2d'), {
+              type: 'doughnut',
+              data: {
+                labels: data.cardsByCategory.map(function(c) { return c.category; }),
+                datasets: [{
+                  data: data.cardsByCategory.map(function(c) { return c.count; }),
+                  backgroundColor: data.cardsByCategory.map(function(c) { return catColors[c.category] || '#999'; })
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+              }
+            });
+          }
+        }, 50);
+
+        // Aging Report Table
+        if (data.agingReport.length > 0) {
+          wrapper.appendChild(ClientUtils.el('h3', { className: 'kanban-section-title' }, ['Aging Report']));
+
+          var tableContainer = ClientUtils.el('div');
+          wrapper.appendChild(tableContainer);
+
+          var tableData = data.agingReport.map(function(r) {
+            return {
+              Title: r.title,
+              Column: r.column,
+              Priority: r.priority,
+              'Age (days)': r.ageDays,
+              'Due Date': r.dueDate ? ClientUtils.formatDate(r.dueDate) : '\u2014',
+              Status: r.isOverdue ? '<span class="badge badge-danger">Overdue</span>' : '<span class="badge badge-neutral">On Track</span>'
+            };
+          });
+
+          DataTable.render(tableContainer, {
+            data: tableData,
+            columns: ['Title', 'Column', 'Priority', 'Age (days)', 'Due Date', 'Status'],
+            pageSize: 10,
+            sortable: true
+          });
+        }
+      } catch (e) {
+        wrapper.innerHTML = '';
+        wrapper.appendChild(ClientUtils.el('div', { className: 'text-muted' }, ['Failed to load analytics: ' + e.message]));
+      }
+    }
+
+    function makeStatCard(label, value, color) {
+      var card = ClientUtils.el('div', { className: 'stat-card' });
+      card.appendChild(ClientUtils.el('div', { className: 'stat-card__value', style: 'color:' + color }, [String(value)]));
+      card.appendChild(ClientUtils.el('div', { className: 'stat-card__label' }, [label]));
+      return card;
+    }
+
+    // ── Bulk Operations ──
+    function toggleBulkMode() {
+      state.bulkMode = !state.bulkMode;
+      state.selectedCardIds = [];
+      els.bulkToggle.textContent = state.bulkMode ? 'Exit Bulk' : 'Bulk Select';
+      els.bulkToggle.classList.toggle('btn-primary', state.bulkMode);
+      els.bulkToggle.classList.toggle('btn-secondary', !state.bulkMode);
+      els.bulkBar.style.display = state.bulkMode ? 'flex' : 'none';
+      updateBulkBar();
+      renderBoard();
+    }
+
+    function toggleCardSelection(cardId) {
+      var idx = state.selectedCardIds.indexOf(cardId);
+      if (idx === -1) {
+        state.selectedCardIds.push(cardId);
+      } else {
+        state.selectedCardIds.splice(idx, 1);
+      }
+      updateBulkBar();
+      renderBoard();
+    }
+
+    function updateBulkBar() {
+      els.bulkCount.textContent = state.selectedCardIds.length + ' selected';
+    }
+
+    async function bulkMove(targetColumnId) {
+      if (state.selectedCardIds.length === 0) { Toast.warning('No cards selected'); return; }
+      try {
+        await ServerAPI.kanbanBulkMove(state.selectedCardIds, targetColumnId);
+        Toast.success(state.selectedCardIds.length + ' cards moved');
+        state.selectedCardIds = [];
+        updateBulkBar();
+        await loadBoard(state.currentBoardId);
+      } catch (e) {
+        Toast.error('Bulk move failed: ' + e.message);
+      }
+    }
+
+    async function bulkSetPriority(priority) {
+      if (state.selectedCardIds.length === 0) { Toast.warning('No cards selected'); return; }
+      try {
+        await ServerAPI.kanbanBulkUpdatePriority(state.selectedCardIds, priority);
+        Toast.success(state.selectedCardIds.length + ' cards updated');
+        state.selectedCardIds = [];
+        updateBulkBar();
+        await loadBoard(state.currentBoardId);
+      } catch (e) {
+        Toast.error('Bulk priority update failed: ' + e.message);
+      }
+    }
+
+    async function bulkDelete() {
+      if (state.selectedCardIds.length === 0) { Toast.warning('No cards selected'); return; }
+      if (!confirm('Delete ' + state.selectedCardIds.length + ' cards? This cannot be undone.')) return;
+      try {
+        await ServerAPI.kanbanBulkDelete(state.selectedCardIds);
+        Toast.success(state.selectedCardIds.length + ' cards deleted');
+        state.selectedCardIds = [];
+        updateBulkBar();
+        await loadBoard(state.currentBoardId);
+      } catch (e) {
+        Toast.error('Bulk delete failed: ' + e.message);
+      }
+    }
+
+    // ── Create / Edit Card Form ──
+    function openCardForm(existingCard) {
+      var isEdit = !!existingCard;
+      var body = ClientUtils.el('div');
+
+      // Title
+      var titleGroup = ClientUtils.el('div', { className: 'form-group' });
+      titleGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Title *']));
+      var titleInput = ClientUtils.el('input', {
+        type: 'text',
+        className: 'form-input',
+        value: isEdit ? existingCard.title : '',
+        placeholder: 'Card title'
+      });
+      titleGroup.appendChild(titleInput);
+      body.appendChild(titleGroup);
+
+      // Description
+      var descGroup = ClientUtils.el('div', { className: 'form-group' });
+      descGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Description']));
+      var descInput = ClientUtils.el('textarea', {
+        className: 'form-textarea',
+        placeholder: 'Describe this task...'
+      });
+      if (isEdit && existingCard.description) descInput.value = existingCard.description;
+      descGroup.appendChild(descInput);
+      body.appendChild(descGroup);
+
+      // Column selector
+      var colGroup = ClientUtils.el('div', { className: 'form-group' });
+      colGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Column']));
+      var colSelect = ClientUtils.el('select', { className: 'form-select' });
+      if (state.boardData) {
+        state.boardData.columns.forEach(function(col) {
+          var opt = ClientUtils.el('option', { value: col.id }, [col.title]);
+          if (isEdit && existingCard.column_id === col.id) opt.selected = true;
+          colSelect.appendChild(opt);
+        });
+      }
+      colGroup.appendChild(colSelect);
+      body.appendChild(colGroup);
+
+      // Priority
+      var prioGroup = ClientUtils.el('div', { className: 'form-group' });
+      prioGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Priority']));
+      var prioSelect = ClientUtils.el('select', { className: 'form-select' });
+      ['low', 'medium', 'high', 'critical'].forEach(function(p) {
+        var opt = ClientUtils.el('option', { value: p }, [p.charAt(0).toUpperCase() + p.slice(1)]);
+        if (isEdit && existingCard.priority === p) opt.selected = true;
+        if (!isEdit && p === 'medium') opt.selected = true;
+        prioSelect.appendChild(opt);
+      });
+      prioGroup.appendChild(prioSelect);
+      body.appendChild(prioGroup);
+
+      // Due date
+      var dueGroup = ClientUtils.el('div', { className: 'form-group' });
+      dueGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Due Date']));
+      var dueInput = ClientUtils.el('input', {
+        type: 'date',
+        className: 'form-input',
+        value: isEdit && existingCard.due_date ? existingCard.due_date.substring(0, 10) : ''
+      });
+      dueGroup.appendChild(dueInput);
+      body.appendChild(dueGroup);
+
+      // Assigned to
+      var assignGroup = ClientUtils.el('div', { className: 'form-group' });
+      assignGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Assigned To']));
+      var assignContainer = ClientUtils.el('div');
+      assignGroup.appendChild(assignContainer);
+      body.appendChild(assignGroup);
+
+      var staffSelector = StaffSelector.render(assignContainer, {
+        placeholder: 'Search staff to assign...',
+        selectedId: isEdit && existingCard.assignees && existingCard.assignees.length > 0 ? existingCard.assignees[0].id : ''
+      });
+
+      if (isEdit && existingCard.assignees && existingCard.assignees.length > 1) {
+        var extraNames = existingCard.assignees.slice(1).map(function(a) { return a.first_name + ' ' + a.last_name; }).join(', ');
+        assignGroup.appendChild(ClientUtils.el('div', { className: 'text-xs text-muted mt-sm' }, ['Also assigned: ' + extraNames + ' (use staff selector to change primary)']));
+      }
+
+      // Labels
+      var labelGroup = ClientUtils.el('div', { className: 'form-group' });
+      labelGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Labels (comma-separated)']));
+      var labelInput = ClientUtils.el('input', {
+        type: 'text',
+        className: 'form-input',
+        value: isEdit && existingCard.labels ? existingCard.labels : '',
+        placeholder: 'e.g., curriculum, urgent, budget'
+      });
+      labelGroup.appendChild(labelInput);
+      body.appendChild(labelGroup);
+
+      // PARA Category (BASB Organize)
+      var catGroup = ClientUtils.el('div', { className: 'form-group' });
+      catGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Category (PARA)']));
+      var catSelect = ClientUtils.el('select', { className: 'form-select' });
+      var catOptions = [
+        { value: '', label: 'None' },
+        { value: 'project', label: 'Project — Time-bound initiative' },
+        { value: 'area', label: 'Area — Ongoing responsibility' },
+        { value: 'resource', label: 'Resource — Reference / evidence' },
+        { value: 'archive', label: 'Archive — Completed / shelved' }
+      ];
+      catOptions.forEach(function(opt) {
+        var el = ClientUtils.el('option', { value: opt.value }, [opt.label]);
+        if (isEdit && existingCard.category === opt.value) el.selected = true;
+        if (!isEdit && opt.value === '') el.selected = true;
+        catSelect.appendChild(el);
+      });
+      catGroup.appendChild(catSelect);
+      body.appendChild(catGroup);
+
+      // Key Takeaway (BASB Distill — progressive summarization)
+      var takeawayGroup = ClientUtils.el('div', { className: 'form-group' });
+      takeawayGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Key Takeaway']));
+      var takeawayInput = ClientUtils.el('input', {
+        type: 'text',
+        className: 'form-input',
+        value: isEdit && existingCard.key_takeaway ? existingCard.key_takeaway : '',
+        placeholder: 'One-liner: the essential insight or next action'
+      });
+      takeawayGroup.appendChild(takeawayInput);
+      body.appendChild(takeawayGroup);
+
+      // Actions
+      var actions = [
+        {
+          label: isEdit ? 'Save Changes' : 'Create Card',
+          className: 'btn-primary',
+          onClick: async function() {
+            var title = titleInput.value.trim();
+            if (!title) { Toast.warning('Title is required'); return; }
+
+            var data = {
+              title: title,
+              description: descInput.value.trim(),
+              column_id: colSelect.value,
+              priority: prioSelect.value,
+              due_date: dueInput.value ? new Date(dueInput.value).toISOString() : '',
+              assigned_to: staffSelector.getValue() || '',
+              labels: labelInput.value.trim(),
+              category: catSelect.value,
+              key_takeaway: takeawayInput.value.trim()
+            };
+
+            try {
+              if (isEdit) {
+                await ServerAPI.updateCard(existingCard.id, data);
+                Toast.success('Card updated');
+              } else {
+                data.board_id = state.currentBoardId;
+                await ServerAPI.createCard(data);
+                Toast.success('Card created');
+              }
+              Modal.close();
+              await loadBoard(state.currentBoardId);
+            } catch (e) {
+              Toast.error('Failed to save card: ' + e.message);
+            }
+          }
+        },
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+      ];
+
+      Modal.open(isEdit ? 'Edit Card' : 'New Card', body, actions);
+    }
+
+    // ── Delete Card ──
+    async function deleteCard(cardId) {
+      try {
+        await ServerAPI.deleteCard(cardId);
+        Toast.success('Card deleted');
+        await loadBoard(state.currentBoardId);
+      } catch (e) {
+        Toast.error('Failed to delete card: ' + e.message);
+      }
+    }
+
+    // ── Board Settings Modal ──
+    function openBoardSettings() {
+      if (!state.boardData) return;
+
+      var body = ClientUtils.el('div');
+
+      // Existing columns list
+      body.appendChild(ClientUtils.el('h4', { style: 'margin-bottom:var(--space-sm); font-size:var(--font-size-sm); font-weight:600; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;' }, ['Columns']));
+
+      var colList = ClientUtils.el('div', { className: 'kanban-col-list' });
+
+      state.boardData.columns.forEach(function(col) {
+        var cardCount = state.boardData.cards.filter(function(c) { return c.column_id === col.id; }).length;
+
+        var row = ClientUtils.el('div', { className: 'kanban-col-row' });
+        row.appendChild(ClientUtils.el('span', { className: 'kanban-col-row__color', style: 'background:' + (col.color || '#ccc') }));
+        row.appendChild(ClientUtils.el('span', { className: 'kanban-col-row__title' }, [col.title]));
+        row.appendChild(ClientUtils.el('span', { className: 'kanban-col-row__wip' }, [
+          col.wip_limit > 0 ? 'WIP: ' + col.wip_limit : 'No limit'
+        ]));
+        row.appendChild(ClientUtils.el('span', { className: 'text-xs text-muted' }, [cardCount + ' cards']));
+
+        if (cardCount === 0) {
+          row.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-danger btn-sm',
+            onClick: async function() {
+              if (!confirm('Delete column "' + col.title + '"?')) return;
+              try {
+                await ServerAPI.deleteColumn(col.id);
+                Toast.success('Column deleted');
+                Modal.close();
+                await loadBoard(state.currentBoardId);
+              } catch (e) {
+                Toast.error('Failed to delete column: ' + e.message);
+              }
+            }
+          }, ['Delete']));
+        }
+
+        colList.appendChild(row);
+      });
+
+      body.appendChild(colList);
+
+      // Add column form
+      body.appendChild(ClientUtils.el('h4', { style: 'margin-top:var(--space-lg); margin-bottom:var(--space-sm); font-size:var(--font-size-sm); font-weight:600; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;' }, ['Add Column']));
+
+      var addForm = ClientUtils.el('div', { className: 'flex gap-sm', style: 'flex-wrap:wrap;' });
+
+      var colTitleInput = ClientUtils.el('input', { type: 'text', className: 'form-input', placeholder: 'Column title', style: 'flex:1; min-width:120px;' });
+      var colColorInput = ClientUtils.el('input', { type: 'color', className: 'form-input', value: '#3b82f6', style: 'width:50px; padding:2px;' });
+      var colWipInput = ClientUtils.el('input', { type: 'number', className: 'form-input', placeholder: 'WIP limit (0=none)', value: '0', style: 'width:100px;' });
+
+      var addColBtn = ClientUtils.el('button', {
+        className: 'btn btn-primary btn-sm',
+        onClick: async function() {
+          var title = colTitleInput.value.trim();
+          if (!title) { Toast.warning('Column title is required'); return; }
+
+          var maxPos = 0;
+          state.boardData.columns.forEach(function(c) { if (Number(c.position) > maxPos) maxPos = Number(c.position); });
+
+          try {
+            await ServerAPI.createColumn({
+              board_id: state.currentBoardId,
+              title: title,
+              position: maxPos + 1,
+              color: colColorInput.value,
+              wip_limit: parseInt(colWipInput.value) || 0
+            });
+            Toast.success('Column added');
+            Modal.close();
+            await loadBoard(state.currentBoardId);
+          } catch (e) {
+            Toast.error('Failed to add column: ' + e.message);
+          }
+        }
+      }, ['Add']);
+
+      addForm.appendChild(colTitleInput);
+      addForm.appendChild(colColorInput);
+      addForm.appendChild(colWipInput);
+      addForm.appendChild(addColBtn);
+      body.appendChild(addForm);
+
+      // Archive board button
+      body.appendChild(ClientUtils.el('div', { style: 'margin-top:var(--space-xl); padding-top:var(--space-md); border-top:1px solid var(--color-border);' }, [
+        ClientUtils.el('button', {
+          className: 'btn btn-danger btn-sm',
+          onClick: async function() {
+            if (!confirm('Archive board "' + state.boardData.board.title + '"? It can be restored later.')) return;
+            try {
+              await ServerAPI.archiveBoard(state.currentBoardId);
+              Toast.success('Board archived');
+              Modal.close();
+              state.currentBoardId = null;
+              await loadBoards();
+            } catch (e) {
+              Toast.error('Failed to archive board: ' + e.message);
+            }
+          }
+        }, ['Archive Board'])
+      ]));
+
+      Modal.open('Board Settings', body, [
+        { label: 'Close', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+      ]);
+    }
+
+    // ── Export Board Summary (BASB Express — intermediate packets) ──
+    function exportBoardSummary() {
+      if (!state.boardData) return;
+      var bd = state.boardData;
+      var lines = ['# ' + bd.board.title];
+      if (bd.board.description) lines.push(bd.board.description);
+      lines.push('');
+      lines.push('*Exported: ' + new Date().toLocaleDateString() + '*');
+      lines.push('');
+
+      bd.columns.forEach(function(col) {
+        var colCards = bd.cards.filter(function(c) { return c.column_id === col.id; });
+        if (colCards.length === 0) return;
+        lines.push('## ' + col.title + ' (' + colCards.length + ')');
+        lines.push('');
+        colCards.forEach(function(card) {
+          var parts = ['- **' + card.title + '**'];
+          if (card.category) parts.push(' [' + card.category.charAt(0).toUpperCase() + card.category.slice(1) + ']');
+          if (card.priority && card.priority !== 'low') parts.push(' (' + card.priority + ')');
+          lines.push(parts.join(''));
+          if (card.key_takeaway) lines.push('  > ' + card.key_takeaway);
+          if (card.assignees && card.assignees.length > 0) {
+            lines.push('  Owner: ' + card.assignees.map(function(a) { return a.first_name + ' ' + a.last_name; }).join(', '));
+          }
+          if (card.due_date) lines.push('  Due: ' + ClientUtils.formatDate(card.due_date));
+        });
+        lines.push('');
+      });
+
+      navigator.clipboard.writeText(lines.join('\n')).then(function() {
+        Toast.success('Board summary copied to clipboard');
+      });
+    }
+
+    // ── Clear Filters ──
+    function clearFilters() {
+      state.filters = { assignee: '', priority: '', category: '', labels: [], search: '' };
+      els.priorityFilter.value = '';
+      if (els.categoryFilter) els.categoryFilter.value = '';
+      els.searchInput.value = '';
+      populateLabelFilter();
+      renderCurrentView();
+    }
+
+    // ── Init ──
+    buildLayout();
+    loadBoards();
+
+    return {
+      onActivate: function() {
+        loadBoard(state.currentBoardId || (state.boards.length > 0 ? state.boards[0].id : null));
+      }
+    };
+  }
+};
+</script>

@@ -1,0 +1,437 @@
+<style>
+/* ================================================
+   BRANCH EXPANSION STYLES (bex- prefix)
+   Resource hex editor, student resource view,
+   planner resource card
+   ================================================ */
+
+/* --- Resource Hex Editor Section --- */
+.bex-res-section {
+  padding: 0;
+}
+
+.bex-res-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 12px;
+}
+
+.bex-res-field {
+  margin-bottom: 10px;
+}
+
+.bex-res-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.bex-res-field input,
+.bex-res-field select,
+.bex-res-field textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.bex-res-field input:focus,
+.bex-res-field select:focus,
+.bex-res-field textarea:focus {
+  outline: none;
+  border-color: #d97706;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15);
+}
+
+.bex-res-field textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.bex-res-char-count {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: right;
+  margin-top: 2px;
+}
+
+.bex-res-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.bex-res-checkbox-row input[type="checkbox"] {
+  width: auto;
+  accent-color: #d97706;
+}
+
+/* --- Resource Hex Badge (teacher mode) --- */
+.bex-hex-badge {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #d97706;
+}
+
+/* --- Student Resource View --- */
+.bex-res-student-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #fef3c7, #fff7ed);
+  border-radius: 10px;
+  border: 1px solid #fcd34d;
+}
+
+.bex-res-student-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.bex-res-student-type {
+  font-size: 18px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.bex-res-student-instructions {
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-left: 3px solid #d97706;
+  border-radius: 0 8px 8px 0;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+}
+
+.bex-res-student-action {
+  text-align: center;
+  margin: 16px 0;
+}
+
+.bex-res-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  background: #d97706 !important;
+  border-color: #b45309 !important;
+  border-radius: 10px !important;
+  color: white !important;
+  text-decoration: none !important;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.bex-res-open-btn:hover {
+  background: #b45309 !important;
+  transform: translateY(-1px);
+}
+
+.bex-res-student-time {
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 12px;
+}
+
+/* --- Planner Resource Card --- */
+.bex-planner-resource {
+  border-left: 3px solid #d97706 !important;
+}
+
+.bex-planner-open-link {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border: 1px solid #fcd34d !important;
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.bex-planner-open-link:hover {
+  background: #fde68a !important;
+}
+
+/* --- Compound (Multi-Gate) Editor --- */
+.bex-logic-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.bex-logic-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.bex-logic-btn.active {
+  background: #6366f1;
+  color: white;
+  border-color: #4f46e5;
+}
+
+.bex-logic-btn:hover:not(.active) {
+  background: #e2e8f0;
+}
+
+.bex-sub-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 6px;
+  background: #fafafe;
+}
+
+.bex-sub-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bex-sub-type {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.bex-sub-remove {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1;
+  padding: 0;
+}
+
+.bex-sub-remove:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.bex-sub-fields {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.bex-sub-fields select,
+.bex-sub-fields input {
+  padding: 3px 5px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.bex-sub-fields input[type="number"] {
+  width: 55px;
+}
+
+.bex-sub-fields input[type="date"] {
+  width: 130px;
+}
+
+.bex-add-sub-btn {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 12px !important;
+  padding: 5px 8px !important;
+}
+
+/* --- Student Choice Modal --- */
+.bex-choice-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bex-choice-modal {
+  background: white;
+  border-radius: 14px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.bex-choice-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 2px solid #ec4899;
+  background: linear-gradient(135deg, #fdf2f8, #fff);
+}
+
+.bex-choice-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #9d174d;
+}
+
+.bex-choice-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #94a3b8;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bex-choice-close:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.bex-choice-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.bex-choice-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 14px;
+}
+
+.bex-choice-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bex-choice-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 2px solid #fce7f3;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: white;
+}
+
+.bex-choice-card:hover {
+  border-color: #ec4899;
+  background: #fdf2f8;
+  transform: translateX(4px);
+}
+
+.bex-choice-card-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.bex-choice-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.bex-choice-card-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.bex-choice-card-target {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.bex-choice-card-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.bex-choice-card-arrow {
+  font-size: 20px;
+  color: #ec4899;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+/* --- Integration Polish: Recently Unlocked (Planner) --- */
+.bex-recently-unlocked {
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.bex-recently-unlocked-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #15803d;
+  margin-bottom: 6px;
+}
+.bex-recently-unlocked-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 13px;
+  color: #1e293b;
+}
+.bex-recently-unlocked-badge {
+  font-size: 12px;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* --- Integration Polish: Resource note in unlock notification --- */
+.sng-unlock-resource-note {
+  font-size: 13px;
+  color: #d97706;
+  margin-top: 4px;
+  font-weight: 500;
+}
+</style>

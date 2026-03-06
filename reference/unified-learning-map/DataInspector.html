@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>Data Structure Inspector</title>
+<style>
+body {
+font-family: 'Courier New', monospace;
+background: #1a202c;
+color: #e2e8f0;
+padding: 20px;
+font-size: 13px;
+    }
+.container {
+max-width: 1200px;
+margin: 0 auto;
+    }
+h1 {
+color: #48bb78;
+margin-bottom: 20px;
+font-size: 24px;
+    }
+.section {
+background: #2d3748;
+padding: 20px;
+border-radius: 8px;
+margin-bottom: 20px;
+border: 1px solid #4a5568;
+    }
+.section h2 {
+color: #90cdf4;
+margin-bottom: 12px;
+font-size: 16px;
+    }
+.json-output {
+background: #1a202c;
+padding: 16px;
+border-radius: 4px;
+overflow-x: auto;
+border: 1px solid #4a5568;
+white-space: pre-wrap;
+word-wrap: break-word;
+    }
+.success { color: #48bb78; }
+.error { color: #f56565; }
+.warning { color: #ed8936; }
+.key { color: #90cdf4; }
+.string { color: #68d391; }
+.number { color: #fbd38d; }
+.boolean { color: #fc8181; }
+button {
+background: #667eea;
+color: white;
+border: none;
+padding: 10px 20px;
+border-radius: 6px;
+cursor: pointer;
+font-weight: 600;
+margin-right: 8px;
+    }
+button:hover {
+background: #5568d3;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🔍 Data Structure Inspector</h1>
+<div class="section">
+<h2>Instructions</h2>
+<p>This tool will show you the EXACT data structure returned from your backend.</p>
+<p style="margin-top: 8px;">Click the buttons below to inspect different backend functions.</p>
+</div>
+<div class="section">
+<h2>Actions</h2>
+<button onclick="inspectMaps()">Inspect getMaps()</button>
+<button onclick="inspectUser()">Inspect getCurrentUser()</button>
+<button onclick="inspectCourses()">Inspect getCourses()</button>
+<button onclick="inspectSheet()">Inspect Sheet Schema</button>
+</div>
+<div id="output"></div>
+</div>
+<script>
+async function inspectMaps() {
+const output = document.getElementById('output');
+output.innerHTML = '<div class="section"><h2>Loading getMaps()...</h2></div>';
+try {
+const maps = await runAsync('getMaps');
+let html = '<div class="section">';
+html += '<h2 class="success">✅ getMaps() Success</h2>';
+html += `<p>Returned <strong>${maps.length}</strong> map(s)</p>`;
+html += '</div>';
+if (maps.length > 0) {
+// Show first map in detail
+html += '<div class="section">';
+html += '<h2>First Map Structure:</h2>';
+html += '<div class="json-output">' + syntaxHighlight(JSON.stringify(maps[0], null, 2)) + '</div>';
+html += '</div>';
+// Analyze structure
+html += '<div class="section">';
+html += '<h2>Structure Analysis:</h2>';
+html += '<div class="json-output">';
+const map = maps[0];
+html += `<span class="key">mapId:</span> ${typeof map.mapId} ${map.mapId ? '✅' : '❌'}\n`;
+html += `<span class="key">title:</span> ${typeof map.title} ${map.title ? '✅' : '❌'}\n`;
+html += `<span class="key">hexes:</span> ${typeof map.hexes} ${Array.isArray(map.hexes) ? `✅ (${map.hexes.length} items)` : '❌ Not an array!'}\n`;
+html += `<span class="key">teacherEmail:</span> ${typeof map.teacherEmail}\n`;
+html += `<span class="key">meta:</span> ${typeof map.meta}\n`;
+html += `<span class="key">ubdData:</span> ${typeof map.ubdData}\n`;
+if (Array.isArray(map.hexes) && map.hexes.length > 0) {
+html += `\n<span class="success">First Hex Structure:</span>\n`;
+const hex = map.hexes[0];
+html += `  <span class="key">id:</span> ${typeof hex.id} = "${hex.id}"\n`;
+html += `  <span class="key">label:</span> ${typeof hex.label} = "${hex.label}"\n`;
+html += `  <span class="key">icon:</span> ${typeof hex.icon} = "${hex.icon}"\n`;
+html += `  <span class="key">type:</span> ${typeof hex.type} = "${hex.type}"\n`;
+html += `  <span class="key">row:</span> ${typeof hex.row} = ${hex.row}\n`;
+html += `  <span class="key">col:</span> ${typeof hex.col} = ${hex.col}\n`;
+html += `  <span class="key">curriculum:</span> ${typeof hex.curriculum}\n`;
+if (hex.curriculum) {
+html += `    <span class="key">sbarDomains:</span> ${Array.isArray(hex.curriculum.sbarDomains) ? `✅ array (${hex.curriculum.sbarDomains.length})` : `❌ ${typeof hex.curriculum.sbarDomains}`}\n`;
+html += `    <span class="key">standards:</span> ${Array.isArray(hex.curriculum.standards) ? `✅ array (${hex.curriculum.standards.length})` : `❌ ${typeof hex.curriculum.standards}`}\n`;
+            }
+          }
+html += '</div>';
+html += '</div>';
+// Show all maps summary
+if (maps.length > 1) {
+html += '<div class="section">';
+html += '<h2>All Maps Summary:</h2>';
+html += '<div class="json-output">';
+maps.forEach((m, i) => {
+html += `<span class="number">[${i}]</span> <span class="string">"${m.title}"</span> - ${m.hexes ? m.hexes.length : 0} hexes - ID: ${m.mapId}\n`;
+            });
+html += '</div>';
+html += '</div>';
+          }
+        }
+output.innerHTML = html;
+      } catch (err) {
+output.innerHTML = `
+          <div class="section">
+            <h2 class="error">❌ getMaps() Error</h2>
+            <p>Error message: ${err.message}</p>
+            <div class="json-output">${err.stack || 'No stack trace'}</div>
+          </div>
+        `;
+      }
+    }
+async function inspectUser() {
+const output = document.getElementById('output');
+output.innerHTML = '<div class="section"><h2>Loading getCurrentUser()...</h2></div>';
+try {
+const user = await runAsync('getCurrentUser');
+let html = '<div class="section">';
+html += '<h2 class="success">✅ getCurrentUser() Success</h2>';
+html += '<div class="json-output">' + syntaxHighlight(JSON.stringify(user, null, 2)) + '</div>';
+html += '</div>';
+output.innerHTML = html;
+      } catch (err) {
+output.innerHTML = `
+          <div class="section">
+            <h2 class="error">❌ getCurrentUser() Error</h2>
+            <p>Error message: ${err.message}</p>
+          </div>
+        `;
+      }
+    }
+async function inspectCourses() {
+const output = document.getElementById('output');
+output.innerHTML = '<div class="section"><h2>Loading getCourses()...</h2></div>';
+try {
+const courses = await runAsync('getCourses');
+let html = '<div class="section">';
+html += '<h2 class="success">✅ getCourses() Success</h2>';
+html += `<p>Returned <strong>${courses.length}</strong> course(s)</p>`;
+html += '<div class="json-output">' + syntaxHighlight(JSON.stringify(courses, null, 2)) + '</div>';
+html += '</div>';
+output.innerHTML = html;
+      } catch (err) {
+output.innerHTML = `
+          <div class="section">
+            <h2 class="error">❌ getCourses() Error</h2>
+            <p>Error message: ${err.message}</p>
+          </div>
+        `;
+      }
+    }
+async function inspectSheet() {
+const output = document.getElementById('output');
+output.innerHTML = '<div class="section"><h2>Inspecting Sheet Schema...</h2></div>';
+try {
+// Call a diagnostic function that returns sheet structure
+const schema = await runAsync('getSheetSchema');
+let html = '<div class="section">';
+html += '<h2 class="success">✅ Sheet Schema</h2>';
+html += '<div class="json-output">' + syntaxHighlight(JSON.stringify(schema, null, 2)) + '</div>';
+html += '</div>';
+output.innerHTML = html;
+      } catch (err) {
+output.innerHTML = `
+          <div class="section">
+            <h2 class="warning">⚠️ getSheetSchema() not available</h2>
+            <p>This function needs to be added to your backend.</p>
+            <p>Error: ${err.message}</p>
+          </div>
+        `;
+      }
+    }
+function syntaxHighlight(json) {
+json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+let cls = 'number';
+if (/^"/.test(match)) {
+if (/:$/.test(match)) {
+cls = 'key';
+          } else {
+cls = 'string';
+          }
+        } else if (/true|false/.test(match)) {
+cls = 'boolean';
+        } else if (/null/.test(match)) {
+cls = 'null';
+        }
+return '<span class="' + cls + '">' + match + '</span>';
+      });
+    }
+function runAsync(functionName, ...args) {
+return new Promise((resolve, reject) => {
+google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          [functionName](...args);
+      });
+    }
+// Auto-run on load
+window.addEventListener('DOMContentLoaded', () => {
+console.log('Data Inspector loaded');
+inspectMaps(); // Auto-inspect maps
+    });
+</script>
+</body>
+</html>

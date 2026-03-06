@@ -1,0 +1,1056 @@
+<script>
+    // ============================================================================
+    // WHITEBOARD DRAWING TOOL — Scripts-Whiteboard.html
+    // Canvas drawing, hex editor integration, teacher overlay, student modal
+    // ============================================================================
+
+    // Constants
+    var WB_DEFAULT_WIDTH = 1920;
+    var WB_DEFAULT_HEIGHT = 1080;
+    var WB_THUMB_WIDTH = 150;
+    var WB_TOOLS = ['pen', 'eraser', 'line', 'rect', 'circle', 'text'];
+    var WB_COLORS = ['#000000', '#ffffff', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7283', '#0d9488'];
+    var WB_WIDTHS = [2, 4, 8, 16];
+    var WB_BACKGROUNDS = ['blank', 'grid', 'lined'];
+    var WB_UNDO_MAX = 30;
+
+    // ============================================================================
+    // CANVAS INITIALIZATION
+    // ============================================================================
+
+    function wbInitCanvas(containerEl, width, height) {
+      if (!containerEl) return null;
+      width = width || WB_DEFAULT_WIDTH;
+      height = height || WB_DEFAULT_HEIGHT;
+
+      var canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.style.cssText = 'width:100%;height:auto;display:block;';
+      containerEl.innerHTML = '';
+      containerEl.appendChild(canvas);
+
+      wbCanvasEl = canvas;
+      wbCtx = canvas.getContext('2d');
+      wbCtx.lineCap = 'round';
+      wbCtx.lineJoin = 'round';
+
+      wbDrawBackground(wbBackground);
+      wbUndoStack = [canvas.toDataURL('image/png')];
+      wbRedoStack = [];
+      wbDirty = false;
+      wbIsDrawing = false;
+
+      // Mouse events
+      canvas.addEventListener('mousedown', function(e) {
+        var pos = wbGetPos(e);
+        wbOnPointerDown(pos.x, pos.y);
+      });
+      canvas.addEventListener('mousemove', function(e) {
+        var pos = wbGetPos(e);
+        wbOnPointerMove(pos.x, pos.y);
+      });
+      canvas.addEventListener('mouseup', function(e) {
+        var pos = wbGetPos(e);
+        wbOnPointerUp(pos.x, pos.y);
+      });
+      canvas.addEventListener('mouseleave', function() {
+        if (wbIsDrawing) wbOnPointerUp(wbLastX, wbLastY);
+      });
+
+      // Touch events
+      canvas.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        var touch = e.touches[0];
+        var pos = wbGetPos(touch);
+        wbOnPointerDown(pos.x, pos.y);
+      }, { passive: false });
+      canvas.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        var touch = e.touches[0];
+        var pos = wbGetPos(touch);
+        wbOnPointerMove(pos.x, pos.y);
+      }, { passive: false });
+      canvas.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        var touch = e.changedTouches[0];
+        var pos = wbGetPos(touch);
+        wbOnPointerUp(pos.x, pos.y);
+      }, { passive: false });
+
+      return canvas;
+    }
+
+    function wbGetPos(e) {
+      if (!wbCanvasEl) return { x: 0, y: 0 };
+      var rect = wbCanvasEl.getBoundingClientRect();
+      var scaleX = wbCanvasEl.width / rect.width;
+      var scaleY = wbCanvasEl.height / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+
+    // ============================================================================
+    // BACKGROUND
+    // ============================================================================
+
+    function wbDrawBackground(bg) {
+      if (!wbCtx || !wbCanvasEl) return;
+      var w = wbCanvasEl.width;
+      var h = wbCanvasEl.height;
+      wbCtx.fillStyle = '#ffffff';
+      wbCtx.fillRect(0, 0, w, h);
+
+      if (bg === 'grid') {
+        wbCtx.strokeStyle = '#e2e8f0';
+        wbCtx.lineWidth = 1;
+        for (var x = 0; x <= w; x += 40) {
+          wbCtx.beginPath();
+          wbCtx.moveTo(x, 0);
+          wbCtx.lineTo(x, h);
+          wbCtx.stroke();
+        }
+        for (var y = 0; y <= h; y += 40) {
+          wbCtx.beginPath();
+          wbCtx.moveTo(0, y);
+          wbCtx.lineTo(w, y);
+          wbCtx.stroke();
+        }
+      } else if (bg === 'lined') {
+        wbCtx.strokeStyle = '#cbd5e1';
+        wbCtx.lineWidth = 1;
+        for (var ly = 32; ly <= h; ly += 32) {
+          wbCtx.beginPath();
+          wbCtx.moveTo(0, ly);
+          wbCtx.lineTo(w, ly);
+          wbCtx.stroke();
+        }
+        // Red margin line
+        wbCtx.strokeStyle = '#fca5a5';
+        wbCtx.lineWidth = 2;
+        wbCtx.beginPath();
+        wbCtx.moveTo(80, 0);
+        wbCtx.lineTo(80, h);
+        wbCtx.stroke();
+      }
+
+      // Reset drawing styles
+      wbCtx.strokeStyle = wbColor;
+      wbCtx.lineWidth = wbWidth;
+      wbCtx.lineCap = 'round';
+      wbCtx.lineJoin = 'round';
+    }
+
+    function wbClearCanvas() {
+      if (!confirm('Clear the entire canvas? This cannot be undone.')) return;
+      wbDrawBackground(wbBackground);
+      wbUndoStack = [wbCanvasEl.toDataURL('image/png')];
+      wbRedoStack = [];
+      wbDirty = true;
+    }
+
+    // ============================================================================
+    // DRAWING EVENT HANDLERS
+    // ============================================================================
+
+    var _wbTempCanvas = null;
+    var _wbTempCtx = null;
+
+    function wbOnPointerDown(x, y) {
+      if (!wbCtx) return;
+      wbIsDrawing = true;
+      wbLastX = x;
+      wbLastY = y;
+
+      if (wbTool === 'text') {
+        wbIsDrawing = false;
+        wbStartTextInput(x, y);
+        return;
+      }
+
+      if (wbTool === 'line' || wbTool === 'rect' || wbTool === 'circle') {
+        wbShapeStartX = x;
+        wbShapeStartY = y;
+        // Create temp overlay canvas for shape preview
+        _wbTempCanvas = document.createElement('canvas');
+        _wbTempCanvas.width = wbCanvasEl.width;
+        _wbTempCanvas.height = wbCanvasEl.height;
+        _wbTempCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;';
+        _wbTempCtx = _wbTempCanvas.getContext('2d');
+        wbCanvasEl.parentNode.style.position = 'relative';
+        wbCanvasEl.parentNode.appendChild(_wbTempCanvas);
+      }
+    }
+
+    function wbOnPointerMove(x, y) {
+      if (!wbIsDrawing || !wbCtx) return;
+
+      if (wbTool === 'pen') {
+        wbCtx.globalCompositeOperation = 'source-over';
+        wbCtx.strokeStyle = wbColor;
+        wbCtx.lineWidth = wbWidth;
+        wbCtx.beginPath();
+        wbCtx.moveTo(wbLastX, wbLastY);
+        wbCtx.lineTo(x, y);
+        wbCtx.stroke();
+        wbLastX = x;
+        wbLastY = y;
+      } else if (wbTool === 'eraser') {
+        wbCtx.globalCompositeOperation = 'destination-out';
+        wbCtx.lineWidth = wbWidth * 3;
+        wbCtx.beginPath();
+        wbCtx.moveTo(wbLastX, wbLastY);
+        wbCtx.lineTo(x, y);
+        wbCtx.stroke();
+        wbCtx.globalCompositeOperation = 'source-over';
+        wbLastX = x;
+        wbLastY = y;
+      } else if (_wbTempCtx) {
+        // Shape preview on temp canvas
+        _wbTempCtx.clearRect(0, 0, _wbTempCanvas.width, _wbTempCanvas.height);
+        _wbTempCtx.strokeStyle = wbColor;
+        _wbTempCtx.lineWidth = wbWidth;
+        _wbTempCtx.lineCap = 'round';
+        _wbTempCtx.lineJoin = 'round';
+
+        if (wbTool === 'line') {
+          _wbTempCtx.beginPath();
+          _wbTempCtx.moveTo(wbShapeStartX, wbShapeStartY);
+          _wbTempCtx.lineTo(x, y);
+          _wbTempCtx.stroke();
+        } else if (wbTool === 'rect') {
+          _wbTempCtx.strokeRect(wbShapeStartX, wbShapeStartY,
+            x - wbShapeStartX, y - wbShapeStartY);
+        } else if (wbTool === 'circle') {
+          var rx = Math.abs(x - wbShapeStartX) / 2;
+          var ry = Math.abs(y - wbShapeStartY) / 2;
+          var cx = wbShapeStartX + (x - wbShapeStartX) / 2;
+          var cy = wbShapeStartY + (y - wbShapeStartY) / 2;
+          _wbTempCtx.beginPath();
+          _wbTempCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          _wbTempCtx.stroke();
+        }
+      }
+    }
+
+    function wbOnPointerUp(x, y) {
+      if (!wbIsDrawing) return;
+      wbIsDrawing = false;
+
+      // Commit shape from temp canvas to main canvas
+      if (_wbTempCanvas && _wbTempCtx) {
+        wbCtx.globalCompositeOperation = 'source-over';
+        wbCtx.strokeStyle = wbColor;
+        wbCtx.lineWidth = wbWidth;
+        wbCtx.lineCap = 'round';
+        wbCtx.lineJoin = 'round';
+
+        if (wbTool === 'line') {
+          wbCtx.beginPath();
+          wbCtx.moveTo(wbShapeStartX, wbShapeStartY);
+          wbCtx.lineTo(x, y);
+          wbCtx.stroke();
+        } else if (wbTool === 'rect') {
+          wbCtx.strokeRect(wbShapeStartX, wbShapeStartY,
+            x - wbShapeStartX, y - wbShapeStartY);
+        } else if (wbTool === 'circle') {
+          var rx = Math.abs(x - wbShapeStartX) / 2;
+          var ry = Math.abs(y - wbShapeStartY) / 2;
+          var cx = wbShapeStartX + (x - wbShapeStartX) / 2;
+          var cy = wbShapeStartY + (y - wbShapeStartY) / 2;
+          wbCtx.beginPath();
+          wbCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          wbCtx.stroke();
+        }
+
+        // Remove temp canvas
+        if (_wbTempCanvas.parentNode) _wbTempCanvas.parentNode.removeChild(_wbTempCanvas);
+        _wbTempCanvas = null;
+        _wbTempCtx = null;
+      }
+
+      wbPushUndoState();
+      wbDirty = true;
+    }
+
+    // ============================================================================
+    // UNDO / REDO
+    // ============================================================================
+
+    function wbPushUndoState() {
+      if (!wbCanvasEl) return;
+      wbUndoStack.push(wbCanvasEl.toDataURL('image/png'));
+      if (wbUndoStack.length > WB_UNDO_MAX) wbUndoStack.shift();
+      wbRedoStack = [];
+      wbUpdateUndoButtons();
+    }
+
+    function wbUndo() {
+      if (wbUndoStack.length <= 1) return;
+      wbRedoStack.push(wbUndoStack.pop());
+      var state = wbUndoStack[wbUndoStack.length - 1];
+      wbRestoreState(state);
+      wbDirty = true;
+      wbUpdateUndoButtons();
+    }
+
+    function wbRedo() {
+      if (wbRedoStack.length === 0) return;
+      var state = wbRedoStack.pop();
+      wbUndoStack.push(state);
+      wbRestoreState(state);
+      wbDirty = true;
+      wbUpdateUndoButtons();
+    }
+
+    function wbRestoreState(dataUrl) {
+      var img = new Image();
+      img.onload = function() {
+        wbCtx.clearRect(0, 0, wbCanvasEl.width, wbCanvasEl.height);
+        wbCtx.drawImage(img, 0, 0);
+      };
+      img.src = dataUrl;
+    }
+
+    function wbUpdateUndoButtons() {
+      var undoBtn = document.getElementById('wbUndoBtn');
+      var redoBtn = document.getElementById('wbRedoBtn');
+      if (undoBtn) {
+        undoBtn.disabled = wbUndoStack.length <= 1;
+        undoBtn.setAttribute('aria-disabled', wbUndoStack.length <= 1 ? 'true' : 'false');
+      }
+      if (redoBtn) {
+        redoBtn.disabled = wbRedoStack.length === 0;
+        redoBtn.setAttribute('aria-disabled', wbRedoStack.length === 0 ? 'true' : 'false');
+      }
+    }
+
+    // ============================================================================
+    // TEXT TOOL
+    // ============================================================================
+
+    function wbStartTextInput(x, y) {
+      if (!wbCanvasEl) return;
+      var container = wbCanvasEl.parentNode;
+      var rect = wbCanvasEl.getBoundingClientRect();
+      var cssX = (x / wbCanvasEl.width) * rect.width;
+      var cssY = (y / wbCanvasEl.height) * rect.height;
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'wb-text-input';
+      input.style.cssText = 'position:absolute;left:' + cssX + 'px;top:' + cssY + 'px;' +
+        'font-size:' + (wbWidth * 4) + 'px;color:' + wbColor + ';' +
+        'background:transparent;border:1px dashed #94a3b8;outline:none;padding:2px 4px;' +
+        'font-family:sans-serif;z-index:10;min-width:60px;';
+      container.style.position = 'relative';
+      container.appendChild(input);
+      input.focus();
+
+      var committed = false;
+      function commitText() {
+        if (committed) return;
+        committed = true;
+        var text = input.value.trim();
+        if (text) {
+          wbCtx.globalCompositeOperation = 'source-over';
+          wbCtx.font = (wbWidth * 4) + 'px sans-serif';
+          wbCtx.fillStyle = wbColor;
+          wbCtx.fillText(text, x, y + (wbWidth * 4));
+          wbPushUndoState();
+          wbDirty = true;
+        }
+        if (input.parentNode) input.parentNode.removeChild(input);
+      }
+
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); commitText(); }
+        if (e.key === 'Escape') { committed = true; if (input.parentNode) input.parentNode.removeChild(input); }
+      });
+      input.addEventListener('blur', commitText);
+    }
+
+    // ============================================================================
+    // THUMBNAIL GENERATION
+    // ============================================================================
+
+    function wbGenerateThumbnail() {
+      if (!wbCanvasEl) return '';
+      var ratio = wbCanvasEl.height / wbCanvasEl.width;
+      var thumbW = WB_THUMB_WIDTH;
+      var thumbH = Math.round(thumbW * ratio);
+      var tempCanvas = document.createElement('canvas');
+      tempCanvas.width = thumbW;
+      tempCanvas.height = thumbH;
+      var tCtx = tempCanvas.getContext('2d');
+      tCtx.drawImage(wbCanvasEl, 0, 0, thumbW, thumbH);
+      return tempCanvas.toDataURL('image/png', 0.5);
+    }
+
+    // ============================================================================
+    // TOOLBAR RENDERING
+    // ============================================================================
+
+    function wbRenderToolbar(containerEl, compact) {
+      if (!containerEl) return;
+      var html = '<div class="wb-toolbar">';
+
+      // Tool buttons
+      html += '<div class="wb-toolbar-group" role="radiogroup" aria-label="Drawing tools">';
+      var toolIcons = { pen: '\u270F\uFE0F', eraser: '\uD83E\uDDF9', line: '\u2015', rect: '\u25A1', circle: '\u25CB', text: 'T' };
+      var toolLabels = { pen: 'Pen', eraser: 'Eraser', line: 'Line', rect: 'Rectangle', circle: 'Circle', text: 'Text' };
+      for (var ti = 0; ti < WB_TOOLS.length; ti++) {
+        var t = WB_TOOLS[ti];
+        var active = (t === wbTool) ? ' wb-tool-active' : '';
+        html += '<button type="button" class="wb-tool-btn' + active + '" role="radio" aria-checked="' +
+          (t === wbTool ? 'true' : 'false') + '" aria-label="' + toolLabels[t] +
+          '" onclick="wbSelectTool(\'' + t + '\')" title="' + toolLabels[t] + '">' + toolIcons[t] + '</button>';
+      }
+      html += '</div>';
+
+      // Separator
+      html += '<div class="wb-toolbar-sep"></div>';
+
+      // Color palette
+      html += '<div class="wb-toolbar-group" aria-label="Colors">';
+      for (var ci = 0; ci < WB_COLORS.length; ci++) {
+        var c = WB_COLORS[ci];
+        var cActive = (c === wbColor) ? ' wb-color-active' : '';
+        var border = c === '#ffffff' ? 'border:1px solid #e2e8f0;' : '';
+        html += '<button type="button" class="wb-color-btn' + cActive + '" style="background:' + c + ';' + border +
+          '" aria-label="Color ' + c + '" onclick="wbSelectColor(\'' + c + '\')"></button>';
+      }
+      html += '<input type="color" class="wb-color-custom" value="' + wbColor +
+        '" onchange="wbSelectColor(this.value)" title="Custom color" aria-label="Custom color">';
+      html += '</div>';
+
+      if (!compact) {
+        // Separator
+        html += '<div class="wb-toolbar-sep"></div>';
+
+        // Width selector
+        html += '<div class="wb-toolbar-group" aria-label="Brush width">';
+        for (var wi = 0; wi < WB_WIDTHS.length; wi++) {
+          var w = WB_WIDTHS[wi];
+          var wActive = (w === wbWidth) ? ' wb-tool-active' : '';
+          html += '<button type="button" class="wb-width-btn' + wActive + '" aria-label="Width ' + w +
+            '" onclick="wbSelectWidth(' + w + ')"><span class="wb-width-dot" style="width:' +
+            Math.max(4, w) + 'px;height:' + Math.max(4, w) + 'px;"></span></button>';
+        }
+        html += '</div>';
+
+        // Separator
+        html += '<div class="wb-toolbar-sep"></div>';
+
+        // Background selector
+        html += '<div class="wb-toolbar-group" aria-label="Background">';
+        var bgLabels = { blank: 'Blank', grid: 'Grid', lined: 'Lined' };
+        var bgIcons = { blank: '\u2B1C', grid: '\u2591', lined: '\u2261' };
+        for (var bi = 0; bi < WB_BACKGROUNDS.length; bi++) {
+          var b = WB_BACKGROUNDS[bi];
+          var bActive = (b === wbBackground) ? ' wb-tool-active' : '';
+          html += '<button type="button" class="wb-tool-btn' + bActive + '" aria-label="Background: ' + bgLabels[b] +
+            '" onclick="wbSelectBackground(\'' + b + '\')" title="' + bgLabels[b] + '">' + bgIcons[b] + '</button>';
+        }
+        html += '</div>';
+      }
+
+      // Separator
+      html += '<div class="wb-toolbar-sep"></div>';
+
+      // Undo/Redo/Clear
+      html += '<div class="wb-toolbar-group">';
+      html += '<button type="button" class="wb-tool-btn" id="wbUndoBtn" onclick="wbUndo()" aria-label="Undo" title="Undo">\u21A9</button>';
+      html += '<button type="button" class="wb-tool-btn" id="wbRedoBtn" onclick="wbRedo()" aria-label="Redo" title="Redo">\u21AA</button>';
+      html += '<button type="button" class="wb-tool-btn" onclick="wbClearCanvas()" aria-label="Clear canvas" title="Clear">\uD83D\uDDD1</button>';
+      html += '</div>';
+
+      html += '</div>';
+      containerEl.innerHTML = html;
+      wbUpdateUndoButtons();
+    }
+
+    // ============================================================================
+    // TOOLBAR ACTIONS
+    // ============================================================================
+
+    function wbSelectTool(tool) {
+      wbTool = tool;
+      // Update active state
+      var btns = document.querySelectorAll('.wb-tool-btn[role="radio"]');
+      for (var i = 0; i < btns.length; i++) {
+        var isActive = btns[i].getAttribute('aria-label') ===
+          ({ pen: 'Pen', eraser: 'Eraser', line: 'Line', rect: 'Rectangle', circle: 'Circle', text: 'Text' })[tool];
+        btns[i].classList.toggle('wb-tool-active', isActive);
+        btns[i].setAttribute('aria-checked', isActive ? 'true' : 'false');
+      }
+      // Update cursor
+      if (wbCanvasEl) {
+        wbCanvasEl.style.cursor = (tool === 'text') ? 'text' : 'crosshair';
+      }
+    }
+
+    function wbSelectColor(color) {
+      wbColor = color;
+      var btns = document.querySelectorAll('.wb-color-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('wb-color-active', btns[i].style.backgroundColor === color ||
+          wbRgbToHex(btns[i].style.backgroundColor) === color);
+      }
+    }
+
+    function wbRgbToHex(rgb) {
+      if (!rgb || rgb.indexOf('rgb') === -1) return rgb;
+      var parts = rgb.match(/\d+/g);
+      if (!parts || parts.length < 3) return rgb;
+      return '#' + ((1 << 24) + (parseInt(parts[0]) << 16) + (parseInt(parts[1]) << 8) + parseInt(parts[2])).toString(16).slice(1);
+    }
+
+    function wbSelectWidth(w) {
+      wbWidth = w;
+      var btns = document.querySelectorAll('.wb-width-btn');
+      for (var i = 0; i < btns.length; i++) {
+        var label = btns[i].getAttribute('aria-label');
+        btns[i].classList.toggle('wb-tool-active', label === 'Width ' + w);
+      }
+    }
+
+    function wbSelectBackground(bg) {
+      wbBackground = bg;
+      // Redraw background under existing content - save content first
+      if (wbCanvasEl && wbCtx) {
+        var imgData = wbCtx.getImageData(0, 0, wbCanvasEl.width, wbCanvasEl.height);
+        wbDrawBackground(bg);
+        // Restore content on top (excluding pure white pixels from old background)
+        wbCtx.putImageData(imgData, 0, 0);
+        wbPushUndoState();
+        wbDirty = true;
+      }
+      // Update active state
+      var btns = document.querySelectorAll('.wb-toolbar-group[aria-label="Background"] .wb-tool-btn');
+      var bgLabels = { blank: 'Blank', grid: 'Grid', lined: 'Lined' };
+      for (var i = 0; i < btns.length; i++) {
+        var label = btns[i].getAttribute('aria-label');
+        btns[i].classList.toggle('wb-tool-active', label === 'Background: ' + bgLabels[bg]);
+      }
+    }
+
+    // ============================================================================
+    // HEX EDITOR INTEGRATION (Teacher)
+    // ============================================================================
+
+    function wbPopulateEditor(hex, isWhiteboardType) {
+      if (!hex) return;
+
+      // Initialize whiteboardConfig if needed
+      if (!hex.whiteboardConfig) {
+        hex.whiteboardConfig = { folderUrl: '', enableWhiteboard: false, templateWhiteboardId: '' };
+      }
+      if (isWhiteboardType) {
+        hex.whiteboardConfig.enableWhiteboard = true;
+      }
+
+      // Show/hide enable checkbox row
+      var enableRow = document.getElementById('wbEnableRow');
+      if (enableRow) {
+        enableRow.style.display = isWhiteboardType ? 'none' : 'block';
+      }
+
+      // Set checkbox value
+      var checkbox = document.getElementById('wbEnableCheckbox');
+      if (checkbox) {
+        checkbox.checked = hex.whiteboardConfig.enableWhiteboard;
+      }
+
+      // Show/hide folder + template rows based on enabled state
+      var enabled = hex.whiteboardConfig.enableWhiteboard;
+      var folderRow = document.getElementById('wbFolderRow');
+      var templateRow = document.getElementById('wbTemplateRow');
+      if (folderRow) folderRow.style.display = enabled ? 'block' : 'none';
+      if (templateRow) templateRow.style.display = enabled ? 'block' : 'none';
+
+      // Populate folder URL
+      var folderInput = document.getElementById('wbFolderUrl');
+      if (folderInput) {
+        folderInput.value = hex.whiteboardConfig.folderUrl || '';
+      }
+
+      // Clear folder status
+      var statusEl = document.getElementById('wbFolderStatus');
+      if (statusEl) statusEl.innerHTML = '';
+
+      // Show template preview if exists
+      wbRenderTemplatePreview(hex);
+    }
+
+    function wbRenderTemplatePreview(hex) {
+      var previewEl = document.getElementById('wbTemplatePreview');
+      if (!previewEl) return;
+
+      if (hex.whiteboardConfig && hex.whiteboardConfig.templateWhiteboardId) {
+        var cached = wbTemplateCache[hex.whiteboardConfig.templateWhiteboardId];
+        if (cached && cached.thumbnailDataUrl) {
+          previewEl.innerHTML = '<img src="' + escapeHtml(cached.thumbnailDataUrl) + '" alt="Template preview">';
+        } else {
+          previewEl.innerHTML = '<span class="wb-template-empty">Loading preview...</span>';
+          // Fetch from backend
+          var expectedHexId = selectedHexId;
+          google.script.run
+            .withSuccessHandler(function(data) {
+              if (selectedHexId !== expectedHexId) return;
+              if (data && data.template && data.template.thumbnailDataUrl) {
+                wbTemplateCache[hex.whiteboardConfig.templateWhiteboardId] = data.template;
+                previewEl.innerHTML = '<img src="' + escapeHtml(data.template.thumbnailDataUrl) + '" alt="Template preview">';
+              } else {
+                previewEl.innerHTML = '<span class="wb-template-empty">No template drawing yet</span>';
+              }
+            })
+            .withFailureHandler(function() {
+              if (selectedHexId !== expectedHexId) return;
+              previewEl.innerHTML = '<span class="wb-template-empty">No template drawing yet</span>';
+            })
+            .getWhiteboardData(currentMap.mapId, hex.id);
+        }
+      } else {
+        previewEl.innerHTML = '<span class="wb-template-empty">No template drawing yet</span>';
+      }
+    }
+
+    function wbOnEnableChange() {
+      var hex = findHexById(selectedHexId);
+      if (!hex) return;
+      if (!hex.whiteboardConfig) {
+        hex.whiteboardConfig = { folderUrl: '', enableWhiteboard: false, templateWhiteboardId: '' };
+      }
+
+      var checkbox = document.getElementById('wbEnableCheckbox');
+      hex.whiteboardConfig.enableWhiteboard = checkbox ? checkbox.checked : false;
+
+      var folderRow = document.getElementById('wbFolderRow');
+      var templateRow = document.getElementById('wbTemplateRow');
+      if (folderRow) folderRow.style.display = hex.whiteboardConfig.enableWhiteboard ? 'block' : 'none';
+      if (templateRow) templateRow.style.display = hex.whiteboardConfig.enableWhiteboard ? 'block' : 'none';
+
+      hasUnsavedMoves = true;
+    }
+
+    function wbOnFolderChange() {
+      var hex = findHexById(selectedHexId);
+      if (!hex || !hex.whiteboardConfig) return;
+
+      var input = document.getElementById('wbFolderUrl');
+      hex.whiteboardConfig.folderUrl = input ? input.value.trim() : '';
+      hasUnsavedMoves = true;
+
+      // Clear status
+      var statusEl = document.getElementById('wbFolderStatus');
+      if (statusEl) statusEl.innerHTML = '';
+    }
+
+    function wbTestFolder() {
+      var input = document.getElementById('wbFolderUrl');
+      var statusEl = document.getElementById('wbFolderStatus');
+      if (!input || !statusEl) return;
+
+      var url = input.value.trim();
+      if (!url) {
+        statusEl.innerHTML = '<span class="wb-folder-error">Please enter a folder URL.</span>';
+        return;
+      }
+
+      statusEl.innerHTML = '<span style="color:#64748b;">Testing...</span>';
+      var expectedHexId = selectedHexId;
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (selectedHexId !== expectedHexId) return;
+          if (result.success) {
+            statusEl.innerHTML = '<span class="wb-folder-ok">\u2713 ' + escapeHtml(result.folderName) + '</span>';
+          } else {
+            statusEl.innerHTML = '<span class="wb-folder-error">\u2717 ' + escapeHtml(result.error) + '</span>';
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (selectedHexId !== expectedHexId) return;
+          statusEl.innerHTML = '<span class="wb-folder-error">\u2717 ' + escapeHtml(friendlyError(err)) + '</span>';
+        })
+        .testDriveFolderAccess(url);
+    }
+
+    // ============================================================================
+    // TEACHER TEMPLATE OVERLAY
+    // ============================================================================
+
+    function wbOpenTeacherCanvas() {
+      var hex = findHexById(selectedHexId);
+      if (!hex || !hex.whiteboardConfig) return;
+
+      if (!hex.whiteboardConfig.folderUrl) {
+        showToast('Please set a Drive folder URL first.', 'error');
+        return;
+      }
+
+      wbCurrentHexId = hex.id;
+      wbCurrentMapId = currentMap ? currentMap.mapId : null;
+      wbMode = 'template';
+      wbOverlayOpen = true;
+      wbDirty = false;
+
+      // Reset drawing state
+      wbTool = 'pen';
+      wbColor = '#000000';
+      wbWidth = 4;
+      wbBackground = 'blank';
+
+      // Show overlay
+      var overlay = document.getElementById('wbOverlay');
+      if (!overlay) return;
+      overlay.classList.add('active');
+
+      // Render toolbar
+      var toolbarContainer = document.getElementById('wbOverlayToolbar');
+      wbRenderToolbar(toolbarContainer, false);
+
+      // Init canvas
+      var canvasContainer = document.getElementById('wbOverlayCanvasContainer');
+      wbInitCanvas(canvasContainer, WB_DEFAULT_WIDTH, WB_DEFAULT_HEIGHT);
+
+      // Load existing template if present
+      if (hex.whiteboardConfig.templateWhiteboardId) {
+        wbLoadExistingImage(hex.whiteboardConfig.templateWhiteboardId);
+      }
+    }
+
+    function wbLoadExistingImage(whiteboardId) {
+      if (!whiteboardId) return;
+      showToast('Loading drawing...', 'info');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (!wbCanvasEl || !wbCtx) return;
+          if (result && result.base64Data) {
+            var img = new Image();
+            img.onload = function() {
+              wbCtx.drawImage(img, 0, 0);
+              wbUndoStack = [wbCanvasEl.toDataURL('image/png')];
+              wbRedoStack = [];
+              wbDirty = false;
+              wbImageLoaded = true;
+              wbUpdateUndoButtons();
+            };
+            img.src = result.base64Data;
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast('Could not load drawing: ' + friendlyError(err), 'error');
+        })
+        .loadWhiteboardImage(whiteboardId);
+    }
+
+    function wbSaveTemplate() {
+      if (!wbCanvasEl || wbSaving) return;
+      var hex = findHexById(wbCurrentHexId);
+      if (!hex || !hex.whiteboardConfig) return;
+
+      wbSaving = true;
+      var saveBtn = document.getElementById('wbSaveTemplateBtn');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+      var base64Data = wbCanvasEl.toDataURL('image/png');
+      var thumbnail = wbGenerateThumbnail();
+      var expectedHexId = wbCurrentHexId;
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          wbSaving = false;
+          if (wbCurrentHexId !== expectedHexId) return;
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '\uD83D\uDCBE Save Template'; }
+
+          if (result && result.whiteboardId) {
+            hex.whiteboardConfig.templateWhiteboardId = result.whiteboardId;
+            wbTemplateCache[result.whiteboardId] = {
+              thumbnailDataUrl: result.thumbnailDataUrl || thumbnail
+            };
+            hasUnsavedMoves = true;
+            wbDirty = false;
+            showToast('Template saved!', 'success');
+
+            // Update preview in hex editor
+            wbRenderTemplatePreview(hex);
+          }
+        })
+        .withFailureHandler(function(err) {
+          wbSaving = false;
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '\uD83D\uDCBE Save Template'; }
+          showToast('Save failed: ' + escapeHtml(friendlyError(err)), 'error');
+        })
+        .saveWhiteboardImage(wbCurrentMapId, wbCurrentHexId, base64Data, thumbnail, hex.whiteboardConfig.folderUrl);
+    }
+
+    function wbCloseTeacherCanvas() {
+      if (wbDirty) {
+        if (!confirm('You have unsaved changes. Close anyway?')) return;
+      }
+      wbOverlayOpen = false;
+      wbMode = null;
+      wbCanvasEl = null;
+      wbCtx = null;
+      wbUndoStack = [];
+      wbRedoStack = [];
+      wbDirty = false;
+      wbIsDrawing = false;
+      _wbTempCanvas = null;
+      _wbTempCtx = null;
+
+      var overlay = document.getElementById('wbOverlay');
+      if (overlay) overlay.classList.remove('active');
+    }
+
+    // ============================================================================
+    // STUDENT WHITEBOARD — Full Mode (whiteboard hex type)
+    // ============================================================================
+
+    function wbOpenStudentWhiteboard(hex, progress, status, teacherApproved) {
+      wbCurrentHexId = hex.id;
+      wbCurrentMapId = currentMap ? currentMap.mapId : null;
+      wbMode = 'student';
+      wbDirty = false;
+
+      // Reset drawing state
+      wbTool = 'pen';
+      wbColor = '#000000';
+      wbWidth = 4;
+      wbBackground = 'blank';
+
+      // Modal setup
+      var modal = document.getElementById('contentModal');
+      modal.classList.add('active');
+      document.querySelector('.content-modal-overlay').classList.add('active');
+
+      // Hide sidebar for whiteboard mode
+      var sidebar = document.getElementById('csbSidebar');
+      if (sidebar) sidebar.classList.add('csb-hidden');
+      var modalEl = document.querySelector('.content-modal');
+      if (modalEl) modalEl.classList.remove('csb-sidebar-open');
+
+      // Status
+      var statusEl = document.getElementById('contentModalStatus');
+      statusEl.style.display = 'block';
+      statusEl.innerHTML = renderStudentStatusSection(status, teacherApproved, progress);
+
+      // Body: toolbar + canvas
+      var bodyEl = document.getElementById('contentModalBody');
+      bodyEl.innerHTML = '<div id="wbStudentToolbar"></div>' +
+        '<div class="wb-student-canvas-wrap">' +
+        '<div class="wb-canvas-container" id="wbStudentCanvasContainer"></div>' +
+        '</div>';
+
+      // Footer: Save buttons
+      var footerEl = document.getElementById('contentModalFooter');
+      footerEl.style.display = 'flex';
+      footerEl.innerHTML = '<div class="wb-save-bar">' +
+        '<button type="button" class="btn btn-primary" id="wbSaveStudentBtn" onclick="wbSaveStudentDrawing()" aria-label="Save to class folder">' +
+        '\uD83D\uDCBE Save to Class Folder</button>' +
+        '<button type="button" class="btn btn-outline" id="wbSaveMyDriveBtn" onclick="wbSaveToMyDrive()" aria-label="Save copy to my Drive">' +
+        '\uD83D\uDCC2 Save to My Drive</button>' +
+        '</div>';
+
+      // Render toolbar (full mode)
+      var toolbarContainer = document.getElementById('wbStudentToolbar');
+      wbRenderToolbar(toolbarContainer, false);
+
+      // Init canvas
+      var canvasContainer = document.getElementById('wbStudentCanvasContainer');
+      wbInitCanvas(canvasContainer, WB_DEFAULT_WIDTH, WB_DEFAULT_HEIGHT);
+
+      // Load existing student drawing or template
+      var expectedHexId = hex.id;
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (wbCurrentHexId !== expectedHexId) return;
+          if (!wbCanvasEl || !wbCtx) return;
+
+          if (data && data.studentEntry && data.studentEntry.whiteboardId) {
+            // Load student's existing drawing
+            wbLoadExistingImage(data.studentEntry.whiteboardId);
+          } else if (data && data.template && data.template.whiteboardId) {
+            // Load template as background
+            wbLoadExistingImage(data.template.whiteboardId);
+          }
+        })
+        .withFailureHandler(function() {
+          // Silently continue with blank canvas
+        })
+        .getWhiteboardData(wbCurrentMapId, hex.id);
+    }
+
+    // ============================================================================
+    // STUDENT WHITEBOARD — Attachment Mode (collapsible section)
+    // ============================================================================
+
+    function wbRenderAttachmentSection(hexId) {
+      var sectionId = 'wbAttach-' + hexId;
+      var innerHtml = '<div id="wbAttachToolbar-' + escapeHtml(hexId) + '"></div>' +
+        '<div class="wb-student-canvas-wrap wb-attach-canvas-wrap">' +
+        '<div class="wb-canvas-container" id="wbAttachCanvas-' + escapeHtml(hexId) + '"></div>' +
+        '</div>' +
+        '<div class="wb-save-bar" style="margin-top:8px;">' +
+        '<button type="button" class="btn btn-primary btn-sm" onclick="wbInitAttachmentCanvas(\'' +
+        escapeHtml(hexId) + '\')" aria-label="Open whiteboard">\uD83C\uDFA8 Open Drawing Canvas</button>' +
+        '</div>';
+
+      return uxoWrapCollapsible('wbAttachment', '\uD83C\uDFA8 Whiteboard', innerHtml, true);
+    }
+
+    function wbInitAttachmentCanvas(hexId) {
+      var hex = findHexById(hexId);
+      if (!hex || !hex.whiteboardConfig) return;
+
+      wbCurrentHexId = hexId;
+      wbCurrentMapId = currentMap ? currentMap.mapId : null;
+      wbMode = 'attachment';
+      wbDirty = false;
+
+      // Reset drawing state
+      wbTool = 'pen';
+      wbColor = '#000000';
+      wbWidth = 4;
+      wbBackground = 'blank';
+
+      // Replace open button with toolbar + canvas
+      var toolbarContainer = document.getElementById('wbAttachToolbar-' + hexId);
+      if (toolbarContainer) wbRenderToolbar(toolbarContainer, true);
+
+      var canvasContainer = document.getElementById('wbAttachCanvas-' + hexId);
+      if (canvasContainer) wbInitCanvas(canvasContainer, 960, 540);
+
+      // Replace the open button with save buttons
+      var section = canvasContainer ? canvasContainer.closest('.uxo-section-body') : null;
+      if (section) {
+        var saveBar = section.querySelector('.wb-save-bar');
+        if (saveBar) {
+          saveBar.innerHTML = '<button type="button" class="btn btn-primary btn-sm" id="wbSaveStudentBtn" ' +
+            'onclick="wbSaveStudentDrawing()" aria-label="Save to class folder">' +
+            '\uD83D\uDCBE Save to Class Folder</button>' +
+            '<button type="button" class="btn btn-outline btn-sm" id="wbSaveMyDriveBtn" ' +
+            'onclick="wbSaveToMyDrive()" aria-label="Save copy to my Drive">' +
+            '\uD83D\uDCC2 Save to My Drive</button>';
+        }
+      }
+
+      // Load existing drawing or template
+      var expectedHexId = hexId;
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (wbCurrentHexId !== expectedHexId) return;
+          if (!wbCanvasEl || !wbCtx) return;
+
+          if (data && data.studentEntry && data.studentEntry.whiteboardId) {
+            wbLoadExistingImage(data.studentEntry.whiteboardId);
+          } else if (data && data.template && data.template.whiteboardId) {
+            wbLoadExistingImage(data.template.whiteboardId);
+          }
+        })
+        .withFailureHandler(function() {
+          // Silently continue with blank canvas
+        })
+        .getWhiteboardData(wbCurrentMapId, hexId);
+    }
+
+    // ============================================================================
+    // STUDENT SAVE FUNCTIONS
+    // ============================================================================
+
+    function wbSaveStudentDrawing() {
+      if (!wbCanvasEl || wbSaving) return;
+      var hex = findHexById(wbCurrentHexId);
+      if (!hex || !hex.whiteboardConfig) {
+        showToast('Whiteboard not configured for this hex.', 'error');
+        return;
+      }
+      if (!hex.whiteboardConfig.folderUrl) {
+        showToast('No folder configured. Contact your teacher.', 'error');
+        return;
+      }
+
+      wbSaving = true;
+      var saveBtn = document.getElementById('wbSaveStudentBtn');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+      var base64Data = wbCanvasEl.toDataURL('image/png');
+      var thumbnail = wbGenerateThumbnail();
+      var expectedHexId = wbCurrentHexId;
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          wbSaving = false;
+          if (wbCurrentHexId !== expectedHexId) return;
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '\uD83D\uDCBE Save to Class Folder'; }
+
+          if (result && result.whiteboardId) {
+            wbDirty = false;
+            showToast('Drawing saved!', 'success');
+          }
+        })
+        .withFailureHandler(function(err) {
+          wbSaving = false;
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '\uD83D\uDCBE Save to Class Folder'; }
+          showToast('Save failed: ' + escapeHtml(friendlyError(err)), 'error');
+        })
+        .saveWhiteboardImage(wbCurrentMapId, wbCurrentHexId, base64Data, thumbnail, hex.whiteboardConfig.folderUrl);
+    }
+
+    function wbSaveToMyDrive() {
+      if (wbSaving) return;
+
+      // Need to save first if dirty, or find existing whiteboardId
+      var hex = findHexById(wbCurrentHexId);
+      if (!hex) return;
+
+      // First save to class folder if dirty
+      if (wbDirty) {
+        showToast('Please save your drawing to the class folder first.', 'info');
+        return;
+      }
+
+      // Get existing whiteboardId
+      var expectedHexId = wbCurrentHexId;
+      wbSaving = true;
+      var myDriveBtn = document.getElementById('wbSaveMyDriveBtn');
+      if (myDriveBtn) { myDriveBtn.disabled = true; myDriveBtn.textContent = 'Copying...'; }
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (wbCurrentHexId !== expectedHexId) { wbSaving = false; return; }
+          if (data && data.studentEntry && data.studentEntry.whiteboardId) {
+            google.script.run
+              .withSuccessHandler(function(result) {
+                wbSaving = false;
+                if (myDriveBtn) { myDriveBtn.disabled = false; myDriveBtn.textContent = '\uD83D\uDCC2 Save to My Drive'; }
+                if (result && result.copiedFileUrl) {
+                  showToast('Copied! Check your Google Drive.', 'success');
+                }
+              })
+              .withFailureHandler(function(err) {
+                wbSaving = false;
+                if (myDriveBtn) { myDriveBtn.disabled = false; myDriveBtn.textContent = '\uD83D\uDCC2 Save to My Drive'; }
+                showToast('Copy failed: ' + escapeHtml(friendlyError(err)), 'error');
+              })
+              .saveWhiteboardToStudentDrive(data.studentEntry.whiteboardId);
+          } else {
+            wbSaving = false;
+            if (myDriveBtn) { myDriveBtn.disabled = false; myDriveBtn.textContent = '\uD83D\uDCC2 Save to My Drive'; }
+            showToast('Save your drawing to the class folder first.', 'info');
+          }
+        })
+        .withFailureHandler(function(err) {
+          wbSaving = false;
+          if (myDriveBtn) { myDriveBtn.disabled = false; myDriveBtn.textContent = '\uD83D\uDCC2 Save to My Drive'; }
+          showToast('Could not find your drawing: ' + escapeHtml(friendlyError(err)), 'error');
+        })
+        .getWhiteboardData(wbCurrentMapId, wbCurrentHexId);
+    }
+
+</script>

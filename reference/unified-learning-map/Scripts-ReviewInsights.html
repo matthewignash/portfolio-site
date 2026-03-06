@@ -1,0 +1,574 @@
+<script>
+    // ================================================
+    // REVIEW INSIGHTS DASHBOARD (ES5)
+    // Teacher analytics for iterations + peer feedback
+    // ================================================
+
+
+    // ================================================
+    // ENTRY POINT
+    // ================================================
+
+    function rviLoadDashboard() {
+      var container = document.getElementById('reviewInsightsContent');
+      if (!container) return;
+
+      var currentClassId = (typeof progressSelectedClassId !== 'undefined') ? progressSelectedClassId : null;
+      var currentMapId = (typeof progressSelectedMapId !== 'undefined') ? progressSelectedMapId : null;
+
+      if (!currentClassId || !currentMapId) {
+        container.innerHTML = '<div class="rvi-empty">' +
+          '<div class="rvi-empty-icon">&#128269;</div>' +
+          '<div class="rvi-empty-title">Select a Class and Map</div>' +
+          '<div class="rvi-empty-text">Choose a class and map in Class Progress first, then switch to Review Insights.</div>' +
+          '</div>';
+        return;
+      }
+
+      // Use cache if both data sources are loaded and match current selection
+      if (rviInitialized && rviIterationData && rviFeedbackData &&
+          String(rviIterationData._mapId) === String(currentMapId) &&
+          String(rviIterationData._classId) === String(currentClassId) &&
+          String(rviFeedbackData._mapId) === String(currentMapId)) {
+        rviRenderDashboard();
+        return;
+      }
+
+      container.innerHTML = '<div class="rvi-loading"><span class="loading-spinner"></span> Loading review insights...</div>';
+
+      // Reset state for new load
+      rviIterationData = null;
+      rviFeedbackData = null;
+      rviInitialized = false;
+      rviDataLoading = true;
+
+      var expectedMapId = currentMapId;
+      var expectedClassId = currentClassId;
+      var loadedCount = 0;
+      var totalRpcs = 2;
+
+      // RPC 1: Iteration summary
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (String(progressSelectedMapId) !== String(expectedMapId)) return;
+          if (String(progressSelectedClassId) !== String(expectedClassId)) return;
+          rviIterationData = data || {};
+          rviIterationData._mapId = expectedMapId;
+          rviIterationData._classId = expectedClassId;
+          loadedCount++;
+          if (loadedCount >= totalRpcs) {
+            rviDataLoading = false;
+            rviInitialized = true;
+            rviRenderDashboard();
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (String(progressSelectedMapId) !== String(expectedMapId)) return;
+          if (String(progressSelectedClassId) !== String(expectedClassId)) return;
+          rviIterationData = {};
+          rviIterationData._mapId = expectedMapId;
+          rviIterationData._classId = expectedClassId;
+          rviIterationData._error = err.message || String(err);
+          loadedCount++;
+          if (loadedCount >= totalRpcs) {
+            rviDataLoading = false;
+            rviInitialized = true;
+            rviRenderDashboard();
+          }
+        })
+        .getIterationSummaryForMap(currentMapId);
+
+      // RPC 2: Peer feedback summary
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (String(progressSelectedMapId) !== String(expectedMapId)) return;
+          rviFeedbackData = data || {};
+          rviFeedbackData._mapId = expectedMapId;
+          loadedCount++;
+          if (loadedCount >= totalRpcs) {
+            rviDataLoading = false;
+            rviInitialized = true;
+            rviRenderDashboard();
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (String(progressSelectedMapId) !== String(expectedMapId)) return;
+          rviFeedbackData = {};
+          rviFeedbackData._mapId = expectedMapId;
+          rviFeedbackData._error = err.message || String(err);
+          loadedCount++;
+          if (loadedCount >= totalRpcs) {
+            rviDataLoading = false;
+            rviInitialized = true;
+            rviRenderDashboard();
+          }
+        })
+        .getPeerFeedbackSummaryForMap(currentMapId);
+    }
+
+
+    // ================================================
+    // NAME + CLASS FILTERING HELPERS
+    // ================================================
+
+    /**
+     * Build email->name lookup from progressDashboardData.students
+     */
+    function rviBuildNameLookup() {
+      var lookup = {};
+      if (!progressDashboardData || !progressDashboardData.students) return lookup;
+      var students = progressDashboardData.students;
+      for (var i = 0; i < students.length; i++) {
+        var email = (students[i].email || '').toLowerCase();
+        if (email) {
+          lookup[email] = students[i].name || email.split('@')[0];
+        }
+      }
+      return lookup;
+    }
+
+    /**
+     * Build set of student emails in current class for filtering
+     */
+    function rviBuildClassEmailSet() {
+      var emailSet = {};
+      if (!progressDashboardData || !progressDashboardData.students) return emailSet;
+      var students = progressDashboardData.students;
+      for (var i = 0; i < students.length; i++) {
+        var email = (students[i].email || '').toLowerCase();
+        if (email) emailSet[email] = true;
+      }
+      return emailSet;
+    }
+
+    /**
+     * Resolve student name from email
+     */
+    function rviGetStudentName(email, nameByEmail) {
+      if (!email) return 'Unknown';
+      var lower = email.toLowerCase();
+      return nameByEmail[lower] || lower.split('@')[0];
+    }
+
+    /**
+     * Build hexId -> label lookup from progressDashboardData.hexes
+     */
+    function rviBuildHexLookup() {
+      var lookup = {};
+      if (!progressDashboardData || !progressDashboardData.hexes) return lookup;
+      var hexes = progressDashboardData.hexes;
+      for (var i = 0; i < hexes.length; i++) {
+        var hid = String(hexes[i].id || '');
+        if (hid) lookup[hid] = hexes[i].label || hid;
+      }
+      return lookup;
+    }
+
+
+    // ================================================
+    // COMPUTE: ITERATION STATS (class-filtered)
+    // ================================================
+
+    function rviComputeIterationStats(iterData, classEmails, hexLookup) {
+      var result = {
+        totalIterations: 0,
+        approvedCount: 0,
+        approvedTotalIters: 0,
+        hexStats: []
+      };
+
+      if (!iterData) return result;
+
+      var hexIds = [];
+      for (var hid in iterData) {
+        if (hid.charAt(0) === '_') continue; // skip _mapId, _error
+        if (!iterData.hasOwnProperty(hid)) continue;
+        hexIds.push(hid);
+      }
+
+      for (var h = 0; h < hexIds.length; h++) {
+        var hexId = hexIds[h];
+        var studentMap = iterData[hexId];
+        var hexLabel = hexLookup[hexId] || hexId;
+        var hexTotalIters = 0;
+        var hexStudentCount = 0;
+        var studentDetails = [];
+
+        for (var email in studentMap) {
+          if (!studentMap.hasOwnProperty(email)) continue;
+          var lower = email.toLowerCase();
+          if (!classEmails[lower]) continue; // filter to class
+
+          var entry = studentMap[email];
+          hexTotalIters += entry.count;
+          hexStudentCount++;
+          result.totalIterations += entry.count;
+
+          if (entry.latestStatus === 'approved') {
+            result.approvedCount++;
+            result.approvedTotalIters += entry.count;
+          }
+
+          studentDetails.push({
+            email: lower,
+            count: entry.count,
+            status: entry.latestStatus || 'submitted'
+          });
+        }
+
+        if (hexStudentCount > 0) {
+          // Sort students by iteration count descending
+          studentDetails.sort(function(a, b) { return b.count - a.count; });
+          result.hexStats.push({
+            hexId: hexId,
+            label: hexLabel,
+            studentCount: hexStudentCount,
+            totalIterations: hexTotalIters,
+            avgPerStudent: Math.round((hexTotalIters / hexStudentCount) * 10) / 10,
+            students: studentDetails
+          });
+        }
+      }
+
+      // Sort hexes by total iterations descending
+      result.hexStats.sort(function(a, b) { return b.totalIterations - a.totalIterations; });
+
+      // Compute average iterations to approval
+      result.avgToApproval = result.approvedCount > 0
+        ? Math.round((result.approvedTotalIters / result.approvedCount) * 10) / 10
+        : 0;
+
+      return result;
+    }
+
+
+    // ================================================
+    // COMPUTE: FEEDBACK STATS (class-filtered)
+    // ================================================
+
+    function rviComputeFeedbackStats(fbData, classEmails) {
+      var result = {
+        totalReviews: 0,
+        helpfulRate: 0,
+        uniqueReviewers: 0,
+        reviewerList: [],
+        nonParticipants: []
+      };
+
+      if (!fbData || !fbData.reviewerCounts) return result;
+
+      // Filter reviewer counts to class students
+      var filteredCounts = {};
+      var reviewerCounts = fbData.reviewerCounts;
+      for (var email in reviewerCounts) {
+        if (!reviewerCounts.hasOwnProperty(email)) continue;
+        var lower = email.toLowerCase();
+        if (classEmails[lower]) {
+          filteredCounts[lower] = reviewerCounts[email];
+          result.totalReviews += reviewerCounts[email];
+        }
+      }
+
+      // Use map-wide helpful rate (can't filter per-class)
+      result.helpfulRate = fbData.helpfulRate || 0;
+
+      // Build reviewer list sorted by count descending
+      var reviewerEmails = [];
+      for (var re in filteredCounts) {
+        if (!filteredCounts.hasOwnProperty(re)) continue;
+        reviewerEmails.push(re);
+        result.uniqueReviewers++;
+      }
+      reviewerEmails.sort(function(a, b) { return filteredCounts[b] - filteredCounts[a]; });
+
+      for (var r = 0; r < reviewerEmails.length; r++) {
+        result.reviewerList.push({
+          email: reviewerEmails[r],
+          count: filteredCounts[reviewerEmails[r]]
+        });
+      }
+
+      // Find non-participants (in class but not in reviewer counts)
+      for (var ce in classEmails) {
+        if (!classEmails.hasOwnProperty(ce)) continue;
+        if (!filteredCounts[ce]) {
+          result.nonParticipants.push(ce);
+        }
+      }
+
+      return result;
+    }
+
+
+    // ================================================
+    // ORCHESTRATOR
+    // ================================================
+
+    function rviRenderDashboard() {
+      var container = document.getElementById('reviewInsightsContent');
+      if (!container) return;
+
+      var nameByEmail = rviBuildNameLookup();
+      var classEmails = rviBuildClassEmailSet();
+      var hexLookup = rviBuildHexLookup();
+
+      var iterStats = rviComputeIterationStats(rviIterationData, classEmails, hexLookup);
+      var fbStats = rviComputeFeedbackStats(rviFeedbackData, classEmails);
+
+      var totalStudents = 0;
+      if (progressDashboardData && progressDashboardData.students) {
+        totalStudents = progressDashboardData.students.length;
+      }
+
+      var html = '<div class="rvi-container">';
+
+      // Summary cards
+      html += rviRenderSummaryCards(iterStats, fbStats);
+
+      // Iteration section
+      html += rviRenderIterationSection(iterStats, nameByEmail);
+
+      // Peer feedback section
+      html += rviRenderFeedbackSection(fbStats, nameByEmail, totalStudents);
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+
+    // ================================================
+    // SUMMARY CARDS
+    // ================================================
+
+    function rviRenderSummaryCards(iterStats, fbStats) {
+      var avgApproval = iterStats.avgToApproval > 0
+        ? String(iterStats.avgToApproval)
+        : '\u2014';
+
+      var helpfulPct = fbStats.totalReviews > 0
+        ? fbStats.helpfulRate + '%'
+        : '\u2014';
+      var helpfulColor = '';
+      if (fbStats.totalReviews > 0) {
+        helpfulColor = fbStats.helpfulRate >= 70 ? 'green' : (fbStats.helpfulRate >= 40 ? 'amber' : 'red');
+      }
+
+      var cards = [
+        { value: String(iterStats.totalIterations), label: 'Total Iterations', color: '' },
+        { value: avgApproval, label: 'Avg to Approval', color: '' },
+        { value: String(fbStats.totalReviews), label: 'Peer Reviews', color: '' },
+        { value: helpfulPct, label: 'Helpful Rate', color: helpfulColor }
+      ];
+
+      var html = '<div class="rvi-cards">';
+      for (var i = 0; i < cards.length; i++) {
+        html += '<div class="rvi-card">';
+        html += '<div class="rvi-card-value' + (cards[i].color ? ' ' + cards[i].color : '') + '">' + escapeHtml(cards[i].value) + '</div>';
+        html += '<div class="rvi-card-label">' + escapeHtml(cards[i].label) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+
+    // ================================================
+    // ITERATION ANALYSIS SECTION
+    // ================================================
+
+    function rviRenderIterationSection(iterStats, nameByEmail) {
+      var html = '<div class="rvi-section-title">Iteration Analysis</div>';
+
+      if (rviIterationData && rviIterationData._error) {
+        html += '<div class="rvi-empty">' +
+          '<div class="rvi-empty-icon">&#9888;&#65039;</div>' +
+          '<div class="rvi-empty-title">Could Not Load Iteration Data</div>' +
+          '<div class="rvi-empty-text">' + escapeHtml(rviIterationData._error) + '</div>' +
+          '</div>';
+        return html;
+      }
+
+      if (iterStats.hexStats.length === 0) {
+        html += '<div class="rvi-empty">' +
+          '<div class="rvi-empty-icon">&#128203;</div>' +
+          '<div class="rvi-empty-title">No Checkpoint Iterations Found</div>' +
+          '<div class="rvi-empty-text">No checkpoint iteration activity for this class on this map.</div>' +
+          '</div>';
+        return html;
+      }
+
+      for (var h = 0; h < iterStats.hexStats.length; h++) {
+        var hex = iterStats.hexStats[h];
+        var expanded = rviExpandedHexes[hex.hexId];
+        var chevronChar = expanded ? '\u25BC' : '\u25B6';
+
+        html += '<div class="rvi-hex-row' + (expanded ? ' expanded' : '') + '" ' +
+          'role="button" tabindex="0" ' +
+          'aria-expanded="' + (expanded ? 'true' : 'false') + '" ' +
+          'aria-controls="rviHexDetail-' + escapeHtml(hex.hexId) + '" ' +
+          'onclick="rviToggleHexDetail(\'' + escapeHtml(hex.hexId) + '\')" ' +
+          'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click();}">';
+        html += '<span class="rvi-hex-label" title="' + escapeHtml(hex.label) + '">' + escapeHtml(hex.label) + '</span>';
+        html += '<span class="rvi-hex-stats">';
+        html += '<span class="rvi-hex-stat"><strong>' + hex.studentCount + '</strong> student' + (hex.studentCount !== 1 ? 's' : '') + '</span>';
+        html += '<span class="rvi-hex-stat"><strong>' + hex.totalIterations + '</strong> iteration' + (hex.totalIterations !== 1 ? 's' : '') + '</span>';
+        html += '<span class="rvi-hex-stat">Avg <strong>' + hex.avgPerStudent + '</strong>/student</span>';
+        html += '</span>';
+        html += '<span class="rvi-hex-chevron">' + chevronChar + '</span>';
+        html += '</div>';
+
+        // Expandable detail
+        html += '<div class="rvi-hex-detail' + (expanded ? ' open' : '') + '" id="rviHexDetail-' + escapeHtml(hex.hexId) + '">';
+        for (var s = 0; s < hex.students.length; s++) {
+          var st = hex.students[s];
+          var name = rviGetStudentName(st.email, nameByEmail);
+          var statusLabel = rviFormatStatus(st.status);
+          var statusClass = rviGetStatusClass(st.status);
+
+          html += '<div class="rvi-student-item">';
+          html += '<span class="rvi-student-name">' + escapeHtml(name) + '</span>';
+          html += '<span class="rvi-student-count">' + st.count + ' iteration' + (st.count !== 1 ? 's' : '') + '</span>';
+          html += '<span class="rvi-status-badge ' + statusClass + '">' + escapeHtml(statusLabel) + '</span>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      return html;
+    }
+
+
+    // ================================================
+    // PEER FEEDBACK SECTION
+    // ================================================
+
+    function rviRenderFeedbackSection(fbStats, nameByEmail, totalStudents) {
+      var html = '<div class="rvi-section-title">Peer Feedback</div>';
+
+      if (rviFeedbackData && rviFeedbackData._error) {
+        html += '<div class="rvi-empty">' +
+          '<div class="rvi-empty-icon">&#9888;&#65039;</div>' +
+          '<div class="rvi-empty-title">Could Not Load Feedback Data</div>' +
+          '<div class="rvi-empty-text">' + escapeHtml(rviFeedbackData._error) + '</div>' +
+          '</div>';
+        return html;
+      }
+
+      if (fbStats.totalReviews === 0 && fbStats.reviewerList.length === 0) {
+        html += '<div class="rvi-empty">' +
+          '<div class="rvi-empty-icon">&#128172;</div>' +
+          '<div class="rvi-empty-title">No Peer Feedback Activity</div>' +
+          '<div class="rvi-empty-text">No peer feedback activity on this map for this class.</div>' +
+          '</div>';
+        return html;
+      }
+
+      // Participation bar
+      var participationPct = totalStudents > 0
+        ? Math.round((fbStats.uniqueReviewers / totalStudents) * 100)
+        : 0;
+      var partColor = participationPct >= 70 ? '#16a34a' : (participationPct >= 40 ? '#d97706' : '#dc2626');
+
+      html += '<div class="rvi-participation">';
+      html += '<div class="rvi-participation-bar-container">';
+      html += '<div class="rvi-participation-bar-fill" style="width:' + participationPct + '%; background:' + partColor + ';"></div>';
+      html += '</div>';
+      html += '<div class="rvi-participation-label">' + participationPct + '%</div>';
+      html += '</div>';
+      html += '<div style="font-size:12px; color:#64748b; margin-bottom:14px;">' +
+        fbStats.uniqueReviewers + ' of ' + totalStudents + ' students have given feedback</div>';
+
+      // Per-student review count bars
+      if (fbStats.reviewerList.length > 0) {
+        var maxCount = fbStats.reviewerList[0].count; // already sorted desc
+        if (maxCount === 0) maxCount = 1;
+
+        for (var r = 0; r < fbStats.reviewerList.length; r++) {
+          var reviewer = fbStats.reviewerList[r];
+          var name = rviGetStudentName(reviewer.email, nameByEmail);
+          var barPct = Math.round((reviewer.count / maxCount) * 100);
+
+          html += '<div class="rvi-reviewer-row">';
+          html += '<span class="rvi-reviewer-name" title="' + escapeHtml(reviewer.email) + '">' + escapeHtml(name) + '</span>';
+          html += '<div class="rvi-reviewer-bar-container">';
+          html += '<div class="rvi-reviewer-bar-fill" style="width:' + barPct + '%;"></div>';
+          html += '</div>';
+          html += '<span class="rvi-reviewer-count">' + reviewer.count + '</span>';
+          html += '</div>';
+        }
+      }
+
+      // Non-participants highlight
+      if (fbStats.nonParticipants.length > 0) {
+        html += '<div class="rvi-nonparticipant">';
+        html += '<div class="rvi-nonparticipant-title">Haven\'t reviewed yet (' + fbStats.nonParticipants.length + ')</div>';
+        html += '<div class="rvi-nonparticipant-list">';
+        var names = [];
+        for (var n = 0; n < fbStats.nonParticipants.length; n++) {
+          names.push(escapeHtml(rviGetStudentName(fbStats.nonParticipants[n], nameByEmail)));
+        }
+        html += names.join(', ');
+        html += '</div>';
+        html += '</div>';
+      }
+
+      return html;
+    }
+
+
+    // ================================================
+    // INTERACTION: TOGGLE HEX DETAIL
+    // ================================================
+
+    function rviToggleHexDetail(hexId) {
+      var detailEl = document.getElementById('rviHexDetail-' + hexId);
+      var rowEls = document.querySelectorAll('.rvi-hex-row');
+
+      if (rviExpandedHexes[hexId]) {
+        delete rviExpandedHexes[hexId];
+        // Collapse: targeted DOM update
+        if (detailEl) detailEl.classList.remove('open');
+        for (var i = 0; i < rowEls.length; i++) {
+          if (rowEls[i].getAttribute('aria-controls') === 'rviHexDetail-' + hexId) {
+            rowEls[i].classList.remove('expanded');
+            rowEls[i].setAttribute('aria-expanded', 'false');
+            var chev = rowEls[i].querySelector('.rvi-hex-chevron');
+            if (chev) chev.textContent = '\u25B6';
+            break;
+          }
+        }
+      } else {
+        rviExpandedHexes[hexId] = true;
+        // Expand: targeted DOM update
+        if (detailEl) detailEl.classList.add('open');
+        for (var j = 0; j < rowEls.length; j++) {
+          if (rowEls[j].getAttribute('aria-controls') === 'rviHexDetail-' + hexId) {
+            rowEls[j].classList.add('expanded');
+            rowEls[j].setAttribute('aria-expanded', 'true');
+            var chev2 = rowEls[j].querySelector('.rvi-hex-chevron');
+            if (chev2) chev2.textContent = '\u25BC';
+            break;
+          }
+        }
+      }
+    }
+
+
+    // ================================================
+    // STATUS FORMATTING HELPERS
+    // ================================================
+
+    function rviFormatStatus(status) {
+      if (status === 'approved') return 'Approved';
+      if (status === 'submitted') return 'Submitted';
+      if (status === 'revision_requested') return 'Revision Requested';
+      return status || 'Unknown';
+    }
+
+    function rviGetStatusClass(status) {
+      if (status === 'approved') return 'approved';
+      if (status === 'submitted') return 'submitted';
+      if (status === 'revision_requested') return 'revision_requested';
+      return 'submitted';
+    }
+</script>

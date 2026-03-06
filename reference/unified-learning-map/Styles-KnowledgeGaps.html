@@ -1,0 +1,447 @@
+<style>
+/* ================================================
+   KNOWLEDGE GAP ANALYSIS STYLES (kga- prefix)
+   ================================================ */
+
+/* Container */
+.kga-container {
+  padding: 20px 24px;
+}
+
+/* Section titles */
+.kga-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 24px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.kga-section-title:first-child {
+  margin-top: 0;
+}
+
+/* ---- 1. Summary Cards ---- */
+.kga-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.kga-summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.kga-summary-card.alert {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.kga-summary-card.danger {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.kga-summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+
+.kga-summary-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.kga-summary-value.danger { color: #dc2626; }
+.kga-summary-value.alert { color: #d97706; }
+
+.kga-summary-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+/* ---- 2. Per-Hex Table ---- */
+.kga-hex-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.kga-hex-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.kga-hex-table th {
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 2px solid #e2e8f0;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.kga-hex-table th:hover {
+  background: #e2e8f0;
+}
+
+.kga-hex-table th .kga-sort-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.kga-hex-table th .kga-sort-arrow.active {
+  color: #667eea;
+}
+
+.kga-hex-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.kga-hex-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.kga-row-danger td { background: #fef2f2; }
+.kga-row-danger:hover td { background: #fee2e2; }
+.kga-row-warn td { background: #fffbeb; }
+.kga-row-warn:hover td { background: #fef3c7; }
+
+.kga-type-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.kga-type-badge.core { background: #dbeafe; color: #2563eb; }
+.kga-type-badge.ext { background: #d1fae5; color: #059669; }
+.kga-type-badge.scaf { background: #fef3c7; color: #d97706; }
+
+/* Status distribution bar */
+.kga-status-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 80px;
+  background: #e2e8f0;
+}
+
+.kga-status-seg {
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.kga-status-seg.mastered { background: #166534; }
+.kga-status-seg.completed { background: #22c55e; }
+.kga-status-seg.in_progress { background: #3b82f6; }
+.kga-status-seg.not_started { background: #cbd5e1; }
+
+/* ---- 3. SBAR Strand Breakdown ---- */
+.kga-sbar-section {
+  margin-bottom: 8px;
+}
+
+.kga-sbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.kga-sbar-label {
+  width: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  flex-shrink: 0;
+}
+
+.kga-bar-container {
+  flex: 1;
+  height: 20px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.kga-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+
+.kga-bar-fill.ku { background: #3b82f6; }
+.kga-bar-fill.tt { background: #10b981; }
+.kga-bar-fill.c { background: #f59e0b; }
+
+.kga-bar-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  width: 50px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.kga-sbar-row.kga-sbar-weakest {
+  background: #fffbeb;
+  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid #fcd34d;
+}
+
+/* ---- 4. Student Struggle Patterns ---- */
+.kga-struggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.kga-struggle-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.kga-struggle-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.kga-struggle-header:hover {
+  background: #f1f5f9;
+}
+
+.kga-struggle-rank {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kga-struggle-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.kga-struggle-score {
+  font-size: 13px;
+  font-weight: 600;
+  color: #dc2626;
+  flex-shrink: 0;
+}
+
+.kga-struggle-chevron {
+  font-size: 12px;
+  color: #94a3b8;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.kga-struggle-chevron.open {
+  transform: rotate(90deg);
+}
+
+.kga-struggle-detail {
+  display: none;
+  padding: 0 14px 12px 50px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.kga-struggle-detail.open {
+  display: block;
+}
+
+.kga-struggle-hex {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.kga-struggle-hex:last-child {
+  border-bottom: none;
+}
+
+.kga-struggle-hex-name {
+  font-weight: 500;
+  color: #334155;
+}
+
+.kga-struggle-hex-score {
+  font-weight: 600;
+}
+
+.kga-struggle-hex-score.low { color: #dc2626; }
+.kga-struggle-hex-score.mid { color: #d97706; }
+
+/* ---- 5. Confidence-Score Mismatch ---- */
+.kga-mismatch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.kga-mismatch-col-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.kga-mismatch-col-title.over {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.kga-mismatch-col-title.under {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.kga-mismatch-card {
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.kga-mismatch-card.over {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+}
+
+.kga-mismatch-card.under {
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+}
+
+.kga-mismatch-student {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.kga-mismatch-detail {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.kga-mismatch-none {
+  font-size: 13px;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* ---- Empty state ---- */
+.kga-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.kga-empty .icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.kga-empty p {
+  font-size: 14px;
+  margin: 0;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .kga-container { padding: 16px; }
+  .kga-summary-cards { grid-template-columns: repeat(2, 1fr); }
+  .kga-mismatch-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  .kga-container { padding: 12px; }
+  .kga-summary-cards { grid-template-columns: 1fr; }
+  .kga-mismatch-grid { grid-template-columns: 1fr; }
+  .kga-sbar-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .kga-sbar-label { width: auto; }
+  .kga-hex-table { font-size: 12px; }
+  .kga-hex-table th, .kga-hex-table td { padding: 8px 6px; }
+}
+
+/* Formative check got-it badge in hex table */
+.kga-got-it-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #d1fae5;
+  color: #065f46;
+}
+.kga-got-it-badge.alert {
+  background: #fef3c7;
+  color: #92400e;
+}
+.kga-got-it-badge.danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Formative "not yet" indicator in struggle cards */
+.kga-struggle-formative {
+  font-size: 11px;
+  color: #d97706;
+  margin-top: 4px;
+}
+</style>

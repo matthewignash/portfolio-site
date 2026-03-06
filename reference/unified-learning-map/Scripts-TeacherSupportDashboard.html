@@ -1,0 +1,764 @@
+<script>
+// ================================================
+// TEACHER SUPPORT DASHBOARD (ES5)
+// tsd- prefix — E3-S2
+// Shows teachers strategy usage analytics:
+// which students use which strategies + effectiveness signals
+// ================================================
+
+// ================================================
+// DATA LOADING
+// ================================================
+
+/**
+ * 1. tsdLoadDashboard — Entry point called by switchProgressSubNav('supportInsights').
+ *    Loads support profiles via RPC if not cached, then renders.
+ */
+function tsdLoadDashboard() {
+  var container = document.getElementById('supportInsightsContent');
+  if (!container) return;
+
+  // Need progressDashboardData loaded first
+  if (typeof progressDashboardData === 'undefined' || !progressDashboardData ||
+      !progressDashboardData.students || progressDashboardData.students.length === 0) {
+    container.innerHTML = '<div class="tsd-empty"><div class="icon">&#128161;</div>' +
+      '<p>Select a class and map in Class Progress, then switch to Support Insights.</p></div>';
+    return;
+  }
+
+  var currentClassId = (typeof progressSelectedClassId !== 'undefined') ? progressSelectedClassId : null;
+  if (!currentClassId) {
+    container.innerHTML = '<div class="tsd-empty"><div class="icon">&#128161;</div>' +
+      '<p>Select a class and map in Class Progress, then switch to Support Insights.</p></div>';
+    return;
+  }
+
+  // Check if we already have cached profiles for this class
+  if (tsdProfilesCache && tsdProfilesClassId === currentClassId && tsdInitialized) {
+    renderTsdDashboard(progressDashboardData, tsdProfilesCache);
+    return;
+  }
+
+  // Show loading
+  container.innerHTML = '<div class="tsd-loading"><span class="loading-spinner"></span> Loading support profiles...</div>';
+
+  // Fetch profiles via RPC
+  google.script.run
+    .withSuccessHandler(function(profiles) {
+      tsdProfilesCache = profiles || [];
+      tsdProfilesClassId = currentClassId;
+      tsdInitialized = true;
+      renderTsdDashboard(progressDashboardData, tsdProfilesCache);
+    })
+    .withFailureHandler(function(err) {
+      tsdProfilesCache = [];
+      tsdProfilesClassId = currentClassId;
+      tsdInitialized = true;
+      // Still render — just without profile comparison data
+      renderTsdDashboard(progressDashboardData, []);
+    })
+    .getClassSupportProfiles(currentClassId);
+}
+
+// ================================================
+// COMPUTATION FUNCTIONS
+// ================================================
+
+/**
+ * 2. tsdComputeUsageOverview — Aggregate strategy usage stats
+ */
+function tsdComputeUsageOverview(students, hexes, profiles) {
+  var allUsed = {};
+  var studentUsedAny = {};
+
+  // Build profile email lookup
+  var profileEmails = {};
+  for (var p = 0; p < profiles.length; p++) {
+    var pe = String(profiles[p].studentEmail || profiles[p].email || '').toLowerCase().trim();
+    if (pe) profileEmails[pe] = true;
+  }
+
+  var profileStudentCount = 0;
+  for (var key in profileEmails) {
+    if (profileEmails.hasOwnProperty(key)) profileStudentCount++;
+  }
+
+  for (var s = 0; s < students.length; s++) {
+    var stu = students[s];
+    var email = String(stu.email || '').toLowerCase().trim();
+    var progress = stu.hexProgress || {};
+
+    for (var h = 0; h < hexes.length; h++) {
+      var hexId = String(hexes[h].id);
+      var prog = progress[hexId];
+      if (!prog) continue;
+      var used = prog.strategiesUsed || [];
+      for (var u = 0; u < used.length; u++) {
+        var stratKey = String(used[u]).toLowerCase().trim();
+        if (!allUsed[stratKey]) allUsed[stratKey] = { display: used[u], count: 0 };
+        allUsed[stratKey].count++;
+        studentUsedAny[email] = true;
+      }
+    }
+  }
+
+  var uniqueKeys = Object.keys(allUsed);
+  var uniqueCount = uniqueKeys.length;
+
+  // Adoption: profile students who used at least 1 strategy
+  var adoptionCount = 0;
+  for (var em in profileEmails) {
+    if (profileEmails.hasOwnProperty(em) && studentUsedAny[em]) {
+      adoptionCount++;
+    }
+  }
+  var adoptionRate = profileStudentCount > 0 ? Math.round((adoptionCount / profileStudentCount) * 100) : 0;
+
+  // Count all students who used any strategies
+  var totalStudentsWithUsage = 0;
+  for (var su in studentUsedAny) {
+    if (studentUsedAny.hasOwnProperty(su)) totalStudentsWithUsage++;
+  }
+
+  // Avg strategies per student (across all who used any)
+  var totalUsages = 0;
+  for (var uk = 0; uk < uniqueKeys.length; uk++) {
+    totalUsages += allUsed[uniqueKeys[uk]].count;
+  }
+  var avgPerStudent = totalStudentsWithUsage > 0 ? Math.round((totalUsages / totalStudentsWithUsage) * 10) / 10 : 0;
+
+  // Most popular strategy
+  var mostPopular = { strategy: '-', count: 0 };
+  for (var mk = 0; mk < uniqueKeys.length; mk++) {
+    if (allUsed[uniqueKeys[mk]].count > mostPopular.count) {
+      mostPopular = { strategy: allUsed[uniqueKeys[mk]].display, count: allUsed[uniqueKeys[mk]].count };
+    }
+  }
+
+  return {
+    uniqueStrategiesCount: uniqueCount,
+    profileStudentCount: profileStudentCount,
+    adoptionCount: adoptionCount,
+    adoptionRate: adoptionRate,
+    totalStudentsWithUsage: totalStudentsWithUsage,
+    avgStrategiesPerStudent: avgPerStudent,
+    mostPopular: mostPopular
+  };
+}
+
+/**
+ * 3. tsdComputeStudentUsage — Per-student assigned vs used analysis
+ *    Includes ALL students who have used strategies, plus all profile students
+ */
+function tsdComputeStudentUsage(students, hexes, profiles) {
+  // Build profile lookup by email
+  var profilesByEmail = {};
+  for (var p = 0; p < profiles.length; p++) {
+    var pe = String(profiles[p].studentEmail || profiles[p].email || '').toLowerCase().trim();
+    if (pe) profilesByEmail[pe] = profiles[p];
+  }
+
+  var results = [];
+  var seen = {};
+
+  for (var s = 0; s < students.length; s++) {
+    var stu = students[s];
+    var email = String(stu.email || '').toLowerCase().trim();
+    if (seen[email]) continue;
+    seen[email] = true;
+
+    var prof = profilesByEmail[email] || null;
+    var progress = stu.hexProgress || {};
+
+    // Collect all used strategies across hexes
+    var usedSet = {};
+    var perHex = [];
+    for (var h = 0; h < hexes.length; h++) {
+      var hexId = String(hexes[h].id);
+      var prog = progress[hexId];
+      if (!prog) continue;
+      var used = prog.strategiesUsed || [];
+      if (used.length > 0) {
+        for (var u = 0; u < used.length; u++) {
+          usedSet[String(used[u]).toLowerCase().trim()] = used[u];
+        }
+        perHex.push({ hexLabel: hexes[h].label || hexId, strategies: used });
+      }
+    }
+
+    var usedStrategies = [];
+    for (var uk in usedSet) {
+      if (usedSet.hasOwnProperty(uk)) usedStrategies.push(usedSet[uk]);
+    }
+
+    // Get assigned strategies from profile
+    var assignedStrategies = [];
+    if (prof) {
+      var profStrats = prof.strategies || [];
+      for (var as = 0; as < profStrats.length; as++) {
+        if (profStrats[as].active !== false) {
+          assignedStrategies.push(profStrats[as].strategy || '');
+        }
+      }
+    }
+
+    // Determine if this student should appear (used any strategies OR has profile)
+    if (usedStrategies.length === 0 && !prof) continue;
+
+    // Compute usage rate (only meaningful with profile)
+    var usageRate = -1;
+    if (prof && assignedStrategies.length > 0) {
+      // Count how many assigned strategies appear in used (case-insensitive)
+      var assignedUsedCount = 0;
+      var usedLower = {};
+      for (var ul = 0; ul < usedStrategies.length; ul++) {
+        usedLower[String(usedStrategies[ul]).toLowerCase().trim()] = true;
+      }
+      for (var al = 0; al < assignedStrategies.length; al++) {
+        if (usedLower[String(assignedStrategies[al]).toLowerCase().trim()]) {
+          assignedUsedCount++;
+        }
+      }
+      usageRate = Math.round((assignedUsedCount / assignedStrategies.length) * 100);
+    }
+
+    results.push({
+      name: stu.name || email,
+      email: email,
+      profileType: prof ? (prof.profileType || 'other') : null,
+      widaLevel: prof ? (parseInt(prof.widaOverallLevel) || 0) : 0,
+      hasProfile: !!prof,
+      assignedStrategies: assignedStrategies,
+      usedStrategies: usedStrategies,
+      usageRate: usageRate,
+      perHex: perHex
+    });
+  }
+
+  // Sort: profile students with lowest usage rate first, then non-profile students
+  results.sort(function(a, b) {
+    // Profile students first
+    if (a.hasProfile && !b.hasProfile) return -1;
+    if (!a.hasProfile && b.hasProfile) return 1;
+    // Within profile students: by usage rate ascending
+    if (a.hasProfile && b.hasProfile) return a.usageRate - b.usageRate;
+    // Within non-profile: alphabetical
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  return results;
+}
+
+/**
+ * 4. tsdComputeEffectiveness — Per-strategy performance correlation
+ */
+function tsdComputeEffectiveness(students, hexes) {
+  // Compute class-wide averages
+  var classCompTotal = 0;
+  var classScoreTotal = 0;
+  var classScoreCount = 0;
+  var classStudentsWithScore = 0;
+
+  for (var s = 0; s < students.length; s++) {
+    classCompTotal += parseFloat(students[s].percentComplete) || 0;
+    var avgSc = parseFloat(students[s].averageScore);
+    if (!isNaN(avgSc) && avgSc > 0) {
+      classScoreTotal += avgSc;
+      classStudentsWithScore++;
+    }
+    classScoreCount++;
+  }
+  var classAvgComp = classScoreCount > 0 ? Math.round(classCompTotal / classScoreCount) : 0;
+  var classAvgScore = classStudentsWithScore > 0 ? Math.round(classScoreTotal / classStudentsWithScore) : 0;
+
+  // Build: strategy → set of student emails
+  var strategyUsers = {};
+  for (var s2 = 0; s2 < students.length; s2++) {
+    var stu = students[s2];
+    var email = String(stu.email || '').toLowerCase().trim();
+    var progress = stu.hexProgress || {};
+
+    for (var h = 0; h < hexes.length; h++) {
+      var hexId = String(hexes[h].id);
+      var prog = progress[hexId];
+      if (!prog) continue;
+      var used = prog.strategiesUsed || [];
+      for (var u = 0; u < used.length; u++) {
+        var stratKey = String(used[u]).toLowerCase().trim();
+        if (!strategyUsers[stratKey]) {
+          strategyUsers[stratKey] = { display: used[u], emails: {} };
+        }
+        strategyUsers[stratKey].emails[email] = true;
+      }
+    }
+  }
+
+  // For each strategy, compute user performance averages
+  var stratKeys = Object.keys(strategyUsers);
+  var results = [];
+
+  // Build student lookup by email
+  var studentByEmail = {};
+  for (var s3 = 0; s3 < students.length; s3++) {
+    var em = String(students[s3].email || '').toLowerCase().trim();
+    studentByEmail[em] = students[s3];
+  }
+
+  for (var k = 0; k < stratKeys.length; k++) {
+    var strat = strategyUsers[stratKeys[k]];
+    var userEmails = Object.keys(strat.emails);
+    var compSum = 0;
+    var scoreSum = 0;
+    var scoreCount = 0;
+
+    for (var ue = 0; ue < userEmails.length; ue++) {
+      var stuData = studentByEmail[userEmails[ue]];
+      if (!stuData) continue;
+      compSum += parseFloat(stuData.percentComplete) || 0;
+      var stuScore = parseFloat(stuData.averageScore);
+      if (!isNaN(stuScore) && stuScore > 0) {
+        scoreSum += stuScore;
+        scoreCount++;
+      }
+    }
+
+    var avgComp = userEmails.length > 0 ? Math.round(compSum / userEmails.length) : 0;
+    var avgScore = scoreCount > 0 ? Math.round(scoreSum / scoreCount) : 0;
+    var scoreDelta = avgScore - classAvgScore;
+    var color = scoreDelta > 5 ? 'above' : (scoreDelta < -5 ? 'below' : 'at');
+
+    results.push({
+      strategy: strat.display,
+      userCount: userEmails.length,
+      avgCompletion: avgComp,
+      avgScore: avgScore,
+      classAvgCompletion: classAvgComp,
+      classAvgScore: classAvgScore,
+      completionDelta: avgComp - classAvgComp,
+      scoreDelta: scoreDelta,
+      color: color
+    });
+  }
+
+  // Sort by scoreDelta descending (best outcomes first)
+  results.sort(function(a, b) { return b.scoreDelta - a.scoreDelta; });
+
+  return results;
+}
+
+/**
+ * 5. tsdComputeHeatmap — Strategy x Hex usage matrix
+ *    Returns null if too many cells (> 200)
+ */
+function tsdComputeHeatmap(students, hexes) {
+  // Gather unique strategies and count per hex
+  var stratSet = {};
+  var matrix = {};
+  var hexesWithUsage = {};
+
+  for (var s = 0; s < students.length; s++) {
+    var progress = students[s].hexProgress || {};
+    for (var h = 0; h < hexes.length; h++) {
+      var hexId = String(hexes[h].id);
+      var prog = progress[hexId];
+      if (!prog) continue;
+      var used = prog.strategiesUsed || [];
+      for (var u = 0; u < used.length; u++) {
+        var stratKey = String(used[u]).toLowerCase().trim();
+        if (!stratSet[stratKey]) stratSet[stratKey] = used[u];
+        if (!matrix[stratKey]) matrix[stratKey] = {};
+        if (!matrix[stratKey][hexId]) matrix[stratKey][hexId] = 0;
+        matrix[stratKey][hexId]++;
+        hexesWithUsage[hexId] = true;
+      }
+    }
+  }
+
+  var stratKeys = Object.keys(stratSet);
+  var hexKeys = Object.keys(hexesWithUsage);
+
+  // Guard: skip if too many cells
+  if (stratKeys.length * hexKeys.length > 200 || stratKeys.length === 0 || hexKeys.length === 0) {
+    return null;
+  }
+
+  // Build hex label array (ordered by original hexes order, filtered to those with usage)
+  var filteredHexes = [];
+  for (var fh = 0; fh < hexes.length; fh++) {
+    if (hexesWithUsage[String(hexes[fh].id)]) {
+      filteredHexes.push({ id: String(hexes[fh].id), label: hexes[fh].label || String(hexes[fh].id) });
+    }
+  }
+
+  var strategies = [];
+  for (var sk = 0; sk < stratKeys.length; sk++) {
+    strategies.push(stratSet[stratKeys[sk]]);
+  }
+
+  return {
+    strategies: strategies,
+    hexes: filteredHexes,
+    matrix: matrix
+  };
+}
+
+/**
+ * 6. tsdComputeSummaryCards — Derive 4 summary card values from overview
+ */
+function tsdComputeSummaryCards(overview) {
+  var adoptionColor = overview.adoptionRate >= 70 ? 'success' : (overview.adoptionRate >= 40 ? 'alert' : 'danger');
+
+  return {
+    uniqueStrategies: {
+      value: String(overview.uniqueStrategiesCount),
+      label: 'Unique Strategies Used',
+      sub: overview.totalStudentsWithUsage + ' student' + (overview.totalStudentsWithUsage !== 1 ? 's' : '') + ' using them',
+      color: ''
+    },
+    adoptionRate: {
+      value: overview.profileStudentCount > 0 ? overview.adoptionRate + '%' : 'N/A',
+      label: 'Profile Adoption',
+      sub: overview.profileStudentCount > 0 ? overview.adoptionCount + '/' + overview.profileStudentCount + ' profile students' : 'No profiles found',
+      color: overview.profileStudentCount > 0 ? adoptionColor : ''
+    },
+    avgPerStudent: {
+      value: String(overview.avgStrategiesPerStudent),
+      label: 'Avg Strategies / Student',
+      sub: 'Across all hexes',
+      color: ''
+    },
+    mostPopular: {
+      value: overview.mostPopular.count > 0 ? String(overview.mostPopular.count) + 'x' : '-',
+      label: 'Most Popular',
+      sub: overview.mostPopular.count > 0 ? overview.mostPopular.strategy : 'No strategies used yet',
+      color: ''
+    }
+  };
+}
+
+// ================================================
+// RENDERING FUNCTIONS
+// ================================================
+
+/**
+ * 7. renderTsdDashboard — Main render entry point
+ */
+function renderTsdDashboard(progressData, profilesData) {
+  var container = document.getElementById('supportInsightsContent');
+  if (!container) return;
+
+  var students = progressData.students || [];
+  var hexes = progressData.hexes || [];
+  var profiles = profilesData || [];
+
+  // Check if there is any strategy usage at all
+  var hasAnyUsage = false;
+  for (var s = 0; s < students.length; s++) {
+    var progress = students[s].hexProgress || {};
+    for (var h = 0; h < hexes.length; h++) {
+      var prog = progress[String(hexes[h].id)];
+      if (prog && prog.strategiesUsed && prog.strategiesUsed.length > 0) {
+        hasAnyUsage = true;
+        break;
+      }
+    }
+    if (hasAnyUsage) break;
+  }
+
+  if (!hasAnyUsage && profiles.length === 0) {
+    container.innerHTML = '<div class="tsd-empty"><div class="icon">&#128161;</div>' +
+      '<p>No student support profiles or strategy usage found for this class.</p>' +
+      '<p style="font-size:12px;color:#94a3b8;margin-top:8px;">Create profiles from the roster in the Courses tab, or wait for students to self-mark strategies in hex content.</p></div>';
+    return;
+  }
+
+  if (!hasAnyUsage) {
+    container.innerHTML = '<div class="tsd-empty"><div class="icon">&#128161;</div>' +
+      '<p>' + profiles.length + ' student profile' + (profiles.length !== 1 ? 's' : '') + ' found, but no strategies have been self-marked yet.</p>' +
+      '<p style="font-size:12px;color:#94a3b8;margin-top:8px;">Students can mark which strategies they use from the hex content modal.</p></div>';
+    return;
+  }
+
+  // Compute all analytics
+  var overview = tsdComputeUsageOverview(students, hexes, profiles);
+  var studentUsage = tsdComputeStudentUsage(students, hexes, profiles);
+  var effectiveness = tsdComputeEffectiveness(students, hexes);
+  var heatmap = tsdComputeHeatmap(students, hexes);
+  var summary = tsdComputeSummaryCards(overview);
+
+  // Cache for re-rendering
+  tsdComputedData = {
+    overview: overview,
+    studentUsage: studentUsage,
+    effectiveness: effectiveness,
+    heatmap: heatmap,
+    summary: summary
+  };
+
+  var html = '<div class="tsd-container">';
+
+  // Section 1: Summary Cards
+  html += renderTsdSummaryCards(summary);
+
+  // Section 2: Student Usage
+  html += renderTsdStudentUsage(studentUsage);
+
+  // Section 3: Strategy Effectiveness
+  if (effectiveness.length > 0) {
+    html += renderTsdEffectiveness(effectiveness);
+  }
+
+  // Section 4: Heatmap
+  if (heatmap) {
+    html += renderTsdHeatmap(heatmap);
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+/**
+ * 8. renderTsdSummaryCards — 4 stat cards
+ */
+function renderTsdSummaryCards(summary) {
+  var html = '<div class="tsd-section-title">Strategy Usage Overview</div>';
+  html += '<div class="tsd-summary-cards">';
+
+  var cards = ['uniqueStrategies', 'adoptionRate', 'avgPerStudent', 'mostPopular'];
+  for (var i = 0; i < cards.length; i++) {
+    var card = summary[cards[i]];
+    var cardColor = card.color ? ' ' + card.color : '';
+    html += '<div class="tsd-summary-card' + cardColor + '">';
+    html += '<div class="tsd-summary-label">' + escapeHtml(card.label) + '</div>';
+    html += '<div class="tsd-summary-value' + cardColor + '">' + escapeHtml(card.value) + '</div>';
+    html += '<div class="tsd-summary-sub">' + escapeHtml(card.sub) + '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * 9. renderTsdStudentUsage — Student cards with assigned vs used
+ */
+function renderTsdStudentUsage(studentUsage) {
+  if (!studentUsage || studentUsage.length === 0) return '';
+
+  var html = '<div class="tsd-section-title">Strategy Usage by Student</div>';
+  html += '<div class="tsd-student-list">';
+
+  for (var i = 0; i < studentUsage.length; i++) {
+    var stu = studentUsage[i];
+    var isExpanded = !!tsdExpandedStudents[stu.email];
+    var cardClass = stu.hasProfile ? ' has-profile' : '';
+
+    html += '<div class="tsd-student-card' + cardClass + '">';
+
+    // Header row
+    html += '<div class="tsd-student-header" onclick="tsdToggleStudentDetail(\'' + escapeHtml(stu.email) + '\')">';
+    html += '<span class="tsd-student-name">' + escapeHtml(stu.name) + '</span>';
+
+    // Profile badge
+    if (stu.hasProfile) {
+      var badgeClass = stu.profileType === 'IEP' ? 'iep' :
+                       stu.profileType === 'WIDA' ? 'wida' :
+                       stu.profileType === 'EAL' ? 'eal' :
+                       stu.profileType === '504' ? 'plan504' : 'other';
+      html += '<span class="tsd-profile-badge ' + badgeClass + '">' + escapeHtml(stu.profileType) + '</span>';
+    } else {
+      html += '<span class="tsd-no-profile">(No profile)</span>';
+    }
+
+    // Usage stat
+    if (stu.hasProfile && stu.assignedStrategies.length > 0) {
+      var usageColor = stu.usageRate >= 50 ? 'high' : (stu.usageRate >= 25 ? 'mid' : 'low');
+      html += '<span class="tsd-usage-stat ' + usageColor + '">' + stu.usedStrategies.length + '/' + stu.assignedStrategies.length + ' used</span>';
+    } else {
+      html += '<span class="tsd-usage-stat">' + stu.usedStrategies.length + ' used</span>';
+    }
+
+    html += '<span class="tsd-student-chevron' + (isExpanded ? ' open' : '') + '">&#9654;</span>';
+    html += '</div>';
+
+    // Strategy chips
+    if (stu.hasProfile && stu.assignedStrategies.length > 0) {
+      html += '<div class="tsd-strategy-chips">';
+      // Build used lookup (case-insensitive)
+      var usedLower = {};
+      for (var ul = 0; ul < stu.usedStrategies.length; ul++) {
+        usedLower[String(stu.usedStrategies[ul]).toLowerCase().trim()] = true;
+      }
+      // Show assigned strategies with used/assigned state
+      for (var a = 0; a < stu.assignedStrategies.length; a++) {
+        var isUsed = !!usedLower[String(stu.assignedStrategies[a]).toLowerCase().trim()];
+        var chipClass = isUsed ? 'used' : 'assigned';
+        html += '<span class="tsd-strategy-chip ' + chipClass + '">' + escapeHtml(stu.assignedStrategies[a]) + '</span>';
+      }
+      // Show any extra strategies used but not in assigned list
+      for (var eu = 0; eu < stu.usedStrategies.length; eu++) {
+        var usedKey = String(stu.usedStrategies[eu]).toLowerCase().trim();
+        var inAssigned = false;
+        for (var ca = 0; ca < stu.assignedStrategies.length; ca++) {
+          if (String(stu.assignedStrategies[ca]).toLowerCase().trim() === usedKey) {
+            inAssigned = true;
+            break;
+          }
+        }
+        if (!inAssigned) {
+          html += '<span class="tsd-strategy-chip used">' + escapeHtml(stu.usedStrategies[eu]) + '</span>';
+        }
+      }
+      html += '</div>';
+    } else if (stu.usedStrategies.length > 0) {
+      html += '<div class="tsd-strategy-chips">';
+      for (var uc = 0; uc < stu.usedStrategies.length; uc++) {
+        html += '<span class="tsd-strategy-chip used">' + escapeHtml(stu.usedStrategies[uc]) + '</span>';
+      }
+      html += '</div>';
+    }
+
+    // Expandable per-hex detail
+    html += '<div class="tsd-student-detail' + (isExpanded ? ' open' : '') + '" id="tsd-detail-' + escapeHtml(stu.email) + '">';
+    if (stu.perHex.length > 0) {
+      for (var ph = 0; ph < stu.perHex.length; ph++) {
+        html += '<div class="tsd-hex-strategy-row">';
+        html += '<span class="tsd-hex-label">' + escapeHtml(stu.perHex[ph].hexLabel) + '</span>';
+        html += '<span class="tsd-hex-strategies">';
+        for (var hs = 0; hs < stu.perHex[ph].strategies.length; hs++) {
+          html += '<span class="tsd-hex-chip">' + escapeHtml(stu.perHex[ph].strategies[hs]) + '</span>';
+        }
+        html += '</span>';
+        html += '</div>';
+      }
+    } else {
+      html += '<div class="tsd-no-data-note">No strategy usage recorded on any hex.</div>';
+    }
+    html += '</div>';
+
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * 10. renderTsdEffectiveness — Per-strategy horizontal bars
+ */
+function renderTsdEffectiveness(effectiveness) {
+  if (!effectiveness || effectiveness.length === 0) return '';
+
+  var html = '<div class="tsd-section-title">Strategy Effectiveness</div>';
+  html += '<div class="tsd-effectiveness-section">';
+  html += '<div class="tsd-eff-list">';
+
+  for (var i = 0; i < effectiveness.length; i++) {
+    var eff = effectiveness[i];
+    var barWidth = Math.min(Math.max(eff.avgScore, 0), 100);
+    var deltaSign = eff.scoreDelta > 0 ? '+' : '';
+    var deltaText = eff.classAvgScore > 0 ? (deltaSign + eff.scoreDelta + '% vs class avg') : '';
+
+    html += '<div class="tsd-eff-row">';
+    html += '<div>';
+    html += '<span class="tsd-eff-name">' + escapeHtml(eff.strategy) + '</span>';
+    html += '<span class="tsd-eff-users">' + eff.userCount + ' student' + (eff.userCount !== 1 ? 's' : '') + '</span>';
+    html += '</div>';
+    html += '<div class="tsd-eff-bar-container">';
+    html += '<div class="tsd-eff-bar-fill ' + eff.color + '" style="width:' + barWidth + '%"></div>';
+    html += '</div>';
+    html += '<div>';
+    html += '<span class="tsd-eff-value">' + eff.avgScore + '%</span>';
+    if (deltaText) {
+      html += '<div class="tsd-eff-vs-class ' + eff.color + '">' + deltaText + '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+/**
+ * 11. renderTsdHeatmap — Strategy (rows) x Hex (cols) grid
+ */
+function renderTsdHeatmap(heatmapData) {
+  if (!heatmapData) return '';
+
+  var html = '<div class="tsd-section-title">Strategy-Hex Usage Map</div>';
+  html += '<div class="tsd-heatmap-container">';
+  html += '<table class="tsd-heatmap">';
+
+  // Header row
+  html += '<thead><tr><th>Strategy</th>';
+  for (var h = 0; h < heatmapData.hexes.length; h++) {
+    html += '<th>' + escapeHtml(heatmapData.hexes[h].label) + '</th>';
+  }
+  html += '</tr></thead>';
+
+  // Data rows
+  html += '<tbody>';
+  for (var s = 0; s < heatmapData.strategies.length; s++) {
+    var stratDisplay = heatmapData.strategies[s];
+    var stratKey = String(stratDisplay).toLowerCase().trim();
+
+    html += '<tr>';
+    html += '<td>' + escapeHtml(stratDisplay) + '</td>';
+
+    for (var hx = 0; hx < heatmapData.hexes.length; hx++) {
+      var hexId = heatmapData.hexes[hx].id;
+      var count = (heatmapData.matrix[stratKey] && heatmapData.matrix[stratKey][hexId]) ? heatmapData.matrix[stratKey][hexId] : 0;
+      var cellClass = count === 0 ? 'none' : (count <= 2 ? 'low' : (count <= 5 ? 'mid' : 'high'));
+      html += '<td><span class="tsd-heatmap-cell ' + cellClass + '">' + count + '</span></td>';
+    }
+
+    html += '</tr>';
+  }
+  html += '</tbody>';
+
+  html += '</table>';
+  html += '</div>';
+  return html;
+}
+
+// ================================================
+// INTERACTION FUNCTIONS
+// ================================================
+
+/**
+ * 12. tsdToggleStudentDetail — Expand/collapse student per-hex breakdown
+ */
+function tsdToggleStudentDetail(email) {
+  if (tsdExpandedStudents[email]) {
+    delete tsdExpandedStudents[email];
+  } else {
+    tsdExpandedStudents[email] = true;
+  }
+  tsdRerender_();
+}
+
+/**
+ * 13. tsdRerender_ — Re-render from cached computed data
+ */
+function tsdRerender_() {
+  if (!tsdComputedData) return;
+
+  var container = document.getElementById('supportInsightsContent');
+  if (!container) return;
+
+  var html = '<div class="tsd-container">';
+  html += renderTsdSummaryCards(tsdComputedData.summary);
+  html += renderTsdStudentUsage(tsdComputedData.studentUsage);
+  if (tsdComputedData.effectiveness && tsdComputedData.effectiveness.length > 0) {
+    html += renderTsdEffectiveness(tsdComputedData.effectiveness);
+  }
+  if (tsdComputedData.heatmap) {
+    html += renderTsdHeatmap(tsdComputedData.heatmap);
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+</script>

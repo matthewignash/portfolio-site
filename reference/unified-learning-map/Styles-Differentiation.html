@@ -1,0 +1,525 @@
+<style>
+/* ============================================================================
+   DIFFERENTIATION — dif- prefix
+   Group-based learning path customization UI
+   ============================================================================ */
+
+/* --- Toolbar Controls --- */
+.dif-mode-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+}
+.dif-mode-select:focus { border-color: #8b5cf6; outline: none; }
+.dif-manage-btn { font-size: 13px !important; }
+
+/* --- Hex Editor Section --- */
+.dif-section-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: #374151;
+}
+.dif-hex-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.dif-empty-note {
+  font-size: 12px;
+  color: #9ca3af;
+  font-style: italic;
+}
+.dif-group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 2px solid #e5e7eb;
+  background: #fff;
+  transition: all 0.15s;
+  user-select: none;
+}
+.dif-group-chip:hover { border-color: #9ca3af; }
+.dif-group-chip.active {
+  color: #fff;
+  border-color: transparent;
+}
+.dif-group-chip .dif-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dif-group-chip .dif-chip-req {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-left: 2px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.dif-hex-overrides-toggle { margin-top: 4px; }
+.dif-hex-overrides {
+  margin-top: 6px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 8px;
+}
+.dif-override-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.dif-override-row .dif-override-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dif-override-row .dif-override-vis {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.dif-override-row .dif-override-vis.show { background: #dcfce7; color: #166534; }
+.dif-override-row .dif-override-vis.hide { background: #fee2e2; color: #991b1b; }
+.dif-override-remove {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+}
+.dif-add-override-bar {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  align-items: center;
+}
+.dif-add-override-bar select {
+  flex: 1;
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+}
+.dif-add-override-bar .btn { font-size: 11px; padding: 3px 8px; }
+
+/* --- Group Manager Overlay --- */
+.dif-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 265;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dif-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 720px;
+  max-width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.dif-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.dif-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+}
+.dif-close-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0 4px;
+}
+.dif-close-btn:hover { color: #111827; }
+.dif-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.dif-scope-toggle {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.dif-scope-radio {
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dif-panels {
+  display: flex;
+  gap: 16px;
+  min-height: 350px;
+}
+.dif-left-panel {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid #f3f4f6;
+  padding-right: 16px;
+}
+.dif-right-panel {
+  flex: 1;
+  min-width: 0;
+}
+.dif-add-btn { width: 100%; margin-bottom: 12px; }
+.dif-group-list { display: flex; flex-direction: column; gap: 6px; }
+
+/* Group cards in left panel */
+.dif-group-card {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.dif-group-card:hover { border-color: #9ca3af; }
+.dif-group-card.selected { border-color: #8b5cf6; background: #faf5ff; }
+.dif-group-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dif-group-card-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dif-group-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dif-group-card-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #6b7280;
+}
+.dif-group-card-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  font-size: 10px;
+  color: #6b7280;
+}
+.dif-group-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 2px;
+}
+.dif-group-card-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  opacity: 0.5;
+}
+.dif-group-card-actions button:hover { opacity: 1; }
+
+/* Right panel — group detail */
+.dif-select-prompt {
+  color: #9ca3af;
+  text-align: center;
+  padding-top: 80px;
+  font-size: 14px;
+}
+.dif-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.dif-detail-name-input {
+  font-size: 15px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 8px;
+  flex: 1;
+  min-width: 0;
+}
+.dif-detail-name-input:focus { border-color: #8b5cf6; outline: none; }
+.dif-color-picker {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.dif-color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s;
+}
+.dif-color-swatch:hover { transform: scale(1.15); }
+.dif-color-swatch.active { border-color: #1f2937; transform: scale(1.15); }
+.dif-detail-desc {
+  width: 100%;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  resize: vertical;
+  min-height: 40px;
+  max-height: 80px;
+  margin-bottom: 12px;
+}
+.dif-detail-desc:focus { border-color: #8b5cf6; outline: none; }
+.dif-member-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dif-member-section-title a {
+  font-size: 11px;
+  font-weight: 400;
+  color: #8b5cf6;
+  cursor: pointer;
+  text-decoration: none;
+}
+.dif-member-section-title a:hover { text-decoration: underline; }
+.dif-member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.dif-member-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.dif-member-row:hover { background: #f9fafb; }
+.dif-member-row input[type="checkbox"] { margin: 0; cursor: pointer; }
+.dif-member-row .dif-member-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #374151;
+}
+.dif-member-row .dif-wida-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 10px;
+  font-weight: 600;
+}
+.dif-member-strategies {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 28px;
+  margin-top: 2px;
+}
+.dif-strategy-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dif-accom-icons {
+  font-size: 12px;
+  margin-left: 4px;
+  letter-spacing: 2px;
+  flex-shrink: 0;
+}
+
+.dif-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+.dif-detail-actions .btn { font-size: 13px; }
+.dif-save-status {
+  font-size: 12px;
+  margin-left: auto;
+  align-self: center;
+}
+.dif-save-status.saved { color: #16a34a; }
+.dif-save-status.error { color: #dc2626; }
+
+/* --- Student Hex Grid: dimmed state --- */
+.dif-dimmed {
+  opacity: 0.25;
+  pointer-events: none;
+  filter: grayscale(0.8);
+}
+.dif-required-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #8b5cf6;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 8px;
+  z-index: 5;
+}
+
+/* --- Teacher hex grid: group dots badge --- */
+.dif-hex-dots {
+  display: flex;
+  gap: 2px;
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.dif-hex-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+/* --- Suggestion Preview --- */
+.dif-suggest-btn {
+  width: 100%;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.dif-suggest-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.dif-suggest-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+}
+.dif-suggest-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.dif-suggest-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dif-suggest-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  flex: 1;
+  min-width: 0;
+}
+.dif-suggest-card-count {
+  font-size: 11px;
+  color: #6b7280;
+}
+.dif-suggest-card-header .btn {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+.dif-suggest-card-header .btn.created {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+  cursor: default;
+}
+.dif-suggest-students {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.dif-suggest-student {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #f3f4f6;
+  color: #374151;
+}
+.dif-suggest-student .dif-wida-badge {
+  font-size: 9px;
+  padding: 0 4px;
+}
+.dif-suggest-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+  text-align: center;
+}
+.dif-loading {
+  text-align: center;
+  padding: 40px 16px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+/* Focus-visible parity (WCAG 2.4.7) */
+.dif-group-chip:focus-visible,
+.dif-close-btn:focus-visible,
+.dif-group-card:focus-visible,
+.dif-group-card-actions button:focus-visible,
+.dif-color-swatch:focus-visible,
+.dif-member-section-title a:focus-visible,
+.dif-member-row:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+</style>

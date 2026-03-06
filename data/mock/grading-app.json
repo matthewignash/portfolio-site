@@ -1,0 +1,5330 @@
+{
+  "teacherDashboard": {
+    "exam": {
+      "id": "exam_001",
+      "name": "Term 2 Assessment — Reactivity & Structure",
+      "level": "SL",
+      "term": "Term 2",
+      "date": "2026-02-14",
+      "status": "visible",
+      "papersIncluded": [
+        "1A",
+        "1B",
+        "2"
+      ]
+    },
+    "students": [
+      {
+        "id": "stu_001",
+        "name": "Aarav Patel",
+        "email": "aarav.patel@school.edu",
+        "classSection": "10A-SL",
+        "level": "SL"
+      },
+      {
+        "id": "stu_002",
+        "name": "Priya Sharma",
+        "email": "priya.sharma@school.edu",
+        "classSection": "10A-SL",
+        "level": "SL"
+      },
+      {
+        "id": "stu_003",
+        "name": "Liam O'Brien",
+        "email": "liam.o'brien@school.edu",
+        "classSection": "10A-SL",
+        "level": "SL"
+      },
+      {
+        "id": "stu_004",
+        "name": "Sakura Tanaka",
+        "email": "sakura.tanaka@school.edu",
+        "classSection": "10A-SL",
+        "level": "SL"
+      },
+      {
+        "id": "stu_005",
+        "name": "Emeka Okafor",
+        "email": "emeka.okafor@school.edu",
+        "classSection": "10B-HL",
+        "level": "HL"
+      },
+      {
+        "id": "stu_006",
+        "name": "Clara Bauer",
+        "email": "clara.bauer@school.edu",
+        "classSection": "10B-HL",
+        "level": "HL"
+      },
+      {
+        "id": "stu_007",
+        "name": "Jin Chen",
+        "email": "jin.chen@school.edu",
+        "classSection": "10B-HL",
+        "level": "HL"
+      },
+      {
+        "id": "stu_008",
+        "name": "Anika Johansson",
+        "email": "anika.johansson@school.edu",
+        "classSection": "10B-HL",
+        "level": "HL"
+      }
+    ],
+    "scores": [
+      {
+        "studentId": "stu_001",
+        "studentName": "Aarav Patel",
+        "level": "SL",
+        "examId": "exam_001",
+        "totalPoints": 49,
+        "maxPoints": 84,
+        "kuPoints": 22,
+        "kuMax": 35,
+        "ttPoints": 20,
+        "ttMax": 31,
+        "cPoints": 7,
+        "cMax": 18,
+        "paper1aEarned": 19,
+        "paper1aMax": 30,
+        "paper1bEarned": 10,
+        "paper1bMax": 15,
+        "paper2Earned": 20,
+        "paper2Max": 39,
+        "ibGrade": 5,
+        "overallBand": 5,
+        "kuBand": 6,
+        "ttBand": 6,
+        "cBand": 4
+      },
+      {
+        "studentId": "stu_002",
+        "studentName": "Priya Sharma",
+        "level": "SL",
+        "examId": "exam_001",
+        "totalPoints": 67,
+        "maxPoints": 84,
+        "kuPoints": 32,
+        "kuMax": 35,
+        "ttPoints": 18,
+        "ttMax": 31,
+        "cPoints": 17,
+        "cMax": 18,
+        "paper1aEarned": 25,
+        "paper1aMax": 30,
+        "paper1bEarned": 12,
+        "paper1bMax": 15,
+        "paper2Earned": 30,
+        "paper2Max": 39,
+        "ibGrade": 6,
+        "overallBand": 6,
+        "kuBand": 8,
+        "ttBand": 5,
+        "cBand": 8
+      },
+      {
+        "studentId": "stu_003",
+        "studentName": "Liam O'Brien",
+        "level": "SL",
+        "examId": "exam_001",
+        "totalPoints": 31,
+        "maxPoints": 84,
+        "kuPoints": 17,
+        "kuMax": 35,
+        "ttPoints": 9,
+        "ttMax": 31,
+        "cPoints": 5,
+        "cMax": 18,
+        "paper1aEarned": 11,
+        "paper1aMax": 30,
+        "paper1bEarned": 9,
+        "paper1bMax": 15,
+        "paper2Earned": 11,
+        "paper2Max": 39,
+        "ibGrade": 3,
+        "overallBand": 3,
+        "kuBand": 4,
+        "ttBand": 3,
+        "cBand": 3
+      },
+      {
+        "studentId": "stu_004",
+        "studentName": "Sakura Tanaka",
+        "level": "SL",
+        "examId": "exam_001",
+        "totalPoints": 61,
+        "maxPoints": 84,
+        "kuPoints": 26,
+        "kuMax": 35,
+        "ttPoints": 23,
+        "ttMax": 31,
+        "cPoints": 12,
+        "cMax": 18,
+        "paper1aEarned": 21,
+        "paper1aMax": 30,
+        "paper1bEarned": 11,
+        "paper1bMax": 15,
+        "paper2Earned": 29,
+        "paper2Max": 39,
+        "ibGrade": 6,
+        "overallBand": 6,
+        "kuBand": 7,
+        "ttBand": 7,
+        "cBand": 6
+      },
+      {
+        "studentId": "stu_005",
+        "studentName": "Emeka Okafor",
+        "level": "HL",
+        "examId": "exam_001",
+        "totalPoints": 72,
+        "maxPoints": 84,
+        "kuPoints": 34,
+        "kuMax": 35,
+        "ttPoints": 22,
+        "ttMax": 31,
+        "cPoints": 16,
+        "cMax": 18,
+        "paper1aEarned": 26,
+        "paper1aMax": 30,
+        "paper1bEarned": 13,
+        "paper1bMax": 15,
+        "paper2Earned": 33,
+        "paper2Max": 39,
+        "ibGrade": 7,
+        "overallBand": 7,
+        "kuBand": 8,
+        "ttBand": 6,
+        "cBand": 8
+      },
+      {
+        "studentId": "stu_006",
+        "studentName": "Clara Bauer",
+        "level": "HL",
+        "examId": "exam_001",
+        "totalPoints": 81,
+        "maxPoints": 84,
+        "kuPoints": 34,
+        "kuMax": 35,
+        "ttPoints": 29,
+        "ttMax": 31,
+        "cPoints": 18,
+        "cMax": 18,
+        "paper1aEarned": 29,
+        "paper1aMax": 30,
+        "paper1bEarned": 14,
+        "paper1bMax": 15,
+        "paper2Earned": 38,
+        "paper2Max": 39,
+        "ibGrade": 7,
+        "overallBand": 7,
+        "kuBand": 8,
+        "ttBand": 8,
+        "cBand": 8
+      },
+      {
+        "studentId": "stu_007",
+        "studentName": "Jin Chen",
+        "level": "HL",
+        "examId": "exam_001",
+        "totalPoints": 47,
+        "maxPoints": 84,
+        "kuPoints": 22,
+        "kuMax": 35,
+        "ttPoints": 14,
+        "ttMax": 31,
+        "cPoints": 11,
+        "cMax": 18,
+        "paper1aEarned": 16,
+        "paper1aMax": 30,
+        "paper1bEarned": 6,
+        "paper1bMax": 15,
+        "paper2Earned": 25,
+        "paper2Max": 39,
+        "ibGrade": 4,
+        "overallBand": 4,
+        "kuBand": 6,
+        "ttBand": 4,
+        "cBand": 6
+      },
+      {
+        "studentId": "stu_008",
+        "studentName": "Anika Johansson",
+        "level": "HL",
+        "examId": "exam_001",
+        "totalPoints": 53,
+        "maxPoints": 84,
+        "kuPoints": 28,
+        "kuMax": 35,
+        "ttPoints": 14,
+        "ttMax": 31,
+        "cPoints": 11,
+        "cMax": 18,
+        "paper1aEarned": 21,
+        "paper1aMax": 30,
+        "paper1bEarned": 9,
+        "paper1bMax": 15,
+        "paper2Earned": 23,
+        "paper2Max": 39,
+        "ibGrade": 5,
+        "overallBand": 5,
+        "kuBand": 7,
+        "ttBand": 4,
+        "cBand": 6
+      }
+    ],
+    "ibBandDistribution": [
+      {
+        "band": 1,
+        "label": "Band 1",
+        "slCount": 0,
+        "hlCount": 0,
+        "totalCount": 0
+      },
+      {
+        "band": 2,
+        "label": "Band 2",
+        "slCount": 0,
+        "hlCount": 0,
+        "totalCount": 0
+      },
+      {
+        "band": 3,
+        "label": "Band 3",
+        "slCount": 1,
+        "hlCount": 0,
+        "totalCount": 1
+      },
+      {
+        "band": 4,
+        "label": "Band 4",
+        "slCount": 0,
+        "hlCount": 1,
+        "totalCount": 1
+      },
+      {
+        "band": 5,
+        "label": "Band 5",
+        "slCount": 1,
+        "hlCount": 1,
+        "totalCount": 2
+      },
+      {
+        "band": 6,
+        "label": "Band 6",
+        "slCount": 2,
+        "hlCount": 0,
+        "totalCount": 2
+      },
+      {
+        "band": 7,
+        "label": "Band 7",
+        "slCount": 0,
+        "hlCount": 2,
+        "totalCount": 2
+      }
+    ],
+    "aiscBandDistribution": {
+      "KU": [
+        {
+          "band": 1,
+          "label": "Band 1",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 2,
+          "label": "Band 2",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 3,
+          "label": "Band 3",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 4,
+          "label": "Band 4",
+          "slCount": 1,
+          "hlCount": 0,
+          "totalCount": 1
+        },
+        {
+          "band": 5,
+          "label": "Band 5",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 6,
+          "label": "Band 6",
+          "slCount": 1,
+          "hlCount": 1,
+          "totalCount": 2
+        },
+        {
+          "band": 7,
+          "label": "Band 7",
+          "slCount": 1,
+          "hlCount": 1,
+          "totalCount": 2
+        },
+        {
+          "band": 8,
+          "label": "Band 8",
+          "slCount": 1,
+          "hlCount": 2,
+          "totalCount": 3
+        }
+      ],
+      "TT": [
+        {
+          "band": 1,
+          "label": "Band 1",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 2,
+          "label": "Band 2",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 3,
+          "label": "Band 3",
+          "slCount": 1,
+          "hlCount": 0,
+          "totalCount": 1
+        },
+        {
+          "band": 4,
+          "label": "Band 4",
+          "slCount": 0,
+          "hlCount": 2,
+          "totalCount": 2
+        },
+        {
+          "band": 5,
+          "label": "Band 5",
+          "slCount": 1,
+          "hlCount": 0,
+          "totalCount": 1
+        },
+        {
+          "band": 6,
+          "label": "Band 6",
+          "slCount": 1,
+          "hlCount": 1,
+          "totalCount": 2
+        },
+        {
+          "band": 7,
+          "label": "Band 7",
+          "slCount": 1,
+          "hlCount": 0,
+          "totalCount": 1
+        },
+        {
+          "band": 8,
+          "label": "Band 8",
+          "slCount": 0,
+          "hlCount": 1,
+          "totalCount": 1
+        }
+      ],
+      "C": [
+        {
+          "band": 1,
+          "label": "Band 1",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 2,
+          "label": "Band 2",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 3,
+          "label": "Band 3",
+          "slCount": 1,
+          "hlCount": 0,
+          "totalCount": 1
+        },
+        {
+          "band": 4,
+          "label": "Band 4",
+          "slCount": 1,
+          "hlCount": 0,
+          "totalCount": 1
+        },
+        {
+          "band": 5,
+          "label": "Band 5",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 6,
+          "label": "Band 6",
+          "slCount": 1,
+          "hlCount": 2,
+          "totalCount": 3
+        },
+        {
+          "band": 7,
+          "label": "Band 7",
+          "slCount": 0,
+          "hlCount": 0,
+          "totalCount": 0
+        },
+        {
+          "band": 8,
+          "label": "Band 8",
+          "slCount": 1,
+          "hlCount": 2,
+          "totalCount": 3
+        }
+      ]
+    },
+    "strandSummary": [
+      {
+        "strand": "KU",
+        "strandName": "Knowledge & Understanding",
+        "classAverage": 26.9,
+        "maxPossible": 35,
+        "averagePercentage": 77
+      },
+      {
+        "strand": "TT",
+        "strandName": "Thinking & Transfer",
+        "classAverage": 18.6,
+        "maxPossible": 31,
+        "averagePercentage": 60
+      },
+      {
+        "strand": "C",
+        "strandName": "Communication",
+        "classAverage": 12.1,
+        "maxPossible": 18,
+        "averagePercentage": 67
+      }
+    ],
+    "paperSummary": [
+      {
+        "paper": "1A",
+        "paperName": "Paper 1A (MCQ)",
+        "classAverage": 21,
+        "maxPossible": 30,
+        "averagePercentage": 70
+      },
+      {
+        "paper": "1B",
+        "paperName": "Paper 1B (Short Answer)",
+        "classAverage": 10.5,
+        "maxPossible": 15,
+        "averagePercentage": 70
+      },
+      {
+        "paper": "2",
+        "paperName": "Paper 2 (Extended Response)",
+        "classAverage": 26.1,
+        "maxPossible": 39,
+        "averagePercentage": 67
+      }
+    ],
+    "topicGroups": [
+      {
+        "code": "S1",
+        "name": "Models of particulate nature of matter",
+        "category": "Structure",
+        "hlOnly": false
+      },
+      {
+        "code": "S2",
+        "name": "Models of bonding and structure",
+        "category": "Structure",
+        "hlOnly": false
+      },
+      {
+        "code": "S3",
+        "name": "Classification of matter",
+        "category": "Structure",
+        "hlOnly": false
+      },
+      {
+        "code": "R1",
+        "name": "What drives chemical reactions?",
+        "category": "Reactivity",
+        "hlOnly": false
+      },
+      {
+        "code": "R2",
+        "name": "How much, how fast, and how far?",
+        "category": "Reactivity",
+        "hlOnly": false
+      },
+      {
+        "code": "R3",
+        "name": "Mechanisms of chemical change",
+        "category": "Reactivity",
+        "hlOnly": false
+      }
+    ],
+    "classTopicAnalysis": [
+      {
+        "topicCode": "S1.2",
+        "topicName": "The nuclear atom",
+        "pointsEarned": 54,
+        "pointsPossible": 72,
+        "percentage": 75,
+        "questionCount": 5
+      },
+      {
+        "topicCode": "S3.1",
+        "topicName": "The periodic table",
+        "pointsEarned": 33,
+        "pointsPossible": 40,
+        "percentage": 83,
+        "questionCount": 2
+      },
+      {
+        "topicCode": "S3.2",
+        "topicName": "Functional groups",
+        "pointsEarned": 7,
+        "pointsPossible": 8,
+        "percentage": 88,
+        "questionCount": 1
+      },
+      {
+        "topicCode": "R3.1",
+        "topicName": "Proton transfer reactions",
+        "pointsEarned": 24,
+        "pointsPossible": 40,
+        "percentage": 60,
+        "questionCount": 2
+      },
+      {
+        "topicCode": "S1.3",
+        "topicName": "Electron configurations",
+        "pointsEarned": 7,
+        "pointsPossible": 8,
+        "percentage": 88,
+        "questionCount": 1
+      },
+      {
+        "topicCode": "S1.1",
+        "topicName": "Introduction to the particulate nature of matter",
+        "pointsEarned": 10,
+        "pointsPossible": 16,
+        "percentage": 63,
+        "questionCount": 2
+      },
+      {
+        "topicCode": "R2.3",
+        "topicName": "How far? Equilibrium",
+        "pointsEarned": 44,
+        "pointsPossible": 64,
+        "percentage": 69,
+        "questionCount": 4
+      },
+      {
+        "topicCode": "R3.3",
+        "topicName": "Electron sharing reactions",
+        "pointsEarned": 28,
+        "pointsPossible": 40,
+        "percentage": 70,
+        "questionCount": 2
+      },
+      {
+        "topicCode": "S2.3",
+        "topicName": "The metallic model",
+        "pointsEarned": 30,
+        "pointsPossible": 40,
+        "percentage": 75,
+        "questionCount": 5
+      },
+      {
+        "topicCode": "S2.4",
+        "topicName": "From models to materials",
+        "pointsEarned": 7,
+        "pointsPossible": 8,
+        "percentage": 88,
+        "questionCount": 1
+      },
+      {
+        "topicCode": "R2.2",
+        "topicName": "How fast? rates of reaction",
+        "pointsEarned": 34,
+        "pointsPossible": 56,
+        "percentage": 61,
+        "questionCount": 3
+      },
+      {
+        "topicCode": "R3.2",
+        "topicName": "Electron transfer reactions",
+        "pointsEarned": 33,
+        "pointsPossible": 48,
+        "percentage": 69,
+        "questionCount": 4
+      },
+      {
+        "topicCode": "R2.1",
+        "topicName": "Amounts in chemical reactions",
+        "pointsEarned": 6,
+        "pointsPossible": 8,
+        "percentage": 75,
+        "questionCount": 1
+      },
+      {
+        "topicCode": "S1.5",
+        "topicName": "Ideal gases",
+        "pointsEarned": 26,
+        "pointsPossible": 40,
+        "percentage": 65,
+        "questionCount": 4
+      },
+      {
+        "topicCode": "R1.2",
+        "topicName": "Energy cycles in reactions",
+        "pointsEarned": 21,
+        "pointsPossible": 32,
+        "percentage": 66,
+        "questionCount": 3
+      },
+      {
+        "topicCode": "R1.3",
+        "topicName": "Energy from fuels",
+        "pointsEarned": 5,
+        "pointsPossible": 8,
+        "percentage": 63,
+        "questionCount": 1
+      },
+      {
+        "topicCode": "R1.1",
+        "topicName": "Measuring enthalpy changes",
+        "pointsEarned": 26,
+        "pointsPossible": 32,
+        "percentage": 81,
+        "questionCount": 1
+      },
+      {
+        "topicCode": "S2.2",
+        "topicName": "The covalent model",
+        "pointsEarned": 33,
+        "pointsPossible": 64,
+        "percentage": 52,
+        "questionCount": 1
+      },
+      {
+        "topicCode": "S2.1",
+        "topicName": "The ionic model",
+        "pointsEarned": 33,
+        "pointsPossible": 48,
+        "percentage": 69,
+        "questionCount": 1
+      }
+    ]
+  },
+  "gradingPanel": {
+    "exam": {
+      "id": "exam_001",
+      "name": "Term 2 Assessment — Reactivity & Structure",
+      "level": "SL",
+      "term": "Term 2",
+      "date": "2026-02-14",
+      "status": "visible",
+      "papersIncluded": [
+        "1A",
+        "1B",
+        "2"
+      ]
+    },
+    "students": [
+      {
+        "id": "stu_001",
+        "name": "Aarav Patel",
+        "email": "aarav.patel@school.edu",
+        "classSection": "10A-SL",
+        "level": "SL"
+      },
+      {
+        "id": "stu_002",
+        "name": "Priya Sharma",
+        "email": "priya.sharma@school.edu",
+        "classSection": "10A-SL",
+        "level": "SL"
+      },
+      {
+        "id": "stu_003",
+        "name": "Liam O'Brien",
+        "email": "liam.o'brien@school.edu",
+        "classSection": "10A-SL",
+        "level": "SL"
+      },
+      {
+        "id": "stu_004",
+        "name": "Sakura Tanaka",
+        "email": "sakura.tanaka@school.edu",
+        "classSection": "10A-SL",
+        "level": "SL"
+      },
+      {
+        "id": "stu_005",
+        "name": "Emeka Okafor",
+        "email": "emeka.okafor@school.edu",
+        "classSection": "10B-HL",
+        "level": "HL"
+      },
+      {
+        "id": "stu_006",
+        "name": "Clara Bauer",
+        "email": "clara.bauer@school.edu",
+        "classSection": "10B-HL",
+        "level": "HL"
+      },
+      {
+        "id": "stu_007",
+        "name": "Jin Chen",
+        "email": "jin.chen@school.edu",
+        "classSection": "10B-HL",
+        "level": "HL"
+      },
+      {
+        "id": "stu_008",
+        "name": "Anika Johansson",
+        "email": "anika.johansson@school.edu",
+        "classSection": "10B-HL",
+        "level": "HL"
+      }
+    ],
+    "paper1aQuestions": [
+      {
+        "qid": "1A_01",
+        "questionNumber": 1,
+        "correctAnswer": "D",
+        "strand": "KU",
+        "ibTopicCode": "S1.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_02",
+        "questionNumber": 2,
+        "correctAnswer": "A",
+        "strand": "KU",
+        "ibTopicCode": "S3.1",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_03",
+        "questionNumber": 3,
+        "correctAnswer": "B",
+        "strand": "KU",
+        "ibTopicCode": "S3.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_04",
+        "questionNumber": 4,
+        "correctAnswer": "A",
+        "strand": "KU",
+        "ibTopicCode": "R3.1",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_05",
+        "questionNumber": 5,
+        "correctAnswer": "D",
+        "strand": "KU",
+        "ibTopicCode": "S1.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_06",
+        "questionNumber": 6,
+        "correctAnswer": "D",
+        "strand": "KU",
+        "ibTopicCode": "S1.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_07",
+        "questionNumber": 7,
+        "correctAnswer": "C",
+        "strand": "KU",
+        "ibTopicCode": "S1.1",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_08",
+        "questionNumber": 8,
+        "correctAnswer": "D",
+        "strand": "KU",
+        "ibTopicCode": "R2.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_09",
+        "questionNumber": 9,
+        "correctAnswer": "B",
+        "strand": "KU",
+        "ibTopicCode": "R3.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_10",
+        "questionNumber": 10,
+        "correctAnswer": "D",
+        "strand": "KU",
+        "ibTopicCode": "S2.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_11",
+        "questionNumber": 11,
+        "correctAnswer": "C",
+        "strand": "KU",
+        "ibTopicCode": "S2.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_12",
+        "questionNumber": 12,
+        "correctAnswer": "D",
+        "strand": "KU",
+        "ibTopicCode": "S1.1",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_13",
+        "questionNumber": 13,
+        "correctAnswer": "C",
+        "strand": "KU",
+        "ibTopicCode": "S2.4",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_14",
+        "questionNumber": 14,
+        "correctAnswer": "B",
+        "strand": "KU",
+        "ibTopicCode": "R2.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_15",
+        "questionNumber": 15,
+        "correctAnswer": "C",
+        "strand": "KU",
+        "ibTopicCode": "R3.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_16",
+        "questionNumber": 16,
+        "correctAnswer": "D",
+        "strand": "TT",
+        "ibTopicCode": "R2.1",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_17",
+        "questionNumber": 17,
+        "correctAnswer": "A",
+        "strand": "TT",
+        "ibTopicCode": "S2.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_18",
+        "questionNumber": 18,
+        "correctAnswer": "B",
+        "strand": "TT",
+        "ibTopicCode": "S2.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_19",
+        "questionNumber": 19,
+        "correctAnswer": "B",
+        "strand": "TT",
+        "ibTopicCode": "R3.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_20",
+        "questionNumber": 20,
+        "correctAnswer": "D",
+        "strand": "TT",
+        "ibTopicCode": "S1.5",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_21",
+        "questionNumber": 21,
+        "correctAnswer": "B",
+        "strand": "TT",
+        "ibTopicCode": "R2.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_22",
+        "questionNumber": 22,
+        "correctAnswer": "C",
+        "strand": "TT",
+        "ibTopicCode": "R3.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_23",
+        "questionNumber": 23,
+        "correctAnswer": "B",
+        "strand": "TT",
+        "ibTopicCode": "S1.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_24",
+        "questionNumber": 24,
+        "correctAnswer": "C",
+        "strand": "TT",
+        "ibTopicCode": "R2.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_25",
+        "questionNumber": 25,
+        "correctAnswer": "D",
+        "strand": "C",
+        "ibTopicCode": "R1.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_26",
+        "questionNumber": 26,
+        "correctAnswer": "B",
+        "strand": "C",
+        "ibTopicCode": "R1.2",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_27",
+        "questionNumber": 27,
+        "correctAnswer": "B",
+        "strand": "C",
+        "ibTopicCode": "S2.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_28",
+        "questionNumber": 28,
+        "correctAnswer": "B",
+        "strand": "C",
+        "ibTopicCode": "S1.5",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_29",
+        "questionNumber": 29,
+        "correctAnswer": "D",
+        "strand": "C",
+        "ibTopicCode": "R1.3",
+        "maxPoints": 1
+      },
+      {
+        "qid": "1A_30",
+        "questionNumber": 30,
+        "correctAnswer": "D",
+        "strand": "C",
+        "ibTopicCode": "S1.5",
+        "maxPoints": 1
+      }
+    ],
+    "checklistQuestions": [
+      {
+        "qid": "1B_01",
+        "questionNumber": 1,
+        "paper": "1B",
+        "strand": "KU",
+        "ibTopicCode": "R2.3",
+        "maxPoints": 4,
+        "rubricItems": [
+          {
+            "itemId": "1B_1_1",
+            "criteriaText": "Correctly identifies the reactant/product",
+            "points": 1
+          },
+          {
+            "itemId": "1B_1_2",
+            "criteriaText": "States the correct formula or equation",
+            "points": 1
+          },
+          {
+            "itemId": "1B_1_3",
+            "criteriaText": "Defines the key term accurately",
+            "points": 1
+          },
+          {
+            "itemId": "1B_1_4",
+            "criteriaText": "Lists the appropriate conditions",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "1B_02",
+        "questionNumber": 2,
+        "paper": "1B",
+        "strand": "KU",
+        "ibTopicCode": "S1.5",
+        "maxPoints": 2,
+        "rubricItems": [
+          {
+            "itemId": "1B_2_1",
+            "criteriaText": "Correctly identifies the reactant/product",
+            "points": 1
+          },
+          {
+            "itemId": "1B_2_2",
+            "criteriaText": "States the correct formula or equation",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "1B_03",
+        "questionNumber": 3,
+        "paper": "1B",
+        "strand": "KU",
+        "ibTopicCode": "S1.2",
+        "maxPoints": 2,
+        "rubricItems": [
+          {
+            "itemId": "1B_3_1",
+            "criteriaText": "Correctly identifies the reactant/product",
+            "points": 1
+          },
+          {
+            "itemId": "1B_3_2",
+            "criteriaText": "States the correct formula or equation",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "1B_04",
+        "questionNumber": 4,
+        "paper": "1B",
+        "strand": "TT",
+        "ibTopicCode": "R1.2",
+        "maxPoints": 2,
+        "rubricItems": [
+          {
+            "itemId": "1B_4_1",
+            "criteriaText": "Explains the trend using atomic structure",
+            "points": 2
+          },
+          {
+            "itemId": "1B_4_2",
+            "criteriaText": "Applies the concept to a novel context",
+            "points": 2
+          },
+          {
+            "itemId": "1B_4_3",
+            "criteriaText": "Evaluates the experimental method",
+            "points": 2
+          },
+          {
+            "itemId": "1B_4_4",
+            "criteriaText": "Calculates the correct numerical answer",
+            "points": 2
+          },
+          {
+            "itemId": "1B_4_5",
+            "criteriaText": "Shows logical reasoning in the analysis",
+            "points": 2
+          }
+        ],
+        "checklistMode": "OR"
+      },
+      {
+        "qid": "1B_05",
+        "questionNumber": 5,
+        "paper": "1B",
+        "strand": "TT",
+        "ibTopicCode": "R3.2",
+        "maxPoints": 3,
+        "rubricItems": [
+          {
+            "itemId": "1B_5_1",
+            "criteriaText": "Explains the trend using atomic structure",
+            "points": 1
+          },
+          {
+            "itemId": "1B_5_2",
+            "criteriaText": "Applies the concept to a novel context",
+            "points": 1
+          },
+          {
+            "itemId": "1B_5_3",
+            "criteriaText": "Evaluates the experimental method",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "1B_06",
+        "questionNumber": 6,
+        "paper": "1B",
+        "strand": "C",
+        "ibTopicCode": "R2.3",
+        "maxPoints": 2,
+        "rubricItems": [
+          {
+            "itemId": "1B_6_1",
+            "criteriaText": "Uses correct scientific terminology",
+            "points": 1
+          },
+          {
+            "itemId": "1B_6_2",
+            "criteriaText": "Presents a clear and logical argument",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "P2_01",
+        "questionNumber": 1,
+        "paper": "2",
+        "strand": "KU",
+        "ibTopicCode": "S3.1",
+        "maxPoints": 4,
+        "rubricItems": [
+          {
+            "itemId": "P2_1_1",
+            "criteriaText": "Correctly identifies the reactant/product",
+            "points": 1
+          },
+          {
+            "itemId": "P2_1_2",
+            "criteriaText": "States the correct formula or equation",
+            "points": 1
+          },
+          {
+            "itemId": "P2_1_3",
+            "criteriaText": "Defines the key term accurately",
+            "points": 1
+          },
+          {
+            "itemId": "P2_1_4",
+            "criteriaText": "Lists the appropriate conditions",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "P2_02",
+        "questionNumber": 2,
+        "paper": "2",
+        "strand": "KU",
+        "ibTopicCode": "S1.2",
+        "maxPoints": 4,
+        "rubricItems": [
+          {
+            "itemId": "P2_2_1",
+            "criteriaText": "Correctly identifies the reactant/product",
+            "points": 1
+          },
+          {
+            "itemId": "P2_2_2",
+            "criteriaText": "States the correct formula or equation",
+            "points": 1
+          },
+          {
+            "itemId": "P2_2_3",
+            "criteriaText": "Defines the key term accurately",
+            "points": 1
+          },
+          {
+            "itemId": "P2_2_4",
+            "criteriaText": "Lists the appropriate conditions",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "P2_03",
+        "questionNumber": 3,
+        "paper": "2",
+        "strand": "KU",
+        "ibTopicCode": "R1.1",
+        "maxPoints": 4,
+        "rubricItems": [],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "P2_04",
+        "questionNumber": 4,
+        "paper": "2",
+        "strand": "TT",
+        "ibTopicCode": "R2.2",
+        "maxPoints": 5,
+        "rubricItems": [
+          {
+            "itemId": "P2_4_1",
+            "criteriaText": "Explains the trend using atomic structure",
+            "points": 1
+          },
+          {
+            "itemId": "P2_4_2",
+            "criteriaText": "Applies the concept to a novel context",
+            "points": 1
+          },
+          {
+            "itemId": "P2_4_3",
+            "criteriaText": "Evaluates the experimental method",
+            "points": 1
+          },
+          {
+            "itemId": "P2_4_4",
+            "criteriaText": "Calculates the correct numerical answer",
+            "points": 1
+          },
+          {
+            "itemId": "P2_4_5",
+            "criteriaText": "Shows logical reasoning in the analysis",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "P2_05",
+        "questionNumber": 5,
+        "paper": "2",
+        "strand": "TT",
+        "ibTopicCode": "R3.3",
+        "maxPoints": 4,
+        "rubricItems": [
+          {
+            "itemId": "P2_5_1",
+            "criteriaText": "Explains the trend using atomic structure",
+            "points": 1
+          },
+          {
+            "itemId": "P2_5_2",
+            "criteriaText": "Applies the concept to a novel context",
+            "points": 1
+          },
+          {
+            "itemId": "P2_5_3",
+            "criteriaText": "Evaluates the experimental method",
+            "points": 1
+          },
+          {
+            "itemId": "P2_5_4",
+            "criteriaText": "Calculates the correct numerical answer",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "P2_06",
+        "questionNumber": 6,
+        "paper": "2",
+        "strand": "TT",
+        "ibTopicCode": "S2.2",
+        "maxPoints": 8,
+        "rubricItems": [
+          {
+            "itemId": "P2_6_1",
+            "criteriaText": "Explains the trend using atomic structure",
+            "points": 1
+          },
+          {
+            "itemId": "P2_6_2",
+            "criteriaText": "Applies the concept to a novel context",
+            "points": 1
+          },
+          {
+            "itemId": "P2_6_3",
+            "criteriaText": "Evaluates the experimental method",
+            "points": 1
+          },
+          {
+            "itemId": "P2_6_4",
+            "criteriaText": "Calculates the correct numerical answer",
+            "points": 1
+          },
+          {
+            "itemId": "P2_6_5",
+            "criteriaText": "Shows logical reasoning in the analysis",
+            "points": 1
+          },
+          {
+            "itemId": "P2_6_6",
+            "criteriaText": "Compares the two models effectively",
+            "points": 1
+          },
+          {
+            "itemId": "P2_6_7",
+            "criteriaText": "Predicts the outcome with justification",
+            "points": 1
+          },
+          {
+            "itemId": "P2_6_8",
+            "criteriaText": "Interprets the data from the graph",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "P2_07",
+        "questionNumber": 7,
+        "paper": "2",
+        "strand": "C",
+        "ibTopicCode": "R3.1",
+        "maxPoints": 4,
+        "rubricItems": [
+          {
+            "itemId": "P2_7_1",
+            "criteriaText": "Uses correct scientific terminology",
+            "points": 1
+          },
+          {
+            "itemId": "P2_7_2",
+            "criteriaText": "Presents a clear and logical argument",
+            "points": 1
+          },
+          {
+            "itemId": "P2_7_3",
+            "criteriaText": "Includes appropriate units and sig figs",
+            "points": 1
+          },
+          {
+            "itemId": "P2_7_4",
+            "criteriaText": "Shows working clearly and systematically",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      },
+      {
+        "qid": "P2_08",
+        "questionNumber": 8,
+        "paper": "2",
+        "strand": "C",
+        "ibTopicCode": "S2.1",
+        "maxPoints": 6,
+        "rubricItems": [
+          {
+            "itemId": "P2_8_1",
+            "criteriaText": "Uses correct scientific terminology",
+            "points": 1
+          },
+          {
+            "itemId": "P2_8_2",
+            "criteriaText": "Presents a clear and logical argument",
+            "points": 1
+          },
+          {
+            "itemId": "P2_8_3",
+            "criteriaText": "Includes appropriate units and sig figs",
+            "points": 1
+          },
+          {
+            "itemId": "P2_8_4",
+            "criteriaText": "Shows working clearly and systematically",
+            "points": 1
+          },
+          {
+            "itemId": "P2_8_5",
+            "criteriaText": "Draws a correctly labeled diagram",
+            "points": 1
+          },
+          {
+            "itemId": "P2_8_6",
+            "criteriaText": "Organizes the response coherently",
+            "points": 1
+          }
+        ],
+        "checklistMode": "AND"
+      }
+    ],
+    "responses": {
+      "stu_001||1A_01": {
+        "responseId": "stu_001||1A_01",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_01",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_02": {
+        "responseId": "stu_001||1A_02",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_02",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_001||1A_03": {
+        "responseId": "stu_001||1A_03",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_03",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_001||1A_04": {
+        "responseId": "stu_001||1A_04",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_04",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_05": {
+        "responseId": "stu_001||1A_05",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_05",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_06": {
+        "responseId": "stu_001||1A_06",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_06",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_07": {
+        "responseId": "stu_001||1A_07",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_07",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_08": {
+        "responseId": "stu_001||1A_08",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_08",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_09": {
+        "responseId": "stu_001||1A_09",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_09",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_10": {
+        "responseId": "stu_001||1A_10",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_10",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_001||1A_11": {
+        "responseId": "stu_001||1A_11",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_11",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_12": {
+        "responseId": "stu_001||1A_12",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_12",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_13": {
+        "responseId": "stu_001||1A_13",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_13",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_14": {
+        "responseId": "stu_001||1A_14",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_14",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_15": {
+        "responseId": "stu_001||1A_15",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_15",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_16": {
+        "responseId": "stu_001||1A_16",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_16",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_17": {
+        "responseId": "stu_001||1A_17",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_17",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_001||1A_18": {
+        "responseId": "stu_001||1A_18",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_18",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_001||1A_19": {
+        "responseId": "stu_001||1A_19",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_19",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_001||1A_20": {
+        "responseId": "stu_001||1A_20",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_20",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_21": {
+        "responseId": "stu_001||1A_21",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_21",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_22": {
+        "responseId": "stu_001||1A_22",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_22",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_23": {
+        "responseId": "stu_001||1A_23",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_23",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_001||1A_24": {
+        "responseId": "stu_001||1A_24",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_24",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_25": {
+        "responseId": "stu_001||1A_25",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_25",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_001||1A_26": {
+        "responseId": "stu_001||1A_26",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_26",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_001||1A_27": {
+        "responseId": "stu_001||1A_27",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_27",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_001||1A_28": {
+        "responseId": "stu_001||1A_28",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_28",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_001||1A_29": {
+        "responseId": "stu_001||1A_29",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_29",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_001||1A_30": {
+        "responseId": "stu_001||1A_30",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1A_30",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_001||1B_01": {
+        "responseId": "stu_001||1B_01",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1B_01",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "1B_1_2",
+          "1B_1_3",
+          "1B_1_4"
+        ]
+      },
+      "stu_001||1B_02": {
+        "responseId": "stu_001||1B_02",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1B_02",
+        "pointsAwarded": 0,
+        "checkedItems": []
+      },
+      "stu_001||1B_03": {
+        "responseId": "stu_001||1B_03",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1B_03",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_3_1"
+        ]
+      },
+      "stu_001||1B_04": {
+        "responseId": "stu_001||1B_04",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1B_04",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_4_2"
+        ]
+      },
+      "stu_001||1B_05": {
+        "responseId": "stu_001||1B_05",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1B_05",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "1B_5_1",
+          "1B_5_2",
+          "1B_5_3"
+        ]
+      },
+      "stu_001||1B_06": {
+        "responseId": "stu_001||1B_06",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "1B_06",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_6_1"
+        ]
+      },
+      "stu_001||P2_01": {
+        "responseId": "stu_001||P2_01",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "P2_01",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_2",
+          "P2_1_4"
+        ]
+      },
+      "stu_001||P2_02": {
+        "responseId": "stu_001||P2_02",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "P2_02",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_2_1",
+          "P2_2_4"
+        ]
+      },
+      "stu_001||P2_03": {
+        "responseId": "stu_001||P2_03",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "P2_03",
+        "pointsAwarded": 3
+      },
+      "stu_001||P2_04": {
+        "responseId": "stu_001||P2_04",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "P2_04",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_4_1",
+          "P2_4_3",
+          "P2_4_4"
+        ]
+      },
+      "stu_001||P2_05": {
+        "responseId": "stu_001||P2_05",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "P2_05",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_5_3",
+          "P2_5_4"
+        ]
+      },
+      "stu_001||P2_06": {
+        "responseId": "stu_001||P2_06",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "P2_06",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_6_4",
+          "P2_6_6",
+          "P2_6_7",
+          "P2_6_8"
+        ]
+      },
+      "stu_001||P2_07": {
+        "responseId": "stu_001||P2_07",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "P2_07",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "P2_7_2"
+        ]
+      },
+      "stu_001||P2_08": {
+        "responseId": "stu_001||P2_08",
+        "studentId": "stu_001",
+        "examId": "exam_001",
+        "qid": "P2_08",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_8_2",
+          "P2_8_6"
+        ]
+      },
+      "stu_002||1A_01": {
+        "responseId": "stu_002||1A_01",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_01",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_02": {
+        "responseId": "stu_002||1A_02",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_02",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_002||1A_03": {
+        "responseId": "stu_002||1A_03",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_03",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_04": {
+        "responseId": "stu_002||1A_04",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_04",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_002||1A_05": {
+        "responseId": "stu_002||1A_05",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_05",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_06": {
+        "responseId": "stu_002||1A_06",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_06",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_07": {
+        "responseId": "stu_002||1A_07",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_07",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_002||1A_08": {
+        "responseId": "stu_002||1A_08",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_08",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_09": {
+        "responseId": "stu_002||1A_09",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_09",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_10": {
+        "responseId": "stu_002||1A_10",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_10",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_002||1A_11": {
+        "responseId": "stu_002||1A_11",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_11",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_12": {
+        "responseId": "stu_002||1A_12",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_12",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_13": {
+        "responseId": "stu_002||1A_13",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_13",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_002||1A_14": {
+        "responseId": "stu_002||1A_14",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_14",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_15": {
+        "responseId": "stu_002||1A_15",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_15",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_002||1A_16": {
+        "responseId": "stu_002||1A_16",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_16",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_17": {
+        "responseId": "stu_002||1A_17",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_17",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_002||1A_18": {
+        "responseId": "stu_002||1A_18",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_18",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_19": {
+        "responseId": "stu_002||1A_19",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_19",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_20": {
+        "responseId": "stu_002||1A_20",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_20",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_002||1A_21": {
+        "responseId": "stu_002||1A_21",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_21",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_22": {
+        "responseId": "stu_002||1A_22",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_22",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_002||1A_23": {
+        "responseId": "stu_002||1A_23",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_23",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_002||1A_24": {
+        "responseId": "stu_002||1A_24",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_24",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_25": {
+        "responseId": "stu_002||1A_25",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_25",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_26": {
+        "responseId": "stu_002||1A_26",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_26",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_27": {
+        "responseId": "stu_002||1A_27",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_27",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_28": {
+        "responseId": "stu_002||1A_28",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_28",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_002||1A_29": {
+        "responseId": "stu_002||1A_29",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_29",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1A_30": {
+        "responseId": "stu_002||1A_30",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1A_30",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_002||1B_01": {
+        "responseId": "stu_002||1B_01",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1B_01",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "1B_1_2",
+          "1B_1_3",
+          "1B_1_4"
+        ]
+      },
+      "stu_002||1B_02": {
+        "responseId": "stu_002||1B_02",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1B_02",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_2_1",
+          "1B_2_2"
+        ]
+      },
+      "stu_002||1B_03": {
+        "responseId": "stu_002||1B_03",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1B_03",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_3_1",
+          "1B_3_2"
+        ]
+      },
+      "stu_002||1B_04": {
+        "responseId": "stu_002||1B_04",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1B_04",
+        "pointsAwarded": 0,
+        "checkedItems": []
+      },
+      "stu_002||1B_05": {
+        "responseId": "stu_002||1B_05",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1B_05",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "1B_5_1",
+          "1B_5_2",
+          "1B_5_3"
+        ]
+      },
+      "stu_002||1B_06": {
+        "responseId": "stu_002||1B_06",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "1B_06",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_6_1",
+          "1B_6_2"
+        ]
+      },
+      "stu_002||P2_01": {
+        "responseId": "stu_002||P2_01",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "P2_01",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_2",
+          "P2_1_3",
+          "P2_1_4"
+        ]
+      },
+      "stu_002||P2_02": {
+        "responseId": "stu_002||P2_02",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "P2_02",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_2_1",
+          "P2_2_2",
+          "P2_2_3",
+          "P2_2_4"
+        ]
+      },
+      "stu_002||P2_03": {
+        "responseId": "stu_002||P2_03",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "P2_03",
+        "pointsAwarded": 4
+      },
+      "stu_002||P2_04": {
+        "responseId": "stu_002||P2_04",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "P2_04",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_4_2",
+          "P2_4_5"
+        ]
+      },
+      "stu_002||P2_05": {
+        "responseId": "stu_002||P2_05",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "P2_05",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_5_1",
+          "P2_5_3",
+          "P2_5_4"
+        ]
+      },
+      "stu_002||P2_06": {
+        "responseId": "stu_002||P2_06",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "P2_06",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_6_2",
+          "P2_6_3",
+          "P2_6_5",
+          "P2_6_8"
+        ]
+      },
+      "stu_002||P2_07": {
+        "responseId": "stu_002||P2_07",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "P2_07",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_7_1",
+          "P2_7_2",
+          "P2_7_3",
+          "P2_7_4"
+        ]
+      },
+      "stu_002||P2_08": {
+        "responseId": "stu_002||P2_08",
+        "studentId": "stu_002",
+        "examId": "exam_001",
+        "qid": "P2_08",
+        "pointsAwarded": 5,
+        "checkedItems": [
+          "P2_8_1",
+          "P2_8_2",
+          "P2_8_4",
+          "P2_8_5",
+          "P2_8_6"
+        ]
+      },
+      "stu_003||1A_01": {
+        "responseId": "stu_003||1A_01",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_01",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_003||1A_02": {
+        "responseId": "stu_003||1A_02",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_02",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_003||1A_03": {
+        "responseId": "stu_003||1A_03",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_03",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_003||1A_04": {
+        "responseId": "stu_003||1A_04",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_04",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_003||1A_05": {
+        "responseId": "stu_003||1A_05",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_05",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_003||1A_06": {
+        "responseId": "stu_003||1A_06",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_06",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_003||1A_07": {
+        "responseId": "stu_003||1A_07",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_07",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_003||1A_08": {
+        "responseId": "stu_003||1A_08",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_08",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_003||1A_09": {
+        "responseId": "stu_003||1A_09",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_09",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_003||1A_10": {
+        "responseId": "stu_003||1A_10",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_10",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_003||1A_11": {
+        "responseId": "stu_003||1A_11",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_11",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_003||1A_12": {
+        "responseId": "stu_003||1A_12",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_12",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_003||1A_13": {
+        "responseId": "stu_003||1A_13",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_13",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_003||1A_14": {
+        "responseId": "stu_003||1A_14",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_14",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_003||1A_15": {
+        "responseId": "stu_003||1A_15",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_15",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_003||1A_16": {
+        "responseId": "stu_003||1A_16",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_16",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_003||1A_17": {
+        "responseId": "stu_003||1A_17",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_17",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_003||1A_18": {
+        "responseId": "stu_003||1A_18",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_18",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_003||1A_19": {
+        "responseId": "stu_003||1A_19",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_19",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_003||1A_20": {
+        "responseId": "stu_003||1A_20",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_20",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_003||1A_21": {
+        "responseId": "stu_003||1A_21",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_21",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_003||1A_22": {
+        "responseId": "stu_003||1A_22",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_22",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_003||1A_23": {
+        "responseId": "stu_003||1A_23",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_23",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_003||1A_24": {
+        "responseId": "stu_003||1A_24",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_24",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_003||1A_25": {
+        "responseId": "stu_003||1A_25",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_25",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_003||1A_26": {
+        "responseId": "stu_003||1A_26",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_26",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_003||1A_27": {
+        "responseId": "stu_003||1A_27",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_27",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_003||1A_28": {
+        "responseId": "stu_003||1A_28",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_28",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_003||1A_29": {
+        "responseId": "stu_003||1A_29",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_29",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_003||1A_30": {
+        "responseId": "stu_003||1A_30",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1A_30",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_003||1B_01": {
+        "responseId": "stu_003||1B_01",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1B_01",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_1_3",
+          "1B_1_4"
+        ]
+      },
+      "stu_003||1B_02": {
+        "responseId": "stu_003||1B_02",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1B_02",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_2_1",
+          "1B_2_2"
+        ]
+      },
+      "stu_003||1B_03": {
+        "responseId": "stu_003||1B_03",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1B_03",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_3_1"
+        ]
+      },
+      "stu_003||1B_04": {
+        "responseId": "stu_003||1B_04",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1B_04",
+        "pointsAwarded": 0,
+        "checkedItems": []
+      },
+      "stu_003||1B_05": {
+        "responseId": "stu_003||1B_05",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1B_05",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "1B_5_1",
+          "1B_5_2",
+          "1B_5_3"
+        ]
+      },
+      "stu_003||1B_06": {
+        "responseId": "stu_003||1B_06",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "1B_06",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_6_1"
+        ]
+      },
+      "stu_003||P2_01": {
+        "responseId": "stu_003||P2_01",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "P2_01",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_3"
+        ]
+      },
+      "stu_003||P2_02": {
+        "responseId": "stu_003||P2_02",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "P2_02",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "P2_2_3"
+        ]
+      },
+      "stu_003||P2_03": {
+        "responseId": "stu_003||P2_03",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "P2_03",
+        "pointsAwarded": 2
+      },
+      "stu_003||P2_04": {
+        "responseId": "stu_003||P2_04",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "P2_04",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_4_1",
+          "P2_4_2",
+          "P2_4_4"
+        ]
+      },
+      "stu_003||P2_05": {
+        "responseId": "stu_003||P2_05",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "P2_05",
+        "pointsAwarded": 0,
+        "checkedItems": []
+      },
+      "stu_003||P2_06": {
+        "responseId": "stu_003||P2_06",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "P2_06",
+        "pointsAwarded": 0,
+        "checkedItems": []
+      },
+      "stu_003||P2_07": {
+        "responseId": "stu_003||P2_07",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "P2_07",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "P2_7_4"
+        ]
+      },
+      "stu_003||P2_08": {
+        "responseId": "stu_003||P2_08",
+        "studentId": "stu_003",
+        "examId": "exam_001",
+        "qid": "P2_08",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_8_2",
+          "P2_8_6"
+        ]
+      },
+      "stu_004||1A_01": {
+        "responseId": "stu_004||1A_01",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_01",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_004||1A_02": {
+        "responseId": "stu_004||1A_02",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_02",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_004||1A_03": {
+        "responseId": "stu_004||1A_03",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_03",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_04": {
+        "responseId": "stu_004||1A_04",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_04",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_05": {
+        "responseId": "stu_004||1A_05",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_05",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_004||1A_06": {
+        "responseId": "stu_004||1A_06",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_06",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_004||1A_07": {
+        "responseId": "stu_004||1A_07",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_07",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_08": {
+        "responseId": "stu_004||1A_08",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_08",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_004||1A_09": {
+        "responseId": "stu_004||1A_09",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_09",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_10": {
+        "responseId": "stu_004||1A_10",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_10",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_004||1A_11": {
+        "responseId": "stu_004||1A_11",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_11",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_004||1A_12": {
+        "responseId": "stu_004||1A_12",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_12",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_004||1A_13": {
+        "responseId": "stu_004||1A_13",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_13",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_004||1A_14": {
+        "responseId": "stu_004||1A_14",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_14",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_004||1A_15": {
+        "responseId": "stu_004||1A_15",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_15",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_004||1A_16": {
+        "responseId": "stu_004||1A_16",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_16",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_004||1A_17": {
+        "responseId": "stu_004||1A_17",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_17",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_004||1A_18": {
+        "responseId": "stu_004||1A_18",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_18",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_19": {
+        "responseId": "stu_004||1A_19",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_19",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_20": {
+        "responseId": "stu_004||1A_20",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_20",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_21": {
+        "responseId": "stu_004||1A_21",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_21",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_004||1A_22": {
+        "responseId": "stu_004||1A_22",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_22",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_004||1A_23": {
+        "responseId": "stu_004||1A_23",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_23",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_24": {
+        "responseId": "stu_004||1A_24",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_24",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_004||1A_25": {
+        "responseId": "stu_004||1A_25",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_25",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_004||1A_26": {
+        "responseId": "stu_004||1A_26",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_26",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_27": {
+        "responseId": "stu_004||1A_27",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_27",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_28": {
+        "responseId": "stu_004||1A_28",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_28",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_004||1A_29": {
+        "responseId": "stu_004||1A_29",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_29",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_004||1A_30": {
+        "responseId": "stu_004||1A_30",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1A_30",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_004||1B_01": {
+        "responseId": "stu_004||1B_01",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1B_01",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "1B_1_1",
+          "1B_1_3",
+          "1B_1_4"
+        ]
+      },
+      "stu_004||1B_02": {
+        "responseId": "stu_004||1B_02",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1B_02",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_2_2"
+        ]
+      },
+      "stu_004||1B_03": {
+        "responseId": "stu_004||1B_03",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1B_03",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_3_2"
+        ]
+      },
+      "stu_004||1B_04": {
+        "responseId": "stu_004||1B_04",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1B_04",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_4_5"
+        ]
+      },
+      "stu_004||1B_05": {
+        "responseId": "stu_004||1B_05",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1B_05",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_5_2",
+          "1B_5_3"
+        ]
+      },
+      "stu_004||1B_06": {
+        "responseId": "stu_004||1B_06",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "1B_06",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_6_1",
+          "1B_6_2"
+        ]
+      },
+      "stu_004||P2_01": {
+        "responseId": "stu_004||P2_01",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "P2_01",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_2",
+          "P2_1_3",
+          "P2_1_4"
+        ]
+      },
+      "stu_004||P2_02": {
+        "responseId": "stu_004||P2_02",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "P2_02",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_2_1",
+          "P2_2_2",
+          "P2_2_3",
+          "P2_2_4"
+        ]
+      },
+      "stu_004||P2_03": {
+        "responseId": "stu_004||P2_03",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "P2_03",
+        "pointsAwarded": 3
+      },
+      "stu_004||P2_04": {
+        "responseId": "stu_004||P2_04",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "P2_04",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_4_1",
+          "P2_4_2",
+          "P2_4_3"
+        ]
+      },
+      "stu_004||P2_05": {
+        "responseId": "stu_004||P2_05",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "P2_05",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_5_1",
+          "P2_5_2",
+          "P2_5_3",
+          "P2_5_4"
+        ]
+      },
+      "stu_004||P2_06": {
+        "responseId": "stu_004||P2_06",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "P2_06",
+        "pointsAwarded": 5,
+        "checkedItems": [
+          "P2_6_1",
+          "P2_6_3",
+          "P2_6_4",
+          "P2_6_5",
+          "P2_6_6"
+        ]
+      },
+      "stu_004||P2_07": {
+        "responseId": "stu_004||P2_07",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "P2_07",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "P2_7_2"
+        ]
+      },
+      "stu_004||P2_08": {
+        "responseId": "stu_004||P2_08",
+        "studentId": "stu_004",
+        "examId": "exam_001",
+        "qid": "P2_08",
+        "pointsAwarded": 5,
+        "checkedItems": [
+          "P2_8_1",
+          "P2_8_2",
+          "P2_8_4",
+          "P2_8_5",
+          "P2_8_6"
+        ]
+      },
+      "stu_005||1A_01": {
+        "responseId": "stu_005||1A_01",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_01",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_02": {
+        "responseId": "stu_005||1A_02",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_02",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_005||1A_03": {
+        "responseId": "stu_005||1A_03",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_03",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_04": {
+        "responseId": "stu_005||1A_04",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_04",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_005||1A_05": {
+        "responseId": "stu_005||1A_05",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_05",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_06": {
+        "responseId": "stu_005||1A_06",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_06",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_005||1A_07": {
+        "responseId": "stu_005||1A_07",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_07",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_005||1A_08": {
+        "responseId": "stu_005||1A_08",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_08",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_09": {
+        "responseId": "stu_005||1A_09",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_09",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_10": {
+        "responseId": "stu_005||1A_10",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_10",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_11": {
+        "responseId": "stu_005||1A_11",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_11",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_005||1A_12": {
+        "responseId": "stu_005||1A_12",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_12",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_13": {
+        "responseId": "stu_005||1A_13",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_13",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_005||1A_14": {
+        "responseId": "stu_005||1A_14",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_14",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_15": {
+        "responseId": "stu_005||1A_15",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_15",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_005||1A_16": {
+        "responseId": "stu_005||1A_16",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_16",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_17": {
+        "responseId": "stu_005||1A_17",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_17",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_005||1A_18": {
+        "responseId": "stu_005||1A_18",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_18",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_19": {
+        "responseId": "stu_005||1A_19",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_19",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_20": {
+        "responseId": "stu_005||1A_20",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_20",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_21": {
+        "responseId": "stu_005||1A_21",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_21",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_005||1A_22": {
+        "responseId": "stu_005||1A_22",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_22",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_005||1A_23": {
+        "responseId": "stu_005||1A_23",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_23",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_24": {
+        "responseId": "stu_005||1A_24",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_24",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_005||1A_25": {
+        "responseId": "stu_005||1A_25",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_25",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_26": {
+        "responseId": "stu_005||1A_26",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_26",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_27": {
+        "responseId": "stu_005||1A_27",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_27",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_28": {
+        "responseId": "stu_005||1A_28",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_28",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_005||1A_29": {
+        "responseId": "stu_005||1A_29",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_29",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_005||1A_30": {
+        "responseId": "stu_005||1A_30",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1A_30",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_005||1B_01": {
+        "responseId": "stu_005||1B_01",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1B_01",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "1B_1_1",
+          "1B_1_2",
+          "1B_1_3",
+          "1B_1_4"
+        ]
+      },
+      "stu_005||1B_02": {
+        "responseId": "stu_005||1B_02",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1B_02",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_2_1",
+          "1B_2_2"
+        ]
+      },
+      "stu_005||1B_03": {
+        "responseId": "stu_005||1B_03",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1B_03",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_3_1",
+          "1B_3_2"
+        ]
+      },
+      "stu_005||1B_04": {
+        "responseId": "stu_005||1B_04",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1B_04",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_4_3"
+        ]
+      },
+      "stu_005||1B_05": {
+        "responseId": "stu_005||1B_05",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1B_05",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_5_2"
+        ]
+      },
+      "stu_005||1B_06": {
+        "responseId": "stu_005||1B_06",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "1B_06",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_6_1",
+          "1B_6_2"
+        ]
+      },
+      "stu_005||P2_01": {
+        "responseId": "stu_005||P2_01",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "P2_01",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_2",
+          "P2_1_3",
+          "P2_1_4"
+        ]
+      },
+      "stu_005||P2_02": {
+        "responseId": "stu_005||P2_02",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "P2_02",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_2_1",
+          "P2_2_2",
+          "P2_2_3",
+          "P2_2_4"
+        ]
+      },
+      "stu_005||P2_03": {
+        "responseId": "stu_005||P2_03",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "P2_03",
+        "pointsAwarded": 4
+      },
+      "stu_005||P2_04": {
+        "responseId": "stu_005||P2_04",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "P2_04",
+        "pointsAwarded": 5,
+        "checkedItems": [
+          "P2_4_1",
+          "P2_4_2",
+          "P2_4_3",
+          "P2_4_4",
+          "P2_4_5"
+        ]
+      },
+      "stu_005||P2_05": {
+        "responseId": "stu_005||P2_05",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "P2_05",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_5_1",
+          "P2_5_3",
+          "P2_5_4"
+        ]
+      },
+      "stu_005||P2_06": {
+        "responseId": "stu_005||P2_06",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "P2_06",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_6_2",
+          "P2_6_3",
+          "P2_6_5",
+          "P2_6_7"
+        ]
+      },
+      "stu_005||P2_07": {
+        "responseId": "stu_005||P2_07",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "P2_07",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_7_1",
+          "P2_7_2",
+          "P2_7_3",
+          "P2_7_4"
+        ]
+      },
+      "stu_005||P2_08": {
+        "responseId": "stu_005||P2_08",
+        "studentId": "stu_005",
+        "examId": "exam_001",
+        "qid": "P2_08",
+        "pointsAwarded": 5,
+        "checkedItems": [
+          "P2_8_1",
+          "P2_8_2",
+          "P2_8_3",
+          "P2_8_5",
+          "P2_8_6"
+        ]
+      },
+      "stu_006||1A_01": {
+        "responseId": "stu_006||1A_01",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_01",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_02": {
+        "responseId": "stu_006||1A_02",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_02",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_006||1A_03": {
+        "responseId": "stu_006||1A_03",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_03",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_04": {
+        "responseId": "stu_006||1A_04",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_04",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_006||1A_05": {
+        "responseId": "stu_006||1A_05",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_05",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_06": {
+        "responseId": "stu_006||1A_06",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_06",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_07": {
+        "responseId": "stu_006||1A_07",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_07",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_006||1A_08": {
+        "responseId": "stu_006||1A_08",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_08",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_09": {
+        "responseId": "stu_006||1A_09",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_09",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_10": {
+        "responseId": "stu_006||1A_10",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_10",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_11": {
+        "responseId": "stu_006||1A_11",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_11",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_006||1A_12": {
+        "responseId": "stu_006||1A_12",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_12",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_13": {
+        "responseId": "stu_006||1A_13",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_13",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_006||1A_14": {
+        "responseId": "stu_006||1A_14",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_14",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_15": {
+        "responseId": "stu_006||1A_15",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_15",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_006||1A_16": {
+        "responseId": "stu_006||1A_16",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_16",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_17": {
+        "responseId": "stu_006||1A_17",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_17",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_006||1A_18": {
+        "responseId": "stu_006||1A_18",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_18",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_19": {
+        "responseId": "stu_006||1A_19",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_19",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_20": {
+        "responseId": "stu_006||1A_20",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_20",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_006||1A_21": {
+        "responseId": "stu_006||1A_21",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_21",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_22": {
+        "responseId": "stu_006||1A_22",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_22",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_006||1A_23": {
+        "responseId": "stu_006||1A_23",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_23",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_24": {
+        "responseId": "stu_006||1A_24",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_24",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_006||1A_25": {
+        "responseId": "stu_006||1A_25",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_25",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_26": {
+        "responseId": "stu_006||1A_26",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_26",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_27": {
+        "responseId": "stu_006||1A_27",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_27",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_28": {
+        "responseId": "stu_006||1A_28",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_28",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_006||1A_29": {
+        "responseId": "stu_006||1A_29",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_29",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1A_30": {
+        "responseId": "stu_006||1A_30",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1A_30",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_006||1B_01": {
+        "responseId": "stu_006||1B_01",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1B_01",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "1B_1_1",
+          "1B_1_3",
+          "1B_1_4"
+        ]
+      },
+      "stu_006||1B_02": {
+        "responseId": "stu_006||1B_02",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1B_02",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_2_1",
+          "1B_2_2"
+        ]
+      },
+      "stu_006||1B_03": {
+        "responseId": "stu_006||1B_03",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1B_03",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_3_1",
+          "1B_3_2"
+        ]
+      },
+      "stu_006||1B_04": {
+        "responseId": "stu_006||1B_04",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1B_04",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_4_1"
+        ]
+      },
+      "stu_006||1B_05": {
+        "responseId": "stu_006||1B_05",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1B_05",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "1B_5_1",
+          "1B_5_2",
+          "1B_5_3"
+        ]
+      },
+      "stu_006||1B_06": {
+        "responseId": "stu_006||1B_06",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "1B_06",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_6_1",
+          "1B_6_2"
+        ]
+      },
+      "stu_006||P2_01": {
+        "responseId": "stu_006||P2_01",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "P2_01",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_2",
+          "P2_1_3",
+          "P2_1_4"
+        ]
+      },
+      "stu_006||P2_02": {
+        "responseId": "stu_006||P2_02",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "P2_02",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_2_1",
+          "P2_2_2",
+          "P2_2_3",
+          "P2_2_4"
+        ]
+      },
+      "stu_006||P2_03": {
+        "responseId": "stu_006||P2_03",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "P2_03",
+        "pointsAwarded": 4
+      },
+      "stu_006||P2_04": {
+        "responseId": "stu_006||P2_04",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "P2_04",
+        "pointsAwarded": 5,
+        "checkedItems": [
+          "P2_4_1",
+          "P2_4_2",
+          "P2_4_3",
+          "P2_4_4",
+          "P2_4_5"
+        ]
+      },
+      "stu_006||P2_05": {
+        "responseId": "stu_006||P2_05",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "P2_05",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_5_1",
+          "P2_5_2",
+          "P2_5_3",
+          "P2_5_4"
+        ]
+      },
+      "stu_006||P2_06": {
+        "responseId": "stu_006||P2_06",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "P2_06",
+        "pointsAwarded": 7,
+        "checkedItems": [
+          "P2_6_2",
+          "P2_6_3",
+          "P2_6_4",
+          "P2_6_5",
+          "P2_6_6",
+          "P2_6_7",
+          "P2_6_8"
+        ]
+      },
+      "stu_006||P2_07": {
+        "responseId": "stu_006||P2_07",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "P2_07",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_7_1",
+          "P2_7_2",
+          "P2_7_3",
+          "P2_7_4"
+        ]
+      },
+      "stu_006||P2_08": {
+        "responseId": "stu_006||P2_08",
+        "studentId": "stu_006",
+        "examId": "exam_001",
+        "qid": "P2_08",
+        "pointsAwarded": 6,
+        "checkedItems": [
+          "P2_8_1",
+          "P2_8_2",
+          "P2_8_3",
+          "P2_8_4",
+          "P2_8_5",
+          "P2_8_6"
+        ]
+      },
+      "stu_007||1A_01": {
+        "responseId": "stu_007||1A_01",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_01",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_02": {
+        "responseId": "stu_007||1A_02",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_02",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_007||1A_03": {
+        "responseId": "stu_007||1A_03",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_03",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_007||1A_04": {
+        "responseId": "stu_007||1A_04",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_04",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_007||1A_05": {
+        "responseId": "stu_007||1A_05",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_05",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_06": {
+        "responseId": "stu_007||1A_06",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_06",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_07": {
+        "responseId": "stu_007||1A_07",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_07",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_007||1A_08": {
+        "responseId": "stu_007||1A_08",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_08",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_09": {
+        "responseId": "stu_007||1A_09",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_09",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_007||1A_10": {
+        "responseId": "stu_007||1A_10",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_10",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_11": {
+        "responseId": "stu_007||1A_11",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_11",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_007||1A_12": {
+        "responseId": "stu_007||1A_12",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_12",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_13": {
+        "responseId": "stu_007||1A_13",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_13",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_007||1A_14": {
+        "responseId": "stu_007||1A_14",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_14",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_007||1A_15": {
+        "responseId": "stu_007||1A_15",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_15",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_007||1A_16": {
+        "responseId": "stu_007||1A_16",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_16",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_007||1A_17": {
+        "responseId": "stu_007||1A_17",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_17",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_007||1A_18": {
+        "responseId": "stu_007||1A_18",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_18",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_007||1A_19": {
+        "responseId": "stu_007||1A_19",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_19",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_20": {
+        "responseId": "stu_007||1A_20",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_20",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_007||1A_21": {
+        "responseId": "stu_007||1A_21",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_21",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_22": {
+        "responseId": "stu_007||1A_22",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_22",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_23": {
+        "responseId": "stu_007||1A_23",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_23",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_24": {
+        "responseId": "stu_007||1A_24",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_24",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_25": {
+        "responseId": "stu_007||1A_25",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_25",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_26": {
+        "responseId": "stu_007||1A_26",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_26",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_007||1A_27": {
+        "responseId": "stu_007||1A_27",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_27",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_007||1A_28": {
+        "responseId": "stu_007||1A_28",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_28",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_007||1A_29": {
+        "responseId": "stu_007||1A_29",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_29",
+        "pointsAwarded": 0,
+        "mcqChoice": "A"
+      },
+      "stu_007||1A_30": {
+        "responseId": "stu_007||1A_30",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1A_30",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_007||1B_01": {
+        "responseId": "stu_007||1B_01",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1B_01",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_1_3"
+        ]
+      },
+      "stu_007||1B_02": {
+        "responseId": "stu_007||1B_02",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1B_02",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_2_1"
+        ]
+      },
+      "stu_007||1B_03": {
+        "responseId": "stu_007||1B_03",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1B_03",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_3_1",
+          "1B_3_2"
+        ]
+      },
+      "stu_007||1B_04": {
+        "responseId": "stu_007||1B_04",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1B_04",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_4_4"
+        ]
+      },
+      "stu_007||1B_05": {
+        "responseId": "stu_007||1B_05",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1B_05",
+        "pointsAwarded": 0,
+        "checkedItems": []
+      },
+      "stu_007||1B_06": {
+        "responseId": "stu_007||1B_06",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "1B_06",
+        "pointsAwarded": 0,
+        "checkedItems": []
+      },
+      "stu_007||P2_01": {
+        "responseId": "stu_007||P2_01",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "P2_01",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_2"
+        ]
+      },
+      "stu_007||P2_02": {
+        "responseId": "stu_007||P2_02",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "P2_02",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_2_2",
+          "P2_2_3"
+        ]
+      },
+      "stu_007||P2_03": {
+        "responseId": "stu_007||P2_03",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "P2_03",
+        "pointsAwarded": 3
+      },
+      "stu_007||P2_04": {
+        "responseId": "stu_007||P2_04",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "P2_04",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_4_1",
+          "P2_4_2",
+          "P2_4_4"
+        ]
+      },
+      "stu_007||P2_05": {
+        "responseId": "stu_007||P2_05",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "P2_05",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_5_1",
+          "P2_5_2",
+          "P2_5_3",
+          "P2_5_4"
+        ]
+      },
+      "stu_007||P2_06": {
+        "responseId": "stu_007||P2_06",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "P2_06",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_6_3",
+          "P2_6_4",
+          "P2_6_5",
+          "P2_6_8"
+        ]
+      },
+      "stu_007||P2_07": {
+        "responseId": "stu_007||P2_07",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "P2_07",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_7_1",
+          "P2_7_3",
+          "P2_7_4"
+        ]
+      },
+      "stu_007||P2_08": {
+        "responseId": "stu_007||P2_08",
+        "studentId": "stu_007",
+        "examId": "exam_001",
+        "qid": "P2_08",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_8_2",
+          "P2_8_3",
+          "P2_8_4",
+          "P2_8_6"
+        ]
+      },
+      "stu_008||1A_01": {
+        "responseId": "stu_008||1A_01",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_01",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_02": {
+        "responseId": "stu_008||1A_02",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_02",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_008||1A_03": {
+        "responseId": "stu_008||1A_03",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_03",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_04": {
+        "responseId": "stu_008||1A_04",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_04",
+        "pointsAwarded": 1,
+        "mcqChoice": "A"
+      },
+      "stu_008||1A_05": {
+        "responseId": "stu_008||1A_05",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_05",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_06": {
+        "responseId": "stu_008||1A_06",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_06",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_07": {
+        "responseId": "stu_008||1A_07",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_07",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_08": {
+        "responseId": "stu_008||1A_08",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_08",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_09": {
+        "responseId": "stu_008||1A_09",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_09",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_10": {
+        "responseId": "stu_008||1A_10",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_10",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_11": {
+        "responseId": "stu_008||1A_11",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_11",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_008||1A_12": {
+        "responseId": "stu_008||1A_12",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_12",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_13": {
+        "responseId": "stu_008||1A_13",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_13",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_008||1A_14": {
+        "responseId": "stu_008||1A_14",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_14",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_008||1A_15": {
+        "responseId": "stu_008||1A_15",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_15",
+        "pointsAwarded": 1,
+        "mcqChoice": "C"
+      },
+      "stu_008||1A_16": {
+        "responseId": "stu_008||1A_16",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_16",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_17": {
+        "responseId": "stu_008||1A_17",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_17",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_008||1A_18": {
+        "responseId": "stu_008||1A_18",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_18",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_19": {
+        "responseId": "stu_008||1A_19",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_19",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_20": {
+        "responseId": "stu_008||1A_20",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_20",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_21": {
+        "responseId": "stu_008||1A_21",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_21",
+        "pointsAwarded": 0,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_22": {
+        "responseId": "stu_008||1A_22",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_22",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_23": {
+        "responseId": "stu_008||1A_23",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_23",
+        "pointsAwarded": 0,
+        "mcqChoice": "C"
+      },
+      "stu_008||1A_24": {
+        "responseId": "stu_008||1A_24",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_24",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_25": {
+        "responseId": "stu_008||1A_25",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_25",
+        "pointsAwarded": 0,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_26": {
+        "responseId": "stu_008||1A_26",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_26",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_27": {
+        "responseId": "stu_008||1A_27",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_27",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_28": {
+        "responseId": "stu_008||1A_28",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_28",
+        "pointsAwarded": 1,
+        "mcqChoice": "B"
+      },
+      "stu_008||1A_29": {
+        "responseId": "stu_008||1A_29",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_29",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1A_30": {
+        "responseId": "stu_008||1A_30",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1A_30",
+        "pointsAwarded": 1,
+        "mcqChoice": "D"
+      },
+      "stu_008||1B_01": {
+        "responseId": "stu_008||1B_01",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1B_01",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_1_2",
+          "1B_1_4"
+        ]
+      },
+      "stu_008||1B_02": {
+        "responseId": "stu_008||1B_02",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1B_02",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_2_1",
+          "1B_2_2"
+        ]
+      },
+      "stu_008||1B_03": {
+        "responseId": "stu_008||1B_03",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1B_03",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_3_1",
+          "1B_3_2"
+        ]
+      },
+      "stu_008||1B_04": {
+        "responseId": "stu_008||1B_04",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1B_04",
+        "pointsAwarded": 0,
+        "checkedItems": []
+      },
+      "stu_008||1B_05": {
+        "responseId": "stu_008||1B_05",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1B_05",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "1B_5_1",
+          "1B_5_2"
+        ]
+      },
+      "stu_008||1B_06": {
+        "responseId": "stu_008||1B_06",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "1B_06",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "1B_6_2"
+        ]
+      },
+      "stu_008||P2_01": {
+        "responseId": "stu_008||P2_01",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "P2_01",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_2",
+          "P2_1_4"
+        ]
+      },
+      "stu_008||P2_02": {
+        "responseId": "stu_008||P2_02",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "P2_02",
+        "pointsAwarded": 3,
+        "checkedItems": [
+          "P2_2_1",
+          "P2_2_3",
+          "P2_2_4"
+        ]
+      },
+      "stu_008||P2_03": {
+        "responseId": "stu_008||P2_03",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "P2_03",
+        "pointsAwarded": 3
+      },
+      "stu_008||P2_04": {
+        "responseId": "stu_008||P2_04",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "P2_04",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_4_1",
+          "P2_4_5"
+        ]
+      },
+      "stu_008||P2_05": {
+        "responseId": "stu_008||P2_05",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "P2_05",
+        "pointsAwarded": 2,
+        "checkedItems": [
+          "P2_5_2",
+          "P2_5_3"
+        ]
+      },
+      "stu_008||P2_06": {
+        "responseId": "stu_008||P2_06",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "P2_06",
+        "pointsAwarded": 5,
+        "checkedItems": [
+          "P2_6_1",
+          "P2_6_3",
+          "P2_6_5",
+          "P2_6_6",
+          "P2_6_7"
+        ]
+      },
+      "stu_008||P2_07": {
+        "responseId": "stu_008||P2_07",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "P2_07",
+        "pointsAwarded": 1,
+        "checkedItems": [
+          "P2_7_3"
+        ]
+      },
+      "stu_008||P2_08": {
+        "responseId": "stu_008||P2_08",
+        "studentId": "stu_008",
+        "examId": "exam_001",
+        "qid": "P2_08",
+        "pointsAwarded": 4,
+        "checkedItems": [
+          "P2_8_1",
+          "P2_8_4",
+          "P2_8_5",
+          "P2_8_6"
+        ]
+      }
+    }
+  },
+  "studentView": {
+    "student": {
+      "id": "stu_005",
+      "name": "Emeka Okafor",
+      "email": "emeka.okafor@school.edu",
+      "classSection": "10B-HL",
+      "level": "HL"
+    },
+    "exam": {
+      "id": "exam_001",
+      "name": "Term 2 Assessment — Reactivity & Structure",
+      "level": "SL",
+      "term": "Term 2",
+      "date": "2026-02-14",
+      "status": "visible",
+      "papersIncluded": [
+        "1A",
+        "1B",
+        "2"
+      ]
+    },
+    "score": {
+      "studentId": "stu_005",
+      "studentName": "Emeka Okafor",
+      "level": "HL",
+      "examId": "exam_001",
+      "totalPoints": 72,
+      "maxPoints": 84,
+      "kuPoints": 34,
+      "kuMax": 35,
+      "ttPoints": 22,
+      "ttMax": 31,
+      "cPoints": 16,
+      "cMax": 18,
+      "paper1aEarned": 26,
+      "paper1aMax": 30,
+      "paper1bEarned": 13,
+      "paper1bMax": 15,
+      "paper2Earned": 33,
+      "paper2Max": 39,
+      "ibGrade": 7,
+      "overallBand": 7,
+      "kuBand": 8,
+      "ttBand": 6,
+      "cBand": 8
+    },
+    "topicAnalysis": {
+      "studentId": "stu_005",
+      "topics": [
+        {
+          "topicCode": "S1.2",
+          "topicName": "The nuclear atom",
+          "pointsEarned": 8,
+          "pointsPossible": 9,
+          "percentage": 89,
+          "questionCount": 5
+        },
+        {
+          "topicCode": "S3.1",
+          "topicName": "The periodic table",
+          "pointsEarned": 5,
+          "pointsPossible": 5,
+          "percentage": 100,
+          "questionCount": 2
+        },
+        {
+          "topicCode": "S3.2",
+          "topicName": "Functional groups",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "R3.1",
+          "topicName": "Proton transfer reactions",
+          "pointsEarned": 5,
+          "pointsPossible": 5,
+          "percentage": 100,
+          "questionCount": 2
+        },
+        {
+          "topicCode": "S1.3",
+          "topicName": "Electron configurations",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "S1.1",
+          "topicName": "Introduction to the particulate nature of matter",
+          "pointsEarned": 2,
+          "pointsPossible": 2,
+          "percentage": 100,
+          "questionCount": 2
+        },
+        {
+          "topicCode": "R2.3",
+          "topicName": "How far? Equilibrium",
+          "pointsEarned": 8,
+          "pointsPossible": 8,
+          "percentage": 100,
+          "questionCount": 4
+        },
+        {
+          "topicCode": "R3.3",
+          "topicName": "Electron sharing reactions",
+          "pointsEarned": 4,
+          "pointsPossible": 5,
+          "percentage": 80,
+          "questionCount": 2
+        },
+        {
+          "topicCode": "S2.3",
+          "topicName": "The metallic model",
+          "pointsEarned": 5,
+          "pointsPossible": 5,
+          "percentage": 100,
+          "questionCount": 5
+        },
+        {
+          "topicCode": "S2.4",
+          "topicName": "From models to materials",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "R2.2",
+          "topicName": "How fast? rates of reaction",
+          "pointsEarned": 6,
+          "pointsPossible": 7,
+          "percentage": 86,
+          "questionCount": 3
+        },
+        {
+          "topicCode": "R3.2",
+          "topicName": "Electron transfer reactions",
+          "pointsEarned": 3,
+          "pointsPossible": 6,
+          "percentage": 50,
+          "questionCount": 4
+        },
+        {
+          "topicCode": "R2.1",
+          "topicName": "Amounts in chemical reactions",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "S1.5",
+          "topicName": "Ideal gases",
+          "pointsEarned": 4,
+          "pointsPossible": 5,
+          "percentage": 80,
+          "questionCount": 4
+        },
+        {
+          "topicCode": "R1.2",
+          "topicName": "Energy cycles in reactions",
+          "pointsEarned": 4,
+          "pointsPossible": 4,
+          "percentage": 100,
+          "questionCount": 3
+        },
+        {
+          "topicCode": "R1.3",
+          "topicName": "Energy from fuels",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "R1.1",
+          "topicName": "Measuring enthalpy changes",
+          "pointsEarned": 4,
+          "pointsPossible": 4,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "S2.2",
+          "topicName": "The covalent model",
+          "pointsEarned": 4,
+          "pointsPossible": 8,
+          "percentage": 50,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "S2.1",
+          "topicName": "The ionic model",
+          "pointsEarned": 5,
+          "pointsPossible": 6,
+          "percentage": 83,
+          "questionCount": 1
+        }
+      ],
+      "strongTopics": [
+        {
+          "topicCode": "S1.2",
+          "topicName": "The nuclear atom",
+          "pointsEarned": 8,
+          "pointsPossible": 9,
+          "percentage": 89,
+          "questionCount": 5
+        },
+        {
+          "topicCode": "S3.1",
+          "topicName": "The periodic table",
+          "pointsEarned": 5,
+          "pointsPossible": 5,
+          "percentage": 100,
+          "questionCount": 2
+        },
+        {
+          "topicCode": "S3.2",
+          "topicName": "Functional groups",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "R3.1",
+          "topicName": "Proton transfer reactions",
+          "pointsEarned": 5,
+          "pointsPossible": 5,
+          "percentage": 100,
+          "questionCount": 2
+        },
+        {
+          "topicCode": "S1.3",
+          "topicName": "Electron configurations",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "S1.1",
+          "topicName": "Introduction to the particulate nature of matter",
+          "pointsEarned": 2,
+          "pointsPossible": 2,
+          "percentage": 100,
+          "questionCount": 2
+        },
+        {
+          "topicCode": "R2.3",
+          "topicName": "How far? Equilibrium",
+          "pointsEarned": 8,
+          "pointsPossible": 8,
+          "percentage": 100,
+          "questionCount": 4
+        },
+        {
+          "topicCode": "R3.3",
+          "topicName": "Electron sharing reactions",
+          "pointsEarned": 4,
+          "pointsPossible": 5,
+          "percentage": 80,
+          "questionCount": 2
+        },
+        {
+          "topicCode": "S2.3",
+          "topicName": "The metallic model",
+          "pointsEarned": 5,
+          "pointsPossible": 5,
+          "percentage": 100,
+          "questionCount": 5
+        },
+        {
+          "topicCode": "S2.4",
+          "topicName": "From models to materials",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "R2.2",
+          "topicName": "How fast? rates of reaction",
+          "pointsEarned": 6,
+          "pointsPossible": 7,
+          "percentage": 86,
+          "questionCount": 3
+        },
+        {
+          "topicCode": "R2.1",
+          "topicName": "Amounts in chemical reactions",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "S1.5",
+          "topicName": "Ideal gases",
+          "pointsEarned": 4,
+          "pointsPossible": 5,
+          "percentage": 80,
+          "questionCount": 4
+        },
+        {
+          "topicCode": "R1.2",
+          "topicName": "Energy cycles in reactions",
+          "pointsEarned": 4,
+          "pointsPossible": 4,
+          "percentage": 100,
+          "questionCount": 3
+        },
+        {
+          "topicCode": "R1.3",
+          "topicName": "Energy from fuels",
+          "pointsEarned": 1,
+          "pointsPossible": 1,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "R1.1",
+          "topicName": "Measuring enthalpy changes",
+          "pointsEarned": 4,
+          "pointsPossible": 4,
+          "percentage": 100,
+          "questionCount": 1
+        },
+        {
+          "topicCode": "S2.1",
+          "topicName": "The ionic model",
+          "pointsEarned": 5,
+          "pointsPossible": 6,
+          "percentage": 83,
+          "questionCount": 1
+        }
+      ],
+      "weakTopics": []
+    },
+    "paper1aResults": [
+      {
+        "qid": "1A_01",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_02",
+        "studentChoice": "A",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_03",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_04",
+        "studentChoice": "A",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_05",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_06",
+        "studentChoice": "C",
+        "isCorrect": false,
+        "pointsAwarded": 0
+      },
+      {
+        "qid": "1A_07",
+        "studentChoice": "C",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_08",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_09",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_10",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_11",
+        "studentChoice": "C",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_12",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_13",
+        "studentChoice": "C",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_14",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_15",
+        "studentChoice": "C",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_16",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_17",
+        "studentChoice": "A",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_18",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_19",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_20",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_21",
+        "studentChoice": "C",
+        "isCorrect": false,
+        "pointsAwarded": 0
+      },
+      {
+        "qid": "1A_22",
+        "studentChoice": "A",
+        "isCorrect": false,
+        "pointsAwarded": 0
+      },
+      {
+        "qid": "1A_23",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_24",
+        "studentChoice": "C",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_25",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_26",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_27",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_28",
+        "studentChoice": "B",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_29",
+        "studentChoice": "D",
+        "isCorrect": true,
+        "pointsAwarded": 1
+      },
+      {
+        "qid": "1A_30",
+        "studentChoice": "A",
+        "isCorrect": false,
+        "pointsAwarded": 0
+      }
+    ],
+    "checklistResults": [
+      {
+        "qid": "1B_01",
+        "checkedItems": [
+          "1B_1_1",
+          "1B_1_2",
+          "1B_1_3",
+          "1B_1_4"
+        ],
+        "pointsAwarded": 4,
+        "maxPoints": 4
+      },
+      {
+        "qid": "1B_02",
+        "checkedItems": [
+          "1B_2_1",
+          "1B_2_2"
+        ],
+        "pointsAwarded": 2,
+        "maxPoints": 2
+      },
+      {
+        "qid": "1B_03",
+        "checkedItems": [
+          "1B_3_1",
+          "1B_3_2"
+        ],
+        "pointsAwarded": 2,
+        "maxPoints": 2
+      },
+      {
+        "qid": "1B_04",
+        "checkedItems": [
+          "1B_4_3"
+        ],
+        "pointsAwarded": 2,
+        "maxPoints": 2
+      },
+      {
+        "qid": "1B_05",
+        "checkedItems": [
+          "1B_5_2"
+        ],
+        "pointsAwarded": 1,
+        "maxPoints": 3
+      },
+      {
+        "qid": "1B_06",
+        "checkedItems": [
+          "1B_6_1",
+          "1B_6_2"
+        ],
+        "pointsAwarded": 2,
+        "maxPoints": 2
+      },
+      {
+        "qid": "P2_01",
+        "checkedItems": [
+          "P2_1_1",
+          "P2_1_2",
+          "P2_1_3",
+          "P2_1_4"
+        ],
+        "pointsAwarded": 4,
+        "maxPoints": 4
+      },
+      {
+        "qid": "P2_02",
+        "checkedItems": [
+          "P2_2_1",
+          "P2_2_2",
+          "P2_2_3",
+          "P2_2_4"
+        ],
+        "pointsAwarded": 4,
+        "maxPoints": 4
+      },
+      {
+        "qid": "P2_03",
+        "checkedItems": [],
+        "pointsAwarded": 4,
+        "maxPoints": 4
+      },
+      {
+        "qid": "P2_04",
+        "checkedItems": [
+          "P2_4_1",
+          "P2_4_2",
+          "P2_4_3",
+          "P2_4_4",
+          "P2_4_5"
+        ],
+        "pointsAwarded": 5,
+        "maxPoints": 5
+      },
+      {
+        "qid": "P2_05",
+        "checkedItems": [
+          "P2_5_1",
+          "P2_5_3",
+          "P2_5_4"
+        ],
+        "pointsAwarded": 3,
+        "maxPoints": 4
+      },
+      {
+        "qid": "P2_06",
+        "checkedItems": [
+          "P2_6_2",
+          "P2_6_3",
+          "P2_6_5",
+          "P2_6_7"
+        ],
+        "pointsAwarded": 4,
+        "maxPoints": 8
+      },
+      {
+        "qid": "P2_07",
+        "checkedItems": [
+          "P2_7_1",
+          "P2_7_2",
+          "P2_7_3",
+          "P2_7_4"
+        ],
+        "pointsAwarded": 4,
+        "maxPoints": 4
+      },
+      {
+        "qid": "P2_08",
+        "checkedItems": [
+          "P2_8_1",
+          "P2_8_2",
+          "P2_8_3",
+          "P2_8_5",
+          "P2_8_6"
+        ],
+        "pointsAwarded": 5,
+        "maxPoints": 6
+      }
+    ],
+    "strandDescriptors": [
+      {
+        "strand": "KU",
+        "strandName": "Knowledge & Understanding",
+        "band": 8,
+        "descriptor": "Exemplary depth and breadth of knowledge with consistent accuracy"
+      },
+      {
+        "strand": "TT",
+        "strandName": "Thinking & Transfer",
+        "band": 6,
+        "descriptor": "Mainly effective transfer of concepts to new situations"
+      },
+      {
+        "strand": "C",
+        "strandName": "Communication",
+        "band": 8,
+        "descriptor": "Exemplary clarity and precision in all scientific communication"
+      }
+    ]
+  }
+}

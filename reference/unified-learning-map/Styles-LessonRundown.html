@@ -1,0 +1,253 @@
+<style>
+/* ================================================
+   LESSON RUNDOWN SIDEBAR (lrd- prefix)
+   Persistent sidebar with map overview + hex detail
+   ================================================ */
+
+/* --- Sidebar Container --- */
+.lrd-sidebar {
+  width: 300px;
+  background: white;
+  border-right: 1px solid #e2e8f0;
+  display: none;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.2s;
+}
+
+.lrd-sidebar.active {
+  display: flex;
+}
+
+/* --- Header --- */
+.lrd-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.lrd-sidebar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.lrd-sidebar-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #94a3b8;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+
+.lrd-sidebar-close:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* --- Body (scrollable) --- */
+.lrd-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+/* --- Progress Summary --- */
+.lrd-progress-summary {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 13px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lrd-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.lrd-progress-fill {
+  height: 100%;
+  background: #10b981;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.lrd-progress-text {
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+/* --- Hex Entry --- */
+.lrd-hex-entry {
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.lrd-hex-entry:hover {
+  background: #f8fafc;
+}
+
+.lrd-hex-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.lrd-hex-index {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.lrd-hex-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.lrd-hex-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Status Dot --- */
+.lrd-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.lrd-status-dot.locked { background: #cbd5e1; }
+.lrd-status-dot.not_started { background: #e2e8f0; }
+.lrd-status-dot.in_progress { background: #3b82f6; }
+.lrd-status-dot.completed { background: #10b981; }
+.lrd-status-dot.mastered { background: #047857; }
+
+.lrd-hex-chevron {
+  font-size: 12px;
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.lrd-hex-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+/* --- Hex Detail (Expanded) --- */
+.lrd-hex-detail {
+  display: none;
+  padding: 0 14px 10px 42px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.lrd-hex-detail.active {
+  display: block;
+}
+
+.lrd-detail-section {
+  margin-bottom: 8px;
+}
+
+.lrd-detail-label {
+  font-weight: 600;
+  color: #475569;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.lrd-detail-text {
+  line-height: 1.5;
+}
+
+.lrd-vocab-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lrd-vocab-chip {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.lrd-detail-connections {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.lrd-sbar-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 3px;
+}
+
+.lrd-sbar-badge.ku { background: #dbeafe; color: #1d4ed8; }
+.lrd-sbar-badge.tt { background: #dcfce7; color: #15803d; }
+.lrd-sbar-badge.c { background: #fef3c7; color: #92400e; }
+
+/* --- Highlight Pulse Animation --- */
+@keyframes lrd-highlight-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.6); }
+  50% { box-shadow: 0 0 0 8px rgba(250, 204, 21, 0.2); }
+  100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+}
+
+.lrd-highlight-pulse {
+  animation: lrd-highlight-pulse 2s ease-out;
+}
+
+/* --- Score badge --- */
+.lrd-score-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+/* --- Just Unlocked Animation --- */
+@keyframes lrd-just-unlocked-flash {
+  0% { background: rgba(34, 197, 94, 0.3); }
+  100% { background: transparent; }
+}
+.lrd-just-unlocked {
+  animation: lrd-just-unlocked-flash 3s ease-out;
+}
+</style>

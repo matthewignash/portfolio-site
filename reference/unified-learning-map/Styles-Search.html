@@ -1,0 +1,235 @@
+<style>
+/* ================================================
+   COMMAND PALETTE SEARCH STYLES (cmd- prefix)
+   ================================================ */
+
+/* Overlay */
+.cmd-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  z-index: 300;
+  backdrop-filter: blur(2px);
+}
+
+.cmd-overlay.active {
+  display: flex;
+}
+
+/* Palette container */
+.cmd-palette {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 580px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+/* Header with search input */
+.cmd-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.cmd-search-icon {
+  color: #94a3b8;
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.cmd-input {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 16px;
+  padding: 14px 0;
+  background: transparent;
+  color: #1a202c;
+  font-family: inherit;
+}
+
+.cmd-input::placeholder {
+  color: #94a3b8;
+}
+
+.cmd-shortcut-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-family: monospace;
+}
+
+/* Results body */
+.cmd-body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Result group */
+.cmd-group {
+  padding: 8px 0;
+}
+
+.cmd-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 16px;
+}
+
+/* Result item */
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.cmd-item:hover,
+.cmd-item.cmd-active {
+  background: #f1f5f9;
+}
+
+/* Type-colored icon */
+.cmd-item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.cmd-icon-hex { background: #ede9fe; color: #7c3aed; }
+.cmd-icon-map { background: #dbeafe; color: #2563eb; }
+.cmd-icon-course { background: #d1fae5; color: #059669; }
+.cmd-icon-std { background: #fef3c7; color: #d97706; }
+
+/* Item text */
+.cmd-item-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.cmd-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-item-subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Optional badge (framework, type) */
+.cmd-item-badge {
+  font-size: 11px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Empty state */
+.cmd-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+/* Footer with keyboard hints */
+.cmd-footer {
+  border-top: 1px solid #e2e8f0;
+  padding: 8px 16px;
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.cmd-footer-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cmd-footer-key {
+  background: #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+/* Header search trigger button */
+.cmd-trigger-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.cmd-trigger-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.cmd-trigger-label {
+  font-weight: 500;
+}
+
+.cmd-trigger-shortcut {
+  font-size: 11px;
+  color: #94a3b8;
+  background: #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+/* Responsive: full-screen on phone */
+@media (max-width: 640px) {
+  .cmd-overlay { padding-top: 0; }
+  .cmd-palette { max-width: 100%; border-radius: 0; max-height: 100vh; }
+  .cmd-trigger-label { display: none; }
+  .cmd-trigger-shortcut { display: none; }
+  .cmd-trigger-btn { padding: 6px 8px; }
+}
+</style>

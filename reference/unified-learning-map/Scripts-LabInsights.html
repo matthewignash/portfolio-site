@@ -1,0 +1,467 @@
+<script>
+    // ================================================
+    // LAB INSIGHTS DASHBOARD (ES5)
+    // Teacher analytics for lab report scoring
+    // ================================================
+
+
+    // Client-side dimension constants (mirrors LabFrameworks.gs LAB_DIMENSIONS)
+    var LIN_DIMENSIONS = {
+      QD: { label: 'Questioning & Defining', color: '#3b82f6' },
+      HP: { label: 'Hypothesizing & Predicting', color: '#8b5cf6' },
+      DI: { label: 'Designing Investigations', color: '#06b6d4' },
+      CD: { label: 'Collecting Data', color: '#10b981' },
+      PA: { label: 'Processing & Analyzing', color: '#f59e0b' },
+      EC: { label: 'Evaluating & Concluding', color: '#ef4444' },
+      CM: { label: 'Communicating', color: '#ec4899' },
+      RC: { label: 'Reflecting & Connecting', color: '#6366f1' }
+    };
+    var LIN_DIM_ORDER = ['QD','HP','DI','CD','PA','EC','CM','RC'];
+
+    // ================================================
+    // ENTRY POINT
+    // ================================================
+
+    function linLoadDashboard() {
+      var container = document.getElementById('labInsightsContent');
+      if (!container) return;
+
+      var currentClassId = (typeof progressSelectedClassId !== 'undefined') ? progressSelectedClassId : null;
+      var currentMapId = (typeof progressSelectedMapId !== 'undefined') ? progressSelectedMapId : null;
+
+      if (!currentClassId || !currentMapId) {
+        container.innerHTML = '<div class="lin-empty">' +
+          '<div class="lin-empty-icon">&#128300;</div>' +
+          '<div class="lin-empty-title">Select a Class and Map</div>' +
+          '<div class="lin-empty-text">Choose a class and map in Class Progress first, then switch to Lab Insights.</div>' +
+          '</div>';
+        return;
+      }
+
+      // Use cache if available
+      if (linData && linInitialized && String(linData._mapId) === String(currentMapId) && String(linData._classId) === String(currentClassId)) {
+        linRenderDashboard(linData);
+        return;
+      }
+
+      container.innerHTML = '<div class="lin-loading"><span class="loading-spinner"></span> Loading lab insights...</div>';
+
+      var expectedMapId = currentMapId;
+      var expectedClassId = currentClassId;
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (String(progressSelectedMapId) !== String(expectedMapId)) return;
+          if (String(progressSelectedClassId) !== String(expectedClassId)) return;
+          data._mapId = expectedMapId;
+          data._classId = expectedClassId;
+          linData = data;
+          linInitialized = true;
+          linRenderDashboard(data);
+        })
+        .withFailureHandler(function(err) {
+          if (String(progressSelectedMapId) !== String(expectedMapId)) return;
+          var cont = document.getElementById('labInsightsContent');
+          if (cont) {
+            cont.innerHTML = '<div class="lin-empty">' +
+              '<div class="lin-empty-icon">&#9888;&#65039;</div>' +
+              '<div class="lin-empty-title">Error Loading Lab Insights</div>' +
+              '<div class="lin-empty-text">' + escapeHtml(err.message || String(err)) + '</div>' +
+              '</div>';
+          }
+        })
+        .getLabInsightsDashboard(currentClassId, currentMapId);
+    }
+
+    // ================================================
+    // ORCHESTRATOR
+    // ================================================
+
+    function linRenderDashboard(data) {
+      var container = document.getElementById('labInsightsContent');
+      if (!container) return;
+
+      if (!data || data.configured === false) {
+        container.innerHTML = '<div class="lin-empty">' +
+          '<div class="lin-empty-icon">&#128300;</div>' +
+          '<div class="lin-empty-title">Lab Reports Not Configured</div>' +
+          '<div class="lin-empty-text">Connect a Lab Reports spreadsheet in the Integrations tab to enable Lab Insights.</div>' +
+          '</div>';
+        return;
+      }
+
+      if (!data.assignments || data.assignments.length === 0) {
+        container.innerHTML = '<div class="lin-empty">' +
+          '<div class="lin-empty-icon">&#128221;</div>' +
+          '<div class="lin-empty-title">No Lab Assignments Found</div>' +
+          '<div class="lin-empty-text">No active or closed lab assignments exist on this map for the selected class.</div>' +
+          '</div>';
+        return;
+      }
+
+      var html = '<div class="lin-container">';
+
+      // Assignment selector (if multiple)
+      html += linRenderAssignmentSelector(data.assignments);
+
+      // Overview cards
+      html += '<div class="lin-section-title">Overview</div>';
+      html += linRenderOverviewCards(data.overview);
+
+      // Submission status bar
+      if (data.assignments.length > 0) {
+        html += '<div class="lin-section-title">Submission Status</div>';
+        html += linRenderStatusBar(data.assignments);
+      }
+
+      // Criterion scorecard
+      if (data.criteria && data.criteria.length > 0) {
+          html += '<div class="lin-section-title">Criterion Scorecard</div>';
+        html += linRenderCriterionScorecard(data.criteria);
+      }
+
+      // Dimension bars
+      if (data.dimensions && Object.keys(data.dimensions).length > 0) {
+        html += '<div class="lin-section-title">Scientific Thinking Dimensions</div>';
+        html += linRenderDimensionBars(data.dimensions);
+      }
+
+      // Score distribution
+      if (data.distribution) {
+        html += '<div class="lin-section-title">Score Distribution</div>';
+        html += linRenderDistribution(data.distribution);
+      }
+
+      // Student breakdown
+      if (data.students && data.students.length > 0) {
+        var filteredStudents = linFilterStudents(data.students);
+        html += '<div class="lin-section-title">Student Breakdown (' + filteredStudents.length + ')</div>';
+        html += linRenderStudentBreakdown(filteredStudents, data.criteria || []);
+      }
+
+      // CSV export button
+      html += '<div style="margin-top:20px; text-align:right;">';
+      html += '<button class="lin-csv-btn" onclick="linCsvExport()">&#128229; Export CSV</button>';
+      html += '</div>';
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    // ================================================
+    // ASSIGNMENT SELECTOR
+    // ================================================
+
+    function linRenderAssignmentSelector(assignments) {
+      if (assignments.length <= 1) {
+        return '<div class="lin-assignment-title">' + escapeHtml(assignments[0] ? assignments[0].title : '') + '</div>';
+      }
+      var html = '<div class="lin-assignment-selector">';
+      html += '<label class="lin-assignment-label" for="linAssignmentSelect">Assignment:</label>';
+      html += '<select id="linAssignmentSelect" class="lin-assignment-select" onchange="linSelectAssignment(this.value)">';
+      html += '<option value="all"' + (linSelectedAssignment === 'all' ? ' selected' : '') + '>All Assignments (' + assignments.length + ')</option>';
+      for (var i = 0; i < assignments.length; i++) {
+        var a = assignments[i];
+        var sel = (linSelectedAssignment === a.assignmentId) ? ' selected' : '';
+        html += '<option value="' + escapeHtml(a.assignmentId) + '"' + sel + '>' + escapeHtml(a.title) + '</option>';
+      }
+      html += '</select></div>';
+      return html;
+    }
+
+    function linSelectAssignment(val) {
+      linSelectedAssignment = val;
+      if (linData) linRenderDashboard(linData);
+    }
+
+    function linFilterStudents(students) {
+      if (linSelectedAssignment === 'all') return students;
+      // For now, return all — per-assignment student filtering would require
+      // assignment-level submission tracking in the return data
+      return students;
+    }
+
+    // ================================================
+    // OVERVIEW CARDS
+    // ================================================
+
+    function linRenderOverviewCards(overview) {
+      if (!overview) return '';
+      var html = '<div class="lin-overview-cards">';
+
+      // Total Submissions
+      html += '<div class="lin-overview-card">';
+      html += '<div class="lin-overview-value">' + (overview.totalSubmissions || 0) + '</div>';
+      html += '<div class="lin-overview-label">Total Submissions</div>';
+      html += '</div>';
+
+      // Scored %
+      var scoredClass = overview.scoredPct >= 70 ? 'success' : (overview.scoredPct >= 40 ? 'warning' : 'danger');
+      html += '<div class="lin-overview-card">';
+      html += '<div class="lin-overview-value ' + scoredClass + '">' + (overview.scoredPct || 0) + '%</div>';
+      html += '<div class="lin-overview-label">Scored</div>';
+      html += '</div>';
+
+      // Class Avg
+      var avgClass = overview.classAvgPct >= 70 ? 'success' : (overview.classAvgPct >= 40 ? 'warning' : 'danger');
+      html += '<div class="lin-overview-card">';
+      html += '<div class="lin-overview-value ' + avgClass + '">' + (overview.classAvgPct || 0) + '%</div>';
+      html += '<div class="lin-overview-label">Class Average</div>';
+      html += '</div>';
+
+      // Highest dimension
+      if (overview.highestDimension) {
+        html += '<div class="lin-overview-card">';
+        html += '<div class="lin-overview-value success">' + overview.highestDimension.avg + '%</div>';
+        html += '<div class="lin-overview-label">Strongest</div>';
+        html += '<div class="lin-overview-sub">' + escapeHtml(overview.highestDimension.label) + '</div>';
+        html += '</div>';
+      }
+
+      // Lowest dimension
+      if (overview.lowestDimension) {
+        html += '<div class="lin-overview-card">';
+        html += '<div class="lin-overview-value danger">' + overview.lowestDimension.avg + '%</div>';
+        html += '<div class="lin-overview-label">Weakest</div>';
+        html += '<div class="lin-overview-sub">' + escapeHtml(overview.lowestDimension.label) + '</div>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // SUBMISSION STATUS BAR
+    // ================================================
+
+    function linRenderStatusBar(assignments) {
+      var html = '';
+      for (var i = 0; i < assignments.length; i++) {
+        var a = assignments[i];
+        var counts = a.statusCounts || {};
+        var total = a.totalSubmissions || 1;
+        if (total === 0) continue;
+
+        if (assignments.length > 1) {
+          html += '<div class="lin-status-title">' + escapeHtml(a.title) + '</div>';
+        }
+        html += '<div class="lin-status-bar">';
+        var statuses = [
+          { key: 'scored', color: '#10b981', label: 'Scored' },
+          { key: 'submitted', color: '#3b82f6', label: 'Submitted' },
+          { key: 'returned', color: '#f59e0b', label: 'Returned' },
+          { key: 'draft', color: '#cbd5e1', label: 'Draft' }
+        ];
+        for (var s = 0; s < statuses.length; s++) {
+          var count = counts[statuses[s].key] || 0;
+          if (count === 0) continue;
+          var pct = Math.round((count / total) * 100);
+          html += '<div class="lin-status-segment" style="width:' + pct + '%; background:' + statuses[s].color + ';" title="' + statuses[s].label + ': ' + count + '"></div>';
+        }
+        html += '</div>';
+      }
+
+      // Legend
+      html += '<div class="lin-status-legend">';
+      html += '<div class="lin-status-legend-item"><span class="lin-status-dot" style="background:#10b981;"></span> Scored</div>';
+      html += '<div class="lin-status-legend-item"><span class="lin-status-dot" style="background:#3b82f6;"></span> Submitted</div>';
+      html += '<div class="lin-status-legend-item"><span class="lin-status-dot" style="background:#f59e0b;"></span> Returned</div>';
+      html += '<div class="lin-status-legend-item"><span class="lin-status-dot" style="background:#cbd5e1;"></span> Draft</div>';
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // CRITERION SCORECARD
+    // ================================================
+
+    function linRenderCriterionScorecard(criteria) {
+      var html = '<div class="lin-criterion-list">';
+      for (var i = 0; i < criteria.length; i++) {
+        var c = criteria[i];
+        var sm = c.scaleMax || 8; // Default: IB MYP 8-point scale
+        var pct = sm > 0 ? Math.round((c.classAvg / sm) * 100) : 0;
+        var masteryClass = c.masteryRate >= 70 ? 'high' : (c.masteryRate >= 40 ? 'mid' : 'low');
+
+        html += '<div class="lin-criterion-row">';
+        html += '<div class="lin-criterion-title">' + escapeHtml(c.title) + '</div>';
+        html += '<div class="lin-criterion-bar-container"><div class="lin-criterion-bar-fill" style="width:' + pct + '%;"></div></div>';
+        html += '<div class="lin-criterion-avg">' + c.classAvg + '/' + sm + '</div>';
+        html += '<div class="lin-criterion-mastery ' + masteryClass + '">' + c.masteryRate + '% mastery</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // DIMENSION BARS
+    // ================================================
+
+    function linRenderDimensionBars(dimensions) {
+      var html = '<div class="lin-dim-list">';
+      for (var i = 0; i < LIN_DIM_ORDER.length; i++) {
+        var code = LIN_DIM_ORDER[i];
+        if (dimensions[code] === undefined) continue;
+        var dim = LIN_DIMENSIONS[code];
+        var avg = dimensions[code];
+
+        html += '<div class="lin-dim-row">';
+        html += '<div class="lin-dim-label"><span class="lin-dim-dot" style="background:' + dim.color + ';"></span> ' + escapeHtml(dim.label) + '</div>';
+        html += '<div class="lin-dim-bar-container"><div class="lin-dim-bar-fill" style="width:' + avg + '%; background:' + dim.color + ';"></div></div>';
+        html += '<div class="lin-dim-value">' + avg + '%</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // SCORE DISTRIBUTION
+    // ================================================
+
+    function linRenderDistribution(distribution) {
+      var maxCount = 0;
+      for (var i = 0; i < distribution.length; i++) {
+        if (distribution[i].count > maxCount) maxCount = distribution[i].count;
+      }
+      if (maxCount === 0) return '<div class="lin-empty-text">No scored submissions yet.</div>';
+
+      var colors = ['#ef4444', '#f59e0b', '#eab308', '#3b82f6', '#10b981'];
+      var html = '<div class="lin-distribution">';
+      for (var i = 0; i < distribution.length; i++) {
+        var d = distribution[i];
+        var height = maxCount > 0 ? Math.round((d.count / maxCount) * 100) : 0;
+        html += '<div class="lin-dist-col">';
+        html += '<div class="lin-dist-count">' + d.count + '</div>';
+        html += '<div class="lin-dist-bar-wrap"><div class="lin-dist-bar" style="height:' + height + '%; background:' + colors[i] + ';"></div></div>';
+        html += '<div class="lin-dist-label">' + escapeHtml(d.label) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // STUDENT BREAKDOWN
+    // ================================================
+
+    function linRenderStudentBreakdown(students, criteria) {
+      // Sort: scored students by percentage ascending (struggling first), then non-scored by status
+      var scored = [];
+      var unscored = [];
+      for (var i = 0; i < students.length; i++) {
+        if (students[i].status === 'scored') scored.push(students[i]);
+        else unscored.push(students[i]);
+      }
+      scored.sort(function(a, b) { return a.percentage - b.percentage; });
+      var sorted = scored.concat(unscored);
+
+      var html = '<div class="lin-student-list">';
+      for (var i = 0; i < sorted.length; i++) {
+        var s = sorted[i];
+        var expanded = linExpandedStudents[s.email];
+        var borderColor = s.status === 'scored' ? (s.percentage >= 70 ? '#10b981' : (s.percentage >= 40 ? '#f59e0b' : '#ef4444')) : '#cbd5e1';
+
+        html += '<div class="lin-student-card" style="border-left-color:' + borderColor + ';">';
+        html += '<div class="lin-student-header" role="button" tabindex="0" onclick="linToggleStudent(\'' + escapeHtml(s.email) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click();}">';
+        html += '<span class="lin-student-name">' + escapeHtml(s.name) + '</span>';
+        html += '<span class="lin-student-status ' + linGetStatusClass(s.status) + '">' + linGetStatusLabel(s.status) + '</span>';
+
+        if (s.status === 'scored') {
+          html += '<span class="lin-student-score">' + s.totalScore + '/' + s.maxScore + '</span>';
+          html += '<span class="lin-student-pct">' + s.percentage + '%</span>';
+        }
+        if (s.revisionNumber > 0) {
+          html += '<span class="lin-revision-stat">Rev ' + s.revisionNumber + '</span>';
+        }
+        html += '<span class="lin-student-chevron">' + (expanded ? '\u25BC' : '\u25B6') + '</span>';
+        html += '</div>';
+
+        if (expanded && s.criterionScores && s.criterionScores.length > 0) {
+          html += linRenderStudentDetail(s, criteria);
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function linRenderStudentDetail(student, criteria) {
+      var criteriaMap = {};
+      for (var i = 0; i < criteria.length; i++) {
+        criteriaMap[criteria[i].criterionId] = criteria[i];
+      }
+
+      var html = '<div class="lin-student-detail">';
+      for (var i = 0; i < student.criterionScores.length; i++) {
+        var cs = student.criterionScores[i];
+        var crit = criteriaMap[cs.criterionId];
+        if (!crit) continue;
+        var scaleMax = crit.scaleMax || 8;
+        var pct = scaleMax > 0 ? Math.round((cs.score / scaleMax) * 100) : 0;
+        var barColor = pct >= 85 ? '#10b981' : (pct >= 50 ? '#f59e0b' : '#ef4444');
+
+        html += '<div class="lin-detail-criterion-row">';
+        html += '<span class="lin-detail-title">' + escapeHtml(crit.title) + '</span>';
+        html += '<span class="lin-detail-bar-wrap"><span class="lin-detail-bar" style="width:' + pct + '%; background:' + barColor + ';"></span></span>';
+        html += '<span class="lin-detail-score">' + cs.score + '/' + scaleMax + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function linToggleStudent(email) {
+      linExpandedStudents[email] = !linExpandedStudents[email];
+      if (linData) linRenderDashboard(linData);
+    }
+
+    // ================================================
+    // HELPERS
+    // ================================================
+
+    function linGetStatusClass(status) {
+      var map = { scored: 'lin-status-scored', submitted: 'lin-status-submitted', returned: 'lin-status-returned', draft: 'lin-status-draft' };
+      return map[status] || 'lin-status-draft';
+    }
+
+    function linGetStatusLabel(status) {
+      var map = { scored: 'Scored', submitted: 'Submitted', returned: 'Returned', draft: 'Draft' };
+      return map[status] || 'Draft';
+    }
+
+    // ================================================
+    // CSV EXPORT
+    // ================================================
+
+    function linCsvExport() {
+      if (!linData || !linData.students) return;
+
+      var headers = ['Student', 'Status', 'Score', 'Max Score', '%', 'Revisions'];
+      var criteria = linData.criteria || [];
+      for (var i = 0; i < criteria.length; i++) {
+        headers.push(criteria[i].title || 'Criterion ' + (i + 1));
+      }
+
+      var rows = [];
+      for (var i = 0; i < linData.students.length; i++) {
+        var s = linData.students[i];
+        var row = [s.name, linGetStatusLabel(s.status), s.totalScore, s.maxScore, s.percentage, s.revisionNumber];
+
+        // Per-criterion scores
+        var critMap = {};
+        for (var j = 0; j < (s.criterionScores || []).length; j++) {
+          critMap[s.criterionScores[j].criterionId] = s.criterionScores[j].score;
+        }
+        for (var j = 0; j < criteria.length; j++) {
+          row.push(critMap[criteria[j].criterionId] !== undefined ? critMap[criteria[j].criterionId] : '');
+        }
+        rows.push(row);
+      }
+
+      if (typeof csvExportData === 'function') {
+        csvExportData(headers, rows, 'lab-insights-export');
+      }
+    }
+</script>

@@ -1,0 +1,198 @@
+<script>
+/**
+ * Client-side utility functions.
+ */
+
+var ClientUtils = (function() {
+
+  /**
+   * Formats an ISO date string for display.
+   * @param {string} isoStr
+   * @param {Object} [opts] - Intl.DateTimeFormat options
+   * @returns {string}
+   */
+  function formatDate(isoStr, opts) {
+    if (!isoStr) return '';
+    var d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '';
+    var defaults = { year: 'numeric', month: 'short', day: 'numeric' };
+    return d.toLocaleDateString('en-US', opts || defaults);
+  }
+
+  /**
+   * Formats a date as relative time (e.g., "3 days ago").
+   * @param {string} isoStr
+   * @returns {string}
+   */
+  function timeAgo(isoStr) {
+    if (!isoStr) return '';
+    var now = Date.now();
+    var then = new Date(isoStr).getTime();
+    var diff = Math.floor((now - then) / 1000);
+
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+    if (diff < 2592000) return Math.floor(diff / 604800) + 'w ago';
+    return formatDate(isoStr);
+  }
+
+  /**
+   * Returns a debounced version of a function.
+   * @param {Function} fn
+   * @param {number} delay - milliseconds
+   * @returns {Function}
+   */
+  function debounce(fn, delay) {
+    var timer;
+    return function() {
+      var args = arguments;
+      var ctx = this;
+      clearTimeout(timer);
+      timer = setTimeout(function() { fn.apply(ctx, args); }, delay);
+    };
+  }
+
+  /**
+   * Escapes HTML special characters to prevent XSS.
+   * @param {string} str
+   * @returns {string}
+   */
+  function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  /**
+   * Groups an array of objects by a key.
+   * @param {Object[]} arr
+   * @param {string} key
+   * @returns {Object} Map of key values to arrays
+   */
+  function groupBy(arr, key) {
+    var map = {};
+    arr.forEach(function(item) {
+      var val = item[key] || '';
+      if (!map[val]) map[val] = [];
+      map[val].push(item);
+    });
+    return map;
+  }
+
+  /**
+   * Simple pluralization.
+   * @param {number} count
+   * @param {string} singular
+   * @param {string} [plural]
+   * @returns {string}
+   */
+  function pluralize(count, singular, plural) {
+    if (count === 1) return count + ' ' + singular;
+    return count + ' ' + (plural || singular + 's');
+  }
+
+  /**
+   * Returns the number of days between two dates.
+   * @param {string|Date} a
+   * @param {string|Date} b
+   * @returns {number}
+   */
+  function daysBetween(a, b) {
+    var da = typeof a === 'string' ? new Date(a) : a;
+    var db = typeof b === 'string' ? new Date(b) : b;
+    return Math.floor(Math.abs(db - da) / (1000 * 60 * 60 * 24));
+  }
+
+  /**
+   * Gets the current day-of-week code (MON, TUE, etc.).
+   * @returns {string}
+   */
+  function todayCode() {
+    var codes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    return codes[new Date().getDay()];
+  }
+
+  /**
+   * Determines the current period number based on period start times.
+   * @param {string} periodTimesCSV - Comma-separated start times (e.g., "8:00,8:50,...")
+   * @returns {number} 1-based period number, or 0 if outside school hours
+   */
+  function currentPeriod(periodTimesCSV) {
+    if (!periodTimesCSV) return 0;
+    var times = periodTimesCSV.split(',').map(function(t) { return t.trim(); });
+    var now = new Date();
+    var nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    for (var i = times.length - 1; i >= 0; i--) {
+      var parts = times[i].split(':');
+      var periodMinutes = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+      if (nowMinutes >= periodMinutes) return i + 1;
+    }
+    return 0;
+  }
+
+  /**
+   * Generates initials from a name.
+   * @param {string} firstName
+   * @param {string} lastName
+   * @returns {string}
+   */
+  function initials(firstName, lastName) {
+    return ((firstName || '').charAt(0) + (lastName || '').charAt(0)).toUpperCase();
+  }
+
+  /**
+   * Creates a DOM element with attributes and children.
+   * @param {string} tag
+   * @param {Object} [attrs]
+   * @param {(string|HTMLElement)[]} [children]
+   * @returns {HTMLElement}
+   */
+  function el(tag, attrs, children) {
+    var element = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function(key) {
+        if (key === 'className') {
+          element.className = attrs[key];
+        } else if (key === 'dataset') {
+          Object.keys(attrs[key]).forEach(function(dk) {
+            element.dataset[dk] = attrs[key][dk];
+          });
+        } else if (key.indexOf('on') === 0) {
+          element.addEventListener(key.substring(2).toLowerCase(), attrs[key]);
+        } else {
+          element.setAttribute(key, attrs[key]);
+        }
+      });
+    }
+    if (children) {
+      children.forEach(function(child) {
+        if (typeof child === 'string') {
+          element.appendChild(document.createTextNode(child));
+        } else if (child) {
+          element.appendChild(child);
+        }
+      });
+    }
+    return element;
+  }
+
+  return {
+    formatDate: formatDate,
+    timeAgo: timeAgo,
+    debounce: debounce,
+    escapeHtml: escapeHtml,
+    groupBy: groupBy,
+    pluralize: pluralize,
+    daysBetween: daysBetween,
+    todayCode: todayCode,
+    currentPeriod: currentPeriod,
+    initials: initials,
+    el: el
+  };
+
+})();
+</script>

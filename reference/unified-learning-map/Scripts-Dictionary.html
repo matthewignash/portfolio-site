@@ -1,0 +1,1067 @@
+<script>
+// ============================================================================
+// VOCABULARY DICTIONARY — dct- prefix
+// Teacher: vocab CRUD in unit modal + hex editor, translation overrides
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+// ---- State ----
+var dctUnitVocab = [];           // Vocabulary for current unit modal
+var dctHexVocab = [];            // Vocabulary for current hex editor
+var dctEditingEntry = null;      // Entry being edited (vocabId or null for new)
+var dctTranslating = false;      // True while saving translations
+var dctShowingForm = '';          // 'unit' or 'hex' or '' — which context form is open
+var dctExpandedTranslations = {};// vocabId -> true for expanded translation rows
+
+var DCT_LANG_LABELS = {
+  ja: 'Japanese', ko: 'Korean', fr: 'French', ta: 'Tamil',
+  zh: 'Chinese', es: 'Spanish', ar: 'Arabic', hi: 'Hindi',
+  vi: 'Vietnamese', tl: 'Filipino', pt: 'Portuguese', ru: 'Russian',
+  de: 'German', it: 'Italian'
+};
+
+var DCT_LANG_FLAGS = {
+  ja: '&#127471;&#127477;',
+  ko: '&#127472;&#127479;',
+  fr: '&#127467;&#127479;',
+  ta: '&#127473;&#127472;',
+  zh: '&#127464;&#127475;',
+  es: '&#127466;&#127480;',
+  ar: '&#127462;&#127466;',
+  hi: '&#127470;&#127475;',
+  vi: '&#127483;&#127475;',
+  tl: '&#127477;&#127469;',
+  pt: '&#127463;&#127479;',
+  ru: '&#127479;&#127482;',
+  de: '&#127465;&#127466;',
+  it: '&#127470;&#127481;'
+};
+
+var DCT_CATEGORIES = [
+  { value: 'analysis', label: 'Analysis & Reasoning' },
+  { value: 'communication', label: 'Communication' },
+  { value: 'scientific', label: 'Scientific Method' },
+  { value: 'mathematical', label: 'Mathematical Thinking' },
+  { value: 'research', label: 'Research & Inquiry' },
+  { value: 'reading', label: 'Reading' },
+  { value: 'writing', label: 'Writing' },
+  { value: 'processes', label: 'Processes' },
+  { value: 'general', label: 'General Academic' },
+  { value: 'custom', label: 'Custom' }
+];
+
+var DCT_TIERS = [
+  { value: 1, label: 'Tier 1: Everyday', color: '#94a3b8', hint: 'Basic words EAL beginners may not know (e.g., pour, mix, measure)' },
+  { value: 2, label: 'Tier 2: Academic', color: '#d97706', hint: 'High-frequency academic words crossing disciplines (e.g., analyze, evaluate, hypothesis)' },
+  { value: 3, label: 'Tier 3: Domain', color: '#2563eb', hint: 'Subject-specific technical vocabulary (e.g., isotope, covalent bond, stoichiometry)' }
+];
+
+// ================================================
+// UNIT MODAL — VOCABULARY SECTION
+// ================================================
+
+/**
+ * Render the vocabulary section inside the unit modal.
+ * Called from openUnitModal() after populating unit data.
+ */
+function dctRenderUnitVocabSection() {
+  var container = document.getElementById('dctUnitVocabSection');
+  if (!container) return;
+
+  var html = '';
+  html += '<div class="dct-vocab-section">';
+  html += '<div class="dct-vocab-header">';
+  html += '<div>';
+  html += '<span class="dct-vocab-title">&#128218; Academic Vocabulary</span>';
+  html += ' <span class="dct-vocab-count">' + dctUnitVocab.length + ' term' + (dctUnitVocab.length !== 1 ? 's' : '') + '</span>';
+  html += '</div>';
+  html += '<div class="dct-vocab-actions">';
+  html += '<button class="dct-add-btn" onclick="dctOpenEntryForm(\'unit\', null)">+ Add Term</button>';
+  html += '</div>';
+  html += '</div>';
+
+  // Entry form (if open)
+  if (dctShowingForm === 'unit') {
+    html += dctRenderEntryForm('unit');
+  }
+
+  // Translating indicator
+  if (dctTranslating) {
+    html += '<div class="dct-translating">&#9203; Translating vocabulary... This may take a moment.</div>';
+  }
+
+  // Vocab list
+  html += dctRenderVocabList(dctUnitVocab, 'unit');
+
+  html += '</div>'; // .dct-vocab-section
+  container.innerHTML = html;
+}
+
+// ================================================
+// HEX EDITOR — VOCABULARY SECTION
+// ================================================
+
+/**
+ * Populate hex vocabulary in the hex editor.
+ * Called from openHexEditorPanel().
+ */
+function dctPopulateHexEditor(hex) {
+  var section = document.getElementById('dctHexSection');
+  if (!section) return;
+
+  // Only show if map has a unit with vocab support or hex has vocab
+  dctHexVocab = (hex && hex.vocabulary) ? hex.vocabulary.slice() : [];
+
+  section.classList.add('dct-visible');
+  dctRenderHexVocabSection();
+}
+
+function dctRenderHexVocabSection() {
+  var container = document.getElementById('dctHexVocabContent');
+  if (!container) return;
+
+  var html = '';
+  html += '<div class="dct-vocab-header">';
+  html += '<div>';
+  html += '<span class="dct-vocab-count">' + dctHexVocab.length + ' term' + (dctHexVocab.length !== 1 ? 's' : '') + '</span>';
+  html += '</div>';
+  html += '<div class="dct-vocab-actions">';
+  html += '<button class="dct-add-btn" onclick="dctOpenEntryForm(\'hex\', null)">+ Add</button>';
+  html += '</div>';
+  html += '</div>';
+
+  if (dctShowingForm === 'hex') {
+    html += dctRenderEntryForm('hex');
+  }
+
+  html += dctRenderVocabList(dctHexVocab, 'hex');
+
+  container.innerHTML = html;
+}
+
+// ================================================
+// VOCAB LIST RENDERER
+// ================================================
+
+function dctRenderVocabList(vocab, context) {
+  if (!vocab || vocab.length === 0) {
+    return '<div class="dct-empty">No vocabulary terms defined yet.</div>';
+  }
+
+  var html = '<div class="dct-vocab-list">';
+  for (var i = 0; i < vocab.length; i++) {
+    var v = vocab[i];
+    html += '<div class="dct-vocab-item" data-vocab-id="' + escapeHtml(v.vocabId) + '">';
+
+    // Header row
+    html += '<div class="dct-vocab-item-header">';
+    html += '<span class="dct-vocab-term">' + escapeHtml(v.term) + '</span>';
+    if (v.tier) {
+      var tierDef = null;
+      for (var td = 0; td < DCT_TIERS.length; td++) {
+        if (DCT_TIERS[td].value === v.tier) { tierDef = DCT_TIERS[td]; break; }
+      }
+      if (tierDef) {
+        html += '<span class="dct-tier-badge" style="background:' + tierDef.color + ';">T' + v.tier + '</span>';
+      }
+    }
+    if (v.category && v.category !== 'custom') {
+      html += '<span class="dct-vocab-category">' + escapeHtml(v.category) + '</span>';
+    }
+    html += '</div>';
+
+    // Definition
+    html += '<div class="dct-vocab-def">' + escapeHtml(v.definition) + '</div>';
+
+    // Simplified definition (if present)
+    if (v.simplifiedDefinition) {
+      html += '<div class="dct-vocab-simplified"><span class="dct-simplified-label">Simplified:</span> ' + escapeHtml(v.simplifiedDefinition) + '</div>';
+    }
+
+    // Context
+    if (v.context) {
+      html += '<div class="dct-vocab-context">"' + escapeHtml(v.context) + '"</div>';
+    }
+
+    // Action buttons
+    html += '<div class="dct-vocab-item-actions">';
+    html += '<button class="dct-vocab-item-btn" onclick="dctToggleTranslations(\'' + escapeHtml(v.vocabId) + '\')">';
+    html += dctExpandedTranslations[v.vocabId] ? '&#9650; Hide Translations' : '&#9660; Show Translations';
+    html += '</button>';
+    html += '<button class="dct-vocab-item-btn" onclick="dctOpenEntryForm(\'' + context + '\', \'' + escapeHtml(v.vocabId) + '\')">&#9998; Edit</button>';
+    html += '<button class="dct-vocab-item-btn dct-btn-danger" onclick="dctRemoveEntry(\'' + context + '\', \'' + escapeHtml(v.vocabId) + '\')">&#10005; Remove</button>';
+    html += '</div>';
+
+    // Translations (expandable)
+    var transClass = dctExpandedTranslations[v.vocabId] ? 'dct-translations dct-visible' : 'dct-translations';
+    html += '<div class="' + transClass + '">';
+    var langs = Object.keys(DCT_LANG_LABELS);
+    for (var l = 0; l < langs.length; l++) {
+      var lang = langs[l];
+      var trans = (v.translations && v.translations[lang]) ? v.translations[lang] : null;
+      var override = (v.translationOverrides && v.translationOverrides[lang]) ? v.translationOverrides[lang] : null;
+      // Skip languages with no translation and no override (avoids showing empty rows for new languages on old entries)
+      if (!trans && !override) continue;
+
+      html += '<div class="dct-trans-row">';
+      html += '<span class="dct-trans-lang">' + DCT_LANG_FLAGS[lang] + ' ' + DCT_LANG_LABELS[lang] + '</span>';
+
+      if (override && override.term) {
+        html += '<span class="dct-trans-value dct-trans-override">' + escapeHtml(override.term) + ' (edited)</span>';
+      } else if (trans && trans.term && !trans.error) {
+        html += '<span class="dct-trans-value">' + escapeHtml(trans.term) + '</span>';
+      } else if (trans && trans.error) {
+        html += '<span class="dct-trans-value dct-trans-error">Translation failed</span>';
+      } else {
+        html += '<span class="dct-trans-value dct-trans-error">Not translated</span>';
+      }
+
+      html += '<button class="dct-trans-edit-btn" onclick="dctEditTranslation(\'' + context + '\', \'' + escapeHtml(v.vocabId) + '\', \'' + lang + '\', \'term\')" title="Edit translation">&#9998;</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += '</div>'; // .dct-vocab-item
+  }
+  html += '</div>';
+  return html;
+}
+
+// ================================================
+// ENTRY FORM (Add / Edit)
+// ================================================
+
+function dctOpenEntryForm(context, vocabId) {
+  dctShowingForm = context;
+  dctEditingEntry = vocabId;
+
+  if (context === 'unit') {
+    dctRenderUnitVocabSection();
+  } else {
+    dctRenderHexVocabSection();
+  }
+}
+
+function dctRenderEntryForm(context) {
+  var entry = null;
+  var vocab = (context === 'unit') ? dctUnitVocab : dctHexVocab;
+
+  if (dctEditingEntry) {
+    for (var i = 0; i < vocab.length; i++) {
+      if (vocab[i].vocabId === dctEditingEntry) {
+        entry = vocab[i];
+        break;
+      }
+    }
+  }
+
+  var html = '<div class="dct-entry-form">';
+  html += '<div class="dct-form-row">';
+  html += '<label class="dct-form-label">Term <span style="color:#dc2626">*</span></label>';
+  html += '<div class="dct-term-row">';
+  html += '<input class="dct-form-input" id="dctFormTerm" placeholder="e.g., analyze" value="' + (entry ? escapeHtml(entry.term) : '') + '" maxlength="100">';
+  html += '<button class="dct-lookup-btn" onclick="dctLookupWord()">\uD83D\uDD0D Lookup</button>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '<div class="dct-form-row">';
+  html += '<label class="dct-form-label">Vocabulary Tier</label>';
+  html += '<div class="dct-tier-chips" role="radiogroup" aria-label="Vocabulary tier">';
+  var currentTier = (entry && entry.tier) ? entry.tier : 3;
+  for (var t = 0; t < DCT_TIERS.length; t++) {
+    var tierDef = DCT_TIERS[t];
+    var activeClass = (currentTier === tierDef.value) ? ' dct-tier-active' : '';
+    html += '<button type="button" class="dct-tier-chip' + activeClass + '" role="radio"';
+    html += ' aria-checked="' + (currentTier === tierDef.value) + '"';
+    html += ' data-tier="' + tierDef.value + '"';
+    html += ' style="border-color:' + tierDef.color + ';' + (currentTier === tierDef.value ? 'background:' + tierDef.color + ';color:#fff;' : '') + '"';
+    html += ' onclick="dctSelectTier(' + tierDef.value + ')"';
+    html += ' title="' + escapeHtml(tierDef.hint) + '">' + tierDef.label + '</button>';
+  }
+  html += '</div>';
+  html += '<div class="dct-tier-hint" id="dctTierHint">' + escapeHtml(DCT_TIERS[currentTier - 1].hint) + '</div>';
+  html += '</div>';
+
+  html += '<div class="dct-form-row">';
+  html += '<label class="dct-form-label">Definition <span style="color:#dc2626">*</span></label>';
+  html += '<textarea class="dct-form-textarea" id="dctFormDef" placeholder="Clear, student-friendly definition..." maxlength="500">' + (entry ? escapeHtml(entry.definition) : '') + '</textarea>';
+  html += '</div>';
+
+  html += '<div class="dct-form-row">';
+  html += '<label class="dct-form-label">Simplified Definition <span class="dct-form-hint">(optional, for WIDA 1-2 students)</span></label>';
+  html += '<textarea class="dct-form-textarea dct-simplified-textarea" id="dctFormSimplifiedDef" placeholder="Simple explanation in plain words..." maxlength="300">' + (entry ? escapeHtml(entry.simplifiedDefinition || '') : '') + '</textarea>';
+  html += '<div class="dct-char-count"><span id="dctSimplifiedCount">' + ((entry && entry.simplifiedDefinition) ? entry.simplifiedDefinition.length : 0) + '</span>/300</div>';
+  html += '</div>';
+
+  html += '<div class="dct-form-row">';
+  html += '<label class="dct-form-label">Context Sentence (optional)</label>';
+  html += '<input class="dct-form-input" id="dctFormContext" placeholder="e.g., We need to analyze the data to find patterns." value="' + (entry ? escapeHtml(entry.context || '') : '') + '" maxlength="300">';
+  html += '</div>';
+
+  html += '<div class="dct-form-row">';
+  html += '<label class="dct-form-label">Category</label>';
+  html += '<select class="dct-form-select" id="dctFormCategory">';
+  for (var c = 0; c < DCT_CATEGORIES.length; c++) {
+    var cat = DCT_CATEGORIES[c];
+    var sel = (entry && entry.category === cat.value) ? ' selected' : ((!entry && cat.value === 'custom') ? ' selected' : '');
+    html += '<option value="' + cat.value + '"' + sel + '>' + cat.label + '</option>';
+  }
+  html += '</select>';
+  html += '</div>';
+
+  html += '<div class="dct-form-row">';
+  html += '<label class="dct-form-label">Student Display</label>';
+  html += '<select class="dct-form-select" id="dctFormDisplayMode">';
+  var dmFull = (!entry || !entry.displayMode || entry.displayMode === 'full') ? ' selected' : '';
+  var dmWord = (entry && entry.displayMode === 'word_only') ? ' selected' : '';
+  html += '<option value="full"' + dmFull + '>Word + Definition + Translation</option>';
+  html += '<option value="word_only"' + dmWord + '>Word + Translation only (Glossary)</option>';
+  html += '</select>';
+  html += '</div>';
+
+  // Translation preview container (populated by Lookup)
+  html += '<div id="dctLookupPreview"></div>';
+
+  html += '<div class="dct-form-actions">';
+  html += '<button class="dct-form-save" onclick="dctSaveEntry(\'' + context + '\')">' + (dctEditingEntry ? 'Update' : 'Add Term') + '</button>';
+  html += '<button class="dct-form-cancel" onclick="dctCancelForm(\'' + context + '\')">Cancel</button>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function dctSaveEntry(context) {
+  var term = document.getElementById('dctFormTerm').value.trim();
+  var def = document.getElementById('dctFormDef').value.trim();
+  var ctx = document.getElementById('dctFormContext').value.trim();
+  var cat = document.getElementById('dctFormCategory').value;
+  var displayMode = document.getElementById('dctFormDisplayMode').value || 'full';
+  var tierEl = document.querySelector('.dct-tier-chip.dct-tier-active');
+  var tier = tierEl ? parseInt(tierEl.getAttribute('data-tier'), 10) : 3;
+  var simplifiedDefEl = document.getElementById('dctFormSimplifiedDef');
+  var simplifiedDefinition = simplifiedDefEl ? simplifiedDefEl.value.trim() : '';
+
+  if (!term) { showToast('Term is required', 'error'); return; }
+  if (!def) { showToast('Definition is required', 'error'); return; }
+
+  var vocab = (context === 'unit') ? dctUnitVocab : dctHexVocab;
+
+  // Apply pre-fetched translations from lookup if available
+  var prefetchedTranslations = dctLookupTranslations || {};
+
+  if (dctEditingEntry) {
+    // Update existing
+    for (var i = 0; i < vocab.length; i++) {
+      if (vocab[i].vocabId === dctEditingEntry) {
+        vocab[i].term = term;
+        vocab[i].definition = def;
+        vocab[i].context = ctx;
+        vocab[i].category = cat;
+        vocab[i].displayMode = displayMode;
+        vocab[i].tier = tier;
+        vocab[i].simplifiedDefinition = simplifiedDefinition;
+        // Preserve phonetic from lookup (don't overwrite if no new lookup done)
+        if (dctLookupPhonetic) vocab[i].phonetic = dctLookupPhonetic;
+        // Merge pre-fetched translations (don't overwrite teacher overrides)
+        if (prefetchedTranslations && Object.keys(prefetchedTranslations).length) {
+          if (!vocab[i].translations) vocab[i].translations = {};
+          for (var lang in prefetchedTranslations) {
+            if (prefetchedTranslations.hasOwnProperty(lang) && !prefetchedTranslations[lang].error) {
+              vocab[i].translations[lang] = prefetchedTranslations[lang];
+            }
+          }
+        }
+        break;
+      }
+    }
+  } else {
+    // Add new
+    vocab.push({
+      vocabId: 'vocab-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
+      term: term,
+      definition: def,
+      context: ctx,
+      category: cat,
+      displayMode: displayMode,
+      tier: tier,
+      simplifiedDefinition: simplifiedDefinition,
+      phonetic: dctLookupPhonetic || '',
+      translations: prefetchedTranslations || {},
+      translationOverrides: {},
+      addedBy: '',
+      addedAt: new Date().toISOString()
+    });
+  }
+
+  dctShowingForm = '';
+  dctEditingEntry = null;
+  dctLookupTranslations = null;
+  dctLookupPhonetic = '';
+
+  if (context === 'unit') {
+    dctRenderUnitVocabSection();
+  } else {
+    dctRenderHexVocabSection();
+  }
+}
+
+function dctCancelForm(context) {
+  dctShowingForm = '';
+  dctEditingEntry = null;
+  dctLookupTranslations = null;
+  dctLookupPhonetic = '';
+  if (context === 'unit') {
+    dctRenderUnitVocabSection();
+  } else {
+    dctRenderHexVocabSection();
+  }
+}
+
+function dctSelectTier(tierValue) {
+  var chips = document.querySelectorAll('.dct-tier-chip');
+  for (var i = 0; i < chips.length; i++) {
+    var chipTier = parseInt(chips[i].getAttribute('data-tier'), 10);
+    var tierDef = null;
+    for (var td = 0; td < DCT_TIERS.length; td++) {
+      if (DCT_TIERS[td].value === chipTier) { tierDef = DCT_TIERS[td]; break; }
+    }
+    if (!tierDef) continue;
+    if (chipTier === tierValue) {
+      chips[i].className = 'dct-tier-chip dct-tier-active';
+      chips[i].setAttribute('aria-checked', 'true');
+      chips[i].style.background = tierDef.color;
+      chips[i].style.color = '#fff';
+    } else {
+      chips[i].className = 'dct-tier-chip';
+      chips[i].setAttribute('aria-checked', 'false');
+      chips[i].style.background = '';
+      chips[i].style.color = '';
+    }
+  }
+  var hint = document.getElementById('dctTierHint');
+  if (hint) hint.textContent = DCT_TIERS[tierValue - 1].hint;
+}
+
+// Cached translations and phonetic from last lookup (applied on save)
+var dctLookupTranslations = null;
+var dctLookupPhonetic = '';
+
+// ---- Lookup Helpers ----
+
+function dctApplyLookupResult(result) {
+  var defEl = document.getElementById('dctFormDef');
+  if (defEl) {
+    if (!defEl.value.trim()) {
+      defEl.value = result.definition || '';
+    } else {
+      if (confirm('Replace current definition with lookup result?')) {
+        defEl.value = result.definition || '';
+      }
+    }
+  }
+  if (result.example) {
+    var ctxEl = document.getElementById('dctFormContext');
+    if (ctxEl && !ctxEl.value.trim()) {
+      ctxEl.value = result.example;
+    }
+  }
+  // Capture phonetic pronunciation from dictionary API
+  dctLookupPhonetic = result.phonetic || '';
+  showToast('Definition loaded!' + (dctLookupPhonetic ? ' (' + dctLookupPhonetic + ')' : ''), 'success');
+}
+
+// ---- Main Lookup Entry Point ----
+
+function dctLookupWord() {
+  var termEl = document.getElementById('dctFormTerm');
+  var term = termEl ? termEl.value.trim() : '';
+  if (!term) { showToast('Enter a word first', 'error'); return; }
+
+  var btn = document.querySelector('.dct-lookup-btn');
+  var origText = btn ? btn.innerHTML : '';
+  if (btn) { btn.innerHTML = '\u23F3 Looking up...'; btn.disabled = true; }
+
+  dctLookupTranslations = null;
+  dctLookupPhonetic = '';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+      if (result && result.success) {
+        dctApplyLookupResult(result);
+        // Cache translations for use when saving
+        if (result.translations) {
+          dctLookupTranslations = result.translations;
+          dctRenderLookupPreview(result.translations);
+        }
+      } else {
+        showToast(result && result.message ? result.message : 'Word not found', 'error');
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+      showToast('Lookup unavailable \u2014 type the definition manually', 'error');
+    })
+    .lookupAndTranslate(term);
+}
+
+function dctRenderLookupPreview(translations) {
+  var container = document.getElementById('dctLookupPreview');
+  if (!container) return;
+  var langs = Object.keys(DCT_LANG_LABELS);
+  var html = '<div class="dct-lookup-preview">';
+  for (var i = 0; i < langs.length; i++) {
+    var lang = langs[i];
+    var t = translations[lang];
+    if (t && t.term && !t.error) {
+      html += '<span class="dct-lookup-preview-chip">';
+      html += '<span class="dct-lookup-preview-flag">' + DCT_LANG_FLAGS[lang] + '</span> ';
+      html += escapeHtml(t.term);
+      html += '</span>';
+    } else {
+      html += '<span class="dct-lookup-preview-chip dct-lookup-preview-err">';
+      html += DCT_LANG_FLAGS[lang] + ' —';
+      html += '</span>';
+    }
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function dctRemoveEntry(context, vocabId) {
+  var vocab = (context === 'unit') ? dctUnitVocab : dctHexVocab;
+  for (var i = 0; i < vocab.length; i++) {
+    if (vocab[i].vocabId === vocabId) {
+      vocab.splice(i, 1);
+      break;
+    }
+  }
+
+  if (context === 'unit') {
+    dctRenderUnitVocabSection();
+  } else {
+    dctRenderHexVocabSection();
+  }
+}
+
+// ================================================
+// TRANSLATION TOGGLE & EDIT
+// ================================================
+
+function dctToggleTranslations(vocabId) {
+  dctExpandedTranslations[vocabId] = !dctExpandedTranslations[vocabId];
+  // Re-render whichever context is active
+  if (dctShowingForm === 'hex' || document.getElementById('dctHexSection')) {
+    dctRenderHexVocabSection();
+  }
+  dctRenderUnitVocabSection();
+}
+
+function dctEditTranslation(context, vocabId, lang, field) {
+  var rowId = 'dctTransEditRow-' + vocabId + '-' + lang + '-' + field;
+  if (document.getElementById(rowId)) return;
+
+  // Find the translation display element to insert inline input nearby
+  var btn = document.querySelector('[onclick*="dctEditTranslation(\'' + context + '\',\'' + vocabId + '\',\'' + lang + '\',\'' + field + '\'"]');
+  var container = btn ? btn.parentNode : document.getElementById('dctVocabSection');
+  if (!container) return;
+
+  var langLabel = (typeof DCT_LANG_LABELS !== 'undefined' && DCT_LANG_LABELS[lang]) ? DCT_LANG_LABELS[lang] : lang;
+  var row = document.createElement('div');
+  row.id = rowId;
+  row.style.cssText = 'display:flex;gap:6px;margin-top:4px;align-items:center;';
+  row.innerHTML = '<input id="dctTransInput-' + escapeHtml(vocabId) + '-' + escapeHtml(lang) + '-' + escapeHtml(field) + '" '
+    + 'type="text" placeholder="' + escapeHtml(langLabel) + ' translation..." '
+    + 'style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+    + 'onkeydown="if(event.key===\'Enter\'){dctConfirmTransEdit(\'' + escapeHtml(context) + '\',\'' + escapeHtml(vocabId) + '\',\'' + escapeHtml(lang) + '\',\'' + escapeHtml(field) + '\');}if(event.key===\'Escape\'){dctCancelTransEdit(\'' + escapeHtml(vocabId) + '\',\'' + escapeHtml(lang) + '\',\'' + escapeHtml(field) + '\');}">'
+    + '<button onclick="dctConfirmTransEdit(\'' + escapeHtml(context) + '\',\'' + escapeHtml(vocabId) + '\',\'' + escapeHtml(lang) + '\',\'' + escapeHtml(field) + '\')" style="padding:6px 10px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Save</button>'
+    + '<button onclick="dctCancelTransEdit(\'' + escapeHtml(vocabId) + '\',\'' + escapeHtml(lang) + '\',\'' + escapeHtml(field) + '\')" style="padding:6px 10px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+  container.appendChild(row);
+  document.getElementById('dctTransInput-' + vocabId + '-' + lang + '-' + field).focus();
+}
+
+function dctConfirmTransEdit(context, vocabId, lang, field) {
+  var input = document.getElementById('dctTransInput-' + vocabId + '-' + lang + '-' + field);
+  var value = (input ? input.value : '').trim();
+  var row = document.getElementById('dctTransEditRow-' + vocabId + '-' + lang + '-' + field);
+  if (row) row.parentNode.removeChild(row);
+
+  var vocab = (context === 'unit') ? dctUnitVocab : dctHexVocab;
+  for (var i = 0; i < vocab.length; i++) {
+    if (vocab[i].vocabId === vocabId) {
+      if (!vocab[i].translationOverrides) vocab[i].translationOverrides = {};
+      if (!vocab[i].translationOverrides[lang]) vocab[i].translationOverrides[lang] = {};
+      vocab[i].translationOverrides[lang][field] = value;
+      break;
+    }
+  }
+
+  var unitId = null;
+  var mapId = null;
+  var hexId = null;
+  if (context === 'unit') {
+    unitId = document.getElementById('unitFormId') ? document.getElementById('unitFormId').value : null;
+  } else {
+    mapId = currentMap ? currentMap.mapId : null;
+    hexId = selectedHexId;
+  }
+
+  if (unitId || (mapId && hexId)) {
+    google.script.run
+      .withSuccessHandler(function() {
+        showToast('Translation override saved', 'success');
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error saving override: ' + escapeHtml(err.message), 'error');
+      })
+      .saveTranslationOverride(unitId, mapId, hexId, vocabId, lang, field, value);
+  }
+
+  if (context === 'unit') {
+    dctRenderUnitVocabSection();
+  } else {
+    dctRenderHexVocabSection();
+  }
+}
+
+function dctCancelTransEdit(vocabId, lang, field) {
+  var row = document.getElementById('dctTransEditRow-' + vocabId + '-' + lang + '-' + field);
+  if (row) row.parentNode.removeChild(row);
+}
+
+// ================================================
+// COLLECT VOCAB FOR SAVE
+// ================================================
+
+/**
+ * Collect unit vocab and save via RPC after unit modal save.
+ */
+function dctSaveUnitVocab(unitId) {
+  if (!unitId || dctUnitVocab.length === 0) return;
+
+  dctTranslating = true;
+  dctRenderUnitVocabSection();
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      dctTranslating = false;
+      if (result && result.vocabulary) {
+        dctUnitVocab = result.vocabulary;
+      }
+      if (result && result.translationErrors && result.translationErrors.length > 0) {
+        showToast('Some translations failed: ' + result.translationErrors.length + ' error(s)', 'error');
+      }
+      dctRenderUnitVocabSection();
+    })
+    .withFailureHandler(function(err) {
+      dctTranslating = false;
+      showToast('Error saving vocabulary: ' + escapeHtml(err.message), 'error');
+      dctRenderUnitVocabSection();
+    })
+    .saveUnitVocabulary(unitId, dctUnitVocab);
+}
+
+/**
+ * Collect hex vocab and save to hex object (local) — will be saved with map.
+ */
+function dctCollectHexVocab() {
+  if (!currentMap || !selectedHexId) return dctHexVocab;
+
+  var hexes = currentMap.hexes || [];
+  for (var i = 0; i < hexes.length; i++) {
+    if (String(hexes[i].id) === String(selectedHexId)) {
+      hexes[i].vocabulary = dctHexVocab;
+      break;
+    }
+  }
+  return dctHexVocab;
+}
+
+// ================================================
+// RESET
+// ================================================
+
+function dctResetState() {
+  dctUnitVocab = [];
+  dctHexVocab = [];
+  dctEditingEntry = null;
+  dctTranslating = false;
+  dctShowingForm = '';
+  dctExpandedTranslations = {};
+}
+
+// ================================================
+// STUDENT DICTIONARY — Hex Modal Vocab Section
+// ================================================
+
+var dctStudentLang = '';          // Preferred language code (from profile or toggle)
+var dctDictPanelOpen = false;     // Floating dictionary panel state
+var dctMapVocabCache = null;      // Cached map vocabulary
+var dctTier2First = false;        // WIDA: show Tier 2 academic words first toggle
+
+/**
+ * Render student vocabulary section in hex content modal.
+ * Shows terms for this hex + unit-level terms, in student's preferred language.
+ * Applies WIDA bracket filtering: low hides Tier 3, mid/high can sort Tier 2 first.
+ */
+function dctRenderStudentHexVocab(hexId, hex) {
+  if (!hex) return '';
+
+  // Combine hex vocab + unit vocab
+  var hexVocab = (hex.vocabulary && hex.vocabulary.length > 0) ? hex.vocabulary : [];
+  var unitVocab = [];
+  if (dctMapVocabCache && dctMapVocabCache.unitVocabulary) {
+    unitVocab = dctMapVocabCache.unitVocabulary;
+  }
+
+  if (hexVocab.length === 0 && unitVocab.length === 0) return '';
+
+  var html = '<div class="dct-student-section">';
+  html += '<div class="dct-student-header">&#128218; Key Vocabulary</div>';
+  html += dctRenderStudentHexVocabInner(hex);
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Inner vocab rendering — extracted so dctToggleTier2 can re-render without rebuilding outer wrapper.
+ */
+function dctRenderStudentHexVocabInner(hex) {
+  var hexVocab = (hex.vocabulary && hex.vocabulary.length > 0) ? hex.vocabulary : [];
+  var unitVocab = [];
+  if (dctMapVocabCache && dctMapVocabCache.unitVocabulary) {
+    unitVocab = dctMapVocabCache.unitVocabulary;
+  }
+
+  var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+  var lang = dctGetPreferredLanguage();
+  var html = '';
+
+  // Tier 2 toggle for mid/high brackets
+  if (bracket === 'mid' || bracket === 'high') {
+    html += '<button type="button" class="dct-tier2-toggle' + (dctTier2First ? ' active' : '') + '" ';
+    html += 'onclick="dctToggleTier2()" aria-pressed="' + (dctTier2First ? 'true' : 'false') + '">';
+    html += 'Show Academic Words First</button>';
+  }
+
+  // Apply bracket filtering to hex vocab
+  var totalHexCount = hexVocab.length;
+  var filteredHex = dctFilterByBracket(hexVocab, bracket);
+
+  // Filter note for low bracket
+  if (bracket === 'low' && filteredHex.length < totalHexCount) {
+    html += '<div class="dct-filter-note">Showing ' + filteredHex.length + ' of ' + totalHexCount + ' terms (simplified for your level)</div>';
+  }
+
+  // Hex-specific terms first
+  if (filteredHex.length > 0) {
+    for (var i = 0; i < filteredHex.length; i++) {
+      html += dctRenderStudentVocabCard(filteredHex[i], lang);
+    }
+  }
+
+  // Show a few unit terms (max 5 contextual), also filtered by bracket
+  if (unitVocab.length > 0) {
+    var filteredUnit = dctFilterByBracket(unitVocab, bracket);
+    var shown = 0;
+    for (var u = 0; u < filteredUnit.length && shown < 5; u++) {
+      html += dctRenderStudentVocabCard(filteredUnit[u], lang);
+      shown++;
+    }
+    if (filteredUnit.length > 5) {
+      html += '<div class="dct-student-more" onclick="dctOpenDictPanel()">View all ' + filteredUnit.length + ' unit terms &#8594;</div>';
+    }
+  }
+
+  return html;
+}
+
+function dctRenderStudentVocabCard(entry, lang) {
+  var isWordOnly = (entry.displayMode === 'word_only');
+
+  var html = '<div class="dct-student-card">';
+  html += '<div class="dct-student-term">' + escapeHtml(entry.term) + '</div>';
+
+  // Tier badges — Tier 2 = "Academic Word" amber, Tier 1 = "Everyday Word" gray, Tier 3 = no badge
+  var entryTier = entry.tier || 3;
+  if (entryTier === 2) {
+    html += '<span class="dct-student-tier-badge dct-tier-academic">&#128221; Academic Word</span>';
+  } else if (entryTier === 1) {
+    html += '<span class="dct-student-tier-badge dct-tier-everyday">Everyday Word</span>';
+  }
+
+  // Phonetic pronunciation (from dictionary API lookup)
+  if (entry.phonetic) {
+    html += '<div class="dct-student-phonetic">' + escapeHtml(entry.phonetic) + '</div>';
+  }
+
+  // Show definition only if not word_only mode
+  if (!isWordOnly) {
+    html += '<div class="dct-student-def">' + escapeHtml(entry.definition) + '</div>';
+  }
+
+  // Simplified definition for WIDA 1-2 students (uses getWidaBracket for teacher preview support)
+  var _sdBracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+  if (entry.simplifiedDefinition && _sdBracket === 'low') {
+    html += '<div class="dct-student-simplified">';
+    html += '<span class="dct-simplified-icon">&#128161;</span>';
+    html += '<span class="dct-simplified-label">Simple: </span>';
+    html += escapeHtml(entry.simplifiedDefinition);
+    // Also show translated simplified definition if available
+    if (lang && entry.translations && entry.translations[lang] && entry.translations[lang].simplifiedDefinition) {
+      html += '<div class="dct-student-simplified-trans">' + (DCT_LANG_FLAGS[lang] || '') + ' ' + escapeHtml(entry.translations[lang].simplifiedDefinition) + '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Translation always shown (core EAL value)
+  if (lang && entry.translations && entry.translations[lang]) {
+    var trans = entry.translations[lang];
+    var override = (entry.translationOverrides && entry.translationOverrides[lang]) ? entry.translationOverrides[lang] : null;
+    var termTrans = (override && override.term) ? override.term : (trans.term || '');
+
+    if (termTrans) {
+      html += '<div class="dct-student-trans">';
+      html += '<span class="dct-student-trans-flag">' + (DCT_LANG_FLAGS[lang] || '') + '</span> ';
+      html += '<span class="dct-student-trans-text">' + escapeHtml(termTrans) + '</span>';
+      html += '</div>';
+    }
+  }
+
+  // Context only if not word_only mode
+  if (!isWordOnly && entry.context) {
+    html += '<div class="dct-student-context">"' + escapeHtml(entry.context) + '"</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ================================================
+// FLOATING DICTIONARY PANEL
+// ================================================
+
+function dctOpenDictPanel() {
+  dctDictPanelOpen = true;
+  var panel = document.getElementById('dctDictPanel');
+  if (panel) panel.classList.add('dct-panel-open');
+  dctRenderDictPanel();
+}
+
+function dctCloseDictPanel() {
+  dctDictPanelOpen = false;
+  var panel = document.getElementById('dctDictPanel');
+  if (panel) panel.classList.remove('dct-panel-open');
+}
+
+function dctRenderDictPanel() {
+  var body = document.getElementById('dctDictPanelBody');
+  if (!body) return;
+
+  var lang = dctGetPreferredLanguage();
+  var searchVal = '';
+  var searchInput = document.getElementById('dctDictSearch');
+  if (searchInput) searchVal = searchInput.value.toLowerCase().trim();
+
+  // Get vocab data
+  var allTerms = [];
+  if (dctMapVocabCache && dctMapVocabCache.allTerms) {
+    allTerms = dctMapVocabCache.allTerms;
+  }
+
+  // Filter by search
+  var filtered = [];
+  for (var i = 0; i < allTerms.length; i++) {
+    var t = allTerms[i];
+    if (searchVal) {
+      var match = false;
+      if (t.term.toLowerCase().indexOf(searchVal) !== -1) match = true;
+      if (t.definition.toLowerCase().indexOf(searchVal) !== -1) match = true;
+      // Check translations
+      if (lang && t.translations && t.translations[lang]) {
+        var tr = t.translations[lang];
+        if (tr.term && tr.term.toLowerCase().indexOf(searchVal) !== -1) match = true;
+      }
+      if (!match) continue;
+    }
+    filtered.push(t);
+  }
+
+  // Render language toggle — show student's home languages + languages with existing translations
+  var langCodes = dctGetAvailableLanguages(allTerms);
+  var html = '<div class="dct-panel-lang-row">';
+  for (var l = 0; l < langCodes.length; l++) {
+    var lc = langCodes[l];
+    if (!DCT_LANG_LABELS[lc]) continue;
+    var activeClass = (lang === lc) ? ' dct-lang-active' : '';
+    html += '<button class="dct-lang-btn' + activeClass + '" onclick="dctSelectLanguage(\'' + lc + '\')">' + DCT_LANG_FLAGS[lc] + ' ' + DCT_LANG_LABELS[lc] + '</button>';
+  }
+  html += '</div>';
+
+  if (filtered.length === 0) {
+    html += '<div class="dct-empty">' + (searchVal ? 'No terms match your search.' : 'No vocabulary loaded for this map.') + '</div>';
+  } else {
+    html += '<div class="dct-panel-list">';
+    for (var f = 0; f < filtered.length; f++) {
+      html += dctRenderStudentVocabCard(filtered[f], lang);
+    }
+    html += '</div>';
+  }
+
+  body.innerHTML = html;
+}
+
+function dctFilterDict() {
+  dctRenderDictPanel();
+}
+
+function dctSelectLanguage(langCode) {
+  dctStudentLang = langCode;
+  dctRenderDictPanel();
+}
+
+/**
+ * Get available language codes for toggle buttons: student home languages + any languages with translations.
+ * Prevents showing 14 buttons when most are irrelevant.
+ */
+function dctGetAvailableLanguages(vocabTerms) {
+  var seen = {};
+  // Always include student's home languages
+  if (typeof sstProfileData !== 'undefined' && sstProfileData && sstProfileData.homeLanguages) {
+    for (var h = 0; h < sstProfileData.homeLanguages.length; h++) {
+      if (DCT_LANG_LABELS[sstProfileData.homeLanguages[h]]) {
+        seen[sstProfileData.homeLanguages[h]] = true;
+      }
+    }
+  }
+  // Include any languages that have translations in the current vocab data
+  if (vocabTerms && vocabTerms.length > 0) {
+    for (var v = 0; v < vocabTerms.length; v++) {
+      var trans = vocabTerms[v].translations;
+      if (!trans) continue;
+      var tKeys = Object.keys(trans);
+      for (var k = 0; k < tKeys.length; k++) {
+        var t = trans[tKeys[k]];
+        if (t && t.term && !t.error) seen[tKeys[k]] = true;
+      }
+    }
+  }
+  // If no languages found, show original 4 as fallback
+  var result = Object.keys(seen);
+  if (result.length === 0) return ['ja', 'ko', 'fr', 'ta'];
+  return result;
+}
+
+/**
+ * Filter and sort vocabulary by WIDA bracket.
+ * low: only Tier 1+2 (filter out Tier 3 domain-specific)
+ * mid: all tiers, but sort Tier 1+2 first when dctTier2First is active
+ * high/null: all terms unfiltered
+ */
+function dctFilterByBracket(vocabTerms, bracket) {
+  if (!vocabTerms || vocabTerms.length === 0) return vocabTerms;
+  if (!bracket) return vocabTerms;
+
+  if (bracket === 'low') {
+    // Filter out Tier 3 domain-specific terms
+    var filtered = [];
+    for (var i = 0; i < vocabTerms.length; i++) {
+      var tier = vocabTerms[i].tier || 3;
+      if (tier === 1 || tier === 2) filtered.push(vocabTerms[i]);
+    }
+    return filtered;
+  }
+
+  if ((bracket === 'mid' || bracket === 'high') && dctTier2First) {
+    // Sort Tier 2 first, then Tier 1, then Tier 3
+    var sorted = vocabTerms.slice();
+    sorted.sort(function(a, b) {
+      var ta = a.tier || 3;
+      var tb = b.tier || 3;
+      var oa = (ta === 2) ? 0 : (ta === 1) ? 1 : 2;
+      var ob = (tb === 2) ? 0 : (tb === 1) ? 1 : 2;
+      return oa - ob;
+    });
+    return sorted;
+  }
+
+  return vocabTerms;
+}
+
+/**
+ * Toggle "Show Academic Words First" for mid/high WIDA brackets.
+ * Re-renders the vocab section in the student hex modal sidebar.
+ */
+function dctToggleTier2() {
+  dctTier2First = !dctTier2First;
+  var toggleEl = document.querySelector('.dct-tier2-toggle');
+  if (toggleEl) {
+    if (dctTier2First) {
+      toggleEl.className = 'dct-tier2-toggle active';
+      toggleEl.setAttribute('aria-pressed', 'true');
+    } else {
+      toggleEl.className = 'dct-tier2-toggle';
+      toggleEl.setAttribute('aria-pressed', 'false');
+    }
+  }
+  // Re-render vocab section if hex panel is open
+  var vocabBody = document.getElementById('uxoBody-vocabulary');
+  if (vocabBody && typeof currentMap !== 'undefined' && currentMap && typeof selectedHexId !== 'undefined' && selectedHexId) {
+    var hexes = currentMap.hexes || [];
+    var hex = null;
+    for (var i = 0; i < hexes.length; i++) {
+      if (String(hexes[i].id) === String(selectedHexId)) { hex = hexes[i]; break; }
+    }
+    if (hex) {
+      var innerHtml = dctRenderStudentHexVocabInner(hex);
+      vocabBody.innerHTML = innerHtml;
+      // Restore focus to the new toggle button after re-render
+      var newToggle = vocabBody.querySelector('.dct-tier2-toggle');
+      if (newToggle) newToggle.focus();
+    }
+  }
+}
+
+function dctGetPreferredLanguage() {
+  if (dctStudentLang) return dctStudentLang;
+  // Try to get from student profile
+  if (typeof sstProfileData !== 'undefined' && sstProfileData && sstProfileData.homeLanguages && sstProfileData.homeLanguages.length > 0) {
+    // Use first home language if it's a supported dictionary language
+    var supported = Object.keys(DCT_LANG_LABELS);
+    for (var i = 0; i < sstProfileData.homeLanguages.length; i++) {
+      if (supported.indexOf(sstProfileData.homeLanguages[i]) !== -1) {
+        dctStudentLang = sstProfileData.homeLanguages[i];
+        return dctStudentLang;
+      }
+    }
+  }
+  return '';
+}
+
+/**
+ * Load vocabulary for the current map (student view).
+ * Called when map loads in student mode.
+ */
+function dctLoadMapVocab() {
+  if (!currentMap || !currentMap.mapId) return;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      dctMapVocabCache = result;
+      // Update trigger button visibility
+      var trigger = document.getElementById('dctDictTrigger');
+      if (trigger) {
+        if (result && result.allTerms && result.allTerms.length > 0) {
+          trigger.style.display = 'flex';
+        } else {
+          trigger.style.display = 'none';
+        }
+      }
+    })
+    .withFailureHandler(function(err) {
+      // Silent fail — dictionary is optional
+      dctMapVocabCache = { unitVocabulary: [], hexVocabulary: {}, allTerms: [] };
+    })
+    .getMapVocabulary(currentMap.mapId);
+}
+</script>

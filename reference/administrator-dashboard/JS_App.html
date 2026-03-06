@@ -1,0 +1,226 @@
+<script>
+/**
+ * App — Main application controller
+ *
+ * Handles initialization, tab routing, user context, and module lifecycle.
+ * Each module registers itself in ModuleRegistry and implements:
+ *   - init(container)    — First-time setup. Returns a module handle.
+ *   - onActivate()       — Called when the tab is switched to (refresh data).
+ */
+
+var App = (function() {
+
+  var currentModule = null;
+  var userContext = null;
+  var config = null;
+  var modules = {}; // Initialized module handles keyed by name
+
+  // Module registry — populated by each module's <script> block
+  // Preserve any registrations made before JS_App loaded (via bootstrap)
+  var ModuleRegistry = (window.App && window.App.ModuleRegistry) || {};
+
+  // Tab display order and configuration
+  var TAB_CONFIG = [
+    { key: 'reporting',          label: 'Reporting' },
+    { key: 'observations',       label: 'Observations' },
+    { key: 'kanban',             label: 'Strategic Plan' },
+    { key: 'growth_plans',       label: 'Growth Plans' },
+    { key: 'projects',           label: 'Projects' },
+    { key: 'change_management',  label: 'Change Mgmt' },
+    { key: 'accreditation',      label: 'Accreditation' },
+    { key: 'meeting_minutes',    label: 'Meetings' },
+    { key: 'pd',                 label: 'PD Tracking' },
+    { key: 'feedback',           label: '360 Feedback' },
+    { key: 'wellness',           label: 'Wellness' }
+  ];
+
+  /**
+   * Initializes the application. Called on page load.
+   */
+  async function init() {
+    try {
+      showLoadingState();
+
+      // Load user context and config in parallel
+      var results = await Promise.all([
+        ServerAPI.getCurrentUser(),
+        ServerAPI.getConfig()
+      ]);
+
+      userContext = results[0];
+      config = results[1];
+
+      renderHeader();
+      renderTabBar();
+
+      // Auto-switch to the first visible tab
+      var visibleTabs = getVisibleTabs();
+      if (visibleTabs.length > 0) {
+        await switchTab(visibleTabs[0].key);
+      }
+
+      hideLoadingState();
+    } catch (e) {
+      hideLoadingState();
+      showError(e.message);
+    }
+  }
+
+  /**
+   * Returns tabs visible to the current user based on their role.
+   */
+  function getVisibleTabs() {
+    if (!userContext) return [];
+    return TAB_CONFIG.filter(function(tab) {
+      return userContext.visibleModules.indexOf(tab.key) !== -1;
+    });
+  }
+
+  /**
+   * Renders the app header with title and user info.
+   */
+  function renderHeader() {
+    var headerUser = document.getElementById('header-user');
+    if (!headerUser || !userContext) return;
+
+    headerUser.innerHTML = '';
+    headerUser.appendChild(
+      ClientUtils.el('span', { className: 'app-header__avatar' }, [
+        ClientUtils.initials(userContext.firstName, userContext.lastName)
+      ])
+    );
+    headerUser.appendChild(
+      ClientUtils.el('span', {}, [
+        userContext.firstName + ' ' + userContext.lastName
+      ])
+    );
+    if (userContext.isAdmin) {
+      headerUser.appendChild(
+        ClientUtils.el('span', { className: 'badge badge-info', style: 'margin-left:4px;' }, ['Admin'])
+      );
+    }
+  }
+
+  /**
+   * Renders the tab navigation bar based on visible modules.
+   */
+  function renderTabBar() {
+    var tabBar = document.getElementById('tab-bar');
+    if (!tabBar) return;
+
+    tabBar.innerHTML = '';
+    var visibleTabs = getVisibleTabs();
+
+    visibleTabs.forEach(function(tab) {
+      var btn = ClientUtils.el('button', {
+        className: 'tab-btn',
+        dataset: { module: tab.key },
+        'aria-label': tab.label + ' tab',
+        onClick: function() { switchTab(tab.key); }
+      }, [tab.label]);
+      tabBar.appendChild(btn);
+    });
+  }
+
+  /**
+   * Switches to a module tab. Lazy-initializes the module on first visit.
+   * @param {string} moduleName
+   */
+  async function switchTab(moduleName) {
+    if (currentModule === moduleName) return;
+
+    // Hide all module containers
+    var containers = document.querySelectorAll('.module-container');
+    for (var i = 0; i < containers.length; i++) {
+      containers[i].classList.remove('active');
+    }
+
+    // Show target container
+    var container = document.getElementById('module-' + moduleName);
+    if (!container) return;
+    container.classList.add('active');
+
+    // Update tab bar active state
+    var buttons = document.querySelectorAll('.tab-btn');
+    for (var j = 0; j < buttons.length; j++) {
+      buttons[j].classList.toggle('active', buttons[j].dataset.module === moduleName);
+    }
+
+    currentModule = moduleName;
+
+    // Initialize or activate the module
+    if (ModuleRegistry[moduleName]) {
+      if (!modules[moduleName]) {
+        // First-time init
+        try {
+          LoadingSpinner.show(container);
+          modules[moduleName] = await ModuleRegistry[moduleName].init(container);
+          LoadingSpinner.hide(container);
+        } catch (e) {
+          LoadingSpinner.hide(container);
+          container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Failed to load module</div><div class="empty-state__sub">' + ClientUtils.escapeHtml(e.message) + '</div></div>';
+        }
+      } else {
+        // Re-activate (refresh data)
+        if (modules[moduleName].onActivate) {
+          modules[moduleName].onActivate();
+        }
+      }
+    } else {
+      // Module not yet registered (coming soon)
+      container.innerHTML = '<div class="coming-soon"><div class="coming-soon__title">Coming Soon</div><div class="text-muted">This module is under development.</div></div>';
+    }
+  }
+
+  function showLoadingState() {
+    var main = document.getElementById('main-content');
+    if (main) LoadingSpinner.show(main);
+  }
+
+  function hideLoadingState() {
+    var main = document.getElementById('main-content');
+    if (main) LoadingSpinner.hide(main);
+  }
+
+  function showError(message) {
+    var main = document.getElementById('main-content');
+    if (main) {
+      main.innerHTML = '<div class="empty-state" style="padding-top:80px;">' +
+        '<div class="empty-state__icon">&#9888;</div>' +
+        '<div class="empty-state__text">Unable to load dashboard</div>' +
+        '<div class="empty-state__sub">' + ClientUtils.escapeHtml(message) + '</div>' +
+        '</div>';
+    }
+  }
+
+  /**
+   * Returns the current user context.
+   * @returns {Object|null}
+   */
+  function getUser() {
+    return userContext;
+  }
+
+  /**
+   * Returns the app config.
+   * @returns {Object|null}
+   */
+  function getConfig() {
+    return config;
+  }
+
+  return {
+    init: init,
+    switchTab: switchTab,
+    getUser: getUser,
+    getConfig: getConfig,
+    ModuleRegistry: ModuleRegistry
+  };
+
+})();
+
+// Start the app when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+  App.init();
+});
+</script>

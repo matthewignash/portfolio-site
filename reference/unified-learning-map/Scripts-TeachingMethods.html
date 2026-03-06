@@ -1,0 +1,886 @@
+<script>
+// ============================================================================
+// TEACHING METHODS GUIDE — tmg- prefix
+// Teacher-only tab: PBL, Design Thinking, Iterative Design guidance
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+var tmgLoaded = false;
+
+// ---- Template Definitions ----
+var TMG_TEMPLATES = {
+  scienceInvestigation: {
+    name: 'Science Investigation',
+    icon: '&#128300;',
+    description: 'A structured scientific inquiry with 5 phases from research through reporting. Great for lab-based units.',
+    hexes: [
+      { label: 'Research', type: 'core', row: 1, col: 1, designPhase: 'research', isCheckpoint: false },
+      { label: 'Hypothesis', type: 'core', row: 1, col: 2, designPhase: 'hypothesis', isCheckpoint: false },
+      { label: 'Experiment', type: 'core', row: 2, col: 1, designPhase: 'experiment', isCheckpoint: true },
+      { label: 'Analyze', type: 'core', row: 2, col: 2, designPhase: 'analyze', isCheckpoint: false },
+      { label: 'Report', type: 'core', row: 3, col: 1, designPhase: 'report', isCheckpoint: true }
+    ],
+    edges: [
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 }
+    ],
+    phases: ['Research', 'Hypothesis', 'Experiment', 'Analyze', 'Report']
+  },
+  designChallenge: {
+    name: 'Design Challenge',
+    icon: '&#128736;',
+    description: 'A full d.school design thinking cycle with 6 hexes and iteration built in. Ideal for engineering or product design.',
+    hexes: [
+      { label: 'Empathize', type: 'core', row: 1, col: 1, designPhase: 'empathize', isCheckpoint: false },
+      { label: 'Define', type: 'core', row: 1, col: 2, designPhase: 'define', isCheckpoint: false },
+      { label: 'Ideate', type: 'core', row: 2, col: 1, designPhase: 'ideate', isCheckpoint: false },
+      { label: 'Prototype', type: 'core', row: 2, col: 2, designPhase: 'prototype', isCheckpoint: true },
+      { label: 'Test', type: 'core', row: 3, col: 1, designPhase: 'test', isCheckpoint: true },
+      { label: 'Iterate', type: 'extension', row: 3, col: 2, designPhase: 'iterate', isCheckpoint: false }
+    ],
+    edges: [
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 },
+      { from: 4, to: 5 },
+      { from: 5, to: 3 }
+    ],
+    phases: ['Empathize', 'Define', 'Ideate', 'Prototype', 'Test', 'Iterate']
+  },
+  communityAction: {
+    name: 'Community Action Project',
+    icon: '&#127758;',
+    description: 'Students discover a local issue, design a solution, and reflect on impact. Perfect for social studies or service learning.',
+    hexes: [
+      { label: 'Discover', type: 'core', row: 1, col: 1, designPhase: 'discover', isCheckpoint: false },
+      { label: 'Define', type: 'core', row: 1, col: 2, designPhase: 'define', isCheckpoint: false },
+      { label: 'Develop', type: 'core', row: 2, col: 1, designPhase: 'develop', isCheckpoint: true },
+      { label: 'Deliver', type: 'core', row: 2, col: 2, designPhase: 'deliver', isCheckpoint: true },
+      { label: 'Reflect', type: 'core', row: 3, col: 1, designPhase: 'reflect', isCheckpoint: false }
+    ],
+    edges: [
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 }
+    ],
+    phases: ['Discover', 'Define', 'Develop', 'Deliver', 'Reflect']
+  },
+  ibDesignCycle: {
+    name: 'IB Design Cycle',
+    icon: '&#127891;',
+    description: 'Follows the IB MYP Design Cycle with 4 phases. Suited for IB schools using criterion-based assessment.',
+    hexes: [
+      { label: 'Inquiring & Analysing', type: 'core', row: 1, col: 1, designPhase: 'inquiring', isCheckpoint: false },
+      { label: 'Developing Ideas', type: 'core', row: 1, col: 2, designPhase: 'developing', isCheckpoint: false },
+      { label: 'Creating the Solution', type: 'core', row: 2, col: 1, designPhase: 'creating', isCheckpoint: true },
+      { label: 'Evaluating', type: 'core', row: 2, col: 2, designPhase: 'evaluating', isCheckpoint: true }
+    ],
+    edges: [
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 0 }
+    ],
+    phases: ['Inquiring & Analysing', 'Developing Ideas', 'Creating the Solution', 'Evaluating']
+  }
+};
+
+// ---- Phase Color Map (reused across demo and templates) ----
+var TMG_PHASE_COLORS = {
+  empathize: '#7c3aed',
+  define: '#2563eb',
+  ideate: '#059669',
+  prototype: '#d97706',
+  test: '#dc2626',
+  iterate: '#9333ea',
+  research: '#7c3aed',
+  hypothesis: '#2563eb',
+  experiment: '#059669',
+  analyze: '#d97706',
+  report: '#dc2626',
+  discover: '#7c3aed',
+  develop: '#059669',
+  deliver: '#d97706',
+  reflect: '#2563eb',
+  inquiring: '#7c3aed',
+  developing: '#2563eb',
+  creating: '#059669',
+  evaluating: '#d97706'
+};
+
+// ================================================
+// ENTRY POINT
+// ================================================
+
+function loadTeachingMethodsTab() {
+  if (tmgLoaded) return;
+  tmgLoaded = true;
+  switchTmgSection('gettingStarted');
+}
+
+var TMG_SECTION_MAP = {
+  gettingStarted: { id: 'tmgSectionGettingStarted', render: function() { return tmgRenderGettingStarted(); } },
+  concepts:       { id: 'tmgSectionConcepts',       render: function() { return tmgRenderConceptCards(); } },
+  demo:           { id: 'tmgSectionDemo',           render: function() { return tmgRenderInteractiveDemo(); } },
+  setup:          { id: 'tmgSectionSetup',          render: function() { return tmgRenderSetupGuide(); } },
+  templates:      { id: 'tmgSectionTemplates',      render: function() { return tmgRenderTemplateGallery(); } },
+  strategies:     { id: 'tmgSectionStrategies',     render: function() { return tmgRenderStrategiesTab(); } }
+};
+
+function switchTmgSection(sectionName) {
+  var keys = ['gettingStarted', 'concepts', 'demo', 'setup', 'templates', 'strategies'];
+  var i, key, el;
+
+  // Hide all sections
+  for (i = 0; i < keys.length; i++) {
+    key = keys[i];
+    el = document.getElementById(TMG_SECTION_MAP[key].id);
+    if (el) el.style.display = 'none';
+  }
+
+  // Update active button
+  var btns = document.querySelectorAll('#tmgSubNav .tmg-subnav-btn');
+  for (i = 0; i < btns.length; i++) {
+    btns[i].className = 'tmg-subnav-btn' + (keys[i] === sectionName ? ' active' : '');
+  }
+
+  // Show selected section + lazy render
+  var section = TMG_SECTION_MAP[sectionName];
+  if (!section) return;
+  el = document.getElementById(section.id);
+  if (!el) return;
+  el.style.display = '';
+
+  if (!tmgRenderedSections[sectionName]) {
+    tmgRenderedSections[sectionName] = true;
+    el.innerHTML = '<div class="tmg-container">' + section.render() + '</div>';
+  }
+
+  // Reset scroll position
+  var sc = el.closest('.scroll-container');
+  if (sc) sc.scrollTop = 0;
+}
+
+// ================================================
+// GETTING STARTED (Onboarding Reference)
+// ================================================
+
+function tmgRenderGettingStarted() {
+  var steps = [
+    {
+      title: 'Create a Course & Unit',
+      desc: 'Head to the <b>Courses</b> tab to create a course, then add units inside it. Each unit connects to one hex map.'
+    },
+    {
+      title: 'Build a Hex Map',
+      desc: 'Open the <b>Map Builder</b> tab and add hexes to create a visual activity board. Each hex is a learning task students will complete.'
+    },
+    {
+      title: 'Add Assessments & Connections',
+      desc: 'Attach embedded assessments to hexes and connect them with paths. Use <b>branch conditions</b> to create adaptive learning pathways.'
+    },
+    {
+      title: 'Assign to a Class',
+      desc: 'Create a class in the <b>Classes</b> tab, add students, then assign your map. Set a due date so students can see it in their planner.'
+    },
+    {
+      title: 'Track & Support',
+      desc: 'Use the <b>Progress</b> tab to monitor student progress, spot knowledge gaps, log formative checks, and review student submissions.'
+    }
+  ];
+
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">\uD83D\uDE80 Getting Started: Your First Map in 5 Steps</div>';
+  html += '<div class="tmg-steps">';
+
+  for (var i = 0; i < steps.length; i++) {
+    html += '<div class="tmg-step">';
+    html += '<div class="tmg-step-num">' + (i + 1) + '</div>';
+    html += '<div class="tmg-step-content">';
+    html += '<div class="tmg-step-title">' + steps[i].title + '</div>';
+    html += '<div class="tmg-step-desc">' + steps[i].desc + '</div>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .tmg-steps
+  html += '<button class="tur-replay-btn" onclick="if(typeof turReplayTour===\'function\')turReplayTour()"><span class="tur-replay-icon">\u25B6</span> Replay Interactive Tour</button>';
+  html += '</div>'; // .tmg-section
+  return html;
+}
+
+// ================================================
+// CONCEPT CARDS (Expandable Accordion)
+// ================================================
+
+function tmgRenderConceptCards() {
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">Understanding the Approaches</div>';
+  html += '<div class="tmg-concept-cards">';
+
+  // PBL Card
+  html += '<div class="tmg-concept-card" id="tmgCardPbl">';
+  html += '<div class="tmg-concept-header" onclick="tmgToggleCard(\'tmgCardPbl\')">';
+  html += '<div class="tmg-concept-icon tmg-pbl">&#127959;</div>';
+  html += '<div class="tmg-concept-title">Project-Based Learning (PBL)<span class="tmg-concept-subtitle">Extended inquiry driven by a real-world question</span></div>';
+  html += '<span class="tmg-concept-chevron">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="tmg-concept-body">';
+  html += '<p>Project-Based Learning is a teaching method where students work on a sustained, meaningful project driven by an authentic question or challenge. Rather than learning content in isolation, students apply knowledge and skills to solve real-world problems.</p>';
+  html += '<h4>Why it works</h4>';
+  html += '<ul>';
+  html += '<li>Students develop deeper understanding through application</li>';
+  html += '<li>Collaboration and communication skills grow naturally</li>';
+  html += '<li>Motivation increases when work has authentic purpose</li>';
+  html += '<li>Critical thinking develops through iteration and feedback</li>';
+  html += '</ul>';
+  html += '<h4>How hex maps support PBL</h4>';
+  html += '<div class="tmg-highlight">Each hex represents a milestone in the project journey. The driving question anchors the map, while branching paths allow students to explore different approaches. Checkpoint hexes create natural moments for teacher review and iteration.</div>';
+  html += '<ul>';
+  html += '<li><strong>Driving question</strong> becomes the map title and anchoring context</li>';
+  html += '<li><strong>Milestones</strong> are mapped as hexes with clear deliverables</li>';
+  html += '<li><strong>Iteration checkpoints</strong> require teacher approval before progressing</li>';
+  html += '<li><strong>Public product</strong> is the final hex, representing the culminating work</li>';
+  html += '</ul>';
+  html += '</div>';
+  html += '</div>';
+
+  // Design Thinking Card
+  html += '<div class="tmg-concept-card" id="tmgCardDt">';
+  html += '<div class="tmg-concept-header" onclick="tmgToggleCard(\'tmgCardDt\')">';
+  html += '<div class="tmg-concept-icon tmg-dt">&#128161;</div>';
+  html += '<div class="tmg-concept-title">Design Thinking<span class="tmg-concept-subtitle">Human-centered problem solving through structured phases</span></div>';
+  html += '<span class="tmg-concept-chevron">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="tmg-concept-body">';
+  html += '<p>Design Thinking is a structured approach to creative problem-solving that puts human needs at the center. It moves through defined phases, from understanding users to testing solutions, with intentional reflection at each stage.</p>';
+  html += '<h4>Available frameworks</h4>';
+  html += '<ul>';
+  html += '<li><strong>d.school 5-Phase</strong>: Empathize, Define, Ideate, Prototype, Test</li>';
+  html += '<li><strong>Double Diamond</strong>: Discover, Define, Develop, Deliver</li>';
+  html += '<li><strong>IB Design Cycle</strong>: Inquiring &amp; Analysing, Developing Ideas, Creating the Solution, Evaluating</li>';
+  html += '<li><strong>Custom</strong>: Create your own 1-8 phase framework</li>';
+  html += '</ul>';
+  html += '<h4>How hex maps support design thinking</h4>';
+  html += '<div class="tmg-highlight">Each hex is tagged with a design phase. Students see a visual progress bar showing which phase they are in. Phase colors on hex borders make the structure visible at a glance. Branch connections can loop back to earlier phases, supporting natural iteration.</div>';
+  html += '<ul>';
+  html += '<li><strong>Phase tagging</strong> on each hex shows where students are in the process</li>';
+  html += '<li><strong>Phase progress bar</strong> shows students their journey through the cycle</li>';
+  html += '<li><strong>Branch loops</strong> connect Test back to Prototype for iteration</li>';
+  html += '<li><strong>Contextual guidance</strong> tells students what to focus on in each phase</li>';
+  html += '</ul>';
+  html += '</div>';
+  html += '</div>';
+
+  // Iterative Design Card
+  html += '<div class="tmg-concept-card" id="tmgCardId">';
+  html += '<div class="tmg-concept-header" onclick="tmgToggleCard(\'tmgCardId\')">';
+  html += '<div class="tmg-concept-icon tmg-id">&#128260;</div>';
+  html += '<div class="tmg-concept-title">Iterative Design<span class="tmg-concept-subtitle">Learn through cycles of creating, testing, and refining</span></div>';
+  html += '<span class="tmg-concept-chevron">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="tmg-concept-body">';
+  html += '<p>Iterative Design is the practice of refining work through repeated cycles of creation, feedback, and revision. Rather than expecting perfection on the first attempt, students learn that improvement comes through deliberate revision.</p>';
+  html += '<h4>The power of feedback loops</h4>';
+  html += '<ul>';
+  html += '<li>Students learn that revision is a strength, not a failure</li>';
+  html += '<li>Each iteration captures evidence, reflection, and teacher feedback</li>';
+  html += '<li>Growth becomes visible through the iteration timeline</li>';
+  html += '<li>Peer feedback adds diverse perspectives to the revision process</li>';
+  html += '</ul>';
+  html += '<h4>How hex maps support iteration</h4>';
+  html += '<div class="tmg-highlight">Checkpoint hexes require teacher review before students progress. When a teacher requests revision, the student sees specific feedback and can resubmit. Every attempt is captured in the iteration history, creating a portfolio of growth over time.</div>';
+  html += '<ul>';
+  html += '<li><strong>Checkpoint hexes</strong> create natural pause-and-reflect moments</li>';
+  html += '<li><strong>Teacher-gated review</strong> ensures quality before progression</li>';
+  html += '<li><strong>Iteration history</strong> captures every submission with evidence and reflection</li>';
+  html += '<li><strong>Peer feedback</strong> adds structured review from classmates</li>';
+  html += '<li><strong>Growth timeline</strong> makes improvement visible over multiple attempts</li>';
+  html += '</ul>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>'; // .tmg-concept-cards
+  html += '</div>'; // .tmg-section
+  return html;
+}
+
+function tmgToggleCard(cardId) {
+  var card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.toggle('tmg-expanded');
+}
+
+// ================================================
+// INTERACTIVE DEMO
+// ================================================
+
+function tmgRenderInteractiveDemo() {
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">Interactive Example: "Design a School Garden"</div>';
+  html += '<div class="tmg-demo-container">';
+  html += '<div class="tmg-demo-title">d.school 5-Phase Design Thinking Map</div>';
+  html += '<div class="tmg-demo-subtitle">This sample PBL unit shows how hexes, phases, checkpoints, and iteration loops work together.</div>';
+
+  html += '<div class="tmg-demo-grid">';
+
+  // Empathize hex
+  html += tmgBuildDemoHex('Empathize', 'empathize', 'Interview\nstakeholders', false);
+
+  // Arrow
+  html += '<div class="tmg-demo-arrow">&#10132;</div>';
+
+  // Define hex
+  html += tmgBuildDemoHex('Define', 'define', 'Problem\nstatement', false);
+
+  // Arrow
+  html += '<div class="tmg-demo-arrow">&#10132;</div>';
+
+  // Ideate hex
+  html += tmgBuildDemoHex('Ideate', 'ideate', 'Brainstorm\nsolutions', false);
+
+  // Arrow
+  html += '<div class="tmg-demo-arrow">&#10132;</div>';
+
+  // Prototype hex (checkpoint)
+  html += tmgBuildDemoHex('Prototype', 'prototype', 'Build garden\nmodel', true);
+
+  // Arrow
+  html += '<div class="tmg-demo-arrow">&#10132;</div>';
+
+  // Test hex (checkpoint)
+  html += tmgBuildDemoHex('Test', 'test', 'Present &\nget feedback', true);
+
+  html += '</div>'; // .tmg-demo-grid
+
+  // Annotation legend
+  html += '<div class="tmg-demo-annotation">';
+  html += '<span class="tmg-demo-anno-chip tmg-anno-phase">&#127912; Color = Design Phase</span>';
+  html += '<span class="tmg-demo-anno-chip tmg-anno-checkpoint">&#9878; Gold badge = Teacher Checkpoint</span>';
+  html += '<span class="tmg-demo-anno-chip tmg-anno-loop">&#128260; Test loops back to Prototype for iteration</span>';
+  html += '</div>';
+
+  html += '</div>'; // .tmg-demo-container
+  html += '</div>'; // .tmg-section
+  return html;
+}
+
+function tmgBuildDemoHex(label, phase, desc, isCheckpoint) {
+  var color = TMG_PHASE_COLORS[phase] || '#64748b';
+  var html = '';
+  html += '<div class="tmg-demo-hex">';
+  html += '<div class="tmg-demo-hex-shape">';
+  html += '<svg viewBox="0 0 80 70">';
+  html += '<polygon points="40,2 76,19 76,53 40,70 4,53 4,19" fill="' + color + '" fill-opacity="0.12" stroke="' + color + '" stroke-width="2.5"/>';
+  html += '<text x="40" y="38" text-anchor="middle" font-size="9" fill="' + color + '" font-weight="600">';
+  var lines = desc.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    html += '<tspan x="40" dy="' + (i === 0 ? '0' : '12') + '">' + lines[i] + '</tspan>';
+  }
+  html += '</text>';
+  html += '</svg>';
+  if (isCheckpoint) {
+    html += '<div class="tmg-demo-checkpoint">&#9878;</div>';
+  }
+  html += '</div>';
+  html += '<div class="tmg-demo-hex-label">' + label + '</div>';
+  html += '<span class="tmg-demo-hex-phase tmg-phase-' + phase + '">' + label + '</span>';
+  html += '</div>';
+  return html;
+}
+
+// ================================================
+// STEP-BY-STEP SETUP GUIDE
+// ================================================
+
+function tmgRenderSetupGuide() {
+  var steps = [
+    {
+      title: 'Create or select a course',
+      desc: 'Go to the Courses tab and create a course (or use an existing one). The course organizes your units and maps.',
+      tip: 'You can have both PBL and traditional units in the same course.'
+    },
+    {
+      title: 'Create a unit and enable PBL mode',
+      desc: 'Inside the course, add a new unit. Toggle "Enable PBL / Design Thinking" to ON. This activates all PBL features for that unit only.',
+      tip: 'Units without PBL enabled work exactly as before. Nothing changes for them.'
+    },
+    {
+      title: 'Choose a design thinking framework',
+      desc: 'Select a preset framework (d.school, Double Diamond, IB Design Cycle) or create a custom one with your own phase names and colors.',
+      tip: 'You can change the framework later. Hex phase tags will update to match.'
+    },
+    {
+      title: 'Create a map and tag hexes with phases',
+      desc: 'Open the Map Builder and create hexes for your unit. In the hex editor, use the "Design Phase" dropdown to tag each hex with a phase from your framework.',
+      tip: 'Phase colors appear on hex borders so students can see the design cycle visually.'
+    },
+    {
+      title: 'Mark checkpoint hexes for iteration gates',
+      desc: 'Toggle "Checkpoint Hex" on any hex where you want students to pause for review. At checkpoints, students must submit their work and wait for teacher approval before continuing.',
+      tip: 'Common checkpoint locations: after Prototype and Test phases.'
+    },
+    {
+      title: 'Enable peer feedback on relevant hexes',
+      desc: 'In the hex editor, turn on peer feedback and define 1-3 review criteria. Students will rate each other using these criteria after completing their own work.',
+      tip: 'Keep criteria simple and observable. Example: "Clarity", "Creativity", "Evidence".'
+    },
+    {
+      title: 'Assign the map to your class',
+      desc: 'Use the "Assign to Class" button on the map card. Optionally set a due date. Students will see the map with phase progress, iteration history, and peer feedback built in.',
+      tip: 'Check the PBL Insights sub-tab in Progress to monitor iteration patterns and peer feedback quality.'
+    }
+  ];
+
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">Step-by-Step Setup Guide</div>';
+  html += '<div class="tmg-steps">';
+
+  for (var i = 0; i < steps.length; i++) {
+    html += '<div class="tmg-step">';
+    html += '<div class="tmg-step-num">' + (i + 1) + '</div>';
+    html += '<div class="tmg-step-content">';
+    html += '<div class="tmg-step-title">' + steps[i].title + '</div>';
+    html += '<div class="tmg-step-desc">' + steps[i].desc + '</div>';
+    if (steps[i].tip) {
+      html += '<div class="tmg-step-tip">&#128161; ' + steps[i].tip + '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .tmg-steps
+  html += '</div>'; // .tmg-section
+  return html;
+}
+
+// ================================================
+// TEMPLATE GALLERY
+// ================================================
+
+function tmgRenderTemplateGallery() {
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">Starter Templates</div>';
+  html += '<p style="color:#64748b; font-size:13px; margin-bottom:16px;">Click "Use Template" to create a new map pre-configured with hexes, phases, and connections. You can customize everything after creation.</p>';
+  html += '<div class="tmg-templates">';
+
+  var keys = ['scienceInvestigation', 'designChallenge', 'communityAction', 'ibDesignCycle'];
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k];
+    var tpl = TMG_TEMPLATES[key];
+    html += '<div class="tmg-template-card">';
+    html += '<div class="tmg-template-icon">' + tpl.icon + '</div>';
+    html += '<div class="tmg-template-name">' + tpl.name + '</div>';
+    html += '<div class="tmg-template-desc">' + tpl.description + '</div>';
+    html += '<div class="tmg-template-phases">';
+    for (var p = 0; p < tpl.phases.length; p++) {
+      html += '<span class="tmg-template-phase-chip">' + tpl.phases[p] + '</span>';
+    }
+    html += '</div>';
+    html += '<button class="tmg-template-btn" onclick="tmgUseTemplate(\'' + key + '\')">&#10133; Use Template</button>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .tmg-templates
+  html += '</div>'; // .tmg-section
+  return html;
+}
+
+// ================================================
+// USE TEMPLATE — creates a new map from template data
+// ================================================
+
+function tmgUseTemplate(templateKey) {
+  var tpl = TMG_TEMPLATES[templateKey];
+  if (!tpl) {
+    showToast('Template not found', 'error');
+    return;
+  }
+
+  var rowId = 'tmgInlineTitleRow-' + templateKey;
+  if (document.getElementById(rowId)) return;
+
+  // Find the template card to insert inline input
+  var btn = document.querySelector('[onclick*="tmgUseTemplate(\'' + templateKey + '\'"]');
+  var container = btn ? btn.parentNode : document.getElementById('tmgTemplatesContainer');
+  if (!container) return;
+
+  var defaultTitle = tpl.name + ' Map';
+  var row = document.createElement('div');
+  row.id = rowId;
+  row.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;';
+  row.innerHTML = '<input id="tmgTitleInput-' + escapeHtml(templateKey) + '" type="text" '
+    + 'value="' + escapeHtml(defaultTitle) + '" maxlength="100" '
+    + 'style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+    + 'onkeydown="if(event.key===\'Enter\'){tmgConfirmUseTemplate(\'' + escapeHtml(templateKey) + '\');}if(event.key===\'Escape\'){tmgCancelUseTemplate(\'' + escapeHtml(templateKey) + '\');}">'
+    + '<button onclick="tmgConfirmUseTemplate(\'' + escapeHtml(templateKey) + '\')" style="padding:6px 12px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Create</button>'
+    + '<button onclick="tmgCancelUseTemplate(\'' + escapeHtml(templateKey) + '\')" style="padding:6px 12px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+  container.appendChild(row);
+  var input = document.getElementById('tmgTitleInput-' + templateKey);
+  if (input) { input.focus(); input.select(); }
+}
+
+function tmgCancelUseTemplate(templateKey) {
+  var row = document.getElementById('tmgInlineTitleRow-' + templateKey);
+  if (row) row.parentNode.removeChild(row);
+}
+
+function tmgConfirmUseTemplate(templateKey) {
+  var tpl = TMG_TEMPLATES[templateKey];
+  if (!tpl) return;
+  var input = document.getElementById('tmgTitleInput-' + templateKey);
+  var title = (input ? input.value : '').trim();
+  if (!title) { showToast('Title cannot be empty', 'error'); return; }
+  var row = document.getElementById('tmgInlineTitleRow-' + templateKey);
+  if (row) row.parentNode.removeChild(row);
+
+  // Build template data for backend
+  var templateData = {
+    title: title,
+    hexes: [],
+    edges: []
+  };
+
+  for (var h = 0; h < tpl.hexes.length; h++) {
+    var hexDef = tpl.hexes[h];
+    templateData.hexes.push({
+      label: hexDef.label,
+      type: hexDef.type || 'core',
+      row: hexDef.row,
+      col: hexDef.col,
+      designPhase: hexDef.designPhase || '',
+      isCheckpoint: hexDef.isCheckpoint || false
+    });
+  }
+
+  for (var e = 0; e < tpl.edges.length; e++) {
+    templateData.edges.push({
+      fromIndex: tpl.edges[e].from,
+      toIndex: tpl.edges[e].to
+    });
+  }
+
+  showToast('Creating map from template...');
+
+  google.script.run
+    .withSuccessHandler(function(newMap) {
+      showToast('Map "' + title + '" created successfully!');
+      // Reload maps to show the new one
+      if (typeof mapsData !== 'undefined' && newMap) {
+        mapsData.push(newMap);
+        showMaps();
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error creating map: ' + escapeHtml(err.message), 'error');
+    })
+    .createMapFromTemplate(templateData);
+}
+
+// ================================================
+// RESEARCH STRATEGIES (Silver, Strong & Perini)
+// Client-side data mirrors — no RPC needed
+// ================================================
+
+var TMG_STYLE_META = [
+  { key: 'mastery', label: 'Mastery', motivator: 'Success & clear expectations', color: '#2563eb', icon: '&#127919;', focus: 'Remember, summarize, demonstrate skills', whenToUse: 'When students need to acquire and retain foundational knowledge, skills, or procedures' },
+  { key: 'understanding', label: 'Understanding', motivator: 'Curiosity & evidence-based reasoning', color: '#7c3aed', icon: '&#128269;', focus: 'Explain, interpret, prove with evidence', whenToUse: 'When students need to analyze, compare, or build arguments using evidence and logic' },
+  { key: 'selfExpressive', label: 'Self-Expressive', motivator: 'Originality & imagination', color: '#059669', icon: '&#127912;', focus: 'Create, imagine, make connections', whenToUse: 'When students need to generate ideas, explore possibilities, or express creative thinking' },
+  { key: 'interpersonal', label: 'Interpersonal', motivator: 'Relationships & personal connection', color: '#d97706', icon: '&#129309;', focus: 'Relate, empathize, collaborate', whenToUse: 'When students need to learn from and with each other, or connect content to personal experience' },
+  { key: 'fourStyle', label: 'Four-Style', motivator: 'All four learning styles together', color: '#6366f1', icon: '&#128256;', focus: 'Rotate through mastery, understanding, self-expressive, and interpersonal tasks', whenToUse: 'When you want to reach all learners through differentiated task formats in one lesson' }
+];
+
+var TMG_STRAT_DATA = [
+  // Mastery (4)
+  { name: 'New American Lecture', key: 'newAmericanLecture', style: 'mastery', estimatedMinutes: 30, phases: ['Hook with visual organizer', 'Present in brief chunks (pause & process)', 'Students record key ideas', 'Review & assess'], whenToUse: 'Direct instruction that needs active student processing', description: 'Teacher presents content in short chunks with built-in pause-and-process cycles. Students use a visual organizer to capture and connect key ideas.' },
+  { name: 'Direct Instruction', key: 'directInstruction', style: 'mastery', estimatedMinutes: 25, phases: ['Model the skill', 'Guided practice with feedback', 'Independent practice', 'Assessment check'], whenToUse: 'Step-by-step skill acquisition or procedural learning', description: 'Explicit modeling followed by guided practice and independent application. Effective for teaching procedures, algorithms, or skills that require accuracy.' },
+  { name: 'Graduated Difficulty', key: 'graduatedDifficulty', style: 'mastery', estimatedMinutes: 30, phases: ['Present 3-5 levels of difficulty', 'Students self-select starting level', 'Work through progressively harder tasks', 'Reflect on growth'], whenToUse: 'Practicing skills at different complexity levels', description: 'Students work through tasks of increasing difficulty, choosing their own entry point. Builds confidence through achievable challenge and visible progress.' },
+  { name: 'Teams-Games-Tournaments', key: 'teamsGamesTournaments', style: 'mastery', estimatedMinutes: 35, phases: ['Teach content', 'Team study with practice questions', 'Tournament rounds (mixed-ability tables)', 'Score and recognize teams'], whenToUse: 'Review and retention through friendly competition', description: 'Cooperative learning structure where students study together then compete in academic tournaments. Combines teamwork with individual accountability.' },
+
+  // Understanding (4)
+  { name: 'Compare and Contrast', key: 'compareContrast', style: 'understanding', estimatedMinutes: 25, phases: ['Identify items to compare', 'Select criteria for comparison', 'Analyze similarities and differences', 'Draw conclusions and generalize'], whenToUse: 'Deepening understanding through structured comparison', description: 'Students use criteria-based comparison to find meaningful similarities, differences, and patterns. Develops analytical thinking and evidence-based conclusions.' },
+  { name: 'Reading for Meaning', key: 'readingForMeaning', style: 'understanding', estimatedMinutes: 25, phases: ['Preview provocative statements', 'Read text for evidence', 'Mark support/refute for each statement', 'Discuss and defend positions'], whenToUse: 'Active reading with evidence-based reasoning', description: 'Students evaluate provocative statements against a text, finding evidence to support or refute each claim. Builds critical reading and argumentation skills.' },
+  { name: 'Concept Attainment', key: 'conceptAttainment', style: 'understanding', estimatedMinutes: 25, phases: ['Present yes/no examples', 'Students hypothesize critical attributes', 'Test with new examples', 'Define the concept precisely'], whenToUse: 'Building deep conceptual understanding from examples', description: 'Students analyze examples and non-examples to discover the defining attributes of a concept. Develops inductive reasoning and precise thinking.' },
+  { name: 'Mystery', key: 'mystery', style: 'understanding', estimatedMinutes: 30, phases: ['Present the mystery question', 'Distribute clue cards', 'Students organize clues into categories', 'Construct and defend explanations'], whenToUse: 'Engaging investigation that requires evidence organization', description: 'Students receive clue cards and must organize evidence to solve a compelling question. Develops skills in categorizing information and building explanations.' },
+
+  // Self-Expressive (4)
+  { name: 'Inductive Learning', key: 'inductiveLearning', style: 'selfExpressive', estimatedMinutes: 25, phases: ['Present collection of items or data', 'Students group items by their own criteria', 'Label each group and explain logic', 'Predict patterns or generate rules'], whenToUse: 'Discovering patterns and building conceptual categories', description: 'Students organize information into self-created groups, then label and explain their classifications. Develops pattern recognition and creative categorization.' },
+  { name: 'Metaphorical Expression', key: 'metaphoricalExpression', style: 'selfExpressive', estimatedMinutes: 20, phases: ['Introduce the topic or concept', 'Present a metaphor prompt', 'Students create extended metaphors', 'Share and explain connections'], whenToUse: 'Making abstract concepts concrete through creative comparison', description: 'Students create metaphors to represent content, revealing their understanding through creative analogy. Develops abstract thinking and communication skills.' },
+  { name: 'Pattern Maker', key: 'patternMaker', style: 'selfExpressive', estimatedMinutes: 25, phases: ['Collect data or examples', 'Identify repeating patterns', 'Create visual representation of pattern', 'Predict what comes next'], whenToUse: 'Finding and extending patterns across content', description: 'Students search for patterns in data, examples, or content, then represent those patterns visually and use them to make predictions.' },
+  { name: 'Mind\'s Eye', key: 'mindsEye', style: 'selfExpressive', estimatedMinutes: 20, phases: ['Teacher reads descriptive passage', 'Students visualize and sketch', 'Share and discuss images', 'Connect visualization to content'], whenToUse: 'Using visualization to deepen comprehension', description: 'Students listen to a passage with eyes closed, creating mental images. They sketch what they see, then discuss how visualization deepens understanding.' },
+
+  // Interpersonal (4)
+  { name: 'Reciprocal Learning', key: 'reciprocalLearning', style: 'interpersonal', estimatedMinutes: 20, phases: ['Form coaching pairs', 'Partner A summarizes, Partner B questions', 'Switch roles for next section', 'Pairs synthesize key learning'], whenToUse: 'Deep processing through structured peer teaching', description: 'Pairs alternate between summarizing and questioning roles as they work through content. Each partner teaches and learns from the other.' },
+  { name: 'Jigsaw', key: 'jigsaw', style: 'interpersonal', estimatedMinutes: 30, phases: ['Assign expert topics to groups', 'Expert groups study their section deeply', 'Reform into mixed home teams', 'Experts teach home team members'], whenToUse: 'Dividing complex content so every student is an expert', description: 'Each student becomes an expert on one part of the content, then teaches it to their home team. Creates interdependence and individual accountability.' },
+  { name: 'Community Circle', key: 'communityCircle', style: 'interpersonal', estimatedMinutes: 15, phases: ['Sit in circle formation', 'Pose an open-ended prompt', 'Each person shares (round robin)', 'Active listening, no interrupting'], whenToUse: 'Building classroom community and sharing perspectives', description: 'Students share perspectives in a structured circle format where every voice is heard. Builds empathy, listening skills, and classroom community.' },
+  { name: 'Decision Making', key: 'decisionMaking', style: 'interpersonal', estimatedMinutes: 25, phases: ['Present a dilemma or decision', 'Identify alternatives and criteria', 'Evaluate each alternative against criteria', 'Justify and defend final choice'], whenToUse: 'Evaluating options through structured deliberation', description: 'Students evaluate multiple alternatives using defined criteria to make and defend a decision. Develops critical evaluation and collaborative reasoning.' },
+
+  // Four-Style (4)
+  { name: 'Task Rotation', key: 'taskRotation', style: 'fourStyle', estimatedMinutes: 40, phases: ['Mastery task: recall or practice', 'Understanding task: analyze or compare', 'Self-Expressive task: create or imagine', 'Interpersonal task: discuss or collaborate'], whenToUse: 'Differentiated practice hitting all four learning styles', description: 'Students rotate through four tasks, each designed for a different learning style. Every student experiences variety while teachers ensure comprehensive coverage.' },
+  { name: 'Window Notes', key: 'windowNotes', style: 'fourStyle', estimatedMinutes: 25, phases: ['Draw 4-quadrant window on paper', 'Facts (mastery): record key information', 'Questions (understanding): what puzzles you?', 'Ideas (self-expressive): creative connections', 'Feelings (interpersonal): personal reactions'], whenToUse: 'Multi-perspective note-taking that engages all styles', description: 'Students organize their thinking into four quadrants: Facts, Questions, Ideas, and Feelings. Ensures note-taking captures multiple dimensions of learning.' },
+  { name: 'Circle of Knowledge', key: 'circleOfKnowledge', style: 'fourStyle', estimatedMinutes: 20, phases: ['Inner circle discusses topic', 'Outer circle observes and takes notes', 'Switch circles', 'Whole-class debrief'], whenToUse: 'Structured discussion with observation and reflection', description: 'Inner/outer circle format where students alternate between discussing and observing. Develops both participation and analytical listening skills.' },
+  { name: 'Do You Hear What I Hear?', key: 'doYouHear', style: 'fourStyle', estimatedMinutes: 25, phases: ['Present content through different media', 'Students process in four style modes', 'Share interpretations across styles', 'Synthesize into unified understanding'], whenToUse: 'Processing content through multiple modalities', description: 'Students experience the same content through different learning style lenses, then compare and synthesize their varied interpretations.' }
+];
+
+// ================================================
+// STRATEGIES TAB — Orchestrator
+// ================================================
+
+function tmgRenderStrategiesTab() {
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">Research-Based Instructional Strategies</div>';
+  html += '<p style="color:#64748b; font-size:13px; margin-bottom:20px;">Based on <em>The Strategic Teacher</em> (Silver, Strong &amp; Perini, 2007) — 20 strategies across 5 learning styles to match the right strategy to every lesson.</p>';
+  html += '</div>';
+  html += tmgRenderStyleOverview();
+  html += tmgRenderStrategyBrowser();
+  html += tmgRenderStrategyPicker();
+  return html;
+}
+
+// ================================================
+// STYLE OVERVIEW — 5 Expandable Accordion Cards
+// ================================================
+
+function tmgRenderStyleOverview() {
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">The 5 Learning Styles</div>';
+  html += '<div class="tmg-concept-cards">';
+
+  for (var s = 0; s < TMG_STYLE_META.length; s++) {
+    var style = TMG_STYLE_META[s];
+    var cardId = 'tmgStyleCard_' + style.key;
+    html += '<div class="tmg-concept-card tmg-strat-style-card" id="' + cardId + '" style="border-left: 4px solid ' + style.color + ';">';
+    html += '<div class="tmg-concept-header" onclick="tmgToggleStyleCard(\'' + style.key + '\')">';
+    html += '<div class="tmg-concept-icon" style="background:' + style.color + '15; color:' + style.color + '; font-size:20px;">' + style.icon + '</div>';
+    html += '<div class="tmg-concept-title">' + style.label;
+    html += '<span class="tmg-concept-subtitle">' + style.motivator + '</span>';
+    html += '</div>';
+    html += '<span class="tmg-concept-chevron">&#9660;</span>';
+    html += '</div>';
+
+    html += '<div class="tmg-concept-body">';
+    html += '<p><strong>Focus:</strong> ' + style.focus + '</p>';
+    html += '<div class="tmg-highlight" style="border-left-color:' + style.color + '; background:' + style.color + '08;">';
+    html += '<strong>When to use:</strong> ' + style.whenToUse;
+    html += '</div>';
+
+    // Strategy chips inside the style card
+    html += '<h4>Strategies in this style:</h4>';
+    html += '<div class="tmg-strat-chip-row">';
+    for (var j = 0; j < TMG_STRAT_DATA.length; j++) {
+      if (TMG_STRAT_DATA[j].style === style.key) {
+        html += '<span class="tmg-strat-badge" style="background:' + style.color + '12; color:' + style.color + '; border: 1px solid ' + style.color + '30;">';
+        html += TMG_STRAT_DATA[j].name + ' <span style="opacity:0.7;">(' + TMG_STRAT_DATA[j].estimatedMinutes + ' min)</span>';
+        html += '</span>';
+      }
+    }
+    html += '</div>';
+
+    html += '</div>'; // .tmg-concept-body
+    html += '</div>'; // .tmg-concept-card
+  }
+
+  html += '</div>'; // .tmg-concept-cards
+  html += '</div>'; // .tmg-section
+  return html;
+}
+
+function tmgToggleStyleCard(styleKey) {
+  var card = document.getElementById('tmgStyleCard_' + styleKey);
+  if (!card) return;
+  card.classList.toggle('tmg-expanded');
+}
+
+// ================================================
+// STRATEGY BROWSER — Cards Grouped by Style
+// ================================================
+
+function tmgRenderStrategyBrowser() {
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">All 20 Strategies</div>';
+
+  for (var s = 0; s < TMG_STYLE_META.length; s++) {
+    var style = TMG_STYLE_META[s];
+    html += '<div class="tmg-strat-group">';
+    html += '<div class="tmg-strat-group-header" style="color:' + style.color + ';">' + style.icon + ' ' + style.label + '</div>';
+    html += '<div class="tmg-strat-cards">';
+
+    for (var j = 0; j < TMG_STRAT_DATA.length; j++) {
+      var strat = TMG_STRAT_DATA[j];
+      if (strat.style !== style.key) continue;
+      var cardId = 'tmgStratCard_' + strat.key;
+
+      html += '<div class="tmg-strat-card" id="' + cardId + '" style="border-left: 3px solid ' + style.color + ';">';
+      html += '<div class="tmg-strat-card-header" onclick="tmgToggleStratCard(\'' + strat.key + '\')">';
+      html += '<div class="tmg-strat-name">' + strat.name + '</div>';
+      html += '<div class="tmg-strat-meta">';
+      html += '<span class="tmg-strat-badge" style="background:' + style.color + '12; color:' + style.color + ';">' + style.label + '</span>';
+      html += '<span class="tmg-strat-time">&#9201; ' + strat.estimatedMinutes + ' min</span>';
+      html += '</div>';
+      html += '</div>';
+
+      html += '<div class="tmg-strat-detail">';
+      html += '<p class="tmg-strat-desc">' + strat.description + '</p>';
+
+      html += '<div class="tmg-strat-tip">';
+      html += '<strong>When to use:</strong> ' + strat.whenToUse;
+      html += '</div>';
+
+      html += '<div class="tmg-strat-phases">';
+      html += '<strong>Phases:</strong>';
+      html += '<ol class="tmg-strat-phase-list">';
+      for (var p = 0; p < strat.phases.length; p++) {
+        html += '<li>' + strat.phases[p] + '</li>';
+      }
+      html += '</ol>';
+      html += '</div>';
+
+      html += '</div>'; // .tmg-strat-detail
+      html += '</div>'; // .tmg-strat-card
+    }
+
+    html += '</div>'; // .tmg-strat-cards
+    html += '</div>'; // .tmg-strat-group
+  }
+
+  html += '</div>'; // .tmg-section
+  return html;
+}
+
+function tmgToggleStratCard(stratKey) {
+  var card = document.getElementById('tmgStratCard_' + stratKey);
+  if (!card) return;
+  card.classList.toggle('tmg-strat-expanded');
+}
+
+// ================================================
+// STRATEGY PICKER — 4 Questions + Recommendations
+// ================================================
+
+function tmgRenderStrategyPicker() {
+  var html = '';
+  html += '<div class="tmg-section">';
+  html += '<div class="tmg-section-title">&#128161; Which Strategy Should I Use?</div>';
+  html += '<p style="color:#64748b; font-size:13px; margin-bottom:16px;">Answer these four questions about your lesson goals, then get personalized strategy recommendations.</p>';
+
+  html += '<div class="tmg-picker-questions" id="tmgPickerQuestions">';
+
+  var questions = [
+    { label: 'Students need to remember, practice, or demonstrate a skill', style: 'mastery' },
+    { label: 'Students need to analyze, compare, or build evidence-based arguments', style: 'understanding' },
+    { label: 'Students need to create, imagine, or make unexpected connections', style: 'selfExpressive' },
+    { label: 'Students need to collaborate, share perspectives, or connect personally', style: 'interpersonal' }
+  ];
+
+  for (var q = 0; q < questions.length; q++) {
+    var styleMeta = null;
+    for (var m = 0; m < TMG_STYLE_META.length; m++) {
+      if (TMG_STYLE_META[m].key === questions[q].style) { styleMeta = TMG_STYLE_META[m]; break; }
+    }
+    var color = styleMeta ? styleMeta.color : '#64748b';
+    var isActive = tmgPickerAnswers[q];
+    html += '<div class="tmg-picker-q' + (isActive ? ' tmg-picker-q-active' : '') + '" style="border-color:' + (isActive ? color : '#e2e8f0') + ';" onclick="tmgTogglePickerQ(' + q + ')">';
+    html += '<div class="tmg-picker-q-check" style="' + (isActive ? 'background:' + color + '; border-color:' + color + ';' : '') + '">' + (isActive ? '&#10003;' : '') + '</div>';
+    html += '<div class="tmg-picker-q-label">' + questions[q].label + '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .tmg-picker-questions
+
+  html += '<div style="text-align:center; margin-top:16px;">';
+  html += '<button class="tmg-template-btn" onclick="tmgComputeRecommendations()" style="font-size:14px; padding:10px 24px;">Show Recommendations</button>';
+  html += '</div>';
+
+  html += '<div id="tmgPickerResults" class="tmg-picker-results"></div>';
+
+  html += '</div>'; // .tmg-section
+  return html;
+}
+
+function tmgTogglePickerQ(idx) {
+  tmgPickerAnswers[idx] = !tmgPickerAnswers[idx];
+  // Re-render the picker section
+  var container = document.getElementById('tmgSectionStrategies');
+  if (container) {
+    container.innerHTML = '<div class="tmg-container">' + tmgRenderStrategiesTab() + '</div>';
+  }
+}
+
+function tmgComputeRecommendations() {
+  var styleKeys = ['mastery', 'understanding', 'selfExpressive', 'interpersonal'];
+  var matchedStyles = [];
+  var q;
+
+  for (q = 0; q < 4; q++) {
+    if (tmgPickerAnswers[q]) {
+      matchedStyles.push(styleKeys[q]);
+    }
+  }
+
+  // If nothing selected or all selected, recommend fourStyle
+  if (matchedStyles.length === 0 || matchedStyles.length === 4) {
+    matchedStyles = ['fourStyle'];
+  } else if (matchedStyles.length >= 3) {
+    // 3+ styles = also suggest fourStyle
+    matchedStyles.push('fourStyle');
+  }
+
+  var resultsEl = document.getElementById('tmgPickerResults');
+  if (!resultsEl) return;
+
+  var html = '';
+  html += '<div class="tmg-section-title" style="margin-top:24px;">Recommended Strategies</div>';
+
+  for (var ms = 0; ms < matchedStyles.length; ms++) {
+    var styleKey = matchedStyles[ms];
+    var styleMeta = null;
+    for (var m = 0; m < TMG_STYLE_META.length; m++) {
+      if (TMG_STYLE_META[m].key === styleKey) { styleMeta = TMG_STYLE_META[m]; break; }
+    }
+    if (!styleMeta) continue;
+
+    html += '<div class="tmg-strat-group">';
+    html += '<div class="tmg-strat-group-header" style="color:' + styleMeta.color + ';">' + styleMeta.icon + ' ' + styleMeta.label + ' Strategies</div>';
+    html += '<div class="tmg-strat-cards">';
+
+    for (var j = 0; j < TMG_STRAT_DATA.length; j++) {
+      var strat = TMG_STRAT_DATA[j];
+      if (strat.style !== styleKey) continue;
+
+      html += '<div class="tmg-strat-card tmg-strat-expanded" style="border-left: 3px solid ' + styleMeta.color + ';">';
+      html += '<div class="tmg-strat-card-header">';
+      html += '<div class="tmg-strat-name">' + strat.name + '</div>';
+      html += '<div class="tmg-strat-meta">';
+      html += '<span class="tmg-strat-badge" style="background:' + styleMeta.color + '12; color:' + styleMeta.color + ';">' + styleMeta.label + '</span>';
+      html += '<span class="tmg-strat-time">&#9201; ' + strat.estimatedMinutes + ' min</span>';
+      html += '</div>';
+      html += '</div>';
+      html += '<div class="tmg-strat-detail">';
+      html += '<p class="tmg-strat-desc">' + strat.description + '</p>';
+      html += '<div class="tmg-strat-tip"><strong>When to use:</strong> ' + strat.whenToUse + '</div>';
+      html += '</div>';
+      html += '</div>';
+    }
+
+    html += '</div></div>';
+  }
+
+  if (matchedStyles.length === 0) {
+    html += '<p style="color:#64748b; text-align:center; padding:20px;">Select at least one learning goal above to get recommendations.</p>';
+  }
+
+  resultsEl.innerHTML = html;
+}
+</script>

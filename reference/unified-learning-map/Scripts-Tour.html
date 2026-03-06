@@ -1,0 +1,714 @@
+<script>
+// ============================================================================
+// GUIDED TOUR ENGINE (ES5)
+// Data-driven onboarding with spotlight, tooltips, and role-aware steps.
+// ============================================================================
+
+// ---- State ----
+var turActive = false;
+var turCurrentStep = 0;
+var turSteps = null;
+var turBackdrop = null;
+var turTooltip = null;
+var turPulseRing = null;
+var turHighlightedEl = null;
+var turResizeTimer = null;
+var turSaveTimer = null;
+var turSaveCounter = 0;
+var turKeyHandler = null;
+
+// ============================================================================
+// STEP DEFINITIONS
+// ============================================================================
+
+var TUR_STEPS_TEACHER = [
+  {
+    target: '[data-view="maps"]',
+    tab: null,
+    title: 'Welcome to the Unified Learning Map',
+    content: 'This is your command center. The <b>My Maps</b> tab shows all your learning maps. Each map is a visual hex-based activity board you assign to students.',
+    position: 'bottom',
+    icon: '\uD83D\uDDFA\uFE0F'
+  },
+  {
+    target: '#coursesTab',
+    tab: 'courses',
+    title: 'Courses & Units',
+    content: 'Organize your curriculum into <b>Courses</b> and <b>Units</b>. Each unit links to a map, and you can attach vocabulary, UbD plans, and lesson sequences.',
+    position: 'bottom',
+    icon: '\uD83D\uDCDA'
+  },
+  {
+    target: '#builderTab',
+    tab: 'builder',
+    title: 'The Map Builder',
+    content: 'This is where you build hex maps. Click a hex to edit its content, add assessments, set branch conditions, and manage resources.',
+    position: 'bottom',
+    icon: '\u2B21'
+  },
+  {
+    target: '#builderTools',
+    tab: 'builder',
+    title: 'Building Tools',
+    content: 'Use the toolbar to <b>add hexes</b>, <b>connect</b> them with paths, toggle between teacher and student views, and manage your grid layout.',
+    position: 'bottom',
+    icon: '\uD83D\uDEE0\uFE0F'
+  },
+  {
+    target: '#connectBtn',
+    tab: 'builder',
+    title: 'Connections & Branching',
+    content: 'Connect hexes to create learning pathways. Add <b>branch conditions</b> so students unlock activities based on scores, assessments, or completion.',
+    position: 'bottom',
+    icon: '\uD83D\uDD00'
+  },
+  {
+    target: '[data-tour="efa-builder-btn"]',
+    tab: 'builder',
+    title: 'Embedded Assessments',
+    content: 'Build auto-graded assessments directly on hexes \u2014 multiple choice, short answer, matching, and ordering. Results feed into branch conditions.',
+    position: 'bottom',
+    icon: '\uD83D\uDCDD'
+  },
+  {
+    target: '#classesTab',
+    tab: 'classes',
+    title: 'Classes & Assignments',
+    content: 'Create classes, import student rosters, and <b>assign maps</b> to classes with due dates. Students see assigned maps on their dashboard.',
+    position: 'bottom',
+    icon: '\uD83D\uDC65'
+  },
+  {
+    target: '#progressTab',
+    tab: 'progress',
+    title: 'Progress Dashboard',
+    content: 'Monitor student progress with <b>class heatmaps</b>, <b>course analytics</b>, <b>knowledge gap analysis</b>, and <b>formative check logs</b>.',
+    position: 'bottom',
+    icon: '\uD83D\uDCCA'
+  },
+  {
+    target: '[data-tour="knowledge-gaps"]',
+    tab: 'progress',
+    title: 'Knowledge Gap Analysis',
+    content: 'Identify struggling students, find the hardest activities, and spot confidence-score mismatches to target your intervention.',
+    position: 'bottom',
+    icon: '\uD83D\uDD0D'
+  },
+  {
+    target: '#sspHexInfoBar',
+    tab: 'builder',
+    title: 'EAL & Learning Support Profiles',
+    content: 'When a map is assigned to a class, this bar shows <b>how many students have support profiles</b> \u2014 WIDA levels, accommodations, and strategies. Click to expand details.',
+    position: 'bottom',
+    icon: '\uD83C\uDF0D',
+    ealFeature: true
+  },
+  {
+    target: '[data-tour="prompt-builder-btn"]',
+    tab: 'builder',
+    title: 'AI Prompt Builder',
+    content: 'Generate differentiated instruction prompts that integrate <b>WIDA levels</b>, <b>UDL strategies</b>, and <b>translanguaging</b> pedagogy \u2014 tailored to each hex\'s content and your students\' needs.',
+    position: 'bottom',
+    icon: '\uD83E\uDD16',
+    ealFeature: true
+  },
+  {
+    target: '#ealStrategiesTab',
+    tab: 'ealStrategies',
+    title: 'EAL Strategies & Dictionary',
+    content: 'Explore research-based <b>EAL teaching strategies</b> and manage the <b>vocabulary dictionary</b> with automatic translations for your EAL students.',
+    position: 'bottom',
+    icon: '\uD83D\uDCD6',
+    ealFeature: true
+  }
+];
+
+var TUR_STEPS_STUDENT = [
+  {
+    target: '[data-view="maps"]',
+    tab: null,
+    title: 'Your Learning Maps',
+    content: 'Welcome! This is your dashboard. You\'ll see all the learning maps your teachers have assigned to you. Each map is a set of activities to complete.',
+    position: 'bottom',
+    icon: '\uD83D\uDDFA\uFE0F'
+  },
+  {
+    target: '[data-tour="map-card-first"]',
+    tab: 'maps',
+    title: 'Map Cards',
+    content: 'Each card shows a map with your <b>progress</b> and <b>due date</b>. Click a card to open the map and start working on activities.',
+    position: 'bottom',
+    icon: '\uD83D\uDCC4'
+  },
+  {
+    target: '[data-tour="hex-grid"]',
+    tab: 'builder',
+    title: 'Hex Activities',
+    content: 'Each hexagon is an activity. <b>Green</b> means completed, <b>blue</b> means in progress, and <b>gray</b> means locked. Click a hex to see instructions and submit your work.',
+    position: 'bottom',
+    icon: '\u2B21'
+  },
+  {
+    target: '#dctDictTrigger',
+    tab: 'builder',
+    title: 'Your Dictionary',
+    content: 'Tap this button to open your <b>personal dictionary</b> with vocabulary terms and translations in your home language. Use it anytime while working on activities.',
+    position: 'left',
+    icon: '\uD83D\uDCD6',
+    ealFeature: true
+  },
+  {
+    target: '[data-tour="student-support"]',
+    tab: 'builder',
+    title: 'Your Learning Supports',
+    content: 'When you open an activity, you\'ll see <b>personalized support strategies</b> and accommodations based on your learning profile. These are here to help you succeed.',
+    position: 'top',
+    icon: '\uD83C\uDF1F',
+    ealFeature: true
+  },
+  {
+    target: '#plannerTab',
+    tab: 'planner',
+    title: 'My Planner',
+    content: 'Your personal planner shows all tasks sorted by <b>urgency</b>. See what\'s due today, this week, and track your streaks!',
+    position: 'bottom',
+    icon: '\uD83D\uDCCB'
+  },
+  {
+    target: '#progressTab',
+    tab: 'progress',
+    title: 'Your Progress',
+    content: 'Track your progress across all maps. See your <b>completion rates</b>, <b>scores</b>, and click any map for a detailed breakdown.',
+    position: 'bottom',
+    icon: '\uD83D\uDCCA'
+  },
+  {
+    target: '[data-tour="cel-badge-area"]',
+    tab: 'planner',
+    title: 'Badges & Achievements',
+    content: 'Earn badges as you complete activities and build streaks! Check your <b>badge gallery</b> to see what you\'ve unlocked and what\'s coming next.',
+    position: 'top',
+    icon: '\uD83C\uDFC5'
+  }
+];
+
+var TUR_STEPS_ADMIN_EXTRA = [
+  {
+    target: '#settingsTab',
+    tab: 'settings',
+    title: 'Admin Settings',
+    content: 'Configure system-wide settings: <b>grading</b>, <b>branching</b>, <b>approval workflows</b>, and <b>feature flags</b> including this tour.',
+    position: 'bottom',
+    icon: '\u2699\uFE0F'
+  },
+  {
+    target: '#usersTab',
+    tab: 'users',
+    title: 'User Management',
+    content: 'Add, remove, and manage user accounts and roles. Assign <b>teacher</b>, <b>student</b>, or <b>administrator</b> roles.',
+    position: 'bottom',
+    icon: '\uD83D\uDC64'
+  },
+  {
+    target: '#integrationsTab',
+    tab: 'integrations',
+    title: 'Integrations',
+    content: 'Connect external data sources: <b>standards</b>, <b>lessons</b>, <b>student support profiles</b>, and <b>waterfall schedules</b>.',
+    position: 'bottom',
+    icon: '\uD83D\uDD17'
+  }
+];
+
+// ============================================================================
+// ENGINE — PUBLIC
+// ============================================================================
+
+/**
+ * Start the guided tour. Entry point called from loadAllData success handler.
+ * @param {Object} tourStatus - from getInitialData().tourStatus
+ */
+function turStartTour(tourStatus) {
+  if (turActive) return;
+  if (!tourStatus || !tourStatus.shouldShowTour) return;
+
+  // Select step array by role
+  var role = (typeof userData !== 'undefined' && userData && userData.normalizedRole)
+    ? userData.normalizedRole : 'student';
+
+  if (role === 'student') {
+    turSteps = TUR_STEPS_STUDENT.slice();
+  } else if (role === 'administrator') {
+    turSteps = TUR_STEPS_TEACHER.slice().concat(TUR_STEPS_ADMIN_EXTRA.slice());
+  } else {
+    turSteps = TUR_STEPS_TEACHER.slice();
+  }
+
+  turActive = true;
+  turSaveCounter = 0;
+
+  // Create backdrop
+  turBackdrop = document.createElement('div');
+  turBackdrop.className = 'tur-backdrop';
+  turBackdrop.onclick = function() { /* do nothing — block clicks */ };
+  document.body.appendChild(turBackdrop);
+
+  // Resume from lastStep if > 0
+  var startStep = (tourStatus.lastStep && tourStatus.lastStep > 0) ? tourStatus.lastStep : 0;
+  if (startStep >= turSteps.length) startStep = 0;
+
+  // Bind keyboard handler
+  turKeyHandler = function(e) { turHandleKeydown(e); };
+  document.addEventListener('keydown', turKeyHandler, true);
+
+  // Bind resize handler
+  window.addEventListener('resize', turHandleResize);
+
+  turShowStep(startStep);
+}
+
+/**
+ * Replay tour — called from "Replay Tour" buttons in guide tabs.
+ */
+function turReplayTour() {
+  google.script.run
+    .withSuccessHandler(function() {
+      turStartTour({ shouldShowTour: true, lastStep: 0 });
+    })
+    .withFailureHandler(function() {
+      turStartTour({ shouldShowTour: true, lastStep: 0 });
+    })
+    .resetTour();
+}
+
+// ============================================================================
+// ENGINE — STEP NAVIGATION
+// ============================================================================
+
+function turShowStep(index) {
+  if (!turActive || !turSteps || index < 0 || index >= turSteps.length) return;
+  turCurrentStep = index;
+
+  var step = turSteps[index];
+
+  // Navigate to the correct tab if needed
+  if (step.tab) {
+    var tabBtn = document.querySelector('[data-view="' + step.tab + '"]');
+    if (tabBtn && typeof switchTab === 'function') {
+      switchTab(tabBtn);
+    }
+  }
+
+  // Wait for tab transition + element availability
+  var delay = step.tab ? 500 : 100;
+  setTimeout(function() {
+    turWaitForElement(step.target, 3000, function(targetEl) {
+      turRemoveSpotlight();
+      turRemoveTooltip();
+
+      if (targetEl) {
+        turScrollToElement(targetEl);
+        setTimeout(function() {
+          turApplySpotlight(targetEl);
+          turBuildTooltip(step, index, turSteps.length);
+          turPositionTooltip(targetEl, step.position);
+        }, 200);
+      } else {
+        // Element not found — show tooltip centered as fallback
+        turBuildTooltip(step, index, turSteps.length);
+        turPositionTooltipCenter();
+      }
+
+      // Save progress (debounced)
+      turSaveProgress_(index);
+    });
+  }, delay);
+}
+
+function turNextStep() {
+  if (!turActive) return;
+  if (turCurrentStep >= turSteps.length - 1) {
+    turCompleteTour();
+    return;
+  }
+  // Animate out
+  if (turTooltip) {
+    turTooltip.classList.add('tur-dismissing');
+  }
+  setTimeout(function() {
+    turShowStep(turCurrentStep + 1);
+  }, 200);
+}
+
+function turPrevStep() {
+  if (!turActive || turCurrentStep <= 0) return;
+  if (turTooltip) {
+    turTooltip.classList.add('tur-dismissing');
+  }
+  setTimeout(function() {
+    turShowStep(turCurrentStep - 1);
+  }, 200);
+}
+
+function turSkipTour() {
+  if (!turActive) return;
+  // Fire-and-forget RPC
+  google.script.run.dismissTour();
+  turCleanup();
+  // Onboarding milestone: tour done (skipping counts)
+  if (typeof onbMarkMilestone === 'function') onbMarkMilestone('tourDone');
+}
+
+function turCompleteTour() {
+  if (!turActive) return;
+  // Save completion
+  google.script.run.saveTourProgress(turSteps.length - 1, true);
+  // Onboarding milestone: tour done
+  if (typeof onbMarkMilestone === 'function') onbMarkMilestone('tourDone');
+
+  turRemoveSpotlight();
+  turRemoveTooltip();
+
+  // Show completion card
+  var card = document.createElement('div');
+  card.className = 'tur-complete-card';
+  card.innerHTML = '<div class="tur-complete-icon">\uD83C\uDF89</div>' +
+    '<div class="tur-complete-title">You\'re All Set!</div>' +
+    '<div class="tur-complete-msg">You\'ve completed the tour. You can replay it anytime from the <b>Teaching Methods</b> or <b>EAL Strategies</b> tabs.</div>' +
+    '<button class="tur-complete-btn" onclick="turDismissComplete()">Get Started</button>';
+  document.body.appendChild(card);
+
+  // Auto-dismiss after 8 seconds
+  setTimeout(function() {
+    turDismissComplete();
+  }, 8000);
+}
+
+function turDismissComplete() {
+  var card = document.querySelector('.tur-complete-card');
+  if (card) {
+    card.style.animation = 'tur-fadeOut 0.3s ease-in forwards';
+    setTimeout(function() {
+      if (card.parentNode) card.parentNode.removeChild(card);
+    }, 300);
+  }
+  turCleanup();
+}
+
+// ============================================================================
+// ENGINE — SPOTLIGHT
+// ============================================================================
+
+function turApplySpotlight(el) {
+  if (!el) return;
+  turHighlightedEl = el;
+  el.classList.add('tur-spotlight');
+
+  // Create pulse ring
+  var rect = el.getBoundingClientRect();
+  turPulseRing = document.createElement('div');
+  turPulseRing.className = 'tur-pulse-ring';
+  turPulseRing.style.position = 'fixed';
+  turPulseRing.style.top = (rect.top - 4) + 'px';
+  turPulseRing.style.left = (rect.left - 4) + 'px';
+  turPulseRing.style.width = (rect.width + 8) + 'px';
+  turPulseRing.style.height = (rect.height + 8) + 'px';
+  document.body.appendChild(turPulseRing);
+}
+
+function turRemoveSpotlight() {
+  if (turHighlightedEl) {
+    turHighlightedEl.classList.remove('tur-spotlight');
+    turHighlightedEl = null;
+  }
+  if (turPulseRing && turPulseRing.parentNode) {
+    turPulseRing.parentNode.removeChild(turPulseRing);
+    turPulseRing = null;
+  }
+}
+
+// ============================================================================
+// ENGINE — TOOLTIP BUILD + POSITION
+// ============================================================================
+
+function turBuildTooltip(step, index, total) {
+  turRemoveTooltip();
+
+  var tt = document.createElement('div');
+  tt.className = 'tur-tooltip';
+
+  // Header with icon + title
+  var header = '<div class="tur-tooltip-header">';
+  header += '<div class="tur-tooltip-icon">' + (step.icon || '\u2B21') + '</div>';
+  header += '<div class="tur-tooltip-title">' + escapeHtml(step.title) + '</div>';
+  header += '</div>';
+
+  // EAL badge
+  var badge = '';
+  if (step.ealFeature) {
+    badge = '<div class="tur-eal-badge"><span class="tur-eal-badge-icon">\uD83C\uDF10</span> EAL/LS Feature</div>';
+  }
+
+  // Body
+  var body = '<div class="tur-tooltip-body">' + step.content + '</div>';
+
+  // Progress bar
+  var pct = ((index + 1) / total) * 100;
+  var progress = '<div class="tur-progress-bar"><div class="tur-progress-fill" style="width:' + pct + '%"></div></div>';
+
+  // Footer
+  var footer = '<div class="tur-tooltip-footer">';
+  footer += '<div class="tur-step-counter">' + (index + 1) + ' of ' + total + '</div>';
+  footer += '<div class="tur-tooltip-nav">';
+
+  // Skip button (always shown)
+  footer += '<button class="tur-btn tur-btn-skip" onclick="turSkipTour()">Skip</button>';
+
+  // Previous button (if not first step)
+  if (index > 0) {
+    footer += '<button class="tur-btn tur-btn-prev" onclick="turPrevStep()">\u2190 Back</button>';
+  }
+
+  // Next/Finish button
+  if (index < total - 1) {
+    footer += '<button class="tur-btn tur-btn-next" onclick="turNextStep()">Next \u2192</button>';
+  } else {
+    footer += '<button class="tur-btn tur-btn-finish" onclick="turCompleteTour()">\u2713 Finish</button>';
+  }
+
+  footer += '</div></div>';
+
+  tt.innerHTML = header + badge + body + progress + footer;
+  document.body.appendChild(tt);
+  turTooltip = tt;
+}
+
+function turPositionTooltip(targetEl, preferredPos) {
+  if (!turTooltip || !targetEl) return;
+
+  var rect = targetEl.getBoundingClientRect();
+  var tt = turTooltip;
+  var ttRect = tt.getBoundingClientRect();
+  var vw = window.innerWidth;
+  var vh = window.innerHeight;
+  var margin = 12;
+
+  // Mobile bottom-sheet mode
+  if (vw <= 640) {
+    turPositionTooltipMobile();
+    return;
+  }
+
+  var pos = preferredPos || 'bottom';
+  var top, left;
+
+  // Remove any existing arrow
+  var existingArrow = tt.querySelector('.tur-arrow');
+  if (existingArrow) existingArrow.parentNode.removeChild(existingArrow);
+
+  // Calculate position
+  if (pos === 'bottom') {
+    top = rect.bottom + margin;
+    left = rect.left + (rect.width / 2) - (ttRect.width / 2);
+    // Flip to top if not enough space below
+    if (top + ttRect.height > vh - margin) {
+      pos = 'top';
+      top = rect.top - ttRect.height - margin;
+    }
+  } else if (pos === 'top') {
+    top = rect.top - ttRect.height - margin;
+    left = rect.left + (rect.width / 2) - (ttRect.width / 2);
+    // Flip to bottom if not enough space above
+    if (top < margin) {
+      pos = 'bottom';
+      top = rect.bottom + margin;
+    }
+  } else if (pos === 'left') {
+    top = rect.top + (rect.height / 2) - (ttRect.height / 2);
+    left = rect.left - ttRect.width - margin;
+    if (left < margin) {
+      pos = 'right';
+      left = rect.right + margin;
+    }
+  } else if (pos === 'right') {
+    top = rect.top + (rect.height / 2) - (ttRect.height / 2);
+    left = rect.right + margin;
+    if (left + ttRect.width > vw - margin) {
+      pos = 'left';
+      left = rect.left - ttRect.width - margin;
+    }
+  }
+
+  // Clamp to viewport
+  if (left < margin) left = margin;
+  if (left + ttRect.width > vw - margin) left = vw - ttRect.width - margin;
+  if (top < margin) top = margin;
+  if (top + ttRect.height > vh - margin) top = vh - ttRect.height - margin;
+
+  tt.style.top = top + 'px';
+  tt.style.left = left + 'px';
+
+  // Add arrow
+  var arrow = document.createElement('div');
+  arrow.className = 'tur-arrow';
+  if (pos === 'bottom') {
+    arrow.classList.add('tur-arrow-top');
+  } else if (pos === 'top') {
+    arrow.classList.add('tur-arrow-bottom');
+  } else if (pos === 'left') {
+    arrow.classList.add('tur-arrow-right');
+  } else if (pos === 'right') {
+    arrow.classList.add('tur-arrow-left');
+  }
+  tt.appendChild(arrow);
+}
+
+function turPositionTooltipMobile() {
+  if (!turTooltip) return;
+  var tt = turTooltip;
+  tt.style.position = 'fixed';
+  tt.style.bottom = '0';
+  tt.style.left = '0';
+  tt.style.right = '0';
+  tt.style.top = 'auto';
+  tt.style.width = '100%';
+  tt.style.maxWidth = '100%';
+  tt.style.maxHeight = '60vh';
+  tt.style.borderRadius = '16px 16px 0 0';
+  tt.style.overflowY = 'auto';
+  tt.style.animation = 'tur-scaleIn 0.3s ease-out';
+}
+
+function turPositionTooltipCenter() {
+  if (!turTooltip) return;
+  var tt = turTooltip;
+  var ttRect = tt.getBoundingClientRect();
+  tt.style.top = '50%';
+  tt.style.left = '50%';
+  tt.style.transform = 'translate(-50%, -50%)';
+}
+
+function turRemoveTooltip() {
+  if (turTooltip && turTooltip.parentNode) {
+    turTooltip.parentNode.removeChild(turTooltip);
+    turTooltip = null;
+  }
+}
+
+// ============================================================================
+// ENGINE — UTILITIES
+// ============================================================================
+
+function turWaitForElement(selector, timeout, cb) {
+  if (!selector) {
+    cb(null);
+    return;
+  }
+  var el = document.querySelector(selector);
+  if (el) {
+    cb(el);
+    return;
+  }
+
+  var elapsed = 0;
+  var interval = 100;
+  var timer = setInterval(function() {
+    elapsed += interval;
+    el = document.querySelector(selector);
+    if (el) {
+      clearInterval(timer);
+      cb(el);
+    } else if (elapsed >= timeout) {
+      clearInterval(timer);
+      cb(null); // graceful skip
+    }
+  }, interval);
+}
+
+function turScrollToElement(el) {
+  if (!el) return;
+  try {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    // Fallback for older browsers
+    el.scrollIntoView(false);
+  }
+}
+
+function turHandleKeydown(e) {
+  if (!turActive) return;
+
+  var key = e.key || e.keyCode;
+  if (key === 'ArrowRight' || key === 'Enter' || key === 39 || key === 13) {
+    e.preventDefault();
+    e.stopPropagation();
+    turNextStep();
+  } else if (key === 'ArrowLeft' || key === 37) {
+    e.preventDefault();
+    e.stopPropagation();
+    turPrevStep();
+  } else if (key === 'Escape' || key === 27) {
+    e.preventDefault();
+    e.stopPropagation();
+    turSkipTour();
+  }
+}
+
+function turHandleResize() {
+  if (turResizeTimer) clearTimeout(turResizeTimer);
+  turResizeTimer = setTimeout(function() {
+    if (!turActive || !turTooltip) return;
+    var step = turSteps[turCurrentStep];
+    if (turHighlightedEl) {
+      // Reposition pulse ring
+      if (turPulseRing) {
+        var rect = turHighlightedEl.getBoundingClientRect();
+        turPulseRing.style.top = (rect.top - 4) + 'px';
+        turPulseRing.style.left = (rect.left - 4) + 'px';
+        turPulseRing.style.width = (rect.width + 8) + 'px';
+        turPulseRing.style.height = (rect.height + 8) + 'px';
+      }
+      turPositionTooltip(turHighlightedEl, step.position);
+    } else {
+      turPositionTooltipCenter();
+    }
+  }, 200);
+}
+
+function turSaveProgress_(stepIndex) {
+  turSaveCounter++;
+  // Save every 3 steps to minimize RPCs
+  if (turSaveCounter % 3 === 0 || stepIndex === 0) {
+    google.script.run.saveTourProgress(stepIndex, false);
+  }
+}
+
+function turCleanup() {
+  turRemoveSpotlight();
+  turRemoveTooltip();
+
+  if (turBackdrop && turBackdrop.parentNode) {
+    turBackdrop.parentNode.removeChild(turBackdrop);
+    turBackdrop = null;
+  }
+
+  if (turKeyHandler) {
+    document.removeEventListener('keydown', turKeyHandler, true);
+    turKeyHandler = null;
+  }
+
+  window.removeEventListener('resize', turHandleResize);
+
+  if (turResizeTimer) {
+    clearTimeout(turResizeTimer);
+    turResizeTimer = null;
+  }
+  if (turSaveTimer) {
+    clearTimeout(turSaveTimer);
+    turSaveTimer = null;
+  }
+
+  turActive = false;
+  turCurrentStep = 0;
+  turSteps = null;
+}
+</script>

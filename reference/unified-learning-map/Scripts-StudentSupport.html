@@ -1,0 +1,476 @@
+<script>
+// ============================================================================
+// STUDENT SUPPORT PROFILES — Profile editor UI
+// ES5 only — manages in-app profile CRUD
+// ============================================================================
+
+// State
+var sspCurrentClassId = '';
+var sspProfiles = [];
+var sspEditingProfile = null;
+var sspEditorStrategies = [];
+var sspSaving = false;
+
+// Accommodation type definitions (label lookup)
+var SSP_ACCOM_TYPES = [
+  { key: 'extendedTime', label: 'Extended Time' },
+  { key: 'wordToWordDictionary', label: 'Word-to-Word Dictionary' },
+  { key: 'sentenceStarters', label: 'Sentence Starters' },
+  { key: 'reducedWorkload', label: 'Reduced Workload' },
+  { key: 'preferentialSeating', label: 'Preferential Seating' },
+  { key: 'readAloud', label: 'Read Aloud' },
+  { key: 'scribe', label: 'Scribe' },
+  { key: 'visualSupports', label: 'Visual Supports' },
+  { key: 'simplifiedLanguage', label: 'Simplified Language' },
+  { key: 'translationSupport', label: 'Translation Support' }
+];
+
+var SSP_WIDA_LABELS = {
+  1: 'Entering',
+  2: 'Emerging',
+  3: 'Developing',
+  4: 'Expanding',
+  5: 'Bridging',
+  6: 'Reaching'
+};
+
+// ============================================================================
+// PROFILE LIST — shown when teacher clicks "Support Profiles" on a class
+// ============================================================================
+
+function loadSupportProfiles(classId) {
+  sspCurrentClassId = classId;
+  var container = document.getElementById('sspProfileListContainer');
+  if (!container) return;
+  container.innerHTML = '<div class="loading">Loading support profiles...</div>';
+  container.style.display = 'block';
+
+  google.script.run
+    .withSuccessHandler(function(profiles) {
+      sspProfiles = profiles || [];
+      renderSupportProfileList();
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = '<div class="error">' + escapeHtml(friendlyError(err)) + '</div>';
+    })
+    .getClassSupportProfiles(classId);
+}
+
+function renderSupportProfileList() {
+  var container = document.getElementById('sspProfileListContainer');
+  if (!container) return;
+
+  if (sspProfiles.length === 0) {
+    var html = '<div class="ssp-empty-state">';
+    html += '<div class="ssp-empty-state-icon">&#128203;</div>';
+    html += '<div class="ssp-empty-state-text">No support profiles for students in this class.</div>';
+    html += '<button class="ssp-btn ssp-btn-primary" onclick="openSspEditor(null)">Add Support Profile</button>';
+    html += '</div>';
+    container.innerHTML = html;
+    return;
+  }
+
+  var html = '<div class="ssp-profile-list">';
+
+  // Add button at top
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+  html += '<span style="font-weight:600;color:#4a5568;">' + sspProfiles.length + ' student(s) with support profiles</span>';
+  html += '<button class="ssp-btn ssp-btn-primary ssp-btn-sm" onclick="openSspEditor(null)">+ Add Profile</button>';
+  html += '</div>';
+
+  for (var i = 0; i < sspProfiles.length; i++) {
+    var p = sspProfiles[i];
+    html += renderSspProfileCard(p, i);
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderSspProfileCard(p, idx) {
+  var typeClass = 'ssp-type-' + (p.profileType || 'other').toLowerCase();
+  var html = '<div class="ssp-profile-card" onclick="openSspEditor(' + idx + ')">';
+
+  // Header: name + type badge
+  html += '<div class="ssp-card-header">';
+  html += '<div>';
+  html += '<span class="ssp-student-name">' + escapeHtml(p.studentName || p.studentEmail) + '</span>';
+  if (p.studentId) html += '<span class="ssp-student-id">ID: ' + escapeHtml(p.studentId) + '</span>';
+  html += '</div>';
+  html += '<span class="ssp-type-badge ' + typeClass + '">' + escapeHtml(p.profileType) + '</span>';
+  html += '</div>';
+
+  // Body: accommodation chips + WIDA badge
+  html += '<div class="ssp-card-body">';
+  if (p.widaOverallLevel > 0) {
+    html += '<span class="ssp-wida-badge ssp-wida-' + p.widaOverallLevel + '">';
+    html += 'WIDA ' + p.widaOverallLevel + ' — ' + (SSP_WIDA_LABELS[p.widaOverallLevel] || '');
+    html += '</span>';
+  }
+  var accom = p.accommodations || {};
+  for (var a = 0; a < SSP_ACCOM_TYPES.length; a++) {
+    if (accom[SSP_ACCOM_TYPES[a].key] === true) {
+      html += '<span class="ssp-accom-chip ssp-active">' + SSP_ACCOM_TYPES[a].label + '</span>';
+    }
+  }
+  // Custom accommodations
+  if (accom.custom && accom.custom.length > 0) {
+    for (var ci = 0; ci < accom.custom.length; ci++) {
+      html += '<span class="ssp-accom-chip ssp-active">' + escapeHtml(accom.custom[ci]) + '</span>';
+    }
+  }
+  html += '</div>';
+
+  // Footer: strategy count + updated
+  var activeStrats = (p.strategies || []).filter(function(s) { return s.active !== false; }).length;
+  html += '<div class="ssp-card-footer">';
+  html += '<span>' + activeStrats + ' active strategies</span>';
+  if (p.updatedAt) html += '<span> &middot; Updated ' + p.updatedAt.substring(0, 10) + '</span>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+// ============================================================================
+// PROFILE EDITOR MODAL
+// ============================================================================
+
+function openSspEditor(idx) {
+  if (idx !== null && idx >= 0 && idx < sspProfiles.length) {
+    sspEditingProfile = JSON.parse(JSON.stringify(sspProfiles[idx]));
+    sspEditorStrategies = sspEditingProfile.strategies || [];
+  } else {
+    sspEditingProfile = {
+      profileId: null,
+      studentEmail: '',
+      studentId: '',
+      profileType: 'IEP',
+      widaOverallLevel: 0,
+      widaDomains: { listening: 0, speaking: 0, reading: 0, writing: 0 },
+      accommodations: {},
+      strategies: [],
+      notes: ''
+    };
+    sspEditorStrategies = [];
+  }
+  renderSspEditorModal();
+}
+
+function closeSspEditor() {
+  var overlay = document.getElementById('sspEditorOverlay');
+  if (overlay) overlay.remove();
+  sspEditingProfile = null;
+  sspEditorStrategies = [];
+}
+
+function renderSspEditorModal() {
+  // Remove existing
+  var existing = document.getElementById('sspEditorOverlay');
+  if (existing) existing.remove();
+
+  var p = sspEditingProfile;
+  var isNew = !p.profileId;
+
+  var overlay = document.createElement('div');
+  overlay.id = 'sspEditorOverlay';
+  overlay.className = 'ssp-editor-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) closeSspEditor(); };
+
+  var html = '<div class="ssp-editor-modal">';
+
+  // Header
+  html += '<div class="ssp-editor-header">';
+  html += '<span class="ssp-editor-title">' + (isNew ? 'New Support Profile' : 'Edit Support Profile') + '</span>';
+  html += '<button class="ssp-editor-close" onclick="closeSspEditor()">&times;</button>';
+  html += '</div>';
+
+  // Body
+  html += '<div class="ssp-editor-body">';
+
+  // Student info
+  html += '<div class="ssp-section-title">Student Information</div>';
+  html += '<div class="ssp-form-row">';
+  html += '<div class="ssp-form-group">';
+  html += '<label class="ssp-form-label">Student Email *</label>';
+  html += '<input type="email" class="ssp-form-input" id="sspEditorEmail" value="' + escapeHtml(p.studentEmail) + '" ' + (isNew ? '' : 'readonly') + '>';
+  html += '</div>';
+  html += '<div class="ssp-form-group">';
+  html += '<label class="ssp-form-label">Student ID</label>';
+  html += '<input type="text" class="ssp-form-input" id="sspEditorStudentId" value="' + escapeHtml(p.studentId) + '">';
+  html += '</div>';
+  html += '</div>';
+
+  // Profile type
+  html += '<div class="ssp-form-group">';
+  html += '<label class="ssp-form-label">Profile Type *</label>';
+  html += '<select class="ssp-form-select" id="sspEditorType" onchange="onSspTypeChange()">';
+  var types = ['IEP', '504', 'WIDA', 'EAL', 'other'];
+  for (var t = 0; t < types.length; t++) {
+    html += '<option value="' + types[t] + '"' + (p.profileType === types[t] ? ' selected' : '') + '>' + types[t] + '</option>';
+  }
+  html += '</select>';
+  html += '</div>';
+
+  // WIDA section
+  html += '<div class="ssp-section-title">WIDA Proficiency</div>';
+  html += '<div class="ssp-form-group">';
+  html += '<label class="ssp-form-label">Overall WIDA Level (0 = N/A)</label>';
+  html += '<select class="ssp-form-select" id="sspEditorWidaLevel" onchange="onSspWidaLevelChange()">';
+  html += '<option value="0"' + (p.widaOverallLevel === 0 ? ' selected' : '') + '>N/A</option>';
+  for (var w = 1; w <= 6; w++) {
+    html += '<option value="' + w + '"' + (p.widaOverallLevel === w ? ' selected' : '') + '>' + w + ' — ' + SSP_WIDA_LABELS[w] + '</option>';
+  }
+  html += '</select>';
+  html += '</div>';
+
+  // WIDA domain grid
+  var wd = p.widaDomains || {};
+  html += '<div class="ssp-wida-grid">';
+  var domains = ['listening', 'speaking', 'reading', 'writing'];
+  for (var d = 0; d < domains.length; d++) {
+    html += '<div class="ssp-wida-domain">';
+    html += '<span class="ssp-wida-domain-label">' + domains[d] + '</span>';
+    html += '<input type="number" min="0" max="6" class="ssp-wida-domain-input" id="sspWida_' + domains[d] + '" value="' + (wd[domains[d]] || 0) + '">';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Accommodations
+  html += '<div class="ssp-section-title">Accommodations</div>';
+  html += '<div class="ssp-accom-toggles">';
+  var accom = p.accommodations || {};
+  for (var a = 0; a < SSP_ACCOM_TYPES.length; a++) {
+    var at = SSP_ACCOM_TYPES[a];
+    var isOn = accom[at.key] === true;
+    html += '<label class="ssp-accom-toggle' + (isOn ? ' ssp-toggle-on' : '') + '" id="sspAccomLabel_' + at.key + '" onclick="toggleSspAccom(\'' + at.key + '\')">';
+    html += '<span class="ssp-toggle-dot"></span>';
+    html += '<input type="checkbox" id="sspAccom_' + at.key + '"' + (isOn ? ' checked' : '') + '>';
+    html += at.label;
+    html += '</label>';
+  }
+  html += '</div>';
+
+  // Custom accommodations
+  html += '<div class="ssp-form-group" style="margin-top:12px;">';
+  html += '<label class="ssp-form-label">Custom Accommodations</label>';
+  html += '<div class="ssp-form-hint">Comma-separated list of additional accommodations</div>';
+  var customStr = (accom.custom || []).join(', ');
+  html += '<input type="text" class="ssp-form-input" id="sspEditorCustomAccom" value="' + escapeHtml(customStr) + '" placeholder="e.g., bilingual glossary, extra processing time">';
+  html += '</div>';
+
+  // Support Strategies
+  html += '<div class="ssp-section-title">Support Strategies</div>';
+  html += '<div class="ssp-form-hint">Strategies are auto-suggested from WIDA level. You can add, remove, or toggle them.</div>';
+  html += '<div class="ssp-strategy-list" id="sspStrategyList">';
+  html += renderSspStrategies();
+  html += '</div>';
+
+  // Add strategy input
+  html += '<div class="ssp-strategy-add">';
+  html += '<input type="text" class="ssp-strategy-add-input" id="sspNewStrategy" placeholder="Add a custom strategy..." maxlength="200">';
+  html += '<button class="ssp-strategy-add-btn" onclick="addSspStrategy()">Add</button>';
+  html += '</div>';
+
+  // Notes
+  html += '<div class="ssp-section-title">Notes</div>';
+  html += '<textarea class="ssp-form-textarea" id="sspEditorNotes" maxlength="1000" rows="3" placeholder="Additional notes about this student\'s needs...">' + escapeHtml(p.notes || '') + '</textarea>';
+
+  html += '</div>'; // end body
+
+  // Footer
+  html += '<div class="ssp-editor-footer">';
+  if (!isNew) {
+    html += '<button class="ssp-btn ssp-btn-danger" onclick="deactivateSspProfile()" style="margin-right:auto;">Deactivate</button>';
+  }
+  html += '<button class="ssp-btn ssp-btn-secondary" onclick="closeSspEditor()">Cancel</button>';
+  html += '<button class="ssp-btn ssp-btn-primary" id="sspSaveBtn" onclick="saveSspProfile()">Save Profile</button>';
+  html += '</div>';
+
+  html += '</div>'; // end modal
+
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay);
+}
+
+// ============================================================================
+// EDITOR INTERACTIONS
+// ============================================================================
+
+function toggleSspAccom(key) {
+  var cb = document.getElementById('sspAccom_' + key);
+  var label = document.getElementById('sspAccomLabel_' + key);
+  if (!cb || !label) return;
+  cb.checked = !cb.checked;
+  if (cb.checked) {
+    label.className = 'ssp-accom-toggle ssp-toggle-on';
+  } else {
+    label.className = 'ssp-accom-toggle';
+  }
+}
+
+function onSspTypeChange() {
+  var type = document.getElementById('sspEditorType').value;
+  // If type is WIDA or EAL, auto-focus WIDA level
+  if (type === 'WIDA' || type === 'EAL') {
+    var levelSelect = document.getElementById('sspEditorWidaLevel');
+    if (levelSelect && levelSelect.value === '0') {
+      levelSelect.focus();
+    }
+  }
+}
+
+function onSspWidaLevelChange() {
+  var level = parseInt(document.getElementById('sspEditorWidaLevel').value) || 0;
+  // If strategies list is empty and level > 0, offer to load presets
+  if (level > 0 && sspEditorStrategies.length === 0) {
+    google.script.run
+      .withSuccessHandler(function(presets) {
+        if (presets && presets.length > 0) {
+          for (var i = 0; i < presets.length; i++) {
+            sspEditorStrategies.push({ strategy: presets[i], source: 'wida', active: true });
+          }
+          var list = document.getElementById('sspStrategyList');
+          if (list) list.innerHTML = renderSspStrategies();
+        }
+      })
+      .getWidaPresetStrategies(level);
+  }
+}
+
+function renderSspStrategies() {
+  var html = '';
+  for (var i = 0; i < sspEditorStrategies.length; i++) {
+    var s = sspEditorStrategies[i];
+    var inactiveClass = s.active === false ? ' ssp-strategy-inactive' : '';
+    var srcClass = s.source === 'wida' ? 'ssp-src-wida' : 'ssp-src-teacher';
+    html += '<div class="ssp-strategy-item' + inactiveClass + '">';
+    html += '<span class="ssp-strategy-source ' + srcClass + '">' + (s.source || 'teacher') + '</span>';
+    html += '<span>' + escapeHtml(s.strategy) + '</span>';
+    html += '<span class="ssp-strategy-toggle" onclick="toggleSspStrategy(' + i + ')" title="Toggle active">';
+    html += s.active !== false ? '&#10003;' : '&#10007;';
+    html += '</span>';
+    html += '<span class="ssp-strategy-toggle" onclick="removeSspStrategy(' + i + ')" title="Remove">&times;</span>';
+    html += '</div>';
+  }
+  return html;
+}
+
+function toggleSspStrategy(idx) {
+  if (idx < 0 || idx >= sspEditorStrategies.length) return;
+  sspEditorStrategies[idx].active = sspEditorStrategies[idx].active === false ? true : false;
+  var list = document.getElementById('sspStrategyList');
+  if (list) list.innerHTML = renderSspStrategies();
+}
+
+function removeSspStrategy(idx) {
+  if (idx < 0 || idx >= sspEditorStrategies.length) return;
+  sspEditorStrategies.splice(idx, 1);
+  var list = document.getElementById('sspStrategyList');
+  if (list) list.innerHTML = renderSspStrategies();
+}
+
+function addSspStrategy() {
+  var input = document.getElementById('sspNewStrategy');
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+  if (text.length > 200) {
+    showToast('Strategy must be 200 characters or less', 'error');
+    return;
+  }
+  sspEditorStrategies.push({ strategy: text, source: 'teacher', active: true });
+  input.value = '';
+  var list = document.getElementById('sspStrategyList');
+  if (list) list.innerHTML = renderSspStrategies();
+}
+
+// ============================================================================
+// SAVE / DEACTIVATE
+// ============================================================================
+
+function saveSspProfile() {
+  if (sspSaving) return;
+
+  var email = document.getElementById('sspEditorEmail').value.trim();
+  if (!email) {
+    showToast('Student email is required', 'error');
+    return;
+  }
+
+  // Collect accommodations
+  var accommodations = {};
+  for (var a = 0; a < SSP_ACCOM_TYPES.length; a++) {
+    var cb = document.getElementById('sspAccom_' + SSP_ACCOM_TYPES[a].key);
+    accommodations[SSP_ACCOM_TYPES[a].key] = cb ? cb.checked : false;
+  }
+  // Custom accommodations
+  var customStr = (document.getElementById('sspEditorCustomAccom').value || '').trim();
+  accommodations.custom = customStr ? customStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+
+  // Collect WIDA domains
+  var widaDomains = {
+    listening: parseInt(document.getElementById('sspWida_listening').value) || 0,
+    speaking: parseInt(document.getElementById('sspWida_speaking').value) || 0,
+    reading: parseInt(document.getElementById('sspWida_reading').value) || 0,
+    writing: parseInt(document.getElementById('sspWida_writing').value) || 0
+  };
+
+  var profileData = {
+    profileId: sspEditingProfile.profileId || null,
+    studentEmail: email,
+    studentId: document.getElementById('sspEditorStudentId').value.trim(),
+    profileType: document.getElementById('sspEditorType').value,
+    widaOverallLevel: parseInt(document.getElementById('sspEditorWidaLevel').value) || 0,
+    widaDomains: widaDomains,
+    accommodations: accommodations,
+    strategies: sspEditorStrategies,
+    notes: document.getElementById('sspEditorNotes').value.trim()
+  };
+
+  sspSaving = true;
+  var btn = document.getElementById('sspSaveBtn');
+  if (btn) btn.textContent = 'Saving...';
+
+  google.script.run
+    .withSuccessHandler(function(saved) {
+      sspSaving = false;
+      showToast('Support profile saved');
+      closeSspEditor();
+      // Refresh list
+      if (sspCurrentClassId) loadSupportProfiles(sspCurrentClassId);
+    })
+    .withFailureHandler(function(err) {
+      sspSaving = false;
+      if (btn) btn.textContent = 'Save Profile';
+      showToast(friendlyError(err), 'error');
+    })
+    .saveStudentSupportProfile(profileData);
+}
+
+function deactivateSspProfile() {
+  if (!sspEditingProfile || !sspEditingProfile.profileId) return;
+  if (!confirm('Deactivate this support profile? It will no longer appear in lists or reminders.')) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Profile deactivated');
+      closeSspEditor();
+      if (sspCurrentClassId) loadSupportProfiles(sspCurrentClassId);
+    })
+    .withFailureHandler(function(err) {
+      showToast(friendlyError(err), 'error');
+    })
+    .deactivateProfile(sspEditingProfile.profileId);
+}
+
+// ============================================================================
+// HELPER — escape HTML (reuse if not already defined)
+// ============================================================================
+function escapeHtml(str) {
+  if (!str) return '';
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(String(str)));
+  return div.innerHTML;
+}
+</script>

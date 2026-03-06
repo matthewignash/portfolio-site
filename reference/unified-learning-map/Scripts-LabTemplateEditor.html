@@ -1,0 +1,1532 @@
+<script>
+/* ============================================================================
+   Lab Template & Rubric Editor — Teacher UI
+   Prefix: lte
+   ES5 ONLY — no const, let, =>, template literals, .includes()
+   ============================================================================ */
+
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+var LTE_SECTION_TYPES = [
+  { type: 'title_page', label: 'Title Page' },
+  { type: 'research_question', label: 'Research Question' },
+  { type: 'background', label: 'Background / Context' },
+  { type: 'hypothesis', label: 'Hypothesis' },
+  { type: 'variables', label: 'Variables' },
+  { type: 'materials', label: 'Materials List' },
+  { type: 'method', label: 'Method / Procedure' },
+  { type: 'safety', label: 'Safety Considerations' },
+  { type: 'data_collection', label: 'Data Collection' },
+  { type: 'data_processing', label: 'Data Processing' },
+  { type: 'analysis', label: 'Analysis' },
+  { type: 'conclusion', label: 'Conclusion' },
+  { type: 'evaluation', label: 'Evaluation' },
+  { type: 'reflection', label: 'Reflection' },
+  { type: 'bibliography', label: 'Bibliography' },
+  { type: 'custom', label: 'Custom Section' }
+];
+
+var LTE_DIMENSIONS = [
+  { code: 'QD', label: 'Questioning & Design', color: '#3b82f6' },
+  { code: 'HP', label: 'Hypothesizing & Predicting', color: '#8b5cf6' },
+  { code: 'DI', label: 'Data & Information', color: '#059669' },
+  { code: 'CD', label: 'Collecting Data', color: '#0d9488' },
+  { code: 'PA', label: 'Processing & Analyzing', color: '#d97706' },
+  { code: 'EC', label: 'Evaluating & Concluding', color: '#dc2626' },
+  { code: 'CM', label: 'Communicating', color: '#6366f1' },
+  { code: 'RC', label: 'Reflecting & Connecting', color: '#be185d' }
+];
+
+var LTE_FRAMEWORKS = [
+  { id: '', label: '(No framework)' },
+  { id: 'IB-MYP-SCI', label: 'IB MYP Sciences' },
+  { id: 'IB-DP-IA', label: 'IB DP Internal Assessment' },
+  { id: 'AP-SCI', label: 'AP Science Practices' },
+  { id: 'NGSS-SEP', label: 'NGSS Science & Engineering' }
+];
+
+var LTE_SCAFFOLD_LEVELS = ['high', 'medium', 'low', 'none'];
+
+var lteActiveScaffoldTab = 'high';
+
+
+// ============================================================================
+// SHARED UTILITIES
+// ============================================================================
+
+function lteGenerateSectionId() {
+  return 'sec-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+}
+
+function lteGenerateCriterionId() {
+  return 'crt-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+}
+
+
+/**
+ * Close the editor and return to the wizard step.
+ */
+function lteCloseEditor() {
+  if (lteDirty) {
+    if (!confirm('You have unsaved changes. Close anyway?')) return;
+  }
+
+  // Force cache refresh
+  labTemplatesCache = null;
+  labRubricsCache = null;
+
+  // Reset editor state
+  lteMode = null;
+  lteEditingData = null;
+  lteExpandedSection = null;
+  lteSaving = false;
+  lteDirty = false;
+  lteActiveScaffoldTab = 'high';
+
+  // Restore wizard
+  labBuilderStep = lteReturnStep || 1;
+  lteReturnStep = null;
+
+  labLoadTemplatesAndRubrics(function() {
+    labRenderCurrentStep();
+  });
+}
+
+
+/**
+ * Render the editor header into the stepper area.
+ */
+function lteRenderEditorHeader(title) {
+  var el = document.getElementById('labBuilderStepper');
+  if (!el) return;
+
+  var backLabel = lteMode === 'rubric' ? 'Back to Rubrics' : 'Back to Templates';
+  var html = '<div class="lte-editor-header">';
+  html += '<button type="button" class="lte-back-btn" onclick="lteCloseEditor()">&larr; ' + escapeHtml(backLabel) + '</button>';
+  html += '<span style="font-weight:600;font-size:15px;">' + escapeHtml(title) + '</span>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+
+/**
+ * Render Save / Cancel / Delete buttons into footer.
+ */
+function lteUpdateFooter() {
+  var footer = document.getElementById('labBuilderFooter');
+  if (!footer) return;
+
+  var html = '';
+
+  // Delete button (only when editing existing)
+  if (lteEditingData) {
+    if (lteMode === 'template' && lteEditingData.templateId) {
+      html += '<button type="button" class="btn btn-outline" style="color:#ef4444;border-color:#ef4444;" onclick="lteDeleteTemplate(\'' + escapeHtml(lteEditingData.templateId) + '\')">Delete</button>';
+    } else if (lteMode === 'rubric' && lteEditingData.rubricId) {
+      html += '<button type="button" class="btn btn-outline" style="color:#ef4444;border-color:#ef4444;" onclick="lteDeleteRubric(\'' + escapeHtml(lteEditingData.rubricId) + '\')">Delete</button>';
+    }
+  }
+
+  html += '<div style="flex:1;"></div>';
+  html += '<button type="button" class="btn btn-outline" onclick="lteCloseEditor()">Cancel</button>';
+
+  var saveFn = lteMode === 'rubric' ? 'lteSaveRubric' : 'lteSaveTemplate';
+  html += '<button type="button" class="btn btn-primary" onclick="' + saveFn + '()" style="margin-left:8px;"' + (lteSaving ? ' disabled' : '') + '>' + (lteSaving ? 'Saving...' : 'Save') + '</button>';
+
+  footer.innerHTML = html;
+}
+
+
+/**
+ * Render dimension chips for either sections or criteria.
+ *
+ * @param {Array} selected - Array of selected dimension codes
+ * @param {string} fnName - Function name to call on toggle (e.g. 'lteToggleSectionDim')
+ * @param {number} itemIndex - Index of the section/criterion
+ */
+function lteRenderDimensionChips(selected, fnName, itemIndex) {
+  var html = '<div class="lte-dim-chips">';
+  for (var i = 0; i < LTE_DIMENSIONS.length; i++) {
+    var dim = LTE_DIMENSIONS[i];
+    var isActive = false;
+    for (var j = 0; j < selected.length; j++) {
+      if (selected[j] === dim.code) { isActive = true; break; }
+    }
+    var style = isActive ? ' style="background:' + dim.color + ';color:#fff;border-color:' + dim.color + ';"' : '';
+    html += '<span class="lte-dim-chip' + (isActive ? ' lte-dim-chip-active' : '') + '"' + style +
+      ' role="checkbox" aria-checked="' + (isActive ? 'true' : 'false') + '" tabindex="0"' +
+      ' onclick="' + fnName + '(\'' + dim.code + '\',' + itemIndex + ')"' +
+      ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();' + fnName + '(\'' + dim.code + '\',' + itemIndex + ');}"' +
+      '>' + escapeHtml(dim.code) + '</span>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Find section type label by type code.
+ */
+function lteSectionTypeLabel(type) {
+  for (var i = 0; i < LTE_SECTION_TYPES.length; i++) {
+    if (LTE_SECTION_TYPES[i].type === type) return LTE_SECTION_TYPES[i].label;
+  }
+  return type || 'Custom';
+}
+
+
+// ============================================================================
+// TEMPLATE EDITOR — OPEN
+// ============================================================================
+
+/**
+ * Open the template editor.
+ * @param {string|null} templateId - null for new, string for edit
+ */
+function lteOpenTemplateEditor(templateId) {
+  lteReturnStep = labBuilderStep;
+  lteMode = 'template';
+  lteDirty = false;
+  lteExpandedSection = null;
+  lteActiveScaffoldTab = 'high';
+
+  if (templateId) {
+    // Load existing template
+    var expectedId = String(templateId);
+    google.script.run
+      .withSuccessHandler(function(tmpl) {
+        if (lteMode !== 'template') return;
+        if (!tmpl) {
+          showToast('Template not found.', 'error');
+          lteCloseEditor();
+          return;
+        }
+
+        var sections = tmpl.sectionsJson || [];
+        var parsed = [];
+        for (var i = 0; i < sections.length; i++) {
+          var s = sections[i];
+          parsed.push({
+            sectionId: s.sectionId || lteGenerateSectionId(),
+            sectionType: s.sectionType || 'custom',
+            title: s.title || '',
+            sequence: s.sequence != null ? s.sequence : i,
+            required: !!s.required,
+            promptText: s.promptText || '',
+            helpText: s.helpText || '',
+            wordGuidance: s.wordGuidance || { min: 0, max: 0 },
+            internalDimensions: s.internalDimensions || [],
+            linkedCriteria: s.linkedCriteria || [],
+            scaffoldLevels: s.scaffoldLevels || { high: { sentenceStarters: [], guideQuestions: [] }, medium: { sentenceStarters: [], guideQuestions: [] }, low: { sentenceStarters: [], guideQuestions: [] }, none: { sentenceStarters: [], guideQuestions: [] } }
+          });
+        }
+
+        lteEditingData = {
+          templateId: tmpl.templateId,
+          title: tmpl.title || '',
+          framework: tmpl.framework || '',
+          gradeband: tmpl.gradeband || '',
+          status: tmpl.status || 'draft',
+          sections: parsed
+        };
+
+        if (parsed.length > 0) lteExpandedSection = 0;
+        lteRenderTemplateForm();
+      })
+      .withFailureHandler(function(err) {
+        if (lteMode !== 'template') return;
+        showToast('Failed to load template: ' + escapeHtml(err.message), 'error');
+        lteCloseEditor();
+      })
+      .getLabTemplate(templateId);
+  } else {
+    // New blank template
+    lteEditingData = {
+      templateId: null,
+      title: '',
+      framework: '',
+      gradeband: '',
+      status: 'draft',
+      sections: [{
+        sectionId: lteGenerateSectionId(),
+        sectionType: 'custom',
+        title: '',
+        sequence: 0,
+        required: false,
+        promptText: '',
+        helpText: '',
+        wordGuidance: { min: 0, max: 0 },
+        internalDimensions: [],
+        linkedCriteria: [],
+        scaffoldLevels: { high: { sentenceStarters: [], guideQuestions: [] }, medium: { sentenceStarters: [], guideQuestions: [] }, low: { sentenceStarters: [], guideQuestions: [] }, none: { sentenceStarters: [], guideQuestions: [] } }
+      }]
+    };
+    lteExpandedSection = 0;
+    lteRenderTemplateForm();
+  }
+}
+
+
+// ============================================================================
+// TEMPLATE EDITOR — RENDER
+// ============================================================================
+
+function lteRenderTemplateForm() {
+  lteRenderEditorHeader(lteEditingData.templateId ? 'Edit Template' : 'Create Template');
+
+  var body = document.getElementById('labBuilderBody');
+  if (!body) return;
+
+  var d = lteEditingData;
+  var html = '';
+
+  // Title
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Template Title *</label>';
+  html += '<input type="text" class="lab-builder-input" id="lteTitleInput" value="' + escapeHtml(d.title) + '" maxlength="200" placeholder="e.g. My Custom Lab Template">';
+  html += '</div>';
+
+  // Form row: framework + gradeband + status
+  html += '<div class="lte-form-row">';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Framework</label>';
+  html += '<select class="lab-builder-input" id="lteFrameworkSelect">';
+  for (var f = 0; f < LTE_FRAMEWORKS.length; f++) {
+    var fw = LTE_FRAMEWORKS[f];
+    var fSel = d.framework === fw.id ? ' selected' : '';
+    html += '<option value="' + escapeHtml(fw.id) + '"' + fSel + '>' + escapeHtml(fw.label) + '</option>';
+  }
+  html += '</select>';
+  html += '</div>';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Grade Band</label>';
+  html += '<input type="text" class="lab-builder-input" id="lteGradebandInput" value="' + escapeHtml(d.gradeband) + '" maxlength="50" placeholder="e.g. MYP-Y4-5">';
+  html += '</div>';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Status</label>';
+  html += '<select class="lab-builder-input" id="lteStatusSelect">';
+  var statuses = ['draft', 'published', 'archived'];
+  for (var si = 0; si < statuses.length; si++) {
+    var sSel = d.status === statuses[si] ? ' selected' : '';
+    html += '<option value="' + statuses[si] + '"' + sSel + '>' + statuses[si].charAt(0).toUpperCase() + statuses[si].slice(1) + '</option>';
+  }
+  html += '</select>';
+  html += '</div>';
+
+  html += '</div>'; // .lte-form-row
+
+  // Section list
+  html += '<div class="lab-builder-field" style="margin-top:16px;">';
+  html += '<label class="lab-builder-label">Sections (' + d.sections.length + '/20)</label>';
+  html += lteRenderSectionList();
+  html += '</div>';
+
+  body.innerHTML = html;
+  lteUpdateFooter();
+
+  // Focus title input for keyboard users
+  setTimeout(function() {
+    var titleInput = document.getElementById('lteTitleInput');
+    if (titleInput) titleInput.focus();
+  }, 50);
+}
+
+
+function lteRenderSectionList() {
+  var sections = lteEditingData.sections;
+  var html = '<div class="lte-item-list">';
+
+  for (var i = 0; i < sections.length; i++) {
+    var sec = sections[i];
+    var isExpanded = lteExpandedSection === i;
+    var itemClass = 'lte-item' + (isExpanded ? '' : ' lte-collapsed');
+    var bodyId = 'lteSecBody-' + i;
+
+    html += '<div class="' + itemClass + '">';
+
+    // Header
+    html += '<div class="lte-item-header" role="button" tabindex="0" aria-expanded="' + (isExpanded ? 'true' : 'false') + '" aria-controls="' + bodyId + '"' +
+      ' onclick="lteToggleSectionExpand(' + i + ')"' +
+      ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();lteToggleSectionExpand(' + i + ');}">';
+    html += '<span class="lte-item-chevron">&#9660;</span>';
+    html += '<span class="lte-item-title">' + escapeHtml(sec.title || 'Untitled Section') + '</span>';
+    html += '<span class="lte-item-badge">' + escapeHtml(lteSectionTypeLabel(sec.sectionType)) + '</span>';
+    if (sec.required) {
+      html += '<span class="lte-item-badge lte-item-badge-required">Required</span>';
+    }
+
+    // Arrows
+    html += '<span class="lte-item-arrows">';
+    if (i > 0) {
+      html += '<button type="button" class="lte-item-arrow" onclick="event.stopPropagation();lteMoveSection(' + i + ',-1)" title="Move up">&uarr;</button>';
+    }
+    if (i < sections.length - 1) {
+      html += '<button type="button" class="lte-item-arrow" onclick="event.stopPropagation();lteMoveSection(' + i + ',1)" title="Move down">&darr;</button>';
+    }
+    html += '</span>';
+
+    // Remove
+    html += '<button type="button" class="lte-item-remove" onclick="event.stopPropagation();lteRemoveSection(' + i + ')" title="Remove section">&times;</button>';
+
+    html += '</div>'; // .lte-item-header
+
+    // Body (detail)
+    html += '<div class="lte-item-body" id="' + bodyId + '">';
+    if (isExpanded) {
+      html += lteRenderSectionDetail(i);
+    }
+    html += '</div>';
+
+    html += '</div>'; // .lte-item
+  }
+
+  html += '</div>'; // .lte-item-list
+
+  // Add section button
+  html += '<button type="button" class="lte-add-btn"' + (sections.length >= 20 ? ' disabled' : '') + ' onclick="lteAddSection()">+ Add Section</button>';
+
+  return html;
+}
+
+
+function lteRenderSectionDetail(index) {
+  var sec = lteEditingData.sections[index];
+  if (!sec) return '';
+
+  var html = '';
+
+  // Title input
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Section Title *</label>';
+  html += '<input type="text" class="lab-builder-input lte-sec-title" value="' + escapeHtml(sec.title) + '" maxlength="100" placeholder="e.g. Research Question">';
+  html += '</div>';
+
+  // Type + Required row
+  html += '<div class="lte-form-row">';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Section Type</label>';
+  html += '<select class="lab-builder-input lte-sec-type">';
+  for (var t = 0; t < LTE_SECTION_TYPES.length; t++) {
+    var st = LTE_SECTION_TYPES[t];
+    var tSel = sec.sectionType === st.type ? ' selected' : '';
+    html += '<option value="' + st.type + '"' + tSel + '>' + escapeHtml(st.label) + '</option>';
+  }
+  html += '</select>';
+  html += '</div>';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label" style="visibility:hidden;">Required</label>';
+  html += '<div class="lte-form-toggle">';
+  html += '<label><input type="checkbox" class="lte-sec-required"' + (sec.required ? ' checked' : '') + '> Required</label>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>'; // .lte-form-row
+
+  // Prompt text
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Prompt Text</label>';
+  html += '<textarea class="lab-builder-textarea lte-sec-prompt" rows="2" maxlength="2000" placeholder="Instructions shown to the student...">' + escapeHtml(sec.promptText) + '</textarea>';
+  html += '</div>';
+
+  // Help text
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Help Text</label>';
+  html += '<textarea class="lab-builder-textarea lte-sec-help" rows="2" maxlength="2000" placeholder="Additional guidance...">' + escapeHtml(sec.helpText) + '</textarea>';
+  html += '</div>';
+
+  // Word guidance
+  html += '<div class="lte-form-row">';
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Min Words</label>';
+  html += '<input type="number" class="lab-builder-input lte-sec-wg-min" value="' + (sec.wordGuidance.min || 0) + '" min="0" max="10000">';
+  html += '</div>';
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Max Words</label>';
+  html += '<input type="number" class="lab-builder-input lte-sec-wg-max" value="' + (sec.wordGuidance.max || 0) + '" min="0" max="10000">';
+  html += '</div>';
+  html += '</div>';
+
+  // Dimension chips
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Science Dimensions</label>';
+  html += lteRenderDimensionChips(sec.internalDimensions, 'lteToggleSectionDim', index);
+  html += '<div class="lab-builder-hint">Select which scientific thinking dimensions this section addresses.</div>';
+  html += '</div>';
+
+  // Scaffold tabs
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Scaffold Levels</label>';
+  html += lteRenderScaffoldTabs(sec, index);
+  html += '</div>';
+
+  return html;
+}
+
+
+function lteRenderScaffoldTabs(sec, index) {
+  var html = '<div class="lte-scaffold-tabs" role="tablist" aria-label="Scaffold level">';
+  for (var i = 0; i < LTE_SCAFFOLD_LEVELS.length; i++) {
+    var lvl = LTE_SCAFFOLD_LEVELS[i];
+    var isActive = lteActiveScaffoldTab === lvl;
+    html += '<span class="lte-scaffold-tab' + (isActive ? ' lte-scaffold-tab-active' : '') + '"' +
+      ' tabindex="0" role="tab" aria-selected="' + (isActive ? 'true' : 'false') + '"' +
+      ' onclick="lteActiveScaffoldTab=\'' + lvl + '\';lteReRenderSectionList()"' +
+      ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();lteActiveScaffoldTab=\'' + lvl + '\';lteReRenderSectionList();}"' +
+      '>' + lvl.charAt(0).toUpperCase() + lvl.slice(1) + '</span>';
+  }
+  html += '</div>';
+
+  var scaff = sec.scaffoldLevels || {};
+  var curr = scaff[lteActiveScaffoldTab] || { sentenceStarters: [], guideQuestions: [] };
+  var starters = (curr.sentenceStarters || []).join('\n');
+  var questions = (curr.guideQuestions || []).join('\n');
+
+  html += '<div class="lte-scaffold-content">';
+  html += '<div class="lte-scaffold-label">Sentence Starters (one per line)</div>';
+  html += '<textarea class="lab-builder-textarea lte-scaffold-textarea lte-sec-scaffold-starters" rows="3" placeholder="e.g. I predict that...">' + escapeHtml(starters) + '</textarea>';
+  html += '<div class="lte-scaffold-label">Guide Questions (one per line)</div>';
+  html += '<textarea class="lab-builder-textarea lte-scaffold-textarea lte-sec-scaffold-questions" rows="3" placeholder="e.g. What variables will you control?">' + escapeHtml(questions) + '</textarea>';
+  html += '</div>';
+
+  return html;
+}
+
+
+// ============================================================================
+// TEMPLATE EDITOR — INTERACTIONS
+// ============================================================================
+
+function lteAddSection() {
+  if (!lteEditingData || lteEditingData.sections.length >= 20) return;
+
+  // Collect from currently expanded section before adding
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectSectionData(lteExpandedSection);
+  }
+
+  lteEditingData.sections.push({
+    sectionId: lteGenerateSectionId(),
+    sectionType: 'custom',
+    title: '',
+    sequence: lteEditingData.sections.length,
+    required: false,
+    promptText: '',
+    helpText: '',
+    wordGuidance: { min: 0, max: 0 },
+    internalDimensions: [],
+    linkedCriteria: [],
+    scaffoldLevels: { high: { sentenceStarters: [], guideQuestions: [] }, medium: { sentenceStarters: [], guideQuestions: [] }, low: { sentenceStarters: [], guideQuestions: [] }, none: { sentenceStarters: [], guideQuestions: [] } }
+  });
+
+  lteExpandedSection = lteEditingData.sections.length - 1;
+  lteDirty = true;
+  lteReRenderSectionList();
+
+  // Focus the new section title input
+  setTimeout(function() {
+    var titleInput = document.querySelector('.lte-sec-title');
+    if (titleInput) titleInput.focus();
+  }, 50);
+}
+
+
+function lteRemoveSection(index) {
+  if (!lteEditingData) return;
+  if (lteEditingData.sections.length <= 1) {
+    showToast('Template must have at least one section.', 'error');
+    return;
+  }
+  if (!confirm('Remove this section?')) return;
+
+  lteEditingData.sections.splice(index, 1);
+
+  // Renumber sequences
+  for (var i = 0; i < lteEditingData.sections.length; i++) {
+    lteEditingData.sections[i].sequence = i;
+  }
+
+  // Adjust expanded index
+  if (lteExpandedSection === index) {
+    lteExpandedSection = null;
+  } else if (lteExpandedSection !== null && lteExpandedSection > index) {
+    lteExpandedSection--;
+  }
+
+  lteDirty = true;
+  lteReRenderSectionList();
+}
+
+
+function lteMoveSection(index, direction) {
+  if (!lteEditingData) return;
+  var newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= lteEditingData.sections.length) return;
+
+  // Collect from currently expanded section before moving
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectSectionData(lteExpandedSection);
+  }
+
+  // Swap
+  var temp = lteEditingData.sections[index];
+  lteEditingData.sections[index] = lteEditingData.sections[newIndex];
+  lteEditingData.sections[newIndex] = temp;
+
+  // Renumber sequences
+  for (var i = 0; i < lteEditingData.sections.length; i++) {
+    lteEditingData.sections[i].sequence = i;
+  }
+
+  // Track expanded section through move
+  if (lteExpandedSection === index) {
+    lteExpandedSection = newIndex;
+  } else if (lteExpandedSection === newIndex) {
+    lteExpandedSection = index;
+  }
+
+  lteDirty = true;
+  lteReRenderSectionList();
+}
+
+
+function lteToggleSectionExpand(index) {
+  // Collect data from currently expanded section before switching
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectSectionData(lteExpandedSection);
+  }
+
+  if (lteExpandedSection === index) {
+    lteExpandedSection = null;
+  } else {
+    lteExpandedSection = index;
+  }
+
+  lteReRenderSectionList();
+
+  // Focus first input in newly expanded section
+  if (lteExpandedSection !== null) {
+    setTimeout(function() {
+      var titleInput = document.querySelector('.lte-sec-title');
+      if (titleInput) titleInput.focus();
+    }, 50);
+  }
+}
+
+
+function lteCollectSectionData(index) {
+  if (!lteEditingData || index === null || index === undefined) return;
+  var sec = lteEditingData.sections[index];
+  if (!sec) return;
+
+  // Find the expanded body
+  var bodyEl = document.getElementById('lteSecBody-' + index);
+  if (!bodyEl) return;
+
+  var titleEl = bodyEl.querySelector('.lte-sec-title');
+  var typeEl = bodyEl.querySelector('.lte-sec-type');
+  var requiredEl = bodyEl.querySelector('.lte-sec-required');
+  var promptEl = bodyEl.querySelector('.lte-sec-prompt');
+  var helpEl = bodyEl.querySelector('.lte-sec-help');
+  var wgMinEl = bodyEl.querySelector('.lte-sec-wg-min');
+  var wgMaxEl = bodyEl.querySelector('.lte-sec-wg-max');
+  var startersEl = bodyEl.querySelector('.lte-sec-scaffold-starters');
+  var questionsEl = bodyEl.querySelector('.lte-sec-scaffold-questions');
+
+  if (titleEl) sec.title = titleEl.value.trim();
+  if (typeEl) sec.sectionType = typeEl.value;
+  if (requiredEl) sec.required = requiredEl.checked;
+  if (promptEl) sec.promptText = promptEl.value;
+  if (helpEl) sec.helpText = helpEl.value;
+  if (wgMinEl) sec.wordGuidance.min = parseInt(wgMinEl.value, 10) || 0;
+  if (wgMaxEl) sec.wordGuidance.max = parseInt(wgMaxEl.value, 10) || 0;
+
+  // Scaffold — save to current active tab
+  if (!sec.scaffoldLevels) {
+    sec.scaffoldLevels = {};
+  }
+  if (!sec.scaffoldLevels[lteActiveScaffoldTab]) {
+    sec.scaffoldLevels[lteActiveScaffoldTab] = { sentenceStarters: [], guideQuestions: [] };
+  }
+  if (startersEl) {
+    sec.scaffoldLevels[lteActiveScaffoldTab].sentenceStarters = startersEl.value.split('\n').filter(function(l) { return l.trim() !== ''; });
+  }
+  if (questionsEl) {
+    sec.scaffoldLevels[lteActiveScaffoldTab].guideQuestions = questionsEl.value.split('\n').filter(function(l) { return l.trim() !== ''; });
+  }
+
+  lteDirty = true;
+}
+
+
+function lteCollectFormHeader() {
+  if (!lteEditingData) return;
+  var titleEl = document.getElementById('lteTitleInput');
+  var fwEl = document.getElementById('lteFrameworkSelect');
+  var gbEl = document.getElementById('lteGradebandInput');
+  var stEl = document.getElementById('lteStatusSelect');
+
+  if (titleEl) lteEditingData.title = titleEl.value.trim();
+  if (fwEl) lteEditingData.framework = fwEl.value;
+  if (gbEl) lteEditingData.gradeband = gbEl.value.trim();
+  if (stEl) lteEditingData.status = stEl.value;
+}
+
+
+function lteToggleSectionDim(code, index) {
+  if (!lteEditingData || !lteEditingData.sections[index]) return;
+
+  // Collect current section data before re-render to avoid losing typed text
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectSectionData(lteExpandedSection);
+  }
+
+  var dims = lteEditingData.sections[index].internalDimensions;
+  var pos = -1;
+  for (var i = 0; i < dims.length; i++) {
+    if (dims[i] === code) { pos = i; break; }
+  }
+  if (pos >= 0) {
+    dims.splice(pos, 1);
+  } else {
+    dims.push(code);
+  }
+  lteDirty = true;
+  lteReRenderSectionList();
+}
+
+
+/**
+ * Re-render the section list portion only (preserves header form).
+ */
+function lteReRenderSectionList() {
+  var field = document.querySelector('.lte-item-list');
+  if (!field) {
+    // Full re-render fallback
+    lteRenderTemplateForm();
+    return;
+  }
+  var parent = field.parentNode;
+  if (!parent) return;
+
+  // Collect header data first
+  lteCollectFormHeader();
+
+  // Replace from the item-list onwards
+  var addBtn = parent.querySelector('.lte-add-btn');
+  if (addBtn) parent.removeChild(addBtn);
+  parent.removeChild(field);
+
+  var tempDiv = document.createElement('div');
+  tempDiv.innerHTML = lteRenderSectionList();
+  while (tempDiv.firstChild) {
+    parent.appendChild(tempDiv.firstChild);
+  }
+}
+
+
+// ============================================================================
+// TEMPLATE EDITOR — SAVE / DELETE / DUPLICATE
+// ============================================================================
+
+function lteSaveTemplate() {
+  if (!lteEditingData || lteSaving) return;
+
+  // Collect all data
+  lteCollectFormHeader();
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectSectionData(lteExpandedSection);
+  }
+
+  var d = lteEditingData;
+
+  // Client-side validation
+  if (!d.title) {
+    showToast('Template title is required.', 'error');
+    return;
+  }
+  if (d.sections.length === 0) {
+    showToast('Template must have at least one section.', 'error');
+    return;
+  }
+  for (var i = 0; i < d.sections.length; i++) {
+    if (!d.sections[i].title) {
+      showToast('Section ' + (i + 1) + ' needs a title.', 'error');
+      return;
+    }
+  }
+
+  lteSaving = true;
+  lteUpdateFooter();
+
+  var templateObj = {
+    templateId: d.templateId || undefined,
+    title: d.title,
+    framework: d.framework,
+    gradeband: d.gradeband,
+    status: d.status,
+    sectionsJson: d.sections
+  };
+
+  var expectedMode = 'template';
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (lteMode !== expectedMode) return;
+      lteSaving = false;
+      lteDirty = false;
+
+      // Auto-select the saved template
+      var savedId = (result && result.templateId) ? result.templateId : d.templateId;
+      if (savedId && labBuilderData) {
+        labBuilderData.templateId = savedId;
+      }
+
+      showToast('Template saved!', 'success');
+      lteCloseEditor();
+    })
+    .withFailureHandler(function(err) {
+      if (lteMode !== expectedMode) return;
+      lteSaving = false;
+      lteUpdateFooter();
+      showToast('Failed to save template: ' + escapeHtml(err.message), 'error');
+    })
+    .saveLabTemplate(templateObj);
+}
+
+
+function lteDuplicateTemplate(sourceId) {
+  if (!sourceId) return;
+  if (!confirm('Create a copy of this template?')) return;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      labTemplatesCache = null;
+      if (result && result.templateId) {
+        showToast('Template duplicated! Opening editor...', 'success');
+        lteOpenTemplateEditor(result.templateId);
+      } else {
+        showToast('Template duplicated!', 'success');
+        // Refresh the picker
+        labLoadTemplatesAndRubrics(function() {
+          labRenderCurrentStep();
+        });
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to duplicate: ' + escapeHtml(err.message), 'error');
+    })
+    .duplicateLabTemplate(sourceId);
+}
+
+
+function lteDeleteTemplate(templateId) {
+  if (!templateId) return;
+  if (!confirm('Delete this custom template? This cannot be undone. Assignments using this template will be affected.')) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      labTemplatesCache = null;
+      showToast('Template deleted.', 'success');
+
+      // If we were editing this template, close editor
+      if (lteMode === 'template') {
+        lteDirty = false;
+        lteCloseEditor();
+        return;
+      }
+
+      // Clear selection if it was the deleted template
+      if (labBuilderData && String(labBuilderData.templateId) === String(templateId)) {
+        labBuilderData.templateId = null;
+        labBuilderData.selectedTemplate = null;
+      }
+
+      // Refresh picker
+      labLoadTemplatesAndRubrics(function() {
+        labRenderCurrentStep();
+      });
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to delete: ' + escapeHtml(err.message), 'error');
+    })
+    .deleteLabTemplate(templateId);
+}
+
+
+// ============================================================================
+// RUBRIC EDITOR — OPEN
+// ============================================================================
+
+/**
+ * Open the rubric editor.
+ * @param {string|null} rubricId - null for new, string for edit
+ */
+function lteOpenRubricEditor(rubricId) {
+  lteReturnStep = labBuilderStep;
+  lteMode = 'rubric';
+  lteDirty = false;
+  lteExpandedSection = null;
+
+  if (rubricId) {
+    // Load existing rubric (includes criteria)
+    var expectedId = String(rubricId);
+    google.script.run
+      .withSuccessHandler(function(rubric) {
+        if (lteMode !== 'rubric') return;
+        if (!rubric) {
+          showToast('Rubric not found.', 'error');
+          lteCloseEditor();
+          return;
+        }
+
+        var criteria = rubric.criteria || [];
+        var parsed = [];
+        for (var i = 0; i < criteria.length; i++) {
+          var c = criteria[i];
+          var dimStr = c.internalDimensions || '';
+          var dimArr = typeof dimStr === 'string' ? dimStr.split(',').filter(function(part) { return part.trim() !== ''; }) : (dimStr || []);
+          parsed.push({
+            criterionId: c.criterionId || lteGenerateCriterionId(),
+            title: c.title || '',
+            internalDimensions: dimArr,
+            frameworkCriterionId: c.frameworkCriterionId || '',
+            sequence: c.sequence != null ? c.sequence : i,
+            weight: c.weight != null ? parseFloat(c.weight) : 1,
+            level0Desc: c.level0Desc || '',
+            level1Desc: c.level1Desc || '',
+            level2Desc: c.level2Desc || '',
+            level3Desc: c.level3Desc || '',
+            level4Desc: c.level4Desc || ''
+          });
+        }
+
+        // Parse scaleLabels
+        var scaleLabels = {};
+        if (rubric.scaleLabelJson) {
+          try {
+            scaleLabels = typeof rubric.scaleLabelJson === 'string' ? JSON.parse(rubric.scaleLabelJson) : rubric.scaleLabelJson;
+          } catch (e) {
+            scaleLabels = {};
+          }
+        }
+
+        lteEditingData = {
+          rubricId: rubric.rubricId,
+          title: rubric.title || '',
+          scaleType: rubric.scaleType || 'level',
+          scaleMax: rubric.scaleMax || 8,
+          scaleLabels: scaleLabels,
+          frameworkId: rubric.frameworkId || '',
+          multiScorer: !!rubric.multiScorer,
+          status: rubric.status || 'draft',
+          criteria: parsed
+        };
+
+        if (parsed.length > 0) lteExpandedSection = 0;
+        lteRenderRubricForm();
+      })
+      .withFailureHandler(function(err) {
+        if (lteMode !== 'rubric') return;
+        showToast('Failed to load rubric: ' + escapeHtml(err.message), 'error');
+        lteCloseEditor();
+      })
+      .getLabRubric(rubricId);
+  } else {
+    // New blank rubric
+    lteEditingData = {
+      rubricId: null,
+      title: '',
+      scaleType: 'level',
+      scaleMax: 8,
+      scaleLabels: {},
+      frameworkId: '',
+      multiScorer: false,
+      status: 'draft',
+      criteria: [{
+        criterionId: lteGenerateCriterionId(),
+        title: '',
+        internalDimensions: [],
+        frameworkCriterionId: '',
+        sequence: 0,
+        weight: 1,
+        level0Desc: '',
+        level1Desc: '',
+        level2Desc: '',
+        level3Desc: '',
+        level4Desc: ''
+      }]
+    };
+    lteExpandedSection = 0;
+    lteRenderRubricForm();
+  }
+}
+
+
+// ============================================================================
+// RUBRIC EDITOR — RENDER
+// ============================================================================
+
+function lteRenderRubricForm() {
+  lteRenderEditorHeader(lteEditingData.rubricId ? 'Edit Rubric' : 'Create Rubric');
+
+  var body = document.getElementById('labBuilderBody');
+  if (!body) return;
+
+  var d = lteEditingData;
+  var html = '';
+
+  // Title
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Rubric Title *</label>';
+  html += '<input type="text" class="lab-builder-input" id="lteTitleInput" value="' + escapeHtml(d.title) + '" maxlength="200" placeholder="e.g. My Custom Rubric">';
+  html += '</div>';
+
+  // Form row: scaleType + scaleMax + frameworkId
+  html += '<div class="lte-form-row">';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Scale Type</label>';
+  html += '<select class="lab-builder-input" id="lteScaleTypeSelect">';
+  html += '<option value="level"' + (d.scaleType === 'level' ? ' selected' : '') + '>Level</option>';
+  html += '<option value="numeric"' + (d.scaleType === 'numeric' ? ' selected' : '') + '>Numeric</option>';
+  html += '</select>';
+  html += '</div>';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Scale Max</label>';
+  html += '<input type="number" class="lab-builder-input" id="lteScaleMaxInput" value="' + (d.scaleMax || 8) + '" min="1" max="10">';
+  html += '</div>';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Framework</label>';
+  html += '<select class="lab-builder-input" id="lteRubricFrameworkSelect">';
+  for (var f = 0; f < LTE_FRAMEWORKS.length; f++) {
+    var fw = LTE_FRAMEWORKS[f];
+    var fSel = d.frameworkId === fw.id ? ' selected' : '';
+    html += '<option value="' + escapeHtml(fw.id) + '"' + fSel + '>' + escapeHtml(fw.label) + '</option>';
+  }
+  html += '</select>';
+  html += '</div>';
+
+  html += '</div>'; // .lte-form-row
+
+  // Multi-scorer + Status row
+  html += '<div class="lte-form-row">';
+
+  html += '<div class="lab-builder-field">';
+  html += '<div class="lte-form-toggle">';
+  html += '<label><input type="checkbox" id="lteMultiScorerCheck"' + (d.multiScorer ? ' checked' : '') + '> Multi-scorer mode</label>';
+  html += '</div>';
+  html += '<div class="lab-builder-hint">Allow multiple teachers to score independently.</div>';
+  html += '</div>';
+
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Status</label>';
+  html += '<select class="lab-builder-input" id="lteRubricStatusSelect">';
+  html += '<option value="draft"' + (d.status === 'draft' ? ' selected' : '') + '>Draft</option>';
+  html += '<option value="published"' + (d.status === 'published' ? ' selected' : '') + '>Published</option>';
+  html += '</select>';
+  html += '</div>';
+
+  html += '</div>'; // .lte-form-row
+
+  // Criteria list
+  html += '<div class="lab-builder-field" style="margin-top:16px;">';
+  html += '<label class="lab-builder-label">Criteria (' + d.criteria.length + '/12)</label>';
+  html += lteRenderCriteriaList();
+  html += '</div>';
+
+  body.innerHTML = html;
+  lteUpdateFooter();
+
+  // Focus title input for keyboard users
+  setTimeout(function() {
+    var titleInput = document.getElementById('lteTitleInput');
+    if (titleInput) titleInput.focus();
+  }, 50);
+}
+
+
+function lteRenderCriteriaList() {
+  var criteria = lteEditingData.criteria;
+  var html = '<div class="lte-item-list">';
+
+  for (var i = 0; i < criteria.length; i++) {
+    var crit = criteria[i];
+    var isExpanded = lteExpandedSection === i;
+    var itemClass = 'lte-item' + (isExpanded ? '' : ' lte-collapsed');
+    var bodyId = 'lteCritBody-' + i;
+
+    html += '<div class="' + itemClass + '">';
+
+    // Header
+    html += '<div class="lte-item-header" role="button" tabindex="0" aria-expanded="' + (isExpanded ? 'true' : 'false') + '" aria-controls="' + bodyId + '"' +
+      ' onclick="lteToggleCriterionExpand(' + i + ')"' +
+      ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();lteToggleCriterionExpand(' + i + ');}">';
+    html += '<span class="lte-item-chevron">&#9660;</span>';
+    html += '<span class="lte-item-title">' + escapeHtml(crit.title || 'Untitled Criterion') + '</span>';
+    html += '<span class="lte-item-badge">W: ' + (crit.weight || 1) + '</span>';
+
+    // Dimension mini-badges
+    if (crit.internalDimensions && crit.internalDimensions.length > 0) {
+      for (var di = 0; di < crit.internalDimensions.length; di++) {
+        html += '<span class="lte-item-badge" style="font-size:12px;">' + escapeHtml(crit.internalDimensions[di]) + '</span>';
+      }
+    }
+
+    // Arrows
+    html += '<span class="lte-item-arrows">';
+    if (i > 0) {
+      html += '<button type="button" class="lte-item-arrow" onclick="event.stopPropagation();lteMoveCriterion(' + i + ',-1)" title="Move up">&uarr;</button>';
+    }
+    if (i < criteria.length - 1) {
+      html += '<button type="button" class="lte-item-arrow" onclick="event.stopPropagation();lteMoveCriterion(' + i + ',1)" title="Move down">&darr;</button>';
+    }
+    html += '</span>';
+
+    // Remove
+    html += '<button type="button" class="lte-item-remove" onclick="event.stopPropagation();lteRemoveCriterion(' + i + ')" title="Remove criterion">&times;</button>';
+
+    html += '</div>'; // .lte-item-header
+
+    // Body (detail)
+    html += '<div class="lte-item-body" id="' + bodyId + '">';
+    if (isExpanded) {
+      html += lteRenderCriterionDetail(i);
+    }
+    html += '</div>';
+
+    html += '</div>'; // .lte-item
+  }
+
+  html += '</div>'; // .lte-item-list
+
+  // Add criterion button
+  html += '<button type="button" class="lte-add-btn"' + (criteria.length >= 12 ? ' disabled' : '') + ' onclick="lteAddCriterion()">+ Add Criterion</button>';
+
+  return html;
+}
+
+
+function lteRenderCriterionDetail(index) {
+  var crit = lteEditingData.criteria[index];
+  if (!crit) return '';
+
+  var html = '';
+
+  // Title
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Criterion Title *</label>';
+  html += '<input type="text" class="lab-builder-input lte-crit-title" value="' + escapeHtml(crit.title) + '" maxlength="100" placeholder="e.g. Data Analysis">';
+  html += '</div>';
+
+  // Weight
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Weight (0-10)</label>';
+  html += '<input type="number" class="lab-builder-input lte-crit-weight" value="' + (crit.weight || 1) + '" min="0" max="10" step="0.1">';
+  html += '</div>';
+
+  // Dimension chips
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Science Dimensions</label>';
+  html += lteRenderDimensionChips(crit.internalDimensions, 'lteToggleCriterionDim', index);
+  html += '</div>';
+
+  // Level descriptors (0 through 4)
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Level Descriptors</label>';
+  html += '<div class="lte-levels">';
+  for (var lvl = 0; lvl <= 4; lvl++) {
+    var desc = crit['level' + lvl + 'Desc'] || '';
+    html += '<div class="lte-level-row">';
+    html += '<span class="lte-level-label">' + lvl + '</span>';
+    html += '<textarea class="lab-builder-textarea lte-level-textarea lte-crit-level' + lvl + '" rows="2" maxlength="1000" placeholder="Level ' + lvl + ' descriptor...">' + escapeHtml(desc) + '</textarea>';
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  return html;
+}
+
+
+// ============================================================================
+// RUBRIC EDITOR — INTERACTIONS
+// ============================================================================
+
+function lteAddCriterion() {
+  if (!lteEditingData || lteEditingData.criteria.length >= 12) return;
+
+  // Collect from currently expanded criterion
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectCriterionData(lteExpandedSection);
+  }
+
+  lteEditingData.criteria.push({
+    criterionId: lteGenerateCriterionId(),
+    title: '',
+    internalDimensions: [],
+    frameworkCriterionId: '',
+    sequence: lteEditingData.criteria.length,
+    weight: 1,
+    level0Desc: '',
+    level1Desc: '',
+    level2Desc: '',
+    level3Desc: '',
+    level4Desc: ''
+  });
+
+  lteExpandedSection = lteEditingData.criteria.length - 1;
+  lteDirty = true;
+  lteReRenderCriteriaList();
+
+  setTimeout(function() {
+    var titleInput = document.querySelector('.lte-crit-title');
+    if (titleInput) titleInput.focus();
+  }, 50);
+}
+
+
+function lteRemoveCriterion(index) {
+  if (!lteEditingData) return;
+  if (lteEditingData.criteria.length <= 1) {
+    showToast('Rubric must have at least one criterion.', 'error');
+    return;
+  }
+  if (!confirm('Remove this criterion?')) return;
+
+  lteEditingData.criteria.splice(index, 1);
+
+  // Renumber sequences
+  for (var i = 0; i < lteEditingData.criteria.length; i++) {
+    lteEditingData.criteria[i].sequence = i;
+  }
+
+  if (lteExpandedSection === index) {
+    lteExpandedSection = null;
+  } else if (lteExpandedSection !== null && lteExpandedSection > index) {
+    lteExpandedSection--;
+  }
+
+  lteDirty = true;
+  lteReRenderCriteriaList();
+}
+
+
+function lteMoveCriterion(index, direction) {
+  if (!lteEditingData) return;
+  var newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= lteEditingData.criteria.length) return;
+
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectCriterionData(lteExpandedSection);
+  }
+
+  var temp = lteEditingData.criteria[index];
+  lteEditingData.criteria[index] = lteEditingData.criteria[newIndex];
+  lteEditingData.criteria[newIndex] = temp;
+
+  for (var i = 0; i < lteEditingData.criteria.length; i++) {
+    lteEditingData.criteria[i].sequence = i;
+  }
+
+  if (lteExpandedSection === index) {
+    lteExpandedSection = newIndex;
+  } else if (lteExpandedSection === newIndex) {
+    lteExpandedSection = index;
+  }
+
+  lteDirty = true;
+  lteReRenderCriteriaList();
+}
+
+
+function lteToggleCriterionExpand(index) {
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectCriterionData(lteExpandedSection);
+  }
+
+  if (lteExpandedSection === index) {
+    lteExpandedSection = null;
+  } else {
+    lteExpandedSection = index;
+  }
+
+  lteReRenderCriteriaList();
+
+  if (lteExpandedSection !== null) {
+    setTimeout(function() {
+      var titleInput = document.querySelector('.lte-crit-title');
+      if (titleInput) titleInput.focus();
+    }, 50);
+  }
+}
+
+
+function lteCollectCriterionData(index) {
+  if (!lteEditingData || index === null || index === undefined) return;
+  var crit = lteEditingData.criteria[index];
+  if (!crit) return;
+
+  var bodyEl = document.getElementById('lteCritBody-' + index);
+  if (!bodyEl) return;
+
+  var titleEl = bodyEl.querySelector('.lte-crit-title');
+  var weightEl = bodyEl.querySelector('.lte-crit-weight');
+
+  if (titleEl) crit.title = titleEl.value.trim();
+  if (weightEl) crit.weight = parseFloat(weightEl.value) || 1;
+
+  for (var lvl = 0; lvl <= 4; lvl++) {
+    var descEl = bodyEl.querySelector('.lte-crit-level' + lvl);
+    if (descEl) crit['level' + lvl + 'Desc'] = descEl.value;
+  }
+
+  lteDirty = true;
+}
+
+
+function lteCollectRubricHeader() {
+  if (!lteEditingData) return;
+  var titleEl = document.getElementById('lteTitleInput');
+  var scaleTypeEl = document.getElementById('lteScaleTypeSelect');
+  var scaleMaxEl = document.getElementById('lteScaleMaxInput');
+  var fwEl = document.getElementById('lteRubricFrameworkSelect');
+  var msEl = document.getElementById('lteMultiScorerCheck');
+  var stEl = document.getElementById('lteRubricStatusSelect');
+
+  if (titleEl) lteEditingData.title = titleEl.value.trim();
+  if (scaleTypeEl) lteEditingData.scaleType = scaleTypeEl.value;
+  if (scaleMaxEl) lteEditingData.scaleMax = parseInt(scaleMaxEl.value, 10) || 8;
+  if (fwEl) lteEditingData.frameworkId = fwEl.value;
+  if (msEl) lteEditingData.multiScorer = msEl.checked;
+  if (stEl) lteEditingData.status = stEl.value;
+}
+
+
+function lteToggleCriterionDim(code, index) {
+  if (!lteEditingData || !lteEditingData.criteria[index]) return;
+
+  // Collect current criterion data before re-render to avoid losing typed text
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectCriterionData(lteExpandedSection);
+  }
+
+  var dims = lteEditingData.criteria[index].internalDimensions;
+  var pos = -1;
+  for (var i = 0; i < dims.length; i++) {
+    if (dims[i] === code) { pos = i; break; }
+  }
+  if (pos >= 0) {
+    dims.splice(pos, 1);
+  } else {
+    dims.push(code);
+  }
+  lteDirty = true;
+  lteReRenderCriteriaList();
+}
+
+
+/**
+ * Re-render the criteria list portion only (preserves header form).
+ */
+function lteReRenderCriteriaList() {
+  var field = document.querySelector('.lte-item-list');
+  if (!field) {
+    lteRenderRubricForm();
+    return;
+  }
+  var parent = field.parentNode;
+  if (!parent) return;
+
+  lteCollectRubricHeader();
+
+  var addBtn = parent.querySelector('.lte-add-btn');
+  if (addBtn) parent.removeChild(addBtn);
+  parent.removeChild(field);
+
+  var tempDiv = document.createElement('div');
+  tempDiv.innerHTML = lteRenderCriteriaList();
+  while (tempDiv.firstChild) {
+    parent.appendChild(tempDiv.firstChild);
+  }
+}
+
+
+// ============================================================================
+// RUBRIC EDITOR — SAVE / DELETE / DUPLICATE
+// ============================================================================
+
+function lteSaveRubric() {
+  if (!lteEditingData || lteSaving) return;
+
+  // Collect all data
+  lteCollectRubricHeader();
+  if (lteExpandedSection !== null && lteExpandedSection !== undefined) {
+    lteCollectCriterionData(lteExpandedSection);
+  }
+
+  var d = lteEditingData;
+
+  // Client-side validation
+  if (!d.title) {
+    showToast('Rubric title is required.', 'error');
+    return;
+  }
+  if (d.criteria.length === 0) {
+    showToast('Rubric must have at least one criterion.', 'error');
+    return;
+  }
+  for (var i = 0; i < d.criteria.length; i++) {
+    if (!d.criteria[i].title) {
+      showToast('Criterion ' + (i + 1) + ' needs a title.', 'error');
+      return;
+    }
+  }
+
+  lteSaving = true;
+  lteUpdateFooter();
+
+  var rubricObj = {
+    rubricId: d.rubricId || undefined,
+    title: d.title,
+    scaleType: d.scaleType,
+    scaleMax: d.scaleMax,
+    scaleLabelJson: JSON.stringify(d.scaleLabels || {}),
+    frameworkId: d.frameworkId,
+    multiScorer: d.multiScorer,
+    status: d.status
+  };
+
+  var expectedMode = 'rubric';
+
+  // Step 1: Save rubric metadata
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (lteMode !== expectedMode) return;
+
+      var savedId = (result && result.rubricId) ? result.rubricId : d.rubricId;
+      if (!savedId) {
+        lteSaving = false;
+        lteUpdateFooter();
+        showToast('Rubric saved but could not determine ID.', 'error');
+        return;
+      }
+
+      // Persist the ID so retry after step-2 failure won't create duplicates
+      lteEditingData.rubricId = savedId;
+
+      // Step 2: Save criteria
+      var criteriaArr = [];
+      for (var i = 0; i < d.criteria.length; i++) {
+        var c = d.criteria[i];
+        criteriaArr.push({
+          criterionId: c.criterionId,
+          rubricId: savedId,
+          title: c.title,
+          internalDimensions: (c.internalDimensions || []).join(','),
+          frameworkCriterionId: c.frameworkCriterionId || '',
+          sequence: c.sequence,
+          weight: c.weight,
+          level0Desc: c.level0Desc || '',
+          level1Desc: c.level1Desc || '',
+          level2Desc: c.level2Desc || '',
+          level3Desc: c.level3Desc || '',
+          level4Desc: c.level4Desc || ''
+        });
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          if (lteMode !== expectedMode) return;
+          lteSaving = false;
+          lteDirty = false;
+
+          if (savedId && labBuilderData) {
+            labBuilderData.rubricId = savedId;
+          }
+
+          showToast('Rubric saved!', 'success');
+          lteCloseEditor();
+        })
+        .withFailureHandler(function(err) {
+          if (lteMode !== expectedMode) return;
+          lteSaving = false;
+          lteUpdateFooter();
+          showToast('Rubric metadata saved but criteria failed: ' + escapeHtml(err.message), 'error');
+        })
+        .saveRubricCriteria(savedId, criteriaArr);
+    })
+    .withFailureHandler(function(err) {
+      if (lteMode !== expectedMode) return;
+      lteSaving = false;
+      lteUpdateFooter();
+      showToast('Failed to save rubric: ' + escapeHtml(err.message), 'error');
+    })
+    .saveLabRubric(rubricObj);
+}
+
+
+function lteDuplicateRubric(sourceId) {
+  if (!sourceId) return;
+  if (!confirm('Create a copy of this rubric?')) return;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      labRubricsCache = null;
+      if (result && result.rubricId) {
+        showToast('Rubric duplicated! Opening editor...', 'success');
+        lteOpenRubricEditor(result.rubricId);
+      } else {
+        showToast('Rubric duplicated!', 'success');
+        labLoadTemplatesAndRubrics(function() {
+          labRenderCurrentStep();
+        });
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to duplicate: ' + escapeHtml(err.message), 'error');
+    })
+    .duplicateLabRubric(sourceId);
+}
+
+
+function lteDeleteRubric(rubricId) {
+  if (!rubricId) return;
+  if (!confirm('Delete this custom rubric? This cannot be undone. Assignments using this rubric will be affected.')) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      labRubricsCache = null;
+      showToast('Rubric deleted.', 'success');
+
+      if (lteMode === 'rubric') {
+        lteDirty = false;
+        lteCloseEditor();
+        return;
+      }
+
+      if (labBuilderData && String(labBuilderData.rubricId) === String(rubricId)) {
+        labBuilderData.rubricId = null;
+        labBuilderData.selectedRubric = null;
+      }
+
+      labLoadTemplatesAndRubrics(function() {
+        labRenderCurrentStep();
+      });
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to delete: ' + escapeHtml(err.message), 'error');
+    })
+    .deleteLabRubric(rubricId);
+}
+
+
+</script>

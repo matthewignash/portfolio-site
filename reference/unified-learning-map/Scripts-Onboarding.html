@@ -1,0 +1,460 @@
+<script>
+// ============================================================================
+// STUDENT ONBOARDING (ES5)
+// Welcome screen, checklist panel, hex color legend, milestone hooks.
+// Piggybacks on existing TourService.gs + UserPreferences storage.
+// ============================================================================
+
+// ---- Cached tourStatus for deferred use ----
+var onbCachedTourStatus = null;
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+var ONB_MILESTONES = [
+  { key: 'tourDone', label: 'Complete the guided tour', icon: '\uD83D\uDDFA\uFE0F' },
+  { key: 'mapOpened', label: 'Open your first map', icon: '\uD83D\uDCC2' },
+  { key: 'hexClicked', label: 'Start an activity', icon: '\u2B21' },
+  { key: 'plannerVisited', label: 'Check your planner', icon: '\uD83D\uDCCB' },
+  { key: 'badgeEarned', label: 'Earn your first badge', icon: '\uD83C\uDFC5' }
+];
+
+// Bracket-adaptive welcome content for EAL students
+var ONB_BRACKET_WELCOME = {
+  low: {
+    greeting: 'Welcome!',
+    bullets: [
+      '\u2B21 Look at your learning maps',
+      '\uD83D\uDCCA See how you are doing',
+      '\uD83C\uDFC5 Get badges for your work'
+    ],
+    tourBtn: 'Show Me How \u2192',
+    skipBtn: 'I will try by myself'
+  },
+  mid: {
+    greeting: 'Welcome!',
+    bullets: [
+      '\u2B21 Explore your learning maps and activities',
+      '\uD83D\uDCCA Track your progress and set goals',
+      '\uD83C\uDFC5 Earn badges as you learn'
+    ],
+    tourBtn: 'Take the Tour \u2192',
+    skipBtn: 'Skip for now'
+  }
+};
+
+var ONB_STATUS_LEGEND = [
+  { badge: '#e2e8f0', symbol: '\u25CB', textColor: '#64748b', label: 'Ready', desc: 'Available to start' },
+  { badge: '#3b82f6', symbol: '\u25CF', textColor: '#fff', label: 'In Progress', desc: 'You\'ve started this' },
+  { badge: '#f59e0b', symbol: '\u25CF', textColor: '#fff', label: 'Pending Review', desc: 'Waiting for teacher' },
+  { badge: '#10b981', symbol: '\u2713', textColor: '#fff', label: 'Complete', desc: 'Finished!' },
+  { badge: '#047857', symbol: '\u2605', textColor: '#fff', label: 'Mastered', desc: 'Teacher approved' },
+  { badge: '#cbd5e1', symbol: '\uD83D\uDD12', textColor: '#64748b', label: 'Locked', desc: 'Complete prerequisites first' }
+];
+
+// ============================================================================
+// STORY 2 — WELCOME SCREEN
+// ============================================================================
+
+/**
+ * Show welcome screen for first-time students.
+ * Falls through to normal tour trigger if not applicable.
+ * @param {Object} tourStatus - from getInitialData().tourStatus
+ */
+function onbShowWelcome(tourStatus) {
+  onbCachedTourStatus = tourStatus;
+
+  // Not a student → fall through to tour
+  if (typeof currentViewMode !== 'undefined' && currentViewMode === 'teacher') {
+    if (tourStatus && tourStatus.shouldShowTour && typeof turStartTour === 'function') {
+      turStartTour(tourStatus);
+    }
+    return;
+  }
+
+  // Already seen welcome → init checklist + optionally start tour
+  if (tourStatus.welcomeScreenSeen) {
+    onbInitChecklist(tourStatus);
+    if (tourStatus.shouldShowTour && typeof turStartTour === 'function') {
+      turStartTour(tourStatus);
+    }
+    return;
+  }
+
+  // Build welcome card
+  var firstName = 'there';
+  if (typeof userData !== 'undefined' && userData && userData.name) {
+    var parts = userData.name.split(' ');
+    if (parts[0]) firstName = parts[0];
+  }
+
+  // Bracket-adaptive content
+  var onbBracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+  var welcomeCfg = (onbBracket && ONB_BRACKET_WELCOME[onbBracket]) ? ONB_BRACKET_WELCOME[onbBracket] : null;
+
+  var greetingText;
+  if (welcomeCfg) {
+    greetingText = escapeHtml(welcomeCfg.greeting.replace('!', ', ' + firstName + '!'));
+  } else {
+    greetingText = 'Welcome, ' + escapeHtml(firstName) + '!';
+  }
+  var tourBtnText = welcomeCfg ? escapeHtml(welcomeCfg.tourBtn) : 'Take the Tour \u2192';
+  var skipBtnText = welcomeCfg ? escapeHtml(welcomeCfg.skipBtn) : 'I\'ll explore on my own';
+
+  var bulletsHtml = '';
+  if (welcomeCfg) {
+    for (var bi = 0; bi < welcomeCfg.bullets.length; bi++) {
+      bulletsHtml += '<div style="padding:4px 0;">' + escapeHtml(welcomeCfg.bullets[bi]) + '</div>';
+    }
+  } else {
+    bulletsHtml =
+      '<div style="padding:4px 0;">\u2B21 <b>Explore your learning maps</b> \u2014 each hex is an activity</div>' +
+      '<div style="padding:4px 0;">\uD83D\uDCCA <b>Track your progress</b> \u2014 see scores and completion</div>' +
+      '<div style="padding:4px 0;">\uD83C\uDFC5 <b>Earn badges</b> \u2014 build streaks as you learn</div>';
+  }
+
+  var backdrop = document.createElement('div');
+  backdrop.className = 'tur-backdrop';
+  backdrop.id = 'onbWelcomeBackdrop';
+  document.body.appendChild(backdrop);
+
+  var card = document.createElement('div');
+  card.className = 'tur-welcome-overlay';
+  card.id = 'onbWelcomeCard';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
+  card.setAttribute('aria-label', 'Welcome to the Learning Map');
+
+  card.innerHTML =
+    '<div style="font-size:48px;margin-bottom:12px;">\uD83C\uDF89</div>' +
+    '<div style="font-size:22px;font-weight:700;color:#1e293b;margin-bottom:8px;">' + greetingText + '</div>' +
+    '<div style="font-size:14px;color:#64748b;line-height:1.6;margin-bottom:20px;text-align:left;">' +
+      bulletsHtml +
+    '</div>' +
+    '<div style="display:flex;gap:10px;justify-content:center;">' +
+      '<button class="tur-btn tur-btn-next" onclick="onbStartTourFromWelcome()" type="button">' + tourBtnText + '</button>' +
+      '<button class="tur-btn tur-btn-prev" onclick="onbDismissWelcome()" type="button">' + skipBtnText + '</button>' +
+    '</div>';
+
+  document.body.appendChild(card);
+
+  // Focus first button
+  setTimeout(function() {
+    var btn = card.querySelector('.tur-btn-next');
+    if (btn) btn.focus();
+  }, 100);
+}
+
+function onbStartTourFromWelcome() {
+  onbRemoveWelcome_();
+  // Mark welcome seen + init checklist data (preserve any prior progress)
+  if (!onbChecklistData) {
+    onbChecklistData = {
+      tourDone: false, mapOpened: false, hexClicked: false,
+      plannerVisited: false, badgeEarned: false, completed: false, dismissedAt: null
+    };
+  }
+  google.script.run.saveOnboardingProgress(onbChecklistData);
+  // Start tour
+  if (onbCachedTourStatus && typeof turStartTour === 'function') {
+    turStartTour(onbCachedTourStatus);
+  }
+  // Init checklist (will show after tour completes)
+  onbInitChecklist(onbCachedTourStatus);
+}
+
+function onbDismissWelcome() {
+  onbRemoveWelcome_();
+  // Init checklist (preserve any prior progress from tourStatus)
+  if (!onbChecklistData) {
+    onbChecklistData = {
+      tourDone: false, mapOpened: false, hexClicked: false,
+      plannerVisited: false, badgeEarned: false, completed: false, dismissedAt: null
+    };
+  }
+  google.script.run.saveOnboardingProgress(onbChecklistData);
+  // Show checklist immediately (tour skipped)
+  onbRenderChecklist();
+}
+
+function onbRemoveWelcome_() {
+  var card = document.getElementById('onbWelcomeCard');
+  if (card && card.parentNode) card.parentNode.removeChild(card);
+  var backdrop = document.getElementById('onbWelcomeBackdrop');
+  if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+}
+
+// ============================================================================
+// STORY 3 — ONBOARDING CHECKLIST PANEL
+// ============================================================================
+
+/**
+ * Initialize checklist from tourStatus data.
+ * @param {Object} tourStatus
+ */
+function onbInitChecklist(tourStatus) {
+  if (!tourStatus) return;
+  // Not a student
+  if (typeof currentViewMode !== 'undefined' && currentViewMode === 'teacher') return;
+
+  // Already completed
+  if (tourStatus.onboardingChecklist && tourStatus.onboardingChecklist.completed) return;
+
+  // Load existing or init fresh
+  if (tourStatus.onboardingChecklist) {
+    onbChecklistData = tourStatus.onboardingChecklist;
+  } else if (!onbChecklistData) {
+    onbChecklistData = {
+      tourDone: false, mapOpened: false, hexClicked: false,
+      plannerVisited: false, badgeEarned: false, completed: false, dismissedAt: null
+    };
+  }
+
+  // Auto-mark tour done if already completed in a prior session
+  if (tourStatus.completedVersion >= tourStatus.currentTourVersion || tourStatus.dismissed) {
+    onbChecklistData.tourDone = true;
+  }
+
+  // If previously dismissed, don't auto-show
+  if (onbChecklistData.dismissedAt) return;
+
+  onbRenderChecklist();
+}
+
+function onbRenderChecklist() {
+  if (!onbChecklistData || onbChecklistData.completed) return;
+
+  // Remove existing
+  var existing = document.getElementById('onbChecklist');
+  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+  var panel = document.createElement('div');
+  panel.id = 'onbChecklist';
+  panel.className = 'onb-checklist' + (onbChecklistVisible ? '' : ' onb-minimized');
+  panel.setAttribute('role', 'complementary');
+  panel.setAttribute('aria-label', 'Onboarding checklist');
+
+  // Count done
+  var doneCount = 0;
+  for (var i = 0; i < ONB_MILESTONES.length; i++) {
+    if (onbChecklistData[ONB_MILESTONES[i].key]) doneCount++;
+  }
+
+  var pct = Math.round((doneCount / ONB_MILESTONES.length) * 100);
+
+  var html = '<div class="onb-checklist-header" onclick="onbToggleMinimize()" role="button" tabindex="0" aria-expanded="' + String(onbChecklistVisible) + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();onbToggleMinimize();}">';
+  html += '<span class="onb-checklist-title">\uD83D\uDE80 Getting Started</span>';
+  html += '<span class="onb-checklist-count">' + doneCount + '/' + ONB_MILESTONES.length + '</span>';
+  html += '</div>';
+
+  // Progress bar
+  html += '<div class="onb-checklist-progress"><div class="onb-checklist-progress-fill" style="width:' + pct + '%"></div></div>';
+
+  // Milestones
+  html += '<div class="onb-checklist-body">';
+  for (var j = 0; j < ONB_MILESTONES.length; j++) {
+    var m = ONB_MILESTONES[j];
+    var done = !!onbChecklistData[m.key];
+    html += '<div class="onb-milestone' + (done ? ' onb-done' : '') + '">';
+    html += '<span class="onb-milestone-check' + (done ? ' onb-checked' : '') + '">' + (done ? '\u2713' : '') + '</span>';
+    html += '<span class="onb-milestone-icon">' + m.icon + '</span>';
+    html += '<span class="onb-milestone-label">' + escapeHtml(m.label) + '</span>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Footer
+  html += '<div class="onb-checklist-footer">';
+  html += '<button class="onb-checklist-dismiss" onclick="onbDismissChecklist()" type="button">Dismiss</button>';
+  html += '</div>';
+
+  panel.innerHTML = html;
+  document.body.appendChild(panel);
+}
+
+function onbToggleMinimize() {
+  onbChecklistVisible = !onbChecklistVisible;
+  var panel = document.getElementById('onbChecklist');
+  if (panel) {
+    if (onbChecklistVisible) {
+      panel.classList.remove('onb-minimized');
+    } else {
+      panel.classList.add('onb-minimized');
+    }
+    var header = panel.querySelector('.onb-checklist-header');
+    if (header) header.setAttribute('aria-expanded', String(onbChecklistVisible));
+  }
+}
+
+/**
+ * Mark a milestone as completed and re-render.
+ * @param {string} key - milestone key (tourDone, mapOpened, etc.)
+ */
+function onbMarkMilestone(key) {
+  if (!onbChecklistData || onbChecklistData.completed) return;
+  if (onbChecklistData[key]) return; // already done
+
+  onbChecklistData[key] = true;
+
+  // Check if all done
+  var allDone = true;
+  for (var i = 0; i < ONB_MILESTONES.length; i++) {
+    if (!onbChecklistData[ONB_MILESTONES[i].key]) { allDone = false; break; }
+  }
+
+  if (allDone) {
+    onbChecklistData.completed = true;
+    // Save + show completion (skip re-render — panel removed by onbShowCompletion)
+    google.script.run.saveOnboardingProgress(onbChecklistData);
+    setTimeout(function() { onbShowCompletion(); }, 500);
+  } else {
+    // Re-render with updated check, fire-and-forget save
+    onbRenderChecklist();
+    google.script.run.saveOnboardingProgress(onbChecklistData);
+  }
+}
+
+function onbDismissChecklist() {
+  if (onbChecklistData) {
+    onbChecklistData.dismissedAt = new Date().toISOString();
+    google.script.run.saveOnboardingProgress(onbChecklistData);
+  }
+  var panel = document.getElementById('onbChecklist');
+  if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+}
+
+// ============================================================================
+// STORY 4 — HEX COLOR LEGEND PANEL
+// ============================================================================
+
+function onbToggleLegend() {
+  onbLegendVisible = !onbLegendVisible;
+  var panel = document.getElementById('onbLegendPanel');
+  var btn = document.getElementById('onbLegendBtn');
+  if (panel) {
+    panel.style.display = onbLegendVisible ? 'block' : 'none';
+  } else if (onbLegendVisible) {
+    onbRenderLegend();
+  }
+  if (btn) btn.setAttribute('aria-expanded', String(onbLegendVisible));
+}
+
+function onbRenderLegend() {
+  // Remove existing
+  var existing = document.getElementById('onbLegendPanel');
+  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+  var panel = document.createElement('div');
+  panel.id = 'onbLegendPanel';
+  panel.className = 'onb-legend';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-label', 'Hex color legend');
+
+  var html = '<div class="onb-legend-title">How to Read Your Hex Map</div>';
+  for (var i = 0; i < ONB_STATUS_LEGEND.length; i++) {
+    var s = ONB_STATUS_LEGEND[i];
+    html += '<div class="onb-legend-row">';
+    html += '<span class="onb-legend-badge" style="background:' + s.badge + ';color:' + s.textColor + ';">' + s.symbol + '</span>';
+    html += '<div class="onb-legend-text"><span class="onb-legend-label">' + escapeHtml(s.label) + '</span>';
+    html += '<span class="onb-legend-desc">' + escapeHtml(s.desc) + '</span></div>';
+    html += '</div>';
+  }
+  html += '<button class="onb-legend-close" onclick="onbToggleLegend()" type="button">Got it!</button>';
+  panel.innerHTML = html;
+
+  // Insert inside builder view grid area
+  var gridArea = document.getElementById('gridContainer');
+  if (gridArea && gridArea.parentNode) {
+    gridArea.parentNode.style.position = 'relative';
+    gridArea.parentNode.appendChild(panel);
+  } else {
+    document.body.appendChild(panel);
+  }
+
+  onbLegendVisible = true;
+  var btn = document.getElementById('onbLegendBtn');
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+
+  // Focus the dismiss button for keyboard/screen reader users
+  setTimeout(function() {
+    var closeBtn = panel.querySelector('.onb-legend-close');
+    if (closeBtn) closeBtn.focus();
+  }, 100);
+}
+
+/**
+ * Auto-show legend on first map open for onboarding students.
+ */
+function onbAutoShowLegend() {
+  if (onbLegendAutoShown) return;
+  if (!onbChecklistData || onbChecklistData.completed) return;
+  onbLegendAutoShown = true;
+  onbRenderLegend();
+}
+
+/**
+ * Show/hide the legend button based on view mode.
+ * Called from setViewMode and openMapInBuilder.
+ */
+function onbUpdateLegendBtnVisibility() {
+  var btn = document.getElementById('onbLegendBtn');
+  if (!btn) return;
+  if (typeof currentViewMode !== 'undefined' && currentViewMode === 'student') {
+    btn.style.display = '';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+// ============================================================================
+// STORY 5 — COMPLETION CELEBRATION
+// ============================================================================
+
+function onbShowCompletion() {
+  // Remove checklist panel
+  var panel = document.getElementById('onbChecklist');
+  if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+
+  // Build completion card (reuses tur-complete-card pattern)
+  var card = document.createElement('div');
+  card.className = 'tur-complete-card';
+  card.id = 'onbCompleteCard';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
+  card.setAttribute('aria-label', 'Onboarding complete');
+
+  card.innerHTML =
+    '<div class="tur-complete-icon">\uD83C\uDF89</div>' +
+    '<div class="tur-complete-title">You\'re Ready!</div>' +
+    '<div class="tur-complete-msg">You\'ve completed all the getting started steps. Have fun learning!</div>' +
+    '<button class="tur-complete-btn" onclick="onbDismissCompletion()" type="button">Let\'s Go!</button>';
+
+  // Backdrop
+  var backdrop = document.createElement('div');
+  backdrop.className = 'tur-backdrop';
+  backdrop.id = 'onbCompleteBackdrop';
+  document.body.appendChild(backdrop);
+  document.body.appendChild(card);
+
+  // Auto-dismiss after 6s
+  setTimeout(function() { onbDismissCompletion(); }, 6000);
+
+  // Announce
+  if (typeof a11yAnnounce === 'function') {
+    a11yAnnounce('Congratulations! You have completed all getting started steps.');
+  }
+}
+
+function onbDismissCompletion() {
+  var card = document.getElementById('onbCompleteCard');
+  if (card) {
+    card.style.animation = 'tur-fadeOut 0.3s ease-in forwards';
+    setTimeout(function() {
+      if (card.parentNode) card.parentNode.removeChild(card);
+    }, 300);
+  }
+  var backdrop = document.getElementById('onbCompleteBackdrop');
+  if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+}
+</script>

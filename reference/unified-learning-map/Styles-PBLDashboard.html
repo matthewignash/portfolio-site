@@ -1,0 +1,212 @@
+<style>
+/* ============================================================================
+   PBL DASHBOARD — pbl- prefix
+   Iteration analytics, peer feedback analytics, phase progress swimlane
+   ============================================================================ */
+
+/* ---- Summary Cards Grid ---- */
+.pbl-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.pbl-summary-card {
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  text-align: center;
+}
+.pbl-summary-card-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.pbl-summary-card-label {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pbl-card-green .pbl-summary-card-value { color: #059669; }
+.pbl-card-amber .pbl-summary-card-value { color: #d97706; }
+.pbl-card-red .pbl-summary-card-value { color: #dc2626; }
+.pbl-card-blue .pbl-summary-card-value { color: #2563eb; }
+
+/* ---- Section Headers ---- */
+.pbl-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 24px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* ---- Iteration Heatmap Table ---- */
+.pbl-heatmap-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 20px;
+}
+.pbl-heatmap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.pbl-heatmap-table th {
+  padding: 8px 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+.pbl-heatmap-table td {
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+}
+.pbl-heatmap-table .pbl-student-col {
+  text-align: left;
+  white-space: nowrap;
+  font-weight: 500;
+  color: #334155;
+  padding-left: 10px;
+}
+.pbl-heat-none { background: #f8fafc; color: #94a3b8; }
+.pbl-heat-low { background: #dbeafe; color: #1e40af; }
+.pbl-heat-mid { background: #93c5fd; color: #1e3a8a; }
+.pbl-heat-high { background: #3b82f6; color: #fff; }
+.pbl-heat-vhigh { background: #1d4ed8; color: #fff; }
+
+/* ---- Per-Checkpoint Stats Table ---- */
+.pbl-checkpoint-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 20px;
+}
+.pbl-checkpoint-table th {
+  padding: 8px 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+}
+.pbl-checkpoint-table td {
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+/* ---- Peer Feedback Stats Cards ---- */
+.pbl-peer-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.pbl-peer-card {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.pbl-peer-card-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 8px;
+}
+.pbl-peer-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.pbl-peer-bar-label {
+  font-size: 11px;
+  color: #64748b;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+.pbl-peer-bar-container {
+  flex: 1;
+  height: 12px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.pbl-peer-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+.pbl-peer-bar-fill.pbl-bar-green { background: #10b981; }
+.pbl-peer-bar-fill.pbl-bar-blue { background: #3b82f6; }
+.pbl-peer-bar-fill.pbl-bar-amber { background: #f59e0b; }
+.pbl-peer-bar-value {
+  font-size: 11px;
+  color: #475569;
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ---- Phase Swimlane ---- */
+.pbl-swimlane-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 20px;
+}
+.pbl-swimlane-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.pbl-swimlane-table th {
+  padding: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+}
+.pbl-swimlane-table td {
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+}
+.pbl-phase-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+.pbl-dot-done { background: #059669; border-color: #059669; }
+.pbl-dot-active { background: #dbeafe; border-color: #3b82f6; }
+.pbl-dot-pending { background: #f1f5f9; border-color: #d1d5db; }
+
+/* ---- Empty State ---- */
+.pbl-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+}
+.pbl-empty .icon { font-size: 48px; margin-bottom: 12px; }
+.pbl-empty p { font-size: 14px; }
+
+/* ---- Loading ---- */
+.pbl-loading {
+  text-align: center;
+  padding: 30px;
+  color: #64748b;
+  font-size: 13px;
+}
+</style>

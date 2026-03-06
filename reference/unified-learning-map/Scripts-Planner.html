@@ -1,0 +1,852 @@
+<script>
+    // ================================================
+    // STUDENT PLANNER — Task Dashboard + Schedule View
+    // ES5 only — no const, let, =>, template literals, .includes()
+    // CSS prefix: pln-
+    // ================================================
+
+    var plannerData = null;
+    var plannerFilter = 'all';
+    var plannerTasks = [];
+    var plannerSaving = false;
+
+    // E3: Bracket-adaptive text for EAL students
+    var PLN_BRACKET_TEXT = {
+      low: {
+        statTotal: 'All Tasks',
+        statOverdue: 'Late \u26A0\uFE0F',
+        statDueToday: 'Today \uD83D\uDCC5',
+        statDueWeek: 'This Week',
+        filterOverdue: 'Late \u26A0\uFE0F',
+        filterDueToday: 'Today',
+        filterCompleted: 'Done \u2705',
+        filterUpcoming: 'Coming Up',
+        emptyAll: 'No tasks yet. Your teacher will add them soon!',
+        emptyFilter: 'Nothing matches this filter.',
+        dueTodayLabel: 'Today!',
+        overdueLabel: ' day late!',
+        overdueLabelPlural: ' days late!',
+        dueTomorrow: 'Tomorrow',
+        dueInDays: ' days left',
+        statusInProgress: 'Working On It',
+        statusCompleted: 'Done \u2705',
+        statusMastered: 'Great Work! \uD83C\uDFC6',
+        unitProgress: 'Your Units'
+      }
+    };
+
+    function plnGetText(key, fallback) {
+      var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+      if (bracket && PLN_BRACKET_TEXT[bracket] && PLN_BRACKET_TEXT[bracket][key]) {
+        return PLN_BRACKET_TEXT[bracket][key];
+      }
+      return fallback;
+    }
+
+    // ================================================
+    // LIFECYCLE
+    // ================================================
+
+    function loadPlannerData() {
+      var container = document.getElementById('plannerTaskList');
+      if (container) {
+        container.innerHTML = '<div class="loading"><span class="loading-spinner"></span>Loading your tasks...</div>';
+      }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          plannerData = result;
+          plannerTasks = result.tasks || [];
+          renderPlannerView();
+        })
+        .withFailureHandler(function(err) {
+          if (container) {
+            container.innerHTML = '<div class="pln-empty-state"><div class="pln-empty-icon">&#9888;&#65039;</div><div class="pln-empty-title">Error loading planner</div><div class="pln-empty-text">' + escapeHtml(friendlyError(err)) + '</div></div>';
+          }
+        })
+        .getStudentPlannerData();
+    }
+
+    function renderPlannerView() {
+      if (!plannerData) return;
+
+      // Render AISC "Our School" panel
+      if (typeof ascRenderPlannerPanel === 'function') ascRenderPlannerPanel();
+
+      // Safety net: re-fetch custom tasks if they weren't loaded yet
+      if (typeof stlLoadTasks === 'function' && (!stlTasksData || stlTasksData.length === 0) && !stlSaving) {
+        stlLoadTasks();
+      }
+
+      // Render custom task list if loaded
+      if (typeof stlRenderSection === 'function') stlRenderSection();
+
+      // Render unit checklist section if data available
+      if (typeof uclRenderSection === 'function') uclRenderSection();
+
+      // Render process journal section if available
+      if (typeof pjrRenderSection === 'function') pjrRenderSection();
+
+      renderPlannerStats(plannerData.stats);
+      renderPlannerFilters(plannerData.stats);
+
+      // C6: Strategy awareness banner for EAL students
+      plnRenderStrategyBanner();
+
+      var filtered = filterPlannerTasks(plannerTasks, plannerFilter);
+      renderPlannerTaskList(filtered);
+      renderPlannerSchedulePanel(plannerData.scheduleData);
+
+      // Render ATL toolkit if loaded
+      if (typeof renderATLToolkit === 'function') {
+        renderATLToolkit();
+      }
+    }
+
+    // ================================================
+    // STATS
+    // ================================================
+
+    function renderPlannerStats(stats) {
+      var container = document.getElementById('plannerStats');
+      if (!container) return;
+
+      var html = '';
+
+      html += '<div class="pln-stat-card">';
+      html += '<div class="pln-stat-value">' + stats.total + '</div>';
+      html += '<div class="pln-stat-label">' + plnGetText('statTotal', 'Total Tasks') + '</div>';
+      html += '</div>';
+
+      html += '<div class="pln-stat-card">';
+      html += '<div class="pln-stat-value' + (stats.overdue > 0 ? ' danger' : '') + '">' + stats.overdue + '</div>';
+      html += '<div class="pln-stat-label">' + plnGetText('statOverdue', 'Overdue') + '</div>';
+      html += '</div>';
+
+      html += '<div class="pln-stat-card">';
+      html += '<div class="pln-stat-value' + (stats.dueToday > 0 ? ' warning' : '') + '">' + stats.dueToday + '</div>';
+      html += '<div class="pln-stat-label">' + plnGetText('statDueToday', 'Due Today') + '</div>';
+      html += '</div>';
+
+      html += '<div class="pln-stat-card">';
+      html += '<div class="pln-stat-value info">' + stats.dueThisWeek + '</div>';
+      html += '<div class="pln-stat-label">' + plnGetText('statDueWeek', 'Due This Week') + '</div>';
+      html += '</div>';
+
+      // Streak counter (from celebrations)
+      if (celData && celData.streak > 0 && typeof renderStreakCounter === 'function') {
+        html += renderStreakCounter(celData.streak);
+      }
+
+      container.innerHTML = html;
+    }
+
+    // ================================================
+    // FILTERS
+    // ================================================
+
+    function renderPlannerFilters(stats) {
+      var container = document.getElementById('plannerFilters');
+      if (!container) return;
+
+      var filters = [
+        { id: 'all', label: 'All', count: stats.total },
+        { id: 'overdue', label: plnGetText('filterOverdue', 'Overdue'), count: stats.overdue, className: 'danger' },
+        { id: 'due-today', label: plnGetText('filterDueToday', 'Due Today'), count: stats.dueToday },
+        { id: 'due-week', label: plnGetText('statDueWeek', 'This Week'), count: stats.dueThisWeek },
+        { id: 'upcoming', label: plnGetText('filterUpcoming', 'Upcoming'), count: null },
+        { id: 'completed', label: plnGetText('filterCompleted', 'Completed'), count: stats.completed }
+      ];
+
+      var html = '';
+      for (var i = 0; i < filters.length; i++) {
+        var f = filters[i];
+        var activeClass = (plannerFilter === f.id) ? ' active' + (f.className ? ' ' + f.className : '') : '';
+        html += '<button class="pln-filter-chip' + activeClass + '" onclick="setPlannerFilter(\'' + f.id + '\')">';
+        html += escapeHtml(f.label);
+        if (f.count !== null && f.count !== undefined) {
+          html += '<span class="pln-filter-count">' + f.count + '</span>';
+        }
+        html += '</button>';
+      }
+
+      // Notebook toggle button
+      html += '<button class="cn-notebook-toggle-btn' + (cnNotebookLoaded && document.getElementById('cnNotebookPanel') && document.getElementById('cnNotebookPanel').style.display !== 'none' ? ' cn-active' : '') + '" ';
+      html += 'id="cnNotebookToggleBtn" onclick="cnToggleNotebook()" style="margin-left:auto;">&#128221; My Notebook</button>';
+
+      container.innerHTML = html;
+    }
+
+    function setPlannerFilter(filter) {
+      plannerFilter = filter;
+      renderPlannerView();
+    }
+
+    /**
+     * C6: Render a daily strategy tip banner for low/mid bracket EAL students.
+     * Picks one rotating tip per day from SST_PRESET_STRATEGIES.
+     */
+    function plnRenderStrategyBanner() {
+      var bannerEl = document.getElementById('plnStrategyBanner');
+      if (!bannerEl) return;
+
+      var plnBracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+      if (!plnBracket || plnBracket === 'high') {
+        bannerEl.innerHTML = '';
+        return;
+      }
+
+      // Get strategies for this bracket
+      var strategies = (typeof SST_PRESET_STRATEGIES !== 'undefined' && SST_PRESET_STRATEGIES[plnBracket]) ? SST_PRESET_STRATEGIES[plnBracket] : null;
+      if (!strategies || strategies.length === 0) {
+        bannerEl.innerHTML = '';
+        return;
+      }
+
+      // Rotate tip by day
+      var dayIndex = Math.floor(Date.now() / 86400000) % strategies.length;
+      var tip = strategies[dayIndex];
+
+      var html = '<div class="pln-strategy-banner">';
+      html += '<span class="pln-strategy-banner-icon">' + tip.icon + '</span>';
+      html += '<div class="pln-strategy-banner-text">';
+      html += '<span class="pln-strategy-banner-label">Today\'s tip: </span>';
+      html += escapeHtml(tip.title) + ' \u2014 ' + escapeHtml(tip.desc);
+      html += '</div>';
+      html += '</div>';
+
+      bannerEl.innerHTML = html;
+    }
+
+    function filterPlannerTasks(tasks, filter) {
+      if (filter === 'all') return tasks;
+
+      var result = [];
+      for (var i = 0; i < tasks.length; i++) {
+        var t = tasks[i];
+        var match = false;
+
+        if (filter === 'overdue') match = t.isOverdue;
+        else if (filter === 'due-today') match = t.isDueToday;
+        else if (filter === 'due-week') match = t.isDueThisWeek;
+        else if (filter === 'upcoming') match = !t.isOverdue && !t.isDueToday && !t.isDueThisWeek && t.status !== 'completed' && t.status !== 'mastered';
+        else if (filter === 'completed') match = (t.status === 'completed' || t.status === 'mastered');
+
+        if (match) result.push(t);
+      }
+      return result;
+    }
+
+    // ================================================
+    // TASK LIST
+    // ================================================
+
+    function renderPlannerTaskList(tasks) {
+      var container = document.getElementById('plannerTaskList');
+      if (!container) return;
+
+      if (tasks.length === 0) {
+        var msg = plannerFilter === 'all' ? plnGetText('emptyAll', 'No tasks assigned yet. Your teacher will assign learning maps to get started.') : plnGetText('emptyFilter', 'No tasks match this filter.');
+        container.innerHTML = '<div class="pln-empty-state"><div class="pln-empty-icon">&#128203;</div><div class="pln-empty-title">No Tasks</div><div class="pln-empty-text">' + msg + '</div></div>';
+        return;
+      }
+
+      // Separate standalone tasks from lesson map tasks
+      var standaloneTasks = [];
+      var lessonGroups = {}; // groupKey -> {label, parentMapId, parentHexId, tasks[], completed, total}
+      var lessonGroupOrder = [];
+
+      for (var i = 0; i < tasks.length; i++) {
+        var t = tasks[i];
+        if (t.isLessonMapTask && t.parentMapId && t.parentHexId) {
+          var groupKey = t.parentMapId + '|' + t.parentHexId;
+          if (!lessonGroups[groupKey]) {
+            lessonGroups[groupKey] = {
+              label: t.parentHexLabel || 'Lesson',
+              parentMapId: t.parentMapId,
+              parentHexId: t.parentHexId,
+              tasks: [],
+              completed: 0,
+              total: 0
+            };
+            lessonGroupOrder.push(groupKey);
+          }
+          lessonGroups[groupKey].tasks.push(t);
+          lessonGroups[groupKey].total++;
+          if (t.status === 'completed' || t.status === 'mastered') {
+            lessonGroups[groupKey].completed++;
+          }
+        } else {
+          standaloneTasks.push(t);
+        }
+      }
+
+      var html = '';
+
+      // Recently Unlocked mini-section (tasks with createdAt within last 5 minutes)
+      var recentlyUnlocked = [];
+      var fiveMinAgo = Date.now() - (5 * 60 * 1000);
+      for (var ru = 0; ru < tasks.length; ru++) {
+        var ruTask = tasks[ru];
+        if (ruTask.createdAt) {
+          var createdTime = new Date(ruTask.createdAt).getTime();
+          if (createdTime > fiveMinAgo && (ruTask.status === 'not_started' || ruTask.status === 'in_progress')) {
+            recentlyUnlocked.push(ruTask);
+          }
+        }
+      }
+      if (recentlyUnlocked.length > 0) {
+        html += '<div class="bex-recently-unlocked">';
+        html += '<div class="bex-recently-unlocked-header">&#127381; Recently Unlocked</div>';
+        for (var rui = 0; rui < recentlyUnlocked.length; rui++) {
+          var ruT = recentlyUnlocked[rui];
+          var ruIcon = ruT.isResource ? (typeof RES_TYPE_ICONS !== 'undefined' ? (RES_TYPE_ICONS[ruT.resourceType] || '📦') : '📦') : (ruT.icon || '📚');
+          html += '<div class="bex-recently-unlocked-item">';
+          html += '<span>' + ruIcon + '</span>';
+          html += '<span>' + escapeHtml(ruT.hexLabel || ruT.label || 'Activity') + '</span>';
+          if (ruT.isResource) {
+            html += '<span class="bex-recently-unlocked-badge">Resource</span>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      // Render standalone tasks first
+      for (var si = 0; si < standaloneTasks.length; si++) {
+        html += lsmRenderPlannerTaskCard(standaloneTasks[si], si);
+      }
+
+      // Render lesson groups
+      for (var gi = 0; gi < lessonGroupOrder.length; gi++) {
+        var gKey = lessonGroupOrder[gi];
+        var group = lessonGroups[gKey];
+        var isCollapsed = lsmPlannerGroupCollapsed[gKey] === true;
+        var toggleClass = isCollapsed ? ' collapsed' : '';
+
+        // Group header
+        html += '<div class="lsm-planner-group-header" onclick="lsmTogglePlannerGroup(\'' + escapeHtml(gKey) + '\')">';
+        html += '<span class="lsm-planner-group-toggle' + toggleClass + '">&#9660;</span>';
+        html += '<span class="lsm-planner-group-label">&#128214; ' + escapeHtml(group.label) + '</span>';
+        html += '<span class="lsm-planner-group-badge">' + group.completed + '/' + group.total + '</span>';
+        html += '</div>';
+
+        // Group tasks (collapsible)
+        html += '<div class="lsm-planner-group-tasks' + (isCollapsed ? ' collapsed' : '') + '">';
+        for (var gt = 0; gt < group.tasks.length; gt++) {
+          html += lsmRenderPlannerTaskCard(group.tasks[gt], 'g' + gi + '_' + gt);
+        }
+        html += '</div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    function lsmRenderPlannerTaskCard(t, index) {
+      var urgencyClass = getPlannerUrgencyClass(t);
+      var clickHandler = t.isLessonMapTask
+        ? 'lsmOnPlannerLessonTaskClick(\'' + escapeHtml(t.parentMapId) + '\', \'' + escapeHtml(t.parentHexId) + '\', \'' + escapeHtml(t.mapId) + '\', \'' + escapeHtml(t.hexId) + '\')'
+        : 'onPlannerTaskClick(\'' + escapeHtml(t.mapId) + '\', \'' + escapeHtml(t.hexId) + '\')';
+
+      // Resource tasks get amber styling
+      var resClass = t.isResource ? ' bex-planner-resource' : '';
+      var html = '<div class="pln-task-card ' + urgencyClass + resClass + '" onclick="' + clickHandler + '">';
+
+      // Icon — resource tasks use resource type icon
+      var iconHtml = '';
+      if (t.isResource && t.resourceType) {
+        var resIcons = { video: '&#127909;', practice: '&#9999;&#65039;', reading: '&#128214;', worksheet: '&#128196;', link: '&#128279;' };
+        iconHtml = resIcons[t.resourceType] || '&#128230;';
+      } else {
+        iconHtml = t.hexIcon || (t.hexType === 'core' ? '&#128218;' : t.hexType === 'extension' ? '&#128161;' : '&#128736;');
+      }
+      html += '<div class="pln-task-icon">' + iconHtml + '</div>';
+
+      // Body
+      html += '<div class="pln-task-body">';
+      html += '<div class="pln-task-label">' + escapeHtml(t.hexLabel) + '</div>';
+      html += '<div class="pln-task-map">' + escapeHtml(t.isLessonMapTask ? (t.lessonMapTitle || t.mapTitle) : t.mapTitle) + '</div>';
+
+      // Meta badges
+      html += '<div class="pln-task-meta">';
+
+      // Status badge
+      var statusLabel = t.status === 'not_started' ? 'Not Started' : t.status === 'in_progress' ? plnGetText('statusInProgress', 'In Progress') : t.status === 'completed' ? plnGetText('statusCompleted', 'Completed') : t.status === 'mastered' ? plnGetText('statusMastered', 'Mastered') : t.status;
+      html += '<span class="pln-task-badge status ' + t.status + '">' + statusLabel + '</span>';
+
+      // Due date badge
+      if (t.effectiveDueDate) {
+        var dueLabel = formatPlannerDueDate(t.effectiveDueDate, t.isOverdue, t.isDueToday);
+        var dueClass = t.isOverdue ? ' overdue' : '';
+        html += '<span class="pln-task-badge due' + dueClass + '">&#128197; ' + escapeHtml(dueLabel) + '</span>';
+      }
+
+      // Estimated time badge
+      if (t.estimatedMinutes > 0) {
+        html += '<span class="pln-task-badge time">&#9200; ' + t.estimatedMinutes + ' min</span>';
+      }
+
+      // Resource "Open" link
+      if (t.isResource && t.resourceUrl) {
+        html += '<a href="' + escapeHtml(t.resourceUrl) + '" target="_blank" class="pln-task-badge bex-planner-open-link" onclick="event.stopPropagation();">&#128279; Open</a>';
+      }
+
+      html += '</div>'; // meta
+      html += '</div>'; // body
+
+      html += '</div>'; // task-card
+      return html;
+    }
+
+    function lsmTogglePlannerGroup(groupKey) {
+      lsmPlannerGroupCollapsed[groupKey] = !lsmPlannerGroupCollapsed[groupKey];
+      var filtered = filterPlannerTasks(plannerTasks, plannerFilter);
+      renderPlannerTaskList(filtered);
+    }
+
+    function lsmOnPlannerLessonTaskClick(parentMapId, parentHexId, lessonMapId, hexId) {
+      // Navigate to parent unit map, then enter lesson map, then open hex
+      var mapsTab = document.querySelector('[data-view="maps"]');
+      if (mapsTab) switchTab(mapsTab);
+
+      // Open parent map
+      var found = false;
+      for (var i = 0; i < mapsData.length; i++) {
+        if (String(mapsData[i].mapId) === String(parentMapId)) {
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        // Fall back to direct map open
+        onPlannerTaskClick(lessonMapId, hexId);
+        return;
+      }
+
+      openMapInBuilder(parentMapId);
+
+      // Wait for map to render, then enter lesson map
+      setTimeout(function() {
+        if (typeof lsmEnterLessonMap === 'function') {
+          lsmEnterLessonMap(lessonMapId, parentHexId);
+          // Wait for lesson map to load, then open hex
+          setTimeout(function() {
+            if (typeof openStudentHexPanel === 'function') {
+              openStudentHexPanel(hexId);
+            }
+          }, 600);
+        }
+      }, 300);
+    }
+
+    function getPlannerUrgencyClass(task) {
+      if (task.status === 'completed' || task.status === 'mastered') return 'completed';
+      if (task.isOverdue) return 'overdue';
+      if (task.isDueToday) return 'due-today';
+      if (task.isDueThisWeek) return 'due-soon';
+      if (task.effectiveDueDate) return 'upcoming';
+      return 'no-deadline';
+    }
+
+    function formatPlannerDueDate(isoDate, isOverdue, isDueToday) {
+      if (!isoDate) return '';
+
+      if (isDueToday) return plnGetText('dueTodayLabel', 'Due today');
+
+      var due = new Date(isoDate + 'T00:00:00');
+      var now = new Date();
+      now.setHours(0, 0, 0, 0);
+      var diffMs = due.getTime() - now.getTime();
+      var diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+      if (isOverdue) {
+        var overdueDays = Math.abs(diffDays);
+        var overdueText = overdueDays !== 1 ? plnGetText('overdueLabelPlural', ' days late!') : plnGetText('overdueLabel', ' day late!');
+        return overdueDays + overdueText;
+      }
+
+      if (diffDays === 1) return plnGetText('dueTomorrow', 'Due tomorrow');
+      if (diffDays <= 7) return diffDays + plnGetText('dueInDays', ' days left');
+
+      // Format as "Mar 15"
+      var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return 'Due ' + months[due.getMonth()] + ' ' + due.getDate();
+    }
+
+    // ================================================
+    // REORDERING
+    // ================================================
+
+    function movePlannerTaskUp(index) {
+      var filtered = filterPlannerTasks(plannerTasks, plannerFilter);
+      if (index <= 0 || index >= filtered.length) return;
+
+      // Find these tasks in the main array and swap sort orders
+      var taskA = filtered[index];
+      var taskB = filtered[index - 1];
+
+      // Swap sortOrder values
+      var tempOrder = taskA.sortOrder;
+      taskA.sortOrder = taskB.sortOrder;
+      taskB.sortOrder = tempOrder;
+
+      // If both were 9999 (unordered), assign explicit orders
+      if (taskA.sortOrder === taskB.sortOrder) {
+        taskB.sortOrder = index;
+        taskA.sortOrder = index - 1;
+      }
+
+      // Re-sort and re-render
+      plannerTasks.sort(plannerSortComparator);
+      renderPlannerView();
+      savePlannerTaskOrder();
+    }
+
+    function movePlannerTaskDown(index) {
+      var filtered = filterPlannerTasks(plannerTasks, plannerFilter);
+      if (index < 0 || index >= filtered.length - 1) return;
+
+      var taskA = filtered[index];
+      var taskB = filtered[index + 1];
+
+      // Don't swap with completed tasks
+      if (taskB.status === 'completed' || taskB.status === 'mastered') return;
+
+      var tempOrder = taskA.sortOrder;
+      taskA.sortOrder = taskB.sortOrder;
+      taskB.sortOrder = tempOrder;
+
+      if (taskA.sortOrder === taskB.sortOrder) {
+        taskA.sortOrder = index + 1;
+        taskB.sortOrder = index;
+      }
+
+      plannerTasks.sort(plannerSortComparator);
+      renderPlannerView();
+      savePlannerTaskOrder();
+    }
+
+    function plannerSortComparator(a, b) {
+      var aCompleted = (a.status === 'completed' || a.status === 'mastered') ? 1 : 0;
+      var bCompleted = (b.status === 'completed' || b.status === 'mastered') ? 1 : 0;
+      if (aCompleted !== bCompleted) return aCompleted - bCompleted;
+
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+
+      var aUrgency = a.isOverdue ? 0 : (a.isDueToday ? 1 : (a.isDueThisWeek ? 2 : (a.effectiveDueDate ? 3 : 4)));
+      var bUrgency = b.isOverdue ? 0 : (b.isDueToday ? 1 : (b.isDueThisWeek ? 2 : (b.effectiveDueDate ? 3 : 4)));
+      if (aUrgency !== bUrgency) return aUrgency - bUrgency;
+
+      if (a.effectiveDueDate && b.effectiveDueDate) return a.effectiveDueDate < b.effectiveDueDate ? -1 : 1;
+      return 0;
+    }
+
+    function savePlannerTaskOrder() {
+      if (plannerSaving) return;
+      plannerSaving = true;
+
+      var orderData = [];
+      for (var i = 0; i < plannerTasks.length; i++) {
+        var t = plannerTasks[i];
+        if (t.sortOrder !== 9999) {
+          orderData.push({
+            mapId: t.mapId,
+            hexId: t.hexId,
+            sortOrder: t.sortOrder
+          });
+        }
+      }
+
+      google.script.run
+        .withSuccessHandler(function() { plannerSaving = false; })
+        .withFailureHandler(function(err) {
+          plannerSaving = false;
+          showToast(friendlyError(err), 'error');
+        })
+        .saveStudentTaskOrder(orderData);
+    }
+
+    // ================================================
+    // NAVIGATION
+    // ================================================
+
+    function onPlannerTaskClick(mapId, hexId) {
+      // Navigate to Maps tab, open the map, then select the hex
+      // First switch to Maps tab
+      var mapsTab = document.querySelector('[data-view="maps"]');
+      if (mapsTab) switchTab(mapsTab);
+
+      // Find and open the map
+      var found = false;
+      for (var i = 0; i < mapsData.length; i++) {
+        if (String(mapsData[i].mapId) === String(mapId)) {
+          currentMap = mapsData[i];
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        showToast('Map not found', 'error');
+        return;
+      }
+
+      // Render the hex grid
+      renderHexGrid();
+
+      // Wait a tick for the grid to render, then select the hex and open student panel
+      setTimeout(function() {
+        if (typeof openStudentHexPanel === 'function') {
+          openStudentHexPanel(hexId);
+        } else {
+          selectHex(hexId);
+        }
+      }, 200);
+    }
+
+    // ================================================
+    // SCHEDULE PANEL
+    // ================================================
+
+    function renderPlannerSchedulePanel(scheduleData) {
+      var container = document.getElementById('plannerSchedulePanel');
+      if (!container) return;
+
+      if (!scheduleData || !scheduleData.enabled) {
+        container.innerHTML = '<div class="pln-schedule-placeholder">' +
+          '<div class="pln-schedule-placeholder-icon">&#128197;</div>' +
+          '<div class="pln-schedule-placeholder-title">Schedule Not Connected</div>' +
+          '<div class="pln-schedule-placeholder-text">Your schedule will appear here once your teacher connects the school schedule system.</div>' +
+          '</div>';
+        return;
+      }
+
+      var html = '';
+      var today = scheduleData.today;
+
+      // Header with day type
+      html += '<div class="pln-schedule-header">Today\'s Schedule';
+      if (today && today.dayType && !today.isHoliday) {
+        html += ' <span style="color:#6b7280;font-weight:400;font-size:13px;">(' + escapeHtml(today.dayType) + ' Day)</span>';
+      }
+      html += '</div>';
+
+      // Holiday check
+      if (today && today.isHoliday) {
+        html += '<div class="pln-schedule-placeholder">';
+        html += '<div class="pln-schedule-placeholder-icon">&#127796;</div>';
+        html += '<div class="pln-schedule-placeholder-title">No Classes Today</div>';
+        html += '<div class="pln-schedule-placeholder-text">' + escapeHtml(today.holidayName || 'Holiday') + '</div>';
+        html += '</div>';
+      } else if (today && today.blocks && today.blocks.length > 0) {
+        // What's Next card
+        html += renderWhatsNext(today.blocks);
+
+        // Block cards
+        html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+        for (var b = 0; b < today.blocks.length; b++) {
+          html += renderBlockCard(today.blocks[b]);
+        }
+        html += '</div>';
+      } else {
+        html += '<div class="pln-connect-prompt">No schedule data for today.</div>';
+      }
+
+      // Weekly overview
+      if (scheduleData.week && scheduleData.week.length > 0) {
+        html += '<div style="margin-top:16px;">';
+        html += '<div class="pln-schedule-header" style="font-size:13px;">This Week</div>';
+        html += renderWeeklyOverview(scheduleData.week);
+        html += '</div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    function renderWhatsNext(blocks) {
+      if (!blocks || blocks.length === 0) return '';
+
+      var now = new Date();
+      var nowMinutes = now.getHours() * 60 + now.getMinutes();
+      var currentBlock = null;
+      var nextBlock = null;
+
+      for (var i = 0; i < blocks.length; i++) {
+        var block = blocks[i];
+        if (!block.startTime || !block.endTime) continue;
+
+        var startParts = block.startTime.split(':');
+        var endParts = block.endTime.split(':');
+        var startMin = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1] || '0', 10);
+        var endMin = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1] || '0', 10);
+
+        if (nowMinutes >= startMin && nowMinutes < endMin) {
+          currentBlock = block;
+          break;
+        } else if (nowMinutes < startMin && !nextBlock) {
+          nextBlock = block;
+        }
+      }
+
+      var html = '<div class="pln-whats-next">';
+
+      if (currentBlock && currentBlock.hasClass) {
+        html += '<div class="pln-whats-next-label">NOW</div>';
+        html += '<div class="pln-whats-next-class">' + escapeHtml(currentBlock.className) + '</div>';
+        html += '<div class="pln-whats-next-time">' + escapeHtml(currentBlock.startTime) + ' - ' + escapeHtml(currentBlock.endTime);
+        if (currentBlock.room) html += ' &#8226; Room ' + escapeHtml(currentBlock.room);
+        html += '</div>';
+      } else if (nextBlock && nextBlock.hasClass) {
+        var nextStartParts = nextBlock.startTime.split(':');
+        var nextStartMin = parseInt(nextStartParts[0], 10) * 60 + parseInt(nextStartParts[1] || '0', 10);
+        var minsUntil = nextStartMin - nowMinutes;
+
+        html += '<div class="pln-whats-next-label">UP NEXT' + (minsUntil > 0 ? ' IN ' + minsUntil + ' MIN' : '') + '</div>';
+        html += '<div class="pln-whats-next-class">' + escapeHtml(nextBlock.className) + '</div>';
+        html += '<div class="pln-whats-next-time">' + escapeHtml(nextBlock.startTime) + ' - ' + escapeHtml(nextBlock.endTime);
+        if (nextBlock.room) html += ' &#8226; Room ' + escapeHtml(nextBlock.room);
+        html += '</div>';
+      } else {
+        html += '<div class="pln-whats-next-label">SCHEDULE</div>';
+        html += '<div class="pln-whats-next-class" style="font-size:14px;color:#374151;">' + blocks.length + ' blocks today</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    function renderBlockCard(block) {
+      var isCurrent = false;
+      if (block.startTime && block.endTime) {
+        var now = new Date();
+        var nowMinutes = now.getHours() * 60 + now.getMinutes();
+        var sParts = block.startTime.split(':');
+        var eParts = block.endTime.split(':');
+        var sMin = parseInt(sParts[0], 10) * 60 + parseInt(sParts[1] || '0', 10);
+        var eMin = parseInt(eParts[0], 10) * 60 + parseInt(eParts[1] || '0', 10);
+        isCurrent = nowMinutes >= sMin && nowMinutes < eMin;
+      }
+
+      var html = '<div class="pln-block-card' + (isCurrent ? ' current' : '') + '">';
+
+      // Time column
+      html += '<div class="pln-block-time">';
+      html += escapeHtml(block.startTime || '') + '<br>' + escapeHtml(block.endTime || '');
+      html += '</div>';
+
+      // Info column
+      html += '<div style="flex:1;min-width:0;">';
+      if (block.hasClass) {
+        html += '<div class="pln-block-class">' + escapeHtml(block.className) + '</div>';
+        if (block.room) {
+          html += '<div class="pln-block-room">Room ' + escapeHtml(block.room) + '</div>';
+        }
+        // Task chips
+        if (block.tasks && block.tasks.length > 0) {
+          html += '<div class="pln-block-tasks">';
+          for (var t = 0; t < block.tasks.length; t++) {
+            html += '<span class="pln-block-task-chip" title="' + escapeHtml(block.tasks[t].hexLabel) + '">' + escapeHtml(block.tasks[t].hexLabel) + '</span>';
+          }
+          html += '</div>';
+        }
+      } else {
+        html += '<div class="pln-block-class" style="color:#9ca3af;font-weight:400;">Free Period</div>';
+        html += '<div class="pln-block-room" style="font-size:11px;">' + escapeHtml(block.blockName) + '</div>';
+      }
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    function renderWeeklyOverview(week) {
+      var html = '<div class="pln-weekly-grid">';
+      for (var d = 0; d < week.length; d++) {
+        var day = week[d];
+        html += '<div class="pln-weekly-day' + (day.isToday ? ' today' : '') + '">';
+        html += '<div class="pln-weekly-day-name">' + escapeHtml(day.dayName) + '</div>';
+        if (day.isHoliday) {
+          html += '<div class="pln-weekly-day-type" style="color:#dc2626;font-size:9px;">' + escapeHtml(day.holidayName || 'Off') + '</div>';
+        } else if (day.dayType) {
+          html += '<div class="pln-weekly-day-type">' + escapeHtml(day.dayType) + '</div>';
+        } else {
+          html += '<div class="pln-weekly-day-type">-</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // UNIT CHECKLIST SECTION (ucl- prefix)
+    // ================================================
+
+    function uclRenderSection() {
+      var container = document.getElementById('uclSection');
+      if (!container) return;
+      if (!uclChecklistData || uclChecklistData.length === 0) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = 'block';
+
+      var html = '<div class="ucl-section">';
+      html += '<div class="ucl-section-header" role="button" tabindex="0" onclick="uclToggleSection()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click();}">';
+      html += '<span class="ucl-section-title">\uD83D\uDCCB ' + plnGetText('unitProgress', 'Unit Progress') + ' (' + uclChecklistData.length + ')</span>';
+      html += '<span class="ucl-chevron">' + (uclSectionCollapsed ? '\u25B6' : '\u25BC') + '</span>';
+      html += '</div>';
+
+      if (!uclSectionCollapsed) {
+        html += '<div class="ucl-section-body">';
+        for (var i = 0; i < uclChecklistData.length; i++) {
+          var u = uclChecklistData[i];
+          var pct = u.progress.percent;
+          var barColor = pct >= 100 ? '#16a34a' : (pct >= 50 ? '#3b82f6' : '#f59e0b');
+          var isExpanded = uclExpandedUnits[u.unitId];
+
+          html += '<div class="ucl-unit-card">';
+          html += '<div class="ucl-unit-header" role="button" tabindex="0" aria-expanded="' + (isExpanded ? 'true' : 'false') + '" onclick="uclToggleUnit(\'' + escapeHtml(u.unitId) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click();}">';
+          html += '<div class="ucl-unit-info">';
+          html += '<div class="ucl-unit-title">' + escapeHtml(u.unitTitle) + '</div>';
+          html += '<div class="ucl-unit-meta">' + u.progress.completed + '/' + u.progress.total + ' activities \u2022 ' + pct + '%</div>';
+          html += '</div>';
+          html += '<div class="ucl-progress-bar"><div class="ucl-progress-fill" style="width:' + pct + '%; background:' + barColor + ';"></div></div>';
+          html += '</div>';
+
+          // Expanded lesson list
+          if (isExpanded) {
+            html += '<div class="ucl-lesson-list">';
+            for (var j = 0; j < u.lessons.length; j++) {
+              var lesson = u.lessons[j];
+              var dotColor = lesson.status === 'completed' ? '#16a34a' : (lesson.status === 'in_progress' ? '#3b82f6' : '#cbd5e1');
+              html += '<div class="ucl-lesson-row">';
+              html += '<span class="ucl-status-dot" style="background:' + dotColor + ';"></span>';
+              html += '<span class="ucl-lesson-title">' + escapeHtml(lesson.title) + '</span>';
+              html += '<span class="ucl-lesson-hex-count">' + lesson.hexCount + ' hex' + (lesson.hexCount !== 1 ? 'es' : '') + '</span>';
+              html += '</div>';
+            }
+            html += '</div>';
+          }
+
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function uclToggleSection() {
+      uclSectionCollapsed = !uclSectionCollapsed;
+      uclRenderSection();
+    }
+
+    function uclToggleUnit(unitId) {
+      uclExpandedUnits[unitId] = !uclExpandedUnits[unitId];
+      uclRenderSection();
+    }
+</script>

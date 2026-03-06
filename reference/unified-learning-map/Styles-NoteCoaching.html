@@ -1,0 +1,253 @@
+<style>
+/* ============================================================================
+   NOTE COACHING DASHBOARD STYLES (cnc- prefix)
+   Teacher view of student note-taking quality and completion signals
+   ============================================================================ */
+
+/* Summary cards */
+.cnc-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.cnc-summary-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.cnc-summary-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+.cnc-summary-value.cnc-green { color: #16a34a; }
+.cnc-summary-value.cnc-amber { color: #d97706; }
+.cnc-summary-value.cnc-red { color: #dc2626; }
+.cnc-summary-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* Student list */
+.cnc-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.cnc-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+.cnc-student-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cnc-student-card:hover {
+  border-color: #6366f1;
+  background: #fafafe;
+}
+.cnc-student-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cnc-student-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  min-width: 120px;
+}
+.cnc-progress-bar-container {
+  flex: 1;
+  min-width: 80px;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cnc-progress-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #6366f1;
+  transition: width 0.3s;
+}
+.cnc-student-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.cnc-metric-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.cnc-metric-badge.cnc-good {
+  background: #dcfce7;
+  color: #16a34a;
+}
+.cnc-metric-badge.cnc-ok {
+  background: #fef3c7;
+  color: #92400e;
+}
+.cnc-metric-badge.cnc-low {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.cnc-metric-text {
+  font-size: 11px;
+  color: #64748b;
+}
+.cnc-last-note {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+/* Expanded student detail (note previews) */
+.cnc-student-detail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cnc-note-preview {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px;
+}
+.cnc-note-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cnc-note-preview-hex {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.cnc-note-preview-meta {
+  font-size: 10px;
+  color: #94a3b8;
+}
+.cnc-note-preview-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.cnc-note-preview-cue {
+  display: inline-block;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 10px;
+  color: #4338ca;
+}
+.cnc-note-preview-body {
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.4;
+  max-height: 60px;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+.cnc-note-preview-summary {
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+  border-left: 2px solid #6366f1;
+  padding-left: 8px;
+  margin-top: 6px;
+}
+.cnc-loading {
+  text-align: center;
+  padding: 20px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* Hex heatmap */
+.cnc-hex-heatmap {
+  margin-bottom: 20px;
+}
+.cnc-heatmap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.cnc-heatmap-table th {
+  text-align: left;
+  padding: 6px 10px;
+  font-weight: 600;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 11px;
+}
+.cnc-heatmap-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+.cnc-heatmap-cell {
+  text-align: center;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.cnc-heat-none { background: #f8fafc; color: #94a3b8; }
+.cnc-heat-low { background: #dbeafe; color: #1e40af; }
+.cnc-heat-mid { background: #93c5fd; color: #1e3a5f; }
+.cnc-heat-high { background: #3b82f6; color: #fff; }
+
+/* Cue cloud */
+.cnc-cue-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.cnc-cue-tag {
+  display: inline-block;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 12px;
+  padding: 3px 12px;
+  color: #4338ca;
+}
+.cnc-cue-tag.cnc-size-1 { font-size: 11px; }
+.cnc-cue-tag.cnc-size-2 { font-size: 13px; font-weight: 600; }
+.cnc-cue-tag.cnc-size-3 { font-size: 15px; font-weight: 700; }
+
+/* Empty state */
+.cnc-empty {
+  text-align: center;
+  padding: 40px 16px;
+  color: #94a3b8;
+}
+.cnc-empty .icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+.cnc-empty p {
+  font-size: 13px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+</style>

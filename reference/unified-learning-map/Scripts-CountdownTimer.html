@@ -1,0 +1,1223 @@
+<script>
+    // ================================================
+    // CONSTANTS
+    // ================================================
+
+    var CTD_DEFAULT_PRESETS = [
+      { ms: 30000,   label: '30s' },
+      { ms: 60000,   label: '1 min' },
+      { ms: 120000,  label: '2 min' },
+      { ms: 300000,  label: '5 min' },
+      { ms: 600000,  label: '10 min' },
+      { ms: 900000,  label: '15 min' }
+    ];
+    var CTD_MAX_CUSTOM_PRESETS = 10;
+    var CTD_MAX_MINUTES = 180;
+    var CTD_LOCALSTORAGE_KEY = 'ctdPresets';
+
+    // Phase 2 constants
+    var CTD_STUDENT_POLL_INTERVAL = 15000;   // 15s normal polling
+    var CTD_STUDENT_POLL_SLOW = 30000;       // 30s after idle threshold
+    var CTD_STUDENT_SLOW_THRESHOLD = 300000; // 5 min of no active timer
+    var CTD_DEFAULT_MESSAGES = [
+      { pct: 50, text: 'Halfway there!' },
+      { pct: 25, text: 'Time to wrap up' },
+      { pct: 10, text: 'Almost done!' }
+    ];
+    var CTD_POMODORO_DEFAULTS = {
+      workMs: 1500000,    // 25 min
+      breakMs: 300000,    // 5 min
+      longBreakMs: 900000, // 15 min
+      cycles: 4
+    };
+
+    // ================================================
+    // AUDIO
+    // ================================================
+
+    var ctdAudioCtx = null;
+
+    function ctdInitAudioContext() {
+      if (ctdAudioCtx) return;
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) ctdAudioCtx = new AC();
+      } catch (e) {
+        console.warn('AudioContext not available:', e);
+      }
+    }
+
+    function ctdPlayBeep() {
+      if (!ctdAudioCtx) return;
+      var beepCount = 3;
+      for (var b = 0; b < beepCount; b++) {
+        (function(delay) {
+          setTimeout(function() {
+            try {
+              var osc = ctdAudioCtx.createOscillator();
+              var gain = ctdAudioCtx.createGain();
+              osc.connect(gain);
+              gain.connect(ctdAudioCtx.destination);
+              osc.frequency.value = 800;
+              gain.gain.value = 0.3;
+              osc.start(ctdAudioCtx.currentTime);
+              osc.stop(ctdAudioCtx.currentTime + 0.2);
+            } catch (e) { /* ignore audio errors */ }
+          }, delay);
+        })(b * 350);
+      }
+    }
+
+    // ================================================
+    // TIMER ENGINE (drift-proof)
+    // ================================================
+
+    function ctdStart() {
+      ctdTimerState = 'running';
+      ctdEndTime = Date.now() + ctdRemainingMs;
+      ctdMessagesFired = {};
+      if (ctdTickTimer) clearInterval(ctdTickTimer);
+      ctdTickTimer = setInterval(ctdTick, 100);
+      ctdRenderContent();
+      ctdSyncToBackend();
+    }
+
+    function ctdPause() {
+      ctdRemainingMs = Math.max(0, ctdEndTime - Date.now());
+      if (ctdTickTimer) { clearInterval(ctdTickTimer); ctdTickTimer = null; }
+      ctdTimerState = 'paused';
+      ctdRenderContent();
+      ctdSyncToBackend();
+    }
+
+    function ctdResume() {
+      ctdStart();
+    }
+
+    function ctdReset() {
+      if (ctdTickTimer) { clearInterval(ctdTickTimer); ctdTickTimer = null; }
+      ctdTimerState = 'idle';
+      ctdRemainingMs = 0;
+      ctdTotalMs = 0;
+      ctdEndTime = 0;
+      ctdLabel = '';
+      ctdMessagesFired = {};
+      if (ctdStationMode) {
+        ctdCurrentStation = 1;
+      }
+      if (ctdPomodoroMode) {
+        ctdPomodoroMode = false;
+        ctdPomodoroConfig = null;
+        ctdPomodoroCycle = 1;
+        ctdPomodoroPhase = 'work';
+      }
+      ctdRenderContent();
+      // Clear backend session
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function() {}).withFailureHandler(function() {}).clearTimerSession();
+      }
+    }
+
+    function ctdTick() {
+      var remaining = Math.max(0, ctdEndTime - Date.now());
+      var oldSec = Math.ceil(ctdRemainingMs / 1000);
+      var newSec = Math.ceil(remaining / 1000);
+      ctdRemainingMs = remaining;
+      if (newSec !== oldSec) {
+        ctdUpdateDisplay();
+        ctdUpdateProgressRing();
+        ctdUpdateColorPhase();
+        ctdCheckMessages();
+      }
+      if (remaining <= 0) ctdOnFinish();
+    }
+
+    function ctdOnFinish() {
+      if (ctdTickTimer) { clearInterval(ctdTickTimer); ctdTickTimer = null; }
+      ctdTimerState = 'finished';
+      ctdRemainingMs = 0;
+      ctdPlayBeep();
+      ctdRenderContent();
+      ctdSyncToBackend();
+
+      // Station mode: auto-advance after 3 seconds
+      if (ctdStationMode && ctdCurrentStation < ctdStationCount) {
+        setTimeout(function() {
+          if (ctdTimerState !== 'finished') return;
+          ctdAdvanceStation();
+        }, 3000);
+      }
+
+      // Pomodoro mode: auto-advance after 3 seconds
+      if (ctdPomodoroMode && ctdPomodoroConfig) {
+        setTimeout(function() {
+          if (ctdTimerState !== 'finished') return;
+          ctdAdvancePomodoro();
+        }, 3000);
+      }
+    }
+
+    // ================================================
+    // DISPLAY HELPERS
+    // ================================================
+
+    function ctdFormatTime(ms) {
+      var totalSec = Math.ceil(ms / 1000);
+      var h = Math.floor(totalSec / 3600);
+      var m = Math.floor((totalSec % 3600) / 60);
+      var s = totalSec % 60;
+      if (h > 0) {
+        return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+      }
+      return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    function ctdGetColorPhase(remaining, total) {
+      if (remaining <= 0) return 'flash';
+      var pct = remaining / total;
+      if (pct > 0.25) return 'green';
+      if (pct > 0.10) return 'amber';
+      return 'red';
+    }
+
+    function ctdUpdateDisplay() {
+      var el = document.getElementById('ctdTimeText');
+      if (el) el.textContent = ctdFormatTime(ctdRemainingMs);
+      // Mini pill
+      var miniTime = document.getElementById('ctdMiniTime');
+      if (miniTime) miniTime.textContent = ctdFormatTime(ctdRemainingMs);
+      var miniLabel = document.getElementById('ctdMiniLabel');
+      if (miniLabel) miniLabel.textContent = ctdLabel || '';
+      // Projector bar
+      if (ctdTotalMs > 0) {
+        var barFill = document.getElementById('ctdProjectorBarFill');
+        if (barFill) {
+          var pct = ((ctdTotalMs - ctdRemainingMs) / ctdTotalMs) * 100;
+          barFill.style.width = Math.min(100, pct) + '%';
+        }
+      }
+    }
+
+    function ctdUpdateProgressRing() {
+      var fg = document.getElementById('ctdRingFg');
+      if (!fg || ctdTotalMs <= 0) return;
+      var radius = 54;
+      var circumference = 2 * Math.PI * radius;
+      var pct = ctdRemainingMs / ctdTotalMs;
+      fg.setAttribute('stroke-dashoffset', String(circumference * (1 - pct)));
+    }
+
+    function ctdUpdateColorPhase() {
+      var body = document.getElementById('ctdTimerBody');
+      if (!body) return;
+      var phase = ctdGetColorPhase(ctdRemainingMs, ctdTotalMs);
+      body.className = 'ctd-body ctd-phase-' + phase;
+      // Mini dot
+      var dot = document.getElementById('ctdMiniDot');
+      if (dot) dot.className = 'ctd-mini-dot ' + phase;
+      // Projector bar fill color
+      var barFill = document.getElementById('ctdProjectorBarFill');
+      if (barFill) {
+        var colors = { green: '#10b981', amber: '#f59e0b', red: '#ef4444', flash: '#ef4444' };
+        barFill.style.background = colors[phase] || '#10b981';
+      }
+    }
+
+    // ================================================
+    // LIFECYCLE
+    // ================================================
+
+    function ctdOpenTimer() {
+      ctdTimerOpen = true;
+      ctdInitAudioContext();
+      ctdLoadCustomPresets();
+      var overlay = document.getElementById('ctdOverlay');
+      if (overlay) overlay.classList.add('active');
+      // Show mode buttons if timer is running
+      ctdUpdateModeButtons();
+      ctdRenderContent();
+      // Attempt to recover session from backend on first open when idle
+      if (ctdTimerState === 'idle') {
+        ctdRecoverSession();
+      }
+      // One-time preset migration from localStorage to backend
+      if (!ctdPresetsMigrated) {
+        ctdMigratePresets();
+      }
+    }
+
+    function ctdCloseTimer() {
+      if (ctdTickTimer) { clearInterval(ctdTickTimer); ctdTickTimer = null; }
+      ctdTimerOpen = false;
+      var overlay = document.getElementById('ctdOverlay');
+      if (overlay) {
+        overlay.classList.remove('active');
+        overlay.classList.remove('ctd-projector');
+      }
+      var pill = document.getElementById('ctdMiniPill');
+      if (pill) pill.classList.remove('active');
+      ctdDisplayMode = 'overlay';
+    }
+
+    function ctdUpdateModeButtons() {
+      var projBtn = document.getElementById('ctdProjectorBtn');
+      var miniBtn = document.getElementById('ctdMiniBtn');
+      var show = ctdTimerState === 'running' || ctdTimerState === 'paused';
+      if (projBtn) projBtn.style.display = show ? '' : 'none';
+      if (miniBtn) miniBtn.style.display = show ? '' : 'none';
+    }
+
+    // ================================================
+    // RENDERING — MASTER DISPATCHER
+    // ================================================
+
+    function ctdRenderContent() {
+      var body = document.getElementById('ctdTimerBody');
+      if (!body) return;
+
+      ctdUpdateModeButtons();
+
+      if (ctdTimerState === 'idle') {
+        ctdRenderPresetView(body);
+      } else if (ctdTimerState === 'running' || ctdTimerState === 'paused') {
+        ctdRenderRunningView(body);
+      } else if (ctdTimerState === 'finished') {
+        ctdRenderFinishedView(body);
+      }
+    }
+
+    // ================================================
+    // PRESET VIEW (idle state)
+    // ================================================
+
+    function ctdRenderPresetView(container) {
+      var html = '';
+
+      // Default presets
+      html += '<div class="ctd-preset-grid">';
+      for (var i = 0; i < CTD_DEFAULT_PRESETS.length; i++) {
+        var p = CTD_DEFAULT_PRESETS[i];
+        html += '<button class="ctd-preset-btn" onclick="ctdSelectPreset(' + p.ms + ')">';
+        html += '<span class="ctd-preset-time">' + p.label + '</span>';
+        html += '</button>';
+      }
+      html += '</div>';
+
+      // Custom presets
+      if (ctdCustomPresets && ctdCustomPresets.length > 0) {
+        html += '<div class="ctd-custom-presets">';
+        html += '<div class="ctd-custom-section-title">My Presets</div>';
+        html += '<div class="ctd-custom-preset-grid">';
+        for (var c = 0; c < ctdCustomPresets.length; c++) {
+          var cp = ctdCustomPresets[c];
+          html += '<button class="ctd-custom-preset" onclick="ctdSelectPreset(' + cp.ms + ')">';
+          html += '<span class="ctd-custom-preset-label">' + escapeHtml(cp.label) + '</span>';
+          html += '<span class="ctd-custom-preset-del" role="button" tabindex="0" onclick="event.stopPropagation();ctdDeleteCustomPreset(' + c + ')" onkeydown="if(event.key===\'Enter\'){event.stopPropagation();ctdDeleteCustomPreset(' + c + ')}" title="Remove" aria-label="Remove preset">&times;</span>';
+          html += '</button>';
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // Timer label input
+      html += '<div class="ctd-label-section">';
+      html += '<div class="ctd-custom-section-title">Timer Label (optional)</div>';
+      html += '<input type="text" class="ctd-label-input" id="ctdLabelInput" maxlength="50" placeholder="e.g. Silent Reading, Group Work..." value="' + escapeHtml(ctdLabel) + '">';
+      html += '</div>';
+
+      // Custom time input
+      html += '<div class="ctd-custom-section">';
+      html += '<div class="ctd-custom-section-title">Custom Time</div>';
+      html += '<div class="ctd-custom-input-row">';
+      html += '<input type="number" class="ctd-custom-input" id="ctdCustomMin" min="0" max="' + CTD_MAX_MINUTES + '" value="0" placeholder="0">';
+      html += '<span class="ctd-custom-input-label">min</span>';
+      html += '<input type="number" class="ctd-custom-input" id="ctdCustomSec" min="0" max="59" value="0" placeholder="0">';
+      html += '<span class="ctd-custom-input-label">sec</span>';
+      html += '</div>';
+      html += '<button class="ctd-start-btn" onclick="ctdStartCustom()">Start</button>';
+      html += '</div>';
+
+      // Station rotation setup
+      html += '<div class="ctd-station-section">';
+      html += '<div class="ctd-station-toggle">';
+      html += '<input type="checkbox" id="ctdStationCheck" ' + (ctdStationMode ? 'checked' : '') + ' onchange="ctdToggleStationMode(this.checked)">';
+      html += '<label for="ctdStationCheck">Station Rotation Mode</label>';
+      html += '</div>';
+      if (ctdStationMode) {
+        html += '<div class="ctd-station-config">';
+        html += '<label>Stations:</label>';
+        html += '<select id="ctdStationCountSel" onchange="ctdStationCount=parseInt(this.value)">';
+        for (var sc = 2; sc <= 10; sc++) {
+          html += '<option value="' + sc + '"' + (ctdStationCount === sc ? ' selected' : '') + '>' + sc + '</option>';
+        }
+        html += '</select>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Pomodoro mode setup (mutually exclusive with station rotation)
+      html += '<div class="ctd-pomodoro-section">';
+      html += '<div class="ctd-station-toggle">';
+      html += '<input type="checkbox" id="ctdPomodoroCheck" ' + (ctdPomodoroMode ? 'checked' : '') + ' onchange="ctdTogglePomodoroMode(this.checked)">';
+      html += '<label for="ctdPomodoroCheck">Pomodoro Mode</label>';
+      html += '</div>';
+      if (ctdPomodoroMode) {
+        var cfg = ctdPomodoroConfig || CTD_POMODORO_DEFAULTS;
+        html += '<div class="ctd-pomodoro-config">';
+        html += '<div class="ctd-pomodoro-row"><label>Work:</label><input type="number" id="ctdPomWorkMin" min="1" max="60" value="' + Math.round(cfg.workMs / 60000) + '"> min</div>';
+        html += '<div class="ctd-pomodoro-row"><label>Break:</label><input type="number" id="ctdPomBreakMin" min="1" max="30" value="' + Math.round(cfg.breakMs / 60000) + '"> min</div>';
+        html += '<div class="ctd-pomodoro-row"><label>Long break:</label><input type="number" id="ctdPomLongMin" min="5" max="60" value="' + Math.round(cfg.longBreakMs / 60000) + '"> min</div>';
+        html += '<div class="ctd-pomodoro-row"><label>Cycles:</label><select id="ctdPomCycles">';
+        for (var pc = 2; pc <= 8; pc++) {
+          html += '<option value="' + pc + '"' + (cfg.cycles === pc ? ' selected' : '') + '>' + pc + '</option>';
+        }
+        html += '</select></div>';
+        html += '</div>';
+        html += '<button class="ctd-start-btn" onclick="ctdStartPomodoro()">Start Pomodoro</button>';
+      }
+      html += '</div>';
+
+      // Countdown messages config
+      html += '<div class="ctd-messages-section">';
+      html += '<div class="ctd-custom-section-title">Countdown Messages</div>';
+      var msgs = ctdMessages || CTD_DEFAULT_MESSAGES;
+      for (var mi = 0; mi < msgs.length; mi++) {
+        html += '<div class="ctd-message-row">';
+        html += '<span class="ctd-message-pct">' + msgs[mi].pct + '%</span>';
+        html += '<input type="text" class="ctd-message-input" maxlength="60" value="' + escapeHtml(msgs[mi].text) + '" data-msg-index="' + mi + '" onchange="ctdUpdateMessage(' + mi + ', this.value)">';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      container.className = 'ctd-body';
+      container.innerHTML = html;
+    }
+
+    // ================================================
+    // RUNNING VIEW
+    // ================================================
+
+    function ctdRenderRunningView(container) {
+      var phase = ctdGetColorPhase(ctdRemainingMs, ctdTotalMs);
+      var radius = 54;
+      var circumference = 2 * Math.PI * radius;
+      var pct = ctdTotalMs > 0 ? (ctdRemainingMs / ctdTotalMs) : 0;
+
+      var html = '';
+
+      // Timer label
+      if (ctdLabel) {
+        html += '<div class="ctd-timer-label">' + escapeHtml(ctdLabel) + '</div>';
+      }
+
+      // Station badge
+      if (ctdStationMode) {
+        html += '<div class="ctd-station-badge">Station ' + ctdCurrentStation + ' of ' + ctdStationCount + '</div>';
+      }
+
+      // Pomodoro badge
+      if (ctdPomodoroMode && ctdPomodoroConfig) {
+        var phaseLabel = ctdPomodoroPhase === 'work' ? 'Work' : (ctdPomodoroPhase === 'longBreak' ? 'Long Break' : 'Break');
+        var badgeClass = ctdPomodoroPhase === 'work' ? 'ctd-pom-work-badge' : 'ctd-pom-break-badge';
+        html += '<div class="' + badgeClass + '">' + phaseLabel + ' ' + ctdPomodoroCycle + ' of ' + ctdPomodoroConfig.cycles + '</div>';
+      }
+
+      // SVG progress ring + time
+      html += '<div class="ctd-timer-display">';
+      html += '<svg class="ctd-progress-ring" width="140" height="140" viewBox="0 0 120 120">';
+      html += '<circle class="ctd-progress-ring-bg" cx="60" cy="60" r="' + radius + '"></circle>';
+      html += '<circle class="ctd-progress-ring-fg" id="ctdRingFg" cx="60" cy="60" r="' + radius + '" stroke-dasharray="' + circumference + '" stroke-dashoffset="' + (circumference * (1 - pct)) + '"></circle>';
+      html += '</svg>';
+      html += '<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);">';
+      html += '<div class="ctd-time-text" id="ctdTimeText">' + ctdFormatTime(ctdRemainingMs) + '</div>';
+      html += '</div>';
+      html += '</div>';
+
+      // Controls
+      html += '<div class="ctd-controls">';
+      if (ctdTimerState === 'running') {
+        html += '<button class="ctd-ctrl-btn primary" onclick="ctdPause()">⏸ Pause</button>';
+      } else {
+        html += '<button class="ctd-ctrl-btn primary" onclick="ctdResume()">▶ Resume</button>';
+      }
+      html += '<button class="ctd-ctrl-btn secondary" onclick="ctdReset()">↺ Reset</button>';
+      html += '</div>';
+
+      // Save as preset
+      if (ctdTimerState === 'paused') {
+        html += '<button class="ctd-save-preset-btn" onclick="ctdSaveCustomPreset()">⭐ Save as preset</button>';
+      }
+
+      // Projector bar (hidden unless projector mode via CSS)
+      html += '<div class="ctd-projector-bar"><div class="ctd-projector-bar-fill" id="ctdProjectorBarFill" style="width:' + ((ctdTotalMs > 0 ? ((ctdTotalMs - ctdRemainingMs) / ctdTotalMs) * 100 : 0)) + '%;background:' + ({green:'#10b981',amber:'#f59e0b',red:'#ef4444',flash:'#ef4444'}[phase] || '#10b981') + ';"></div></div>';
+
+      container.className = 'ctd-body ctd-phase-' + phase;
+      container.innerHTML = html;
+    }
+
+    // ================================================
+    // FINISHED VIEW
+    // ================================================
+
+    function ctdRenderFinishedView(container) {
+      var html = '';
+
+      // Timer label in finished view
+      if (ctdLabel) {
+        html += '<div class="ctd-timer-label">' + escapeHtml(ctdLabel) + '</div>';
+      }
+
+      if (ctdPomodoroMode && ctdPomodoroConfig) {
+        // Pomodoro transition
+        var phaseLabel = ctdPomodoroPhase === 'work' ? 'Work' : (ctdPomodoroPhase === 'longBreak' ? 'Long Break' : 'Break');
+        if (ctdPomodoroPhase === 'work' && ctdPomodoroCycle >= ctdPomodoroConfig.cycles && ctdPomodoroPhase !== 'longBreak') {
+          // Last work phase done — heading to long break
+          html += '<div class="ctd-finished-icon">🔄</div>';
+          html += '<div class="ctd-station-transition">Starting long break...</div>';
+          html += '<div class="ctd-finished-sub">Great focus session!</div>';
+        } else if (ctdPomodoroPhase === 'longBreak') {
+          // Long break done — all complete
+          html += '<div class="ctd-finished-icon">🎉</div>';
+          html += '<div class="ctd-finished-text">Pomodoro Complete!</div>';
+          html += '<div class="ctd-finished-sub">' + ctdPomodoroConfig.cycles + ' cycles finished</div>';
+        } else {
+          html += '<div class="ctd-finished-icon">🔄</div>';
+          html += '<div class="ctd-station-transition">Next: ' + (ctdPomodoroPhase === 'work' ? 'Break' : 'Work ' + (ctdPomodoroCycle + 1)) + '...</div>';
+          html += '<div class="ctd-finished-sub">Starts automatically</div>';
+        }
+      } else if (ctdStationMode && ctdCurrentStation < ctdStationCount) {
+        // Station transition
+        html += '<div class="ctd-finished-icon">🔄</div>';
+        html += '<div class="ctd-station-transition">Moving to Station ' + (ctdCurrentStation + 1) + '...</div>';
+        html += '<div class="ctd-finished-sub">Next station starts automatically</div>';
+      } else if (ctdStationMode && ctdCurrentStation >= ctdStationCount) {
+        html += '<div class="ctd-finished-icon">🎉</div>';
+        html += '<div class="ctd-finished-text">Rotation Complete!</div>';
+        html += '<div class="ctd-finished-sub">All ' + ctdStationCount + ' stations finished</div>';
+      } else {
+        html += '<div class="ctd-finished-icon">⏰</div>';
+        html += '<div class="ctd-finished-text">Time\'s Up!</div>';
+        html += '<div class="ctd-finished-sub">' + ctdFormatTime(ctdTotalMs) + ' completed</div>';
+      }
+
+      html += '<div class="ctd-controls">';
+      html += '<button class="ctd-ctrl-btn primary" onclick="ctdReset()">↺ New Timer</button>';
+      html += '</div>';
+
+      container.className = 'ctd-body ctd-phase-flash';
+      container.innerHTML = html;
+    }
+
+    // ================================================
+    // PRESET SELECTION & CUSTOM START
+    // ================================================
+
+    function ctdReadLabelInput() {
+      var labelEl = document.getElementById('ctdLabelInput');
+      ctdLabel = labelEl ? labelEl.value.substring(0, 50).trim() : '';
+      // Read custom messages from inputs
+      var msgs = ctdMessages || null;
+      var msgInputs = document.querySelectorAll('.ctd-message-input');
+      if (msgInputs && msgInputs.length > 0) {
+        var defaults = CTD_DEFAULT_MESSAGES;
+        var custom = [];
+        for (var mi = 0; mi < msgInputs.length && mi < defaults.length; mi++) {
+          var text = msgInputs[mi].value.substring(0, 60).trim();
+          custom.push({ pct: defaults[mi].pct, text: text || defaults[mi].text });
+        }
+        ctdMessages = custom;
+      }
+    }
+
+    function ctdSelectPreset(ms) {
+      ctdReadLabelInput();
+      ctdTotalMs = ms;
+      ctdRemainingMs = ms;
+      ctdStart();
+    }
+
+    function ctdStartCustom() {
+      ctdReadLabelInput();
+      var minEl = document.getElementById('ctdCustomMin');
+      var secEl = document.getElementById('ctdCustomSec');
+      if (!minEl || !secEl) return;
+      var mins = parseInt(minEl.value, 10) || 0;
+      var secs = parseInt(secEl.value, 10) || 0;
+      if (mins < 0) mins = 0;
+      if (secs < 0) secs = 0;
+      if (mins > CTD_MAX_MINUTES) mins = CTD_MAX_MINUTES;
+      if (secs > 59) secs = 59;
+      var totalMs = (mins * 60 + secs) * 1000;
+      if (totalMs <= 0) return;
+      ctdTotalMs = totalMs;
+      ctdRemainingMs = totalMs;
+      ctdStart();
+    }
+
+    // ================================================
+    // STATION ROTATION
+    // ================================================
+
+    function ctdToggleStationMode(checked) {
+      ctdStationMode = checked;
+      ctdCurrentStation = 1;
+      if (checked) {
+        ctdPomodoroMode = false;
+        ctdPomodoroConfig = null;
+      }
+      ctdRenderContent();
+    }
+
+    function ctdAdvanceStation() {
+      ctdCurrentStation++;
+      ctdRemainingMs = ctdStationDuration || ctdTotalMs;
+      ctdTotalMs = ctdRemainingMs;
+      ctdStart();
+    }
+
+    function ctdStartStationRotation(ms) {
+      ctdStationMode = true;
+      ctdStationDuration = ms;
+      ctdCurrentStation = 1;
+      // Read station count from dropdown if on preset view
+      var selEl = document.getElementById('ctdStationCountSel');
+      if (selEl) ctdStationCount = parseInt(selEl.value, 10) || ctdStationCount;
+      ctdTotalMs = ms;
+      ctdRemainingMs = ms;
+      ctdStart();
+    }
+
+    // ================================================
+    // DISPLAY MODES
+    // ================================================
+
+    function ctdSetDisplayMode(mode) {
+      ctdDisplayMode = mode;
+      var overlay = document.getElementById('ctdOverlay');
+      var pill = document.getElementById('ctdMiniPill');
+
+      if (mode === 'projector') {
+        if (overlay) { overlay.classList.add('active'); overlay.classList.add('ctd-projector'); }
+        if (pill) pill.classList.remove('active');
+        ctdRenderContent();
+      } else if (mode === 'mini') {
+        if (overlay) { overlay.classList.remove('active'); overlay.classList.remove('ctd-projector'); }
+        if (pill) pill.classList.add('active');
+        // Start mini updates
+        ctdUpdateDisplay();
+        ctdUpdateColorPhase();
+      } else {
+        // overlay
+        if (overlay) { overlay.classList.add('active'); overlay.classList.remove('ctd-projector'); }
+        if (pill) pill.classList.remove('active');
+        ctdRenderContent();
+      }
+    }
+
+    // ================================================
+    // CUSTOM PRESETS (localStorage)
+    // ================================================
+
+    function ctdLoadCustomPresets() {
+      // Backend-first with localStorage fallback
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(presets) {
+            ctdCustomPresets = presets || [];
+            if (ctdTimerState === 'idle' && ctdTimerOpen) ctdRenderContent();
+          })
+          .withFailureHandler(function() {
+            // Fallback to localStorage
+            try {
+              var raw = localStorage.getItem(CTD_LOCALSTORAGE_KEY);
+              ctdCustomPresets = raw ? JSON.parse(raw) : [];
+              if (!Array.isArray(ctdCustomPresets)) ctdCustomPresets = [];
+            } catch (e) {
+              ctdCustomPresets = [];
+            }
+          })
+          .getTeacherTimerPresets();
+      } else {
+        try {
+          var raw = localStorage.getItem(CTD_LOCALSTORAGE_KEY);
+          ctdCustomPresets = raw ? JSON.parse(raw) : [];
+          if (!Array.isArray(ctdCustomPresets)) ctdCustomPresets = [];
+        } catch (e) {
+          ctdCustomPresets = [];
+        }
+      }
+    }
+
+    function ctdSaveCustomPreset() {
+      if (!ctdTotalMs || ctdTotalMs <= 0) return;
+      if (document.getElementById('ctdInlinePresetRow')) return;
+      if (!ctdCustomPresets) ctdCustomPresets = [];
+      if (ctdCustomPresets.length >= CTD_MAX_CUSTOM_PRESETS) {
+        showToast('Maximum ' + CTD_MAX_CUSTOM_PRESETS + ' custom presets', 'error');
+        return;
+      }
+      var container = document.getElementById('ctdPresetList') || document.querySelector('.ctd-presets');
+      if (!container) return;
+      var defaultLabel = ctdFormatTime(ctdTotalMs);
+      var row = document.createElement('div');
+      row.id = 'ctdInlinePresetRow';
+      row.style.cssText = 'display:flex;gap:6px;margin-top:8px;align-items:center;';
+      row.innerHTML = '<input id="ctdPresetNameInput" type="text" value="' + escapeHtml(defaultLabel) + '" '
+        + 'maxlength="20" placeholder="Preset name..." '
+        + 'style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+        + 'onkeydown="if(event.key===\'Enter\'){ctdConfirmSavePreset();}if(event.key===\'Escape\'){ctdCancelSavePreset();}">'
+        + '<button onclick="ctdConfirmSavePreset()" style="padding:6px 12px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Save</button>'
+        + '<button onclick="ctdCancelSavePreset()" style="padding:6px 12px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+      container.appendChild(row);
+      var input = document.getElementById('ctdPresetNameInput');
+      if (input) { input.focus(); input.select(); }
+    }
+
+    function ctdConfirmSavePreset() {
+      var input = document.getElementById('ctdPresetNameInput');
+      var label = (input ? input.value : '').substring(0, 20).trim();
+      if (!label) { showToast('Preset name cannot be empty', 'error'); return; }
+      var row = document.getElementById('ctdInlinePresetRow');
+      if (row) row.parentNode.removeChild(row);
+      ctdCustomPresets.push({ ms: ctdTotalMs, label: label });
+      ctdPersistCustomPresets();
+      showToast('Preset saved: ' + label, 'success');
+    }
+
+    function ctdCancelSavePreset() {
+      var row = document.getElementById('ctdInlinePresetRow');
+      if (row) row.parentNode.removeChild(row);
+    }
+
+    function ctdDeleteCustomPreset(index) {
+      if (!ctdCustomPresets || index < 0 || index >= ctdCustomPresets.length) return;
+      ctdCustomPresets.splice(index, 1);
+      ctdPersistCustomPresets();
+      ctdRenderContent();
+    }
+
+    function ctdPersistCustomPresets() {
+      // Save to backend (fire-and-forget)
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function() {})
+          .withFailureHandler(function(err) { console.warn('Preset save error:', err); })
+          .saveTeacherTimerPresets(ctdCustomPresets);
+      }
+      // Also keep localStorage as backup
+      try {
+        localStorage.setItem(CTD_LOCALSTORAGE_KEY, JSON.stringify(ctdCustomPresets));
+      } catch (e) { /* ignore */ }
+    }
+
+    // ================================================
+    // KEYBOARD SHORTCUTS
+    // ================================================
+
+    function ctdHandleKeydown(e) {
+      if (!ctdTimerOpen) return false;
+
+      var key = e.key || e.keyCode;
+      // Space: pause/resume
+      if (key === ' ' || key === 32) {
+        e.preventDefault();
+        if (ctdTimerState === 'running') ctdPause();
+        else if (ctdTimerState === 'paused') ctdResume();
+        return true;
+      }
+      // R: reset
+      if ((key === 'r' || key === 'R' || key === 82) && !e.ctrlKey && !e.metaKey) {
+        if (ctdTimerState === 'running' || ctdTimerState === 'paused' || ctdTimerState === 'finished') {
+          ctdReset();
+          return true;
+        }
+      }
+      // F: toggle projector
+      if ((key === 'f' || key === 'F' || key === 70) && !e.ctrlKey && !e.metaKey) {
+        if (ctdTimerState === 'running' || ctdTimerState === 'paused') {
+          ctdSetDisplayMode(ctdDisplayMode === 'projector' ? 'overlay' : 'projector');
+          return true;
+        }
+      }
+      // M: toggle mini
+      if ((key === 'm' || key === 'M' || key === 77) && !e.ctrlKey && !e.metaKey) {
+        if (ctdTimerState === 'running' || ctdTimerState === 'paused') {
+          ctdSetDisplayMode(ctdDisplayMode === 'mini' ? 'overlay' : 'mini');
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // ================================================
+    // BACKEND SYNC (Phase 2 — Story 1)
+    // ================================================
+
+    function ctdSyncToBackend() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      var classId = '';
+      if (typeof progressSelectedClassId !== 'undefined' && progressSelectedClassId) {
+        classId = progressSelectedClassId;
+      } else if (typeof classesData !== 'undefined' && classesData && classesData.length > 0) {
+        classId = String(classesData[0].classId || '');
+      }
+      var mapId = (typeof currentMap !== 'undefined' && currentMap && currentMap.mapId) ? currentMap.mapId : '';
+
+      var stationCfg = JSON.stringify({ enabled: ctdStationMode, count: ctdStationCount, current: ctdCurrentStation, duration: ctdStationDuration });
+      var msgs = ctdMessages || CTD_DEFAULT_MESSAGES;
+      var pomCfg = '';
+      if (ctdPomodoroMode && ctdPomodoroConfig) {
+        pomCfg = JSON.stringify({ workMs: ctdPomodoroConfig.workMs, breakMs: ctdPomodoroConfig.breakMs, longBreakMs: ctdPomodoroConfig.longBreakMs, cycles: ctdPomodoroConfig.cycles, cycle: ctdPomodoroCycle, phase: ctdPomodoroPhase });
+      }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result && result.sessionId) ctdSessionId = result.sessionId;
+        })
+        .withFailureHandler(function(err) {
+          console.warn('Timer sync error:', err && err.message ? err.message : err);
+        })
+        .saveTimerSession({
+          classId: classId,
+          mapId: mapId,
+          totalMs: ctdTotalMs,
+          remainingMs: ctdRemainingMs,
+          state: ctdTimerState,
+          stationConfigJson: stationCfg,
+          label: ctdLabel,
+          messagesJson: JSON.stringify(msgs),
+          pomodoroConfigJson: pomCfg
+        });
+    }
+
+    function ctdRecoverSession() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(function(session) {
+          if (!session || !session.state || session.state === 'idle') return;
+          if (ctdTimerState !== 'idle') return; // user already started a timer
+          // Restore state
+          ctdTotalMs = session.totalMs || 0;
+          ctdRemainingMs = session.remainingMs || 0;
+          ctdLabel = session.label || '';
+          ctdSessionId = session.sessionId || null;
+
+          // Parse station config
+          try {
+            var sc = JSON.parse(session.stationConfigJson || '{}');
+            ctdStationMode = !!sc.enabled;
+            ctdStationCount = sc.count || 4;
+            ctdCurrentStation = sc.current || 1;
+            ctdStationDuration = sc.duration || 0;
+          } catch (e) { /* ignore */ }
+
+          // Parse messages
+          try {
+            var m = JSON.parse(session.messagesJson || '');
+            if (Array.isArray(m)) ctdMessages = m;
+          } catch (e) { /* ignore */ }
+
+          // Parse pomodoro config
+          try {
+            var pc = JSON.parse(session.pomodoroConfigJson || '');
+            if (pc && pc.workMs) {
+              ctdPomodoroMode = true;
+              ctdPomodoroConfig = { workMs: pc.workMs, breakMs: pc.breakMs, longBreakMs: pc.longBreakMs, cycles: pc.cycles };
+              ctdPomodoroCycle = pc.cycle || 1;
+              ctdPomodoroPhase = pc.phase || 'work';
+            }
+          } catch (e) { /* ignore */ }
+
+          // Account for elapsed time since last update
+          if (session.state === 'running' && session.updatedAt) {
+            var elapsed = Date.now() - new Date(session.updatedAt).getTime();
+            ctdRemainingMs = Math.max(0, ctdRemainingMs - elapsed);
+          }
+
+          if (session.state === 'running' && ctdRemainingMs > 0) {
+            ctdTimerState = 'running';
+            ctdEndTime = Date.now() + ctdRemainingMs;
+            if (ctdTickTimer) clearInterval(ctdTickTimer);
+            ctdTickTimer = setInterval(ctdTick, 100);
+          } else if (session.state === 'paused') {
+            ctdTimerState = 'paused';
+          } else if (session.state === 'finished' || ctdRemainingMs <= 0) {
+            ctdTimerState = 'finished';
+            ctdRemainingMs = 0;
+          }
+          ctdRenderContent();
+          ctdUpdateModeButtons();
+          showToast('Timer recovered', 'info');
+        })
+        .withFailureHandler(function() { /* ignore — start fresh */ })
+        .getActiveTimerSession();
+    }
+
+    function ctdMigratePresets() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      try {
+        var migrated = localStorage.getItem('ctdPresetsMigrated');
+        if (migrated) { ctdPresetsMigrated = true; return; }
+        var raw = localStorage.getItem(CTD_LOCALSTORAGE_KEY);
+        if (!raw) { ctdPresetsMigrated = true; return; }
+        var presets = JSON.parse(raw);
+        if (!Array.isArray(presets) || presets.length === 0) { ctdPresetsMigrated = true; return; }
+        google.script.run
+          .withSuccessHandler(function() {
+            localStorage.setItem('ctdPresetsMigrated', 'true');
+            localStorage.removeItem(CTD_LOCALSTORAGE_KEY);
+            ctdPresetsMigrated = true;
+          })
+          .withFailureHandler(function() { /* will retry next open */ })
+          .saveTeacherTimerPresets(presets);
+      } catch (e) { /* ignore */ }
+    }
+
+    // ================================================
+    // POMODORO MODE (Phase 2 — Story 3)
+    // ================================================
+
+    function ctdTogglePomodoroMode(checked) {
+      ctdPomodoroMode = checked;
+      if (checked) {
+        ctdStationMode = false;
+        ctdPomodoroConfig = ctdPomodoroConfig || JSON.parse(JSON.stringify(CTD_POMODORO_DEFAULTS));
+      }
+      ctdPomodoroCycle = 1;
+      ctdPomodoroPhase = 'work';
+      ctdRenderContent();
+    }
+
+    function ctdStartPomodoro() {
+      ctdReadLabelInput();
+      var workMin = parseInt((document.getElementById('ctdPomWorkMin') || {}).value, 10) || 25;
+      var breakMin = parseInt((document.getElementById('ctdPomBreakMin') || {}).value, 10) || 5;
+      var longMin = parseInt((document.getElementById('ctdPomLongMin') || {}).value, 10) || 15;
+      var cycles = parseInt((document.getElementById('ctdPomCycles') || {}).value, 10) || 4;
+      ctdPomodoroConfig = {
+        workMs: Math.min(workMin, 60) * 60000,
+        breakMs: Math.min(breakMin, 30) * 60000,
+        longBreakMs: Math.min(longMin, 60) * 60000,
+        cycles: Math.min(cycles, 8)
+      };
+      ctdPomodoroCycle = 1;
+      ctdPomodoroPhase = 'work';
+      ctdTotalMs = ctdPomodoroConfig.workMs;
+      ctdRemainingMs = ctdTotalMs;
+      ctdStart();
+    }
+
+    function ctdAdvancePomodoro() {
+      var cfg = ctdPomodoroConfig;
+      if (!cfg) return;
+      if (ctdPomodoroPhase === 'work') {
+        // Work just finished — start break
+        if (ctdPomodoroCycle >= cfg.cycles) {
+          // Last cycle — long break
+          ctdPomodoroPhase = 'longBreak';
+          ctdTotalMs = cfg.longBreakMs;
+        } else {
+          ctdPomodoroPhase = 'break';
+          ctdTotalMs = cfg.breakMs;
+        }
+      } else {
+        // Break just finished
+        if (ctdPomodoroPhase === 'longBreak') {
+          // All done
+          ctdPomodoroMode = false;
+          ctdPomodoroConfig = null;
+          ctdPomodoroCycle = 1;
+          ctdPomodoroPhase = 'work';
+          ctdReset();
+          showToast('Pomodoro complete! Great focus session.', 'success');
+          return;
+        }
+        ctdPomodoroCycle++;
+        ctdPomodoroPhase = 'work';
+        ctdTotalMs = cfg.workMs;
+      }
+      ctdRemainingMs = ctdTotalMs;
+      ctdStart();
+    }
+
+    // ================================================
+    // COUNTDOWN MESSAGES (Phase 2 — Story 3)
+    // ================================================
+
+    var ctdMessageToastTimer = null;
+
+    function ctdCheckMessages() {
+      if (ctdTotalMs <= 0) return;
+      var pctRemaining = (ctdRemainingMs / ctdTotalMs) * 100;
+      var msgs = ctdMessages || CTD_DEFAULT_MESSAGES;
+      for (var i = 0; i < msgs.length; i++) {
+        var threshold = msgs[i].pct;
+        if (!ctdMessagesFired[threshold] && pctRemaining <= threshold && pctRemaining > (threshold - 3)) {
+          ctdMessagesFired[threshold] = true;
+          ctdShowMessage(msgs[i].text);
+          break;
+        }
+      }
+    }
+
+    function ctdShowMessage(text) {
+      // Remove existing toast
+      ctdHideMessage();
+      var body = document.getElementById('ctdTimerBody');
+      if (!body) return;
+      var toast = document.createElement('div');
+      toast.className = 'ctd-message-toast';
+      toast.id = 'ctdMsgToast';
+      toast.textContent = text;
+      body.appendChild(toast);
+      ctdMessageToastTimer = setTimeout(ctdHideMessage, 3000);
+    }
+
+    function ctdHideMessage() {
+      if (ctdMessageToastTimer) { clearTimeout(ctdMessageToastTimer); ctdMessageToastTimer = null; }
+      var toast = document.getElementById('ctdMsgToast');
+      if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
+    }
+
+    function ctdUpdateMessage(index, text) {
+      if (!ctdMessages) {
+        ctdMessages = [];
+        for (var i = 0; i < CTD_DEFAULT_MESSAGES.length; i++) {
+          ctdMessages.push({ pct: CTD_DEFAULT_MESSAGES[i].pct, text: CTD_DEFAULT_MESSAGES[i].text });
+        }
+      }
+      if (index >= 0 && index < ctdMessages.length) {
+        ctdMessages[index].text = String(text).substring(0, 60);
+      }
+    }
+
+    // ================================================
+    // STUDENT TIMER DISPLAY (Phase 2 — Story 2)
+    // ================================================
+
+    function ctdStudentStartPolling() {
+      if (typeof currentViewMode === 'undefined' || currentViewMode !== 'student') return;
+      if (!classesData || classesData.length === 0) return;
+      ctdStudentPolling = true;
+      ctdStudentClassIndex = 0;
+      ctdStudentNoTimerSince = Date.now();
+      ctdInitAudioContext();
+      ctdStudentScheduleNext();
+    }
+
+    function ctdStudentStopPolling() {
+      ctdStudentPolling = false;
+      if (ctdStudentPollTimer) { clearTimeout(ctdStudentPollTimer); ctdStudentPollTimer = null; }
+      if (ctdStudentTickTimer) { clearInterval(ctdStudentTickTimer); ctdStudentTickTimer = null; }
+      ctdStudentHideBar();
+    }
+
+    function ctdStudentScheduleNext() {
+      if (!ctdStudentPolling) return;
+      if (ctdStudentPollTimer) clearTimeout(ctdStudentPollTimer);
+      var interval = CTD_STUDENT_POLL_INTERVAL;
+      if (ctdStudentNoTimerSince && (Date.now() - ctdStudentNoTimerSince) > CTD_STUDENT_SLOW_THRESHOLD) {
+        interval = CTD_STUDENT_POLL_SLOW;
+      }
+      ctdStudentPollTimer = setTimeout(function() {
+        ctdStudentPollTick();
+      }, interval);
+    }
+
+    function ctdStudentPollTick() {
+      if (!ctdStudentPolling || !classesData || classesData.length === 0) return;
+      var cls = classesData[ctdStudentClassIndex];
+      ctdStudentClassIndex = (ctdStudentClassIndex + 1) % classesData.length;
+      if (!cls || !cls.classId) { ctdStudentScheduleNext(); return; }
+
+      var expectedClassId = String(cls.classId);
+      google.script.run
+        .withSuccessHandler(function(session) {
+          if (!ctdStudentPolling) return;
+          if (session && (session.state === 'running' || session.state === 'paused')) {
+            ctdStudentNoTimerSince = null;
+            // Reset message flags when a new/different session is detected
+            if (!ctdStudentSessionData || ctdStudentSessionData.totalMs !== session.totalMs) {
+              ctdStudentMsgFired = {};
+            }
+            ctdStudentSessionData = session;
+            ctdStudentTotalMs = session.totalMs || 0;
+
+            if (session.state === 'running') {
+              // Compute client-side endTime accounting for network latency
+              var elapsed = 0;
+              if (session.updatedAt) {
+                elapsed = Math.max(0, Date.now() - new Date(session.updatedAt).getTime());
+              }
+              var remaining = Math.max(0, (session.remainingMs || 0) - elapsed);
+              ctdStudentEndTime = Date.now() + remaining;
+              // Start client-side tick if not already running
+              if (!ctdStudentTickTimer) {
+                ctdStudentTickTimer = setInterval(ctdStudentTick, 100);
+              }
+            } else {
+              // Paused — show static
+              ctdStudentEndTime = 0;
+              if (ctdStudentTickTimer) { clearInterval(ctdStudentTickTimer); ctdStudentTickTimer = null; }
+            }
+            ctdStudentShowBar(session);
+          } else {
+            // No active timer
+            if (ctdStudentNoTimerSince === null) ctdStudentNoTimerSince = Date.now();
+            ctdStudentSessionData = null;
+            if (ctdStudentTickTimer) { clearInterval(ctdStudentTickTimer); ctdStudentTickTimer = null; }
+            ctdStudentHideBar();
+          }
+          ctdStudentScheduleNext();
+        })
+        .withFailureHandler(function() {
+          ctdStudentScheduleNext();
+        })
+        .getActiveTimerSession(expectedClassId);
+    }
+
+    function ctdStudentTick() {
+      if (!ctdStudentSessionData || ctdStudentEndTime <= 0) return;
+      var remaining = Math.max(0, ctdStudentEndTime - Date.now());
+      var timeEl = document.getElementById('ctdStudentTime');
+      if (timeEl) timeEl.textContent = ctdFormatTime(remaining);
+
+      // Progress bar
+      if (ctdStudentTotalMs > 0) {
+        var progEl = document.getElementById('ctdStudentProgress');
+        if (progEl) {
+          var pct = ((ctdStudentTotalMs - remaining) / ctdStudentTotalMs) * 100;
+          progEl.style.width = Math.min(100, pct) + '%';
+        }
+      }
+
+      // Color phase
+      var phase = ctdGetColorPhase(remaining, ctdStudentTotalMs);
+      var bar = document.getElementById('ctdStudentBar');
+      if (bar) {
+        bar.className = 'ctd-student-bar ctd-student-phase-' + phase;
+      }
+
+      // Check messages for student
+      ctdStudentCheckMessages(remaining);
+
+      // Finish
+      if (remaining <= 0) {
+        if (ctdStudentTickTimer) { clearInterval(ctdStudentTickTimer); ctdStudentTickTimer = null; }
+        ctdStudentPlayBeep();
+        // Auto-hide after 5 seconds
+        setTimeout(function() {
+          if (!ctdStudentSessionData || ctdStudentEndTime <= 0) ctdStudentHideBar();
+        }, 5000);
+      }
+    }
+
+    function ctdStudentPlayBeep() {
+      if (!ctdAudioCtx) ctdInitAudioContext();
+      if (!ctdAudioCtx) return;
+      try {
+        var osc = ctdAudioCtx.createOscillator();
+        var gain = ctdAudioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(ctdAudioCtx.destination);
+        osc.frequency.value = 600;
+        gain.gain.value = 0.15;
+        osc.start(ctdAudioCtx.currentTime);
+        osc.stop(ctdAudioCtx.currentTime + 0.15);
+      } catch (e) { /* ignore */ }
+    }
+
+    function ctdStudentShowBar(session) {
+      var bar = document.getElementById('ctdStudentBar');
+      if (!bar) return;
+      bar.style.display = 'flex';
+
+      // Label
+      var labelEl = document.getElementById('ctdStudentLabel');
+      if (labelEl) labelEl.textContent = session.label || '';
+
+      // Station badge
+      var stationEl = document.getElementById('ctdStudentStation');
+      if (stationEl) {
+        var stationText = '';
+        try {
+          var sc = JSON.parse(session.stationConfigJson || '{}');
+          if (sc.enabled) stationText = 'Station ' + sc.current + ' of ' + sc.count;
+        } catch (e) { /* ignore */ }
+        // Pomodoro badge
+        try {
+          var pc = JSON.parse(session.pomodoroConfigJson || '');
+          if (pc && pc.workMs) {
+            var phaseLabel = pc.phase === 'work' ? 'Work' : (pc.phase === 'longBreak' ? 'Long Break' : 'Break');
+            stationText = phaseLabel + ' ' + pc.cycle + '/' + pc.cycles;
+          }
+        } catch (e) { /* ignore */ }
+        stationEl.textContent = stationText;
+      }
+
+      // Paused state
+      if (session.state === 'paused') {
+        bar.classList.add('paused');
+        var timeEl = document.getElementById('ctdStudentTime');
+        if (timeEl) timeEl.textContent = ctdFormatTime(session.remainingMs || 0);
+        var progEl = document.getElementById('ctdStudentProgress');
+        if (progEl && ctdStudentTotalMs > 0) {
+          var pct = ((ctdStudentTotalMs - (session.remainingMs || 0)) / ctdStudentTotalMs) * 100;
+          progEl.style.width = Math.min(100, pct) + '%';
+        }
+      } else {
+        bar.classList.remove('paused');
+      }
+    }
+
+    function ctdStudentHideBar() {
+      var bar = document.getElementById('ctdStudentBar');
+      if (bar) bar.style.display = 'none';
+      // Remove any student message
+      var msg = document.getElementById('ctdStudentMsg');
+      if (msg && msg.parentNode) msg.parentNode.removeChild(msg);
+    }
+
+    var ctdStudentMsgFired = {};
+    var ctdStudentMsgTimer = null;
+
+    function ctdStudentCheckMessages(remaining) {
+      if (!ctdStudentSessionData || ctdStudentTotalMs <= 0) return;
+      var pctRemaining = (remaining / ctdStudentTotalMs) * 100;
+      var msgs = CTD_DEFAULT_MESSAGES;
+      try {
+        var parsed = JSON.parse(ctdStudentSessionData.messagesJson || '');
+        if (Array.isArray(parsed)) msgs = parsed;
+      } catch (e) { /* use defaults */ }
+
+      for (var i = 0; i < msgs.length; i++) {
+        var threshold = msgs[i].pct;
+        if (!ctdStudentMsgFired[threshold] && pctRemaining <= threshold && pctRemaining > (threshold - 3)) {
+          ctdStudentMsgFired[threshold] = true;
+          ctdStudentShowMessage(msgs[i].text);
+          break;
+        }
+      }
+    }
+
+    function ctdStudentShowMessage(text) {
+      var bar = document.getElementById('ctdStudentBar');
+      if (!bar) return;
+      // Remove existing
+      var old = document.getElementById('ctdStudentMsg');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      if (ctdStudentMsgTimer) clearTimeout(ctdStudentMsgTimer);
+
+      var msg = document.createElement('div');
+      msg.className = 'ctd-student-message';
+      msg.id = 'ctdStudentMsg';
+      msg.textContent = text;
+      bar.appendChild(msg);
+
+      ctdStudentMsgTimer = setTimeout(function() {
+        var el = document.getElementById('ctdStudentMsg');
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      }, 3000);
+    }
+
+</script>

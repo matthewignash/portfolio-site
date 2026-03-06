@@ -1,0 +1,1013 @@
+<style>
+/* ================================================
+   RESPONSIVE STYLES (mob- prefix for new classes)
+   Must be loaded LAST for cascade priority.
+   Breakpoints: 1024px (tablet), 640px (phone)
+   ================================================ */
+
+/* ---- TABLET: max-width 1024px ---- */
+@media (max-width: 1024px) {
+
+  /* Header: tighter padding */
+  .header { padding: 12px 16px; }
+  .app-title { font-size: 18px; }
+
+  /* Tabs: horizontal scroll */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 16px;
+    scrollbar-width: none; /* Firefox */
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 10px 16px; white-space: nowrap; flex-shrink: 0; }
+
+  /* Courses layout: stack units panel below */
+  .courses-layout { flex-direction: column; }
+  .units-panel.active {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid #e2e8f0;
+    max-height: 50vh;
+  }
+
+  /* Builder layout: stack editor panel below */
+  .builder-main { flex-direction: column; }
+  .editor-panel.active {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid #e2e8f0;
+    max-height: 50vh;
+  }
+
+  /* Student analytics: 2-column grid */
+  .spa-overview-cards { grid-template-columns: repeat(2, 1fr); }
+
+  /* Self-assessment summary: 2-column grid */
+  .sa-summary-cards { grid-template-columns: repeat(2, 1fr); }
+
+  /* Notification panel: slightly narrower + shifted */
+  .ntf-panel { width: 320px; right: -40px; }
+
+  /* Student Planner: stack schedule below tasks */
+  .pln-layout { flex-direction: column; }
+  .pln-schedule-panel { width: 100%; border-left: none; border-top: 1px solid #e2e8f0; max-height: 50vh; }
+
+  /* Scroll container: reduce padding */
+  .scroll-container { padding: 24px 16px; }
+
+  /* Settings & integrations: fluid width */
+  .set-sections { max-width: 100%; }
+  .int-sections { max-width: 100%; }
+
+  /* Tour tooltip: narrower on tablet */
+  .tur-tooltip { max-width: 340px; width: 340px; }
+
+  /* Portfolio: 2-column stats, scrollable graph */
+  .pf-stats-cards { grid-template-columns: repeat(2, 1fr); }
+  .pf-graph-container { overflow-x: auto; }
+
+  /* Lab Insights: 3-column overview on tablet */
+  .lin-overview-cards { grid-template-columns: repeat(3, 1fr); }
+  .lin-criterion-row { grid-template-columns: 160px 1fr 50px 80px; }
+
+  /* Name Selector: tablet */
+  .nsg-groups-grid { grid-template-columns: repeat(2, 1fr); }
+  .nsg-group-config { flex-direction: column; align-items: flex-start; }
+
+  /* Countdown Timer: tablet */
+  .ctd-preset-grid { grid-template-columns: repeat(3, 1fr); }
+  .ctd-modal { max-width: 90vw; }
+
+  /* Projector Mode: tablet */
+  .pjm-stats-bar { gap: 8px; padding: 10px 16px; }
+  .pjm-stat-value { font-size: 28px; }
+  .pjm-stat-label { font-size: 12px; }
+  .pjm-focus-header { gap: 24px; }
+  .pjm-focus-title { font-size: 28px; }
+  .pjm-student-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .pjm-slides-toolbar { padding: 8px 12px; }
+  .pjm-slides-select { min-width: 160px; }
+  .pjm-sidebar.pjm-sidebar-open { width: 260px; }
+  .pjm-sidebar-tab { font-size: 12px; padding: 6px 0; }
+  .pjm-sidebar-li-number { width: 18px; height: 18px; font-size: 12px; }
+  .pjm-sidebar-li-item { gap: 6px; padding: 4px 2px; }
+}
+
+
+/* ---- PHONE: max-width 640px ---- */
+@media (max-width: 640px) {
+
+  /* Header: stack vertically */
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .app-title { font-size: 16px; margin-bottom: 0; }
+  .user-info { font-size: 12px; }
+
+  /* Student preview banner: wrap on phone */
+  .student-preview-banner .tpv-global-left { flex-wrap: wrap; gap: 6px; }
+  .student-preview-banner .tpv-global-select { max-width: 100%; }
+
+  /* Tabs: smaller touch targets */
+  .tab { padding: 8px 12px; font-size: 12px; }
+
+  /* View mode: compact */
+  .view-mode-label { display: none; }
+  .view-mode-btn { padding: 4px 8px; font-size: 12px; }
+  .view-mode-switcher { padding: 4px 8px; }
+
+  /* Student preview banner: compact */
+  .student-preview-banner { padding: 6px 12px; font-size: 12px; }
+  .tpv-global-select { max-width: 150px; }
+
+  /* Scroll container: tighter */
+  .scroll-container { padding: 16px 12px; }
+
+  /* Cards: compact */
+  .card { padding: 16px; }
+  .card h2 { font-size: 16px; }
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* Modals: full-screen */
+  .modal {
+    max-width: 100%;
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .modal-body { max-height: calc(100vh - 140px); }
+  .modal.modal-lg { max-width: 100%; }
+  .lsn-modal { max-width: 100%; }
+  .lsn-modal .modal-body { max-height: calc(100vh - 140px); }
+
+  /* Content modal: full-screen */
+  .content-modal {
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .content-modal.csb-sidebar-open { max-width: 100%; }
+  .csb-main { padding: 24px 16px; }
+  .content-modal-body { position: relative; }
+  .csb-sidebar {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 85%;
+    z-index: 5; background: white;
+    box-shadow: -4px 0 16px rgba(0,0,0,0.15);
+    transform: translateX(100%); transition: transform 0.25s ease;
+  }
+  .csb-sidebar.csb-hidden { transform: translateX(100%); display: flex; }
+  .csb-sidebar.csb-visible-mobile { transform: translateX(0); }
+
+  /* Grid columns: single column */
+  .spa-overview-cards { grid-template-columns: 1fr; }
+  .sa-summary-cards { grid-template-columns: 1fr; }
+
+  /* Progress overview cards: wrap smaller */
+  .pgd-overview-card { min-width: 80px; }
+  .pgd-selector-group select { width: 100%; }
+
+  /* Builder toolbar: stack */
+  .builder-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .toolbar-buttons { flex-wrap: wrap; }
+
+  /* Hex grid: scale down for mobile (0.8 for 44px+ tap targets) */
+  .grid-container {
+    transform: scale(0.8);
+    transform-origin: top left;
+    overflow: auto;
+    padding: 20px;
+  }
+  .hex-node { min-width: 44px; min-height: 44px; }
+  /* Counter-scale status indicators to meet 12px floor after 0.8 transform */
+  .hex-status-text { font-size: 15px; }
+  .hex-status-badge { width: 22px; height: 22px; font-size: 12px; }
+
+  /* Notification panel: near full-width */
+  .ntf-panel {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    top: auto;
+    width: auto;
+  }
+
+  /* Self-assessment rating bar: 2x2 grid */
+  .sa-rating-bar { flex-wrap: wrap; }
+  .sa-rating-item { flex: 0 0 calc(50% - 4px); }
+
+  /* Inline form widths: override inline styles */
+  #courseSearchInput { width: 100% !important; }
+  #courseStatusFilter { width: 100% !important; }
+
+  /* Data items: compact */
+  .data-item { padding: 12px; }
+  .data-item h3 { font-size: 14px; }
+
+  /* Class cards: compact */
+  .class-card { padding: 14px; }
+  .class-card-meta { font-size: 12px; gap: 8px; }
+
+  /* Buttons: compact */
+  .btn { padding: 8px 14px; font-size: 12px; }
+
+  /* Empty state: less padding */
+  .empty-state { padding: 30px 16px; }
+  .empty-state .empty-icon { font-size: 48px; }
+
+  /* Course analytics: already responsive via auto-fit */
+  /* UBD planner + Progress: already handled by 900px query */
+
+  /* Self-assessment evidence rows: stack */
+  .sa-evidence-row { flex-direction: column; }
+  .sa-evidence-row .sa-ev-label { width: 100%; min-width: 0; }
+  .sa-evidence-row .sa-ev-url { min-width: 0; }
+
+  /* Teacher self-assessment display: wrap */
+  .sa-teacher-note { max-width: 100%; }
+
+  /* Distribution label: narrower */
+  .sa-distribution-label { width: 60px; font-size: 12px; }
+
+  /* Analytics heatmap: horizontal scroll */
+  .cad-heatmap-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Standards bulk panel: full width */
+  .sal-bulk-body { flex-direction: column; }
+
+  /* Student Planner: hide schedule panel on phone, full-width tasks */
+  .pln-schedule-panel { display: none; }
+  .pln-task-panel { width: 100%; }
+  .pln-stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .pln-filter-bar { gap: 6px; }
+  .pln-filter-chip { font-size: 12px; padding: 5px 10px; }
+  .pln-task-card { padding: 12px; }
+  .pln-task-icon { font-size: 20px; width: 36px; height: 36px; }
+  .pln-task-label { font-size: 13px; }
+
+  /* Celebrations: responsive overlay + badges */
+  .cel-card { max-width: 90%; }
+  .cel-badge-gallery { grid-template-columns: repeat(3, 1fr); }
+
+  /* ATL Toolkit: single-column cards on phone */
+  .atl-category-cards { grid-template-columns: 1fr; }
+  .atl-timeline { gap: 6px; }
+  .atl-timeline-item { min-width: 90px; font-size: 12px; }
+  .atl-rating-bar { flex-wrap: wrap; }
+  .atl-rating-btn { flex: 0 0 calc(50% - 2px); font-size: 12px; }
+  .atl-emoji-labels .atl-rating-btn { padding: 8px 10px; font-size: 13px; }
+  .atl-toolkit-panel { padding-top: 12px; }
+
+  /* Prompt Builder / Enhanced Support: phone layout */
+  .pb-detail-panel { max-height: 200px; margin: 0 8px 8px; }
+  .pb-udl-chip { font-size: 12px; padding: 3px 8px; }
+  .pb-info-chips { display: none; }
+  .pb-prompt-modal { max-width: 100% !important; border-radius: 0 !important; }
+  .pb-prompt-textarea { min-height: 200px; font-size: 12px; }
+  .pb-depth-selector { flex-direction: column; align-items: flex-start; }
+  .pb-wida-card { padding: 8px; }
+  .pb-udl-legend { flex-direction: column; gap: 4px; }
+
+  /* Student Support Tab (E3-S1) */
+  .sst-domains-grid { grid-template-columns: 1fr; }
+  .sst-domain-card { padding: 8px; }
+  .sst-strategy-item { font-size: 12px; }
+  .sst-accom-card { padding: 8px; }
+  .sst-save-btn { width: 100%; }
+
+  /* Teacher Support Dashboard: phone overrides */
+  .tsd-student-header { flex-wrap: wrap; gap: 6px; }
+  .tsd-strategy-chips { gap: 4px; }
+  .tsd-strategy-chip { font-size: 12px; padding: 3px 8px; }
+  .tsd-heatmap-container { display: none; }
+
+  /* Design Thinking / PBL: phone overrides */
+  .dtk-pbl-toggle-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .dtk-phase-list { gap: 4px; }
+  .dtk-phase-item { padding: 4px 8px; font-size: 12px; }
+  .dtk-custom-label-input { font-size: 12px; }
+  .dtk-seg-label { font-size: 12px; }
+  .dtk-progress-container { padding: 8px 12px; }
+  .dtk-filter-chips { padding: 6px 12px; }
+  .dtk-journey-phase-icon { width: 24px; height: 24px; font-size: 12px; }
+
+  /* Iteration History: phone overrides */
+  .itr-timeline { padding-left: 18px; }
+  .itr-card { padding: 10px; }
+  .itr-evidence-row { flex-direction: column; }
+  .itr-evidence-row input { max-width: 100% !important; }
+  .itr-submit-form { padding: 12px; }
+
+  /* Peer Feedback: phone overrides */
+  .pfb-review-form { padding: 12px; }
+  .pfb-rating-bar { flex-wrap: wrap; }
+  .pfb-rating-btn { flex: 0 0 calc(50% - 4px); font-size: 12px; }
+  .pfb-feedback-card { padding: 10px; }
+  .pfb-criterion { padding: 8px; }
+  .pfb-criterion-editor { flex-direction: column; }
+
+  /* PBL Dashboard: phone overrides */
+  .pbl-summary-cards { grid-template-columns: repeat(2, 1fr); }
+  .pbl-peer-stats { grid-template-columns: 1fr; }
+  .pbl-heatmap-scroll { display: none; }
+  .pbl-swimlane-scroll { font-size: 12px; }
+  .pbl-checkpoint-table { font-size: 12px; }
+  .pbl-summary-card { padding: 10px; }
+
+  /* Teaching Methods Guide: phone overrides */
+  .tmg-container { padding: 0; }
+  .tmg-demo-grid { flex-direction: column; align-items: center; }
+  .tmg-demo-arrow { display: none; }
+  .tmg-templates { grid-template-columns: 1fr; }
+  .tmg-concept-header { padding: 12px 14px; }
+  .tmg-concept-icon { width: 36px; height: 36px; font-size: 18px; }
+  .tmg-strat-cards { grid-template-columns: 1fr; }
+  .tmg-picker-questions { grid-template-columns: 1fr; }
+  .tmg-strat-chip-row { gap: 4px; }
+  .tmg-strat-badge { font-size: 12px; padding: 2px 8px; }
+  .tmg-strat-group-header { font-size: 13px; }
+  .tmg-picker-q { padding: 10px; }
+
+  /* Guide tab sub-navs: compact on phone */
+  .tmg-subnav, .esg-subnav { padding: 0 12px; }
+  .tmg-subnav-btn, .esg-subnav-btn { padding: 8px 12px; font-size: 12px; }
+
+  /* EAL Strategies Guide: phone overrides */
+  .esg-container { padding: 0; }
+  .esg-demo-flex { flex-direction: column; }
+  .esg-demo-flex > * { min-width: 0; }
+  .esg-strategy-cards { grid-template-columns: 1fr; }
+  .esg-concept-header { padding: 12px 14px; }
+  .esg-concept-icon { width: 36px; height: 36px; font-size: 18px; }
+  .esg-demo-dict-entry { flex-direction: column; gap: 4px; }
+
+  /* Dictionary / Vocabulary: phone overrides */
+  .dct-vocab-header { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .dct-vocab-list { max-height: 200px; }
+  .dct-entry-form { padding: 10px; }
+  .dct-trans-row { flex-wrap: wrap; }
+  .dct-trans-lang { min-width: 60px; font-size: 12px; }
+
+  /* Floating Dictionary Panel: full-width on phone */
+  .dct-dict-panel { width: 100%; right: -100%; }
+  .dct-dict-panel.dct-visible { right: 0; }
+  .dct-dict-header { padding: 12px; }
+  .dct-dict-title { font-size: 15px; }
+  .dct-lang-pills { gap: 4px; }
+  .dct-lang-pill { font-size: 12px; padding: 3px 8px; }
+  .dct-dict-search { padding: 0 12px 10px; }
+  .dct-dict-body { padding: 0 12px 12px; }
+  .dct-student-card { padding: 8px; }
+  .dct-student-term { font-size: 13px; }
+  .dct-student-def { font-size: 12px; }
+  .dct-dict-trigger { bottom: 12px; right: 12px; width: 40px; height: 40px; font-size: 14px; }
+
+  /* Tour: bottom-sheet tooltip on phone */
+  .tur-tooltip {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 60vh;
+    border-radius: 16px 16px 0 0;
+    overflow-y: auto;
+    transform: none !important;
+  }
+  .tur-arrow { display: none; }
+  .tur-btn { padding: 10px 18px; font-size: 14px; }
+  .tur-tooltip-title { font-size: 15px; }
+  .tur-tooltip-body { font-size: 13px; }
+  .tur-complete-card { max-width: 90%; padding: 24px 20px; }
+  .tur-welcome-overlay { max-width: 95%; padding: 24px 20px; }
+
+  /* Reflection prompt: phone compact */
+  .rfl-card, .dtk-transition-card { padding: 12px; }
+  .rfl-actions, .dtk-transition-actions { flex-direction: column-reverse; align-items: stretch; gap: 6px; }
+  .rfl-save-btn, .dtk-transition-save { width: 100%; text-align: center; }
+  .itr-scaffold-chip { font-size: 12px; padding: 6px 10px; min-height: 36px; display: inline-flex; align-items: center; }
+
+  /* Onboarding: phone checklist + legend */
+  .onb-checklist { width: calc(100vw - 32px); right: 16px; bottom: 12px; }
+  .onb-legend { width: calc(100vw - 64px); right: 4px; }
+  .onb-legend-btn { width: 28px; height: 28px; font-size: 14px; }
+
+  /* Portfolio: single column stats, stacked cards */
+  .pf-stats-cards { grid-template-columns: 1fr; }
+  .pf-portfolio-card { flex-direction: column; }
+  .pf-portfolio-icon { width: 32px; height: 32px; font-size: 22px; }
+  .pf-graph-bar-label { font-size: 12px; }
+  .pf-skill-bar-label { max-width: 80px; font-size: 12px; }
+  .pf-subnav { padding: 6px 12px; }
+  .pf-subnav-btn { font-size: 12px; padding: 5px 12px; }
+  .pf-section-title { font-size: 14px; }
+  .pf-growth-banner { font-size: 13px; padding: 10px 12px; }
+
+  /* Student Custom Tasks: phone overrides */
+  .stl-add-bar { flex-direction: column; }
+  .stl-add-date { width: 100%; }
+  .stl-task-item { padding: 8px 12px; }
+
+  /* Teacher Reminders: phone overrides */
+  .trm-add-bar { flex-direction: column; gap: 8px; }
+  .trm-add-field.trm-title-field { min-width: 0; }
+  .trm-item { padding: 10px 12px; }
+  .trm-item-meta { flex-wrap: wrap; }
+  .trm-filter-bar { gap: 4px; }
+
+  /* AISC Core: phone overrides */
+  .asc-toggle-group { gap: 4px; }
+  .asc-toggle { font-size: 12px; padding: 4px 8px; }
+  .asc-planner-panel { margin-bottom: 12px; }
+  .asc-competency-grid { grid-template-columns: 1fr; }
+  .asc-values-grid { grid-template-columns: 1fr; }
+  .asc-hex-context { gap: 4px; }
+  .asc-context-badge { font-size: 12px; padding: 2px 8px; }
+  .asc-coverage-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .asc-coverage-label { width: auto; }
+  .asc-coverage-bar-container { width: 100%; }
+
+  /* Lab Report: phone overrides */
+  .lab-placeholder { padding: 20px 12px; }
+  .lab-placeholder-icon { font-size: 36px; }
+  .lab-placeholder-title { font-size: 14px; }
+  /* Lab Editor: phone overrides */
+  .lab-editor-section { padding: 12px 10px; }
+  .lab-editor-input { min-height: 80px; font-size: 14px; }
+  .lab-editor-scaffold { padding: 8px 10px; }
+  .lab-editor-section-title { font-size: 13px; }
+  .lab-editor-meta { flex-direction: column; align-items: flex-start; gap: 2px; }
+  /* Lab Builder: phone overrides */
+  .lab-builder-overlay { padding: 0; }
+  .lab-builder-modal { max-width: 100%; max-height: 100vh; border-radius: 0; }
+  .lab-card-grid { grid-template-columns: 1fr; }
+  .lab-stepper { display: none; }
+  .lab-scaffold-chips { flex-wrap: wrap; }
+  .lab-builder-body { padding: 14px; }
+  /* Lab Renderers: phone overrides */
+  .lab-var-row { flex-direction: column; gap: 6px; }
+  .lab-var-table { font-size: 12px; }
+  .lab-data-grid { font-size: 12px; }
+  .lab-data-cell-input { padding: 4px 6px; }
+  .lab-data-header-input { padding: 3px 5px; }
+  .lab-list-actions { flex-direction: column; gap: 2px; }
+  .lab-bib-entry { padding: 8px; }
+  .lab-bib-fields .lab-struct-field-row { flex-direction: column; }
+  .lab-struct-input { font-size: 14px; }
+  .lab-struct-field-row { flex-direction: column; gap: 6px; }
+  .lab-status-banner { font-size: 12px; padding: 10px 12px; }
+  .lab-submission-list { font-size: 12px; }
+  .lab-submission-item { flex-direction: column; gap: 4px; align-items: flex-start; }
+  /* Rich editor phone rules */
+  .lab-rich-toolbar { padding: 3px 4px; gap: 1px; }
+  .lab-rich-btn { width: 26px; height: 26px; font-size: 12px; }
+  .lab-rich-editor { min-height: 80px; font-size: 14px; padding: 8px 10px; }
+  .lab-rich-separator { height: 18px; margin: 0 2px; }
+  /* Version history phone rules */
+  .lab-version-panel { font-size: 12px; }
+  .lab-version-item { padding: 5px 10px; }
+  .lab-version-view-content { font-size: 12px; }
+}
+
+
+/* ---- COLLABSPACE: TABLET ---- */
+@media (max-width: 1024px) {
+  .colab-board-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .colab-template-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .colab-view-container { padding: 16px; }
+  .colab-wall-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .colab-column { min-width: 240px; flex: 0 0 240px; }
+}
+
+/* ---- COLLABSPACE: PHONE ---- */
+@media (max-width: 640px) {
+  .colab-view-container { padding: 12px; }
+  .colab-header { flex-direction: column; align-items: flex-start; }
+  .colab-header-actions { width: 100%; justify-content: space-between; }
+  .colab-board-grid { grid-template-columns: 1fr; }
+  .colab-template-grid { grid-template-columns: 1fr 1fr; }
+  .colab-form-row { flex-direction: column; }
+  .colab-filter-bar { gap: 4px; }
+  .colab-filter-chip { font-size: 12px; padding: 4px 10px; }
+  .colab-board-card { padding: 14px; }
+  .colab-card-title { font-size: 14px; }
+  .colab-card-desc { font-size: 12px; }
+  .colab-class-selector { width: 100%; }
+  .colab-class-selector .colab-form-select { flex: 1; }
+}
+
+/* ---- CORNELL NOTES: TABLET ---- */
+@media (max-width: 1024px) {
+  .cn-cornell-layout { flex-direction: column; }
+  .cn-cue-column { width: 100%; min-width: 0; }
+  .cn-notebook-layout { flex-direction: column; }
+  .cn-para-nav { flex-direction: row; overflow-x: auto; width: 100%; }
+  .cn-para-btn { padding: 6px 10px; font-size: 12px; }
+  /* Note coaching tablet */
+  .cnc-summary-cards { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---- CORNELL NOTES: PHONE ---- */
+@media (max-width: 640px) {
+  .cn-notes-area { min-height: 120px; }
+  .cn-prompt-tip { font-size: 12px; }
+  .cn-cue-suggestion { font-size: 12px; }
+  .cn-layer-stepper { flex-wrap: wrap; gap: 2px; }
+  .cn-layer-step { font-size: 12px; padding: 3px 6px; }
+  .cn-notebook-toggle-btn { font-size: 12px; padding: 4px 10px; }
+  .cn-note-card { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .cn-note-card-preview { white-space: normal; }
+  .cn-note-card-meta { width: 100%; }
+  /* Note coaching phone */
+  .cnc-summary-cards { grid-template-columns: 1fr; }
+  .cnc-student-card { padding: 10px; }
+  .cnc-hex-heatmap { display: none; }
+}
+
+/* ---- DIFFERENTIATION: PHONE ---- */
+@media (max-width: 640px) {
+  .dif-overlay { padding: 0; }
+  .dif-modal { max-width: 100%; max-height: 100vh; border-radius: 0; }
+  .dif-panels { flex-direction: column; }
+  .dif-left-panel { width: 100%; border-right: none; border-bottom: 1px solid #f3f4f6; padding-right: 0; padding-bottom: 12px; }
+  .dif-mode-select { font-size: 12px; max-width: 160px; }
+  .dif-manage-btn { font-size: 11px !important; padding: 4px 8px !important; }
+  .dif-suggest-card-header { flex-wrap: wrap; }
+
+  /* Differentiation Analytics: phone overrides */
+  .dfa-group-cards { grid-template-columns: 1fr; }
+  .dfa-comp-label { width: 100px; font-size: 12px; }
+  .dfa-hex-dots { display: none; }
+  .dfa-coverage-summary { flex-wrap: wrap; }
+
+  /* Lab Insights: phone overrides */
+  .lin-overview-cards { grid-template-columns: 1fr; }
+  .lin-criterion-row { grid-template-columns: 1fr; gap: 4px; }
+  .lin-criterion-title { white-space: normal; }
+  .lin-dim-row { grid-template-columns: 120px 1fr 40px; }
+  .lin-student-header { flex-wrap: wrap; gap: 6px; }
+  .lin-distribution { overflow-x: auto; }
+  .lin-detail-title { width: 100px; }
+  .lin-assignment-selector { flex-direction: column; align-items: flex-start; }
+  .lin-assignment-select { min-width: 0; width: 100%; }
+
+  /* Lab Scoring: phone overrides */
+  .lab-scoring-overlay { padding: 0; }
+  .lab-scoring-modal { max-width: 100%; max-height: 100vh; border-radius: 0; }
+  .lab-scoring-content { flex-direction: column; }
+  .lab-scoring-left { width: 100%; max-height: 30vh; border-right: none; border-bottom: 1px solid #e2e8f0; }
+  .lab-scoring-right { padding: 14px; }
+  .lab-scoring-level-btn { padding: 8px 10px; font-size: 12px; }
+  .lab-scoring-summary { flex-wrap: wrap; gap: 8px; }
+  .lab-scoring-comparison-row { flex-direction: column; gap: 6px; }
+
+  /* Lab Results: phone overrides */
+  .lab-results-summary { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .lab-results-score { font-size: 28px; }
+  .lab-results-dim-bar { font-size: 12px; }
+
+  /* Lab Template/Rubric Editor: phone overrides */
+  .lte-form-row { flex-direction: column; }
+  .lte-item-header { flex-wrap: wrap; }
+  .lte-level-row { flex-direction: column; }
+  .lte-scaffold-tabs { flex-wrap: wrap; }
+  .lte-dim-chips { gap: 3px; }
+  .lte-add-card { padding: 16px; min-height: 80px; }
+
+  /* Lesson Map: phone overrides */
+  .lsm-back-btn { font-size: 11px !important; padding: 4px 8px !important; }
+  .lsm-autogen-btn { font-size: 11px !important; padding: 4px 8px !important; }
+  .lsm-overview-progress { flex-direction: column; text-align: center; }
+  .lsm-child-map { margin-left: 12px; }
+  .lsm-analytics-lesson-label { flex: 0 0 100px; }
+  .lsm-planner-group-tasks { margin-left: 8px; }
+  .lsm-overview-activities { max-height: 150px; }
+  .lsm-activity-item { padding: 4px 6px; font-size: 12px; }
+
+  /* Review Insights: phone overrides */
+  .rvi-cards { grid-template-columns: 1fr 1fr; }
+  .rvi-hex-row { flex-wrap: wrap; gap: 6px; }
+  .rvi-hex-stats { margin-left: 0; flex-wrap: wrap; gap: 8px; }
+  .rvi-hex-label { flex: 0 0 100%; }
+  .rvi-reviewer-name { width: 100px; min-width: 80px; }
+  .rvi-nonparticipant-list { font-size: 12px; }
+  .rvi-participation-label { min-width: 35px; }
+
+  /* Competency & ATL: phone overrides */
+  .cat-cards { grid-template-columns: 1fr 1fr; }
+  .cat-comp-row { flex-wrap: wrap; gap: 4px; }
+  .cat-comp-label { flex: 0 0 100%; width: auto; }
+  .cat-comp-students { display: none; }
+  .cat-atl-row { flex-wrap: wrap; gap: 4px; }
+  .cat-atl-label { flex: 0 0 calc(100% - 34px); width: auto; }
+  .cat-atl-respondents { display: none; }
+  .cat-support-row { flex-wrap: wrap; gap: 4px; }
+  .cat-support-name { flex: 0 0 100%; }
+  .cat-support-category { margin-left: 0; }
+
+  /* Lesson Insights: phone overrides */
+  .lsmt-overview-cards { grid-template-columns: 1fr 1fr; }
+  .lsmt-student-name { flex: 0 0 100px; }
+  .lsmt-lesson-header { flex-wrap: wrap; }
+  .lsmt-lesson-score { display: none; }
+  .lsmt-container { padding: 12px 14px; }
+
+  /* Branch Expansion: phone overrides */
+  .bex-res-student-header { padding: 10px 12px; }
+  .bex-res-student-icon { font-size: 24px; }
+  .bex-res-student-type { font-size: 15px; }
+  .bex-res-open-btn { padding: 10px 20px !important; font-size: 14px !important; }
+  .bex-res-student-instructions { font-size: 13px; padding: 10px 12px; }
+  .bex-choice-modal { width: 95%; max-height: 90vh; border-radius: 10px; }
+  .bex-choice-card { padding: 10px 12px; }
+  .bex-choice-card-icon { font-size: 22px; }
+
+  /* Grade & Review: phone overrides */
+  .grv-container { flex-direction: column; }
+  .grv-queue-panel { max-height: 40vh; width: 100%; border-right: none; border-bottom: 1px solid #e2e8f0; }
+  .grv-detail-panel { min-height: 300px; }
+  .grv-queue-item { padding: 8px 12px; }
+  .grv-action-bar { flex-wrap: wrap; }
+  .grv-summary-bar { flex-wrap: wrap; }
+  .grv-pathway { padding: 8px 0; }
+  .grv-pathway-node { min-width: 44px; }
+  .grv-pathway-circle { width: 28px; height: 28px; font-size: 12px; }
+  .grv-pathway-label { font-size: 12px; max-width: 44px; }
+  .phm-hex-panel { padding: 12px; }
+  .phm-student-row { font-size: 12px; }
+
+  /* Bulk approve + CSV export: phone */
+  .grv-summary-actions { width: 100%; display: flex; gap: 6px; margin-top: 6px; }
+  .grv-bulk-approve-btn { flex: 1; font-size: 12px; padding: 6px 10px; }
+  .csv-export-btn { min-width: 36px; font-size: 14px; }
+
+  /* Quick Feedback Templates: phone */
+  .qft-chip-bar { gap: 4px; }
+  .qft-chip { font-size: 12px; padding: 3px 8px; max-width: 140px; }
+  .qft-manager-overlay { padding: 0; }
+  .qft-manager-modal { width: 100%; max-width: 100%; min-height: 100vh; border-radius: 0; }
+  .qft-manager-item { flex-wrap: wrap; gap: 4px; }
+  .qft-manager-select { width: 100%; }
+  .qft-manager-add { flex-wrap: wrap; }
+  .qft-manager-add input[type="text"] { width: 100%; }
+
+  /* Hex duplication: phone */
+  .hex-dup-btn { font-size: 12px; padding: 5px 10px; }
+
+  /* CollabSpace board view: phone */
+  .colab-board-header { padding: 0; }
+  .colab-board-title { font-size: 18px; }
+  .colab-board-title-row { flex-wrap: wrap; gap: 6px; }
+  .colab-stream { max-width: 100%; }
+  .colab-wall-grid { grid-template-columns: 1fr; }
+  .colab-columns-container { gap: 8px; }
+  .colab-column { min-width: 85vw; flex: 0 0 85vw; }
+  .colab-composer { padding: 12px; }
+  .colab-composer-textarea { min-height: 60px; font-size: 14px; }
+  .colab-composer-link-fields { flex-direction: column; }
+  .colab-post-card { padding: 12px; }
+  .colab-comment-input { flex-direction: column; align-items: stretch; }
+  .colab-comment-submit { align-self: flex-end; }
+  .colab-post-content { font-size: 13px; }
+  .colab-reactions { gap: 4px; }
+  .colab-reaction-btn { font-size: 12px; padding: 4px 6px; }
+  .colab-composer-footer { flex-direction: column; }
+  .colab-composer-submit,
+  .colab-composer-cancel { width: 100%; text-align: center; }
+}
+
+/* ---- BOARD MEMBER MANAGER: PHONE ---- */
+@media (max-width: 640px) {
+  .cbm-modal { max-width: 100%; border-radius: 0; max-height: 100vh; }
+  .cbm-manual-row { flex-direction: column; }
+  .cbm-manual-row input[type="email"] { width: 100%; }
+  .cbm-roster-picker { max-height: 200px; }
+  .cbm-member-email { font-size: 12px; }
+  .cbm-add-btn { width: 100%; text-align: center; }
+}
+
+/* ---- BOARD SETTINGS: PHONE ---- */
+@media (max-width: 640px) {
+  .colab-settings-modal { max-width: 100%; width: 100%; border-radius: 0; max-height: 100vh; }
+  .colab-settings-footer { flex-direction: column; }
+  .colab-settings-save,
+  .colab-settings-cancel { width: 100%; text-align: center; }
+  .colab-settings-chips { flex-wrap: wrap; }
+  .colab-settings-col-row { flex-wrap: wrap; }
+}
+
+/* ---- TEACHER CALENDAR: PHONE ---- */
+@media (max-width: 640px) {
+  .tcl-modal { max-width: 100%; max-height: 100vh; border-radius: 0; }
+  .tcl-toolbar { padding: 8px 12px; }
+  .tcl-body { padding: 10px 12px; }
+  .tcl-timeline { display: none; } /* Force list view on phone */
+  .tcl-list-item { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+  .tcl-list-status { width: 100%; text-align: right; }
+}
+
+/* ---- LESSON RUNDOWN SIDEBAR: TABLET ---- */
+@media (max-width: 1024px) {
+  .lrd-sidebar {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    z-index: 150;
+    width: 280px;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+  }
+}
+
+/* ---- LESSON RUNDOWN SIDEBAR: PHONE ---- */
+@media (max-width: 640px) {
+  .lrd-sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    z-index: 150;
+    width: 100%;
+    max-width: 100%;
+    border-right: none;
+    border-radius: 0;
+  }
+  .lrd-sidebar-header { padding: 10px 12px; }
+  .lrd-sidebar-title { font-size: 14px; }
+  .lrd-hex-header { padding: 8px 10px; }
+  .lrd-hex-label { font-size: 12px; }
+  .lrd-hex-detail { padding: 6px 10px 6px 32px; }
+  .lrd-detail-label { font-size: 12px; }
+  .lrd-detail-text { font-size: 12px; }
+  .lrd-vocab-chip { font-size: 12px; padding: 2px 6px; }
+  .lrd-progress-summary { padding: 8px 10px; }
+}
+
+/* ---- ITERATION, PEER FEEDBACK, PORTFOLIO (Phone) ---- */
+@media (max-width: 640px) {
+  /* Iteration scoring inputs in Grade & Review */
+  .grv-override-row { flex-direction: row; gap: 6px; }
+  .grv-override-input { max-width: 70px; }
+
+  /* Student iteration analytics */
+  #spaIterationContainer .spa-stat-cards { grid-template-columns: 1fr 1fr; }
+
+  /* Portfolio filter chips */
+  .pf-filter-bar { gap: 6px; }
+  .pf-filter-chip { padding: 4px 10px; font-size: 12px; }
+  .pf-group-header { font-size: 12px; }
+
+  /* Portfolio Insights (teacher) */
+  .pia-summary-cards { grid-template-columns: 1fr; }
+  .pia-student-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .pia-student-meta { flex-wrap: wrap; }
+  .pia-card-value { font-size: 22px; }
+
+  /* UBD Report sub-tab */
+  .ubd-report-cards { grid-template-columns: repeat(2, 1fr); }
+  .ubd-report-table { font-size: 12px; }
+  .ubd-report-table th, .ubd-report-table td { padding: 4px 6px; }
+
+  /* Unit Checklist (student planner) */
+  .ucl-progress-bar { width: 60px; }
+  .ucl-unit-title { font-size: 13px; }
+
+  /* Process Journal (student planner) */
+  .pjr-routine-bar { gap: 4px; }
+  .pjr-routine-chip { padding: 4px 8px; font-size: 12px; }
+  .pjr-textarea { min-height: 60px; }
+  .pjr-card-content { font-size: 13px; }
+
+  /* Course Standards Report */
+  .csr-std-refs { gap: 3px; }
+  .csr-ref-chip { font-size: 12px; padding: 2px 4px; }
+
+  /* Name Selector: phone */
+  .nsg-modal { max-width: 100vw; max-height: 100vh; border-radius: 0; }
+  .nsg-groups-grid { grid-template-columns: 1fr; }
+  .nsg-spin-display { font-size: 32px; min-height: 48px; }
+  .nsg-pick-btn { font-size: 16px; padding: 12px 30px; }
+  .nsg-modal.nsg-projector .nsg-spin-display { font-size: 48px; }
+  .nsg-mode-btn { font-size: 12px; padding: 6px 10px; }
+  .nsg-actions { flex-wrap: wrap; }
+  .nsg-class-bar { flex-wrap: wrap; }
+  .nsg-class-select { min-width: 0; width: 100%; }
+  .nsg-saved-item { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .nsg-saved-item-actions { margin-left: 0; width: 100%; }
+  .nsg-saved-item-actions { flex-wrap: wrap; }
+  .nsg-saved-load-btn, .nsg-saved-edit-btn, .nsg-saved-delete-btn { flex: 1; text-align: center; }
+  .nsg-equity-bar { font-size: 12px; }
+
+  /* Map List Sections: phone */
+  .mls-section-header { padding: 8px 10px; }
+  .mls-section-title { font-size: 14px; }
+
+  /* Countdown Timer: phone */
+  .ctd-modal { max-width: 100vw; max-height: 100vh; border-radius: 0; }
+  .ctd-preset-grid { grid-template-columns: repeat(2, 1fr); }
+  .ctd-custom-preset-grid { grid-template-columns: repeat(2, 1fr); }
+  .ctd-time-text { font-size: 48px; }
+  .ctd-overlay.ctd-projector .ctd-time-text { font-size: 80px; }
+  .ctd-mini-pill { bottom: 12px; right: 12px; }
+  .ctd-pomodoro-config { grid-template-columns: 1fr; }
+  .ctd-student-bar { flex-wrap: wrap; gap: 6px; padding: 6px 12px; }
+  .ctd-student-progress-wrap { max-width: 100%; order: 10; }
+  .ctd-student-time { font-size: 20px; }
+  .ctd-student-label { font-size: 12px; max-width: 140px; }
+  .ctd-student-message { font-size: 12px; bottom: 52px; }
+
+  /* Projector Mode: phone */
+  .pjm-topbar { flex-direction: column; gap: 8px; padding: 8px 12px; }
+  .pjm-view-tabs { flex-wrap: wrap; gap: 4px; }
+  .pjm-view-tab { padding: 6px 10px; font-size: 12px; }
+  .pjm-stats-bar { flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+  .pjm-stat-card { min-width: calc(50% - 6px); }
+  .pjm-stat-value { font-size: 24px; }
+  .pjm-focus { padding: 16px; }
+  .pjm-focus-header { flex-direction: column; gap: 16px; }
+  .pjm-focus-title { font-size: 22px; }
+  .pjm-focus-desc { font-size: 14px; }
+  .pjm-ring-container { width: 140px; height: 140px; }
+  .pjm-ring { width: 140px; height: 140px; }
+  .pjm-ring-pct { font-size: 32px; }
+  .pjm-student-grid { grid-template-columns: 1fr; }
+  .pjm-feed { padding: 12px 16px; }
+  .pjm-timer-view { flex-direction: column; }
+  .pjm-timer-left { border-right: none; border-bottom: 1px solid #1e293b; }
+  .pjm-timer-right { display: none; }
+  .pjm-timer-time { font-size: 64px; }
+  .pjm-slides-toolbar { flex-wrap: wrap; padding: 8px 12px; }
+  .pjm-slides-select { width: 100%; min-width: 0; }
+  .pjm-slides-fullscreen-btn { width: 100%; justify-content: center; }
+  .pjm-sidebar, .pjm-sidebar-toggle { display: none; }
+  .pjm-focus-slides-btn { width: 100%; justify-content: center; }
+  .pjm-focus-actions { flex-wrap: wrap; }
+  .pjm-keyboard-hints { display: none; }
+}
+
+/* ---- Study Dashboard: tablet ---- */
+@media (max-width: 1024px) {
+  .ssd-layout { flex-direction: column; }
+  .ssd-side { width: 100%; }
+  .ssd-strategy-grid { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .ssd-strategy-card { flex: 1 1 calc(50% - 4px); min-width: 200px; }
+}
+
+/* ---- Progress Sub-Nav: phone ---- */
+@media (max-width: 640px) {
+  .cad-subnav-btn { padding: 8px 12px; font-size: 12px; }
+}
+
+/* ---- Study Dashboard: phone ---- */
+@media (max-width: 640px) {
+  .ssd-layout { padding: 12px; gap: 16px; }
+  .ssd-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .ssd-stat-value { font-size: 20px; }
+  .ssd-stat-label { font-size: 12px; }
+  .ssd-side { display: none; }
+  .ssd-welcome { padding: 12px 14px; }
+  .ssd-map-chip { padding: 5px 10px; font-size: 12px; }
+  .ssd-hex-item { padding: 8px 12px; }
+  .ssd-hex-label { font-size: 12px; }
+  .ssd-review-section { padding: 12px; }
+  .ssd-review-card { padding: 8px 10px; }
+}
+
+/* ---- TOUCH DEVICES ---- */
+@media (hover: none) {
+  /* Disable hover scale on hexes (interferes with tap) */
+  .hex-node:hover { transform: none; }
+
+  /* Tap feedback */
+  .hex-node:active { transform: scale(0.95); transition: transform 0.1s; }
+
+  /* Disable hover effects on connection lines */
+  .connection-line:hover { stroke-width: 3; }
+
+  /* CollabSpace: show zero-count reactions on touch (no hover available) */
+  .colab-reaction-btn.zero { opacity: 0.5; pointer-events: auto; }
+  .colab-post-card .colab-reaction-btn.zero:active { opacity: 1; }
+
+  /* Larger tap targets for WCAG 44px minimum */
+  .colab-reaction-btn { min-width: 44px; min-height: 44px; padding: 8px 10px; }
+  .colab-comments-toggle { min-height: 44px; padding: 8px 0; }
+
+  /* Onboarding milestone tap targets */
+  .onb-milestone { min-height: 44px; padding: 10px 16px; }
+
+  /* Collapsible section headers */
+  .uxo-section-header { min-height: 44px; padding: 12px 14px; }
+
+  /* Self-assessment rating buttons */
+  .sa-rating-btn { min-height: 44px; padding: 10px 4px; }
+
+  /* Student support strategy items */
+  .sst-strategy-item { min-height: 44px; padding: 8px 10px; }
+  .sst-strategy-checkbox { width: 22px; height: 22px; min-width: 22px; }
+
+  /* Cornell Notes cue suggestions */
+  .cn-cue-suggestion { min-height: 44px; padding: 8px 12px; font-size: 12px;
+    display: inline-flex; align-items: center; }
+
+  /* Planner task cards */
+  .pln-task-card { min-height: 48px; padding: 12px 14px; }
+
+  /* Student task items */
+  .stl-task-item { min-height: 44px; padding: 10px 18px; }
+  .stl-checkbox { width: 24px; height: 24px; min-width: 24px; }
+
+  /* Study dashboard strategy cards */
+  .ssd-strategy-card { min-height: 48px; padding: 14px; }
+
+  /* Dictionary panel entries */
+  .dct-panel-close { min-width: 44px; min-height: 44px; }
+  .dct-student-vocab-card { min-height: 44px; padding: 10px 12px; }
+
+  /* Tab navigation */
+  .tabs-container button { min-height: 44px; }
+
+  /* Close/toggle buttons */
+  .csb-sidebar-close,
+  .content-modal-close-x { min-width: 44px; min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center; }
+
+  /* Onboarding legend + checklist controls */
+  .onb-legend-btn { min-width: 44px; min-height: 44px; }
+  .onb-checklist-minimize { min-width: 44px; min-height: 44px; }
+}
+
+/* ==================================================
+   REDUCED MOTION PREFERENCE (Session 5)
+   Suppresses all animations/transitions for users with
+   vestibular disorders or motion sensitivity (WCAG 2.3.3)
+   ================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Skeleton loading: solid gray instead of shimmer */
+  .onb-skeleton-line { opacity: 0.6; }
+
+  /* Celebration confetti: hidden entirely (purely decorative) */
+  .cel-confetti-particle { display: none; }
+
+  /* Projector mode flash: subtle background instead of animation */
+  .pjm-stat-card.pjm-updated { background: #f0fdf4; }
+
+  /* Grade review highlight: static amber background */
+  .grv-queue-item-new { background: #fffbeb; }
+
+  /* Countdown timer flash: static red instead of pulsing */
+  .ctd-flash .ctd-time { color: #dc2626; }
+
+  /* Hex node: no scale on active/hover */
+  .hex-node:active { transform: none; }
+}
+
+/* ---- Vocabulary Tier + Simplified Definition: Phone ---- */
+@media (max-width: 640px) {
+  .dct-tier-chips { flex-wrap: wrap; gap: 4px; }
+  .dct-tier-chip { padding: 4px 8px; font-size: 12px; }
+  .ubd-vocab-term-row { flex-direction: column; gap: 4px; }
+  .ubd-vocab-tier-select { width: 100%; }
+  .ubd-vocab-coverage { flex-wrap: wrap; gap: 6px; }
+  .dct-student-simplified { font-size: 12px; padding: 6px 8px; }
+}
+
+/* ---- Story B: WIDA-Adaptive Hex Panel: Phone ---- */
+@media (max-width: 640px) {
+  .sst-frame-chip, .sst-cue-chip { padding: 4px 8px; font-size: 12px; margin: 3px; }
+  .sst-frames-section, .sst-cues-section { padding: 8px; margin-top: 8px; }
+  .dct-tier2-toggle { display: block; width: 100%; text-align: center; margin-bottom: 8px; }
+  /* C-CSS phone rules */
+  .sst-preset-card { padding: 6px 8px; }
+  .sst-preset-icon { font-size: 16px; }
+  .sst-translang-section { padding: 8px; }
+  .sa-emoji-labels .sa-rating-btn { padding: 8px 10px; font-size: 13px; }
+  .pln-strategy-banner { padding: 8px 10px; }
+}
+/* C-CSS touch targets */
+@media (hover: none) {
+  .sst-preset-card { min-height: 44px; }
+}
+</style>

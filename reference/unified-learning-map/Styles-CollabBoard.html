@@ -1,0 +1,1255 @@
+<style>
+/* ============================================================================
+   COLLABSPACE — BOARD VIEW — colab- prefix
+   Board header, composer, stream/wall/columns layouts, post cards,
+   reactions, comments, moderation bar
+   ============================================================================ */
+
+/* ---- Board View Loading & Error ---- */
+.colab-board-loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: #64748b;
+}
+.colab-board-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #0d9488;
+  border-radius: 50%;
+  margin: 0 auto;
+  animation: colabSpin 0.8s linear infinite;
+}
+@keyframes colabSpin {
+  to { transform: rotate(360deg); }
+}
+.colab-board-error {
+  padding: 24px;
+}
+
+/* ---- Board Header ---- */
+.colab-board-header {
+  margin-bottom: 16px;
+}
+.colab-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 12px;
+}
+.colab-back-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+.colab-board-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.colab-board-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+.colab-board-type-badge,
+.colab-board-layout-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+.colab-board-description {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}
+
+/* ---- Moderation Bar ---- */
+.colab-moderation-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+}
+
+/* ---- Composer Toggle Bar ---- */
+.colab-composer-toggle-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.colab-composer-toggle-btn {
+  padding: 8px 18px;
+  background: #0d9488;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.colab-composer-toggle-btn:hover {
+  background: #0f766e;
+}
+.colab-refresh-btn {
+  padding: 7px 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.colab-refresh-btn:hover {
+  background: #e2e8f0;
+}
+
+/* ---- Post Composer ---- */
+.colab-composer {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+.colab-composer-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1e293b;
+  resize: vertical;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.colab-composer-textarea:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.1);
+}
+.colab-composer-char {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: right;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+.colab-composer-link-toggle {
+  margin-bottom: 8px;
+}
+.colab-composer-link-btn {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #0d9488;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+.colab-composer-link-btn:hover {
+  text-decoration: underline;
+}
+.colab-composer-link-fields {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.colab-composer-input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e293b;
+  box-sizing: border-box;
+}
+.colab-composer-input:focus {
+  outline: none;
+  border-color: #0d9488;
+}
+
+/* Color chips */
+.colab-color-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.colab-color-chips-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-right: 4px;
+}
+.colab-color-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+}
+.colab-color-chip:hover {
+  transform: scale(1.15);
+}
+.colab-color-chip.active {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.3);
+}
+.colab-color-none {
+  background: #f1f5f9 !important;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+/* Column selector */
+.colab-column-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #475569;
+}
+.colab-composer-select {
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e293b;
+  background: #fff;
+}
+.colab-composer-select:focus {
+  outline: none;
+  border-color: #0d9488;
+}
+
+/* Anonymous checkbox */
+.colab-anon-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.colab-anon-check input {
+  accent-color: #0d9488;
+}
+
+/* Composer footer */
+.colab-composer-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+.colab-composer-submit {
+  padding: 7px 20px;
+  background: #0d9488;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.colab-composer-submit:hover {
+  background: #0f766e;
+}
+.colab-composer-cancel {
+  padding: 7px 16px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.colab-composer-cancel:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+/* ---- Stream Layout ---- */
+.colab-stream {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---- Wall Layout ---- */
+.colab-wall-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+/* ---- Columns Layout ---- */
+.colab-columns-container {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.colab-column {
+  min-width: 280px;
+  max-width: 320px;
+  flex: 0 0 280px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+.colab-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e2e8f0;
+}
+.colab-column-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.colab-column-count {
+  font-size: 12px;
+  background: #e2e8f0;
+  color: #64748b;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.colab-column-posts {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 500px;
+}
+.colab-column-add-btn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 8px;
+  background: transparent;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.colab-column-add-btn:hover {
+  border-color: #0d9488;
+  color: #0d9488;
+  background: #f0fdfa;
+}
+
+/* ---- Post Card ---- */
+.colab-post-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  transition: box-shadow 0.15s;
+  position: relative;
+}
+.colab-post-card:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+/* Pinned post */
+.colab-post-card.pinned {
+  border-color: #0d9488;
+  background: #f0fdfa;
+}
+
+/* Pending post */
+.colab-post-card.pending {
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+/* Color tags as left border */
+.colab-post-card.colab-color-yellow { border-left: 4px solid #f59e0b; }
+.colab-post-card.colab-color-blue { border-left: 4px solid #3b82f6; }
+.colab-post-card.colab-color-green { border-left: 4px solid #10b981; }
+.colab-post-card.colab-color-pink { border-left: 4px solid #ec4899; }
+.colab-post-card.colab-color-purple { border-left: 4px solid #8b5cf6; }
+.colab-post-card.colab-color-orange { border-left: 4px solid #f97316; }
+.colab-post-card.colab-color-gray { border-left: 4px solid #94a3b8; }
+
+/* Post header */
+.colab-post-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.colab-post-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+}
+.colab-post-date {
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* Pending badge */
+.colab-post-pending-badge {
+  display: inline-block;
+  font-size: 12px;
+  color: #92400e;
+  background: #fef3c7;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+/* Post content */
+.colab-post-content {
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 10px;
+}
+
+/* Link attachment */
+.colab-post-link {
+  margin-bottom: 10px;
+}
+.colab-post-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 6px;
+  color: #0d9488;
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 0.15s;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.colab-post-link a:hover {
+  background: #ccfbf1;
+}
+
+/* ---- Post Actions Menu ---- */
+.colab-post-actions-wrapper {
+  position: relative;
+}
+.colab-post-actions-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.colab-post-actions-btn:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+.colab-post-actions-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  z-index: 10;
+  min-width: 120px;
+  overflow: hidden;
+}
+.colab-post-actions-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-family: inherit;
+}
+.colab-post-actions-menu button:hover {
+  background: #f1f5f9;
+}
+
+/* ---- Reactions ---- */
+.colab-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.colab-reaction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #64748b;
+}
+.colab-reaction-btn:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.colab-reaction-btn.active {
+  border-color: #0d9488;
+  background: #f0fdfa;
+  color: #0d9488;
+  font-weight: 500;
+}
+.colab-reaction-btn.zero {
+  opacity: 0;
+  pointer-events: none;
+}
+.colab-post-card:hover .colab-reaction-btn.zero {
+  opacity: 0.5;
+  pointer-events: auto;
+}
+.colab-post-card:hover .colab-reaction-btn.zero:hover {
+  opacity: 1;
+}
+
+/* ---- Comments ---- */
+.colab-comments-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+.colab-comments-toggle:hover {
+  color: #0d9488;
+}
+.colab-comment-thread {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+.colab-comment {
+  padding: 8px 0;
+}
+.colab-comment + .colab-comment {
+  border-top: 1px solid #f8fafc;
+}
+.colab-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.colab-comment-author {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.colab-comment-date {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.colab-comment-delete {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: auto;
+  transition: color 0.15s;
+}
+.colab-comment-delete:hover {
+  color: #ef4444;
+}
+.colab-comment-text {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* Comment input */
+.colab-comment-input {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-top: 10px;
+}
+.colab-comment-textarea {
+  flex: 1;
+  min-height: 36px;
+  max-height: 100px;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1e293b;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.colab-comment-textarea:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.08);
+}
+.colab-comment-submit {
+  padding: 7px 14px;
+  background: #0d9488;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.colab-comment-submit:hover {
+  background: #0f766e;
+}
+
+/* ---- Empty Board State ---- */
+.colab-empty-board {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+}
+.colab-empty-board-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+  opacity: 0.5;
+}
+
+/* ---- Focus Visible for Keyboard Navigation ---- */
+.colab-back-btn:focus-visible,
+.colab-composer-toggle-btn:focus-visible,
+.colab-refresh-btn:focus-visible,
+.colab-composer-submit:focus-visible,
+.colab-composer-cancel:focus-visible,
+.colab-color-chip:focus-visible,
+.colab-column-add-btn:focus-visible,
+.colab-post-actions-btn:focus-visible,
+.colab-reaction-btn:focus-visible,
+.colab-comments-toggle:focus-visible,
+.colab-comment-submit:focus-visible,
+.colab-comment-delete:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+/* Focus visible for menu items (arrow key navigation) */
+.colab-post-actions-menu button:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: -1px;
+}
+
+/* ---- Board Member Manager (cbm- prefix) ---- */
+.cbm-members-btn {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #334155;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cbm-members-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.cbm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cbm-modal {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 560px;
+  width: 92%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.cbm-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.cbm-modal-header h3 { margin: 0; font-size: 16px; color: #1e293b; }
+.cbm-modal-header .cbm-count { font-size: 13px; color: #64748b; margin-left: 8px; }
+.cbm-close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #64748b;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.cbm-close-btn:hover { background: #f1f5f9; color: #1e293b; }
+.cbm-modal-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 12px 20px;
+}
+.cbm-member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.cbm-member-row:last-child { border-bottom: none; }
+.cbm-member-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.cbm-member-email {
+  flex: 1;
+  font-size: 13px;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.cbm-role-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cbm-role-owner { background: #ede9fe; color: #7c3aed; }
+.cbm-role-moderator { background: #ccfbf1; color: #0d9488; }
+.cbm-role-member { background: #f1f5f9; color: #64748b; }
+.cbm-role-viewer { background: #f8fafc; color: #94a3b8; }
+.cbm-role-select {
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.cbm-role-select:focus-visible { outline: 3px solid #0d9488; outline-offset: 1px; }
+.cbm-remove-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: #ef4444;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.cbm-remove-btn:hover { opacity: 1; background: #fef2f2; }
+.cbm-add-section {
+  border-top: 1px solid #e2e8f0;
+  padding: 14px 20px;
+}
+.cbm-add-section h4 { margin: 0 0 10px; font-size: 14px; color: #475569; }
+.cbm-manual-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.cbm-manual-row input[type="email"] {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.cbm-manual-row input[type="email"]:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,0.15); }
+.cbm-manual-row select {
+  padding: 7px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.cbm-add-btn {
+  padding: 7px 14px;
+  background: #0d9488;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cbm-add-btn:hover { background: #0f766e; }
+.cbm-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cbm-roster-toggle {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #0d9488;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px 0;
+}
+.cbm-roster-toggle:hover { text-decoration: underline; }
+.cbm-roster-picker {
+  margin-top: 8px;
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+}
+.cbm-roster-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  font-size: 13px;
+  color: #334155;
+}
+.cbm-roster-item input[type="checkbox"] { accent-color: #0d9488; }
+.cbm-roster-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.cbm-roster-actions select {
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.cbm-loading { text-align: center; padding: 30px 0; color: #94a3b8; font-size: 14px; }
+
+/* Focus visible for member manager interactive elements */
+.cbm-members-btn:focus-visible,
+.cbm-close-btn:focus-visible,
+.cbm-add-btn:focus-visible,
+.cbm-roster-toggle:focus-visible,
+.cbm-remove-btn:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   BOARD SETTINGS MODAL — colab-settings- prefix
+   ============================================================================ */
+
+/* ---- Settings gear button ---- */
+.colab-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.colab-settings-btn:hover {
+  background: #f0fdfa;
+  color: #0d9488;
+}
+
+/* ---- Settings overlay & modal ---- */
+.colab-settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.colab-settings-modal {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 520px;
+  width: 92%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+/* ---- Header ---- */
+.colab-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.colab-settings-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.colab-settings-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  border-radius: 4px;
+}
+.colab-settings-close:hover {
+  color: #0d9488;
+  background: #f0fdfa;
+}
+
+/* ---- Body ---- */
+.colab-settings-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 16px 20px;
+}
+
+/* ---- Field groups ---- */
+.colab-settings-group {
+  margin-bottom: 16px;
+}
+
+.colab-settings-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.colab-settings-input,
+.colab-settings-textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #1e293b;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.colab-settings-input:focus,
+.colab-settings-textarea:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+}
+
+.colab-settings-textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.colab-settings-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+/* ---- Chip selectors (layout, approval) ---- */
+.colab-settings-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.colab-settings-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #fff;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+.colab-settings-chip:hover {
+  border-color: #94a3b8;
+}
+.colab-settings-chip.active {
+  background: #f0fdfa;
+  color: #0d9488;
+  border-color: #0d9488;
+  font-weight: 600;
+}
+
+/* ---- Checkbox ---- */
+.colab-settings-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+}
+.colab-settings-check input[type="checkbox"] {
+  accent-color: #0d9488;
+}
+
+/* ---- Footer ---- */
+.colab-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.colab-settings-save {
+  padding: 8px 20px;
+  background: #0d9488;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.colab-settings-save:hover {
+  background: #0f766e;
+}
+.colab-settings-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.colab-settings-cancel {
+  padding: 8px 20px;
+  background: #fff;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.colab-settings-cancel:hover {
+  background: #f8fafc;
+  color: #475569;
+}
+
+/* ---- Column management ---- */
+.colab-settings-columns {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.colab-settings-col-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.colab-settings-col-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.colab-settings-col-row:last-of-type {
+  border-bottom: none;
+}
+
+.colab-settings-col-input {
+  flex: 1;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #1e293b;
+}
+.colab-settings-col-input:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+}
+
+.colab-settings-col-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.colab-settings-col-btn:hover {
+  background: #f1f5f9;
+  color: #0d9488;
+  border-color: #0d9488;
+}
+.colab-settings-col-btn.danger:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.colab-settings-col-add {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px dashed #0d9488;
+  border-radius: 6px;
+  background: none;
+  color: #0d9488;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+.colab-settings-col-add:hover {
+  background: #0d9488;
+  color: #fff;
+  border-color: #0d9488;
+}
+.colab-settings-col-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.colab-settings-col-add:disabled:hover {
+  background: none;
+  color: #0d9488;
+}
+
+.colab-settings-col-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* ---- Focus visible ---- */
+.colab-settings-btn:focus-visible,
+.colab-settings-close:focus-visible,
+.colab-settings-save:focus-visible,
+.colab-settings-cancel:focus-visible,
+.colab-settings-chip:focus-visible,
+.colab-settings-col-btn:focus-visible,
+.colab-settings-col-add:focus-visible,
+.colab-settings-col-input:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+</style>

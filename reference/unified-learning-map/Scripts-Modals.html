@@ -1,0 +1,1114 @@
+<script>
+    // ================================================
+    // FORM DROPDOWN POPULATION
+    // ================================================
+
+    function populateFormDropdowns() {
+      var subjectSelect = document.getElementById('classFormSubject');
+      subjectSelect.innerHTML = '<option value="">-- Select Subject --</option>';
+      for (var i = 0; i < formOptions.subjects.length; i++) {
+        var opt = document.createElement('option');
+        opt.value = formOptions.subjects[i];
+        opt.textContent = formOptions.subjects[i];
+        subjectSelect.appendChild(opt);
+      }
+
+      var yearSelect = document.getElementById('classFormYear');
+      yearSelect.innerHTML = '';
+      for (var j = 0; j < formOptions.years.length; j++) {
+        var opt = document.createElement('option');
+        opt.value = formOptions.years[j];
+        opt.textContent = formOptions.years[j];
+        if (j === 1) opt.selected = true;
+        yearSelect.appendChild(opt);
+      }
+    }
+
+    // ================================================
+    // MAPS DATA LOADING
+    // ================================================
+
+    function loadMaps() {
+      google.script.run
+        .withSuccessHandler(function(maps) {
+          mapsData = maps;
+          showMaps();
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('mapsContent').innerHTML = '<p style="color:#dc2626;">Error: ' + escapeHtml(err.message) + '</p>';
+        })
+        .getMaps();
+    }
+
+    function loadClasses() {
+      google.script.run
+        .withSuccessHandler(function(classes) {
+          classesData = classes;
+          showClasses();
+          // Re-populate Progress class dropdown (may have loaded before RPC returned)
+          if (typeof populateProgressClassDropdown === 'function') populateProgressClassDropdown();
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('classesContent').innerHTML = '<p style="color:#dc2626;">Error: ' + escapeHtml(err.message) + '</p>';
+        })
+        .getClasses();
+    }
+
+    function loadUsers() {
+      google.script.run
+        .withSuccessHandler(function(users) {
+          usersData = users;
+          showUsers();
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('usersContent').innerHTML = '<p style="color:#dc2626;">Error: ' + escapeHtml(err.message) + '</p>';
+        })
+        .getAllUsers();
+    }
+
+    // ================================================
+    // MAPS VIEW
+    // ================================================
+
+    var lsmShowLessonMaps = false;  // Toggle for showing lesson maps in map list
+    var mlsCollapsedSections = {};  // { courseId: true } for collapsed map sections
+
+    function showMaps() {
+      // Stop time re-evaluation polling when navigating away from builder
+      if (typeof treStopPolling === 'function') treStopPolling();
+
+      var container = document.getElementById('mapsContent');
+      if (mapsData.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">\uD83D\uDDFA\uFE0F</div><h3>No maps yet</h3><p>Create your first learning map to get started.</p></div>';
+        return;
+      }
+
+      // Separate unit maps from lesson maps
+      var unitMaps = [];
+      var lessonMapsByParent = {};
+      var hasLessonMaps = false;
+      for (var i = 0; i < mapsData.length; i++) {
+        var m = mapsData[i];
+        var meta = m.meta || {};
+        if (meta.isLessonMap && meta.parentMapId) {
+          hasLessonMaps = true;
+          if (!lessonMapsByParent[meta.parentMapId]) lessonMapsByParent[meta.parentMapId] = [];
+          lessonMapsByParent[meta.parentMapId].push(m);
+        } else {
+          unitMaps.push(m);
+        }
+      }
+
+      // Build course name lookup
+      var courseNameById = {};
+      if (typeof coursesData !== 'undefined' && coursesData) {
+        for (var ci = 0; ci < coursesData.length; ci++) {
+          courseNameById[String(coursesData[ci].courseId)] = coursesData[ci].title;
+        }
+      }
+
+      // Group unit maps by courseId
+      var groups = {};
+      var groupOrder = [];
+      for (var j = 0; j < unitMaps.length; j++) {
+        var map = unitMaps[j];
+        var cid = map.courseId ? String(map.courseId) : '_uncategorized';
+        if (!groups[cid]) {
+          groups[cid] = [];
+          groupOrder.push(cid);
+        }
+        groups[cid].push(map);
+      }
+
+      var html = '';
+
+      // Toggle for lesson maps (teacher only, only if lesson maps exist)
+      if (hasLessonMaps && currentViewMode === 'teacher') {
+        html += '<div class="lsm-filter-toggle">';
+        html += '<label class="lsm-filter-label"><input type="checkbox" ' + (lsmShowLessonMaps ? 'checked' : '') + ' onchange="lsmShowLessonMaps=this.checked;showMaps();"> Show lesson maps</label>';
+        html += '</div>';
+      }
+
+      // If only 1 group, render flat (no section headers)
+      if (groupOrder.length <= 1) {
+        var allMaps = groupOrder.length === 1 ? groups[groupOrder[0]] : [];
+        for (var fi = 0; fi < allMaps.length; fi++) {
+          html += lsmRenderMapCard(allMaps[fi], fi === 0, false);
+          if (lsmShowLessonMaps && lessonMapsByParent[allMaps[fi].mapId]) {
+            var fChildren = lessonMapsByParent[allMaps[fi].mapId];
+            for (var fc = 0; fc < fChildren.length; fc++) {
+              html += lsmRenderMapCard(fChildren[fc], false, true);
+            }
+          }
+        }
+      } else {
+        // Multiple groups: render collapsible sections
+        for (var gi = 0; gi < groupOrder.length; gi++) {
+          var gid = groupOrder[gi];
+          var gName = gid === '_uncategorized' ? 'Uncategorized' : (courseNameById[gid] || 'Other Maps');
+          html += mlsRenderSection(gid, gName, groups[gid], lessonMapsByParent, gi === 0);
+        }
+      }
+
+      container.innerHTML = html;
+    }
+
+    function mlsRenderSection(courseId, courseName, maps, lessonMapsByParent, isFirstSection) {
+      var isCollapsed = mlsCollapsedSections[courseId] === true;
+      var mapCount = maps.length;
+      var chevron = isCollapsed ? '&#9654;' : '&#9660;';
+      var safeId = escapeHtml(courseId).replace(/'/g, "\\'");
+
+      var html = '<div class="mls-section">';
+      html += '<div class="mls-section-header" role="button" tabindex="0" '
+        + 'aria-expanded="' + String(!isCollapsed) + '" '
+        + 'aria-controls="mls-body-' + escapeHtml(courseId) + '" '
+        + 'onclick="mlsToggleSection(\'' + safeId + '\')" '
+        + 'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();mlsToggleSection(\'' + safeId + '\');}">';
+      html += '<span class="mls-chevron">' + chevron + '</span>';
+      html += '<span class="mls-section-title">' + escapeHtml(courseName) + '</span>';
+      html += '<span class="mls-count-badge">' + mapCount + '</span>';
+      html += '</div>';
+
+      if (!isCollapsed) {
+        html += '<div class="mls-section-body" id="mls-body-' + escapeHtml(courseId) + '">';
+        for (var si = 0; si < maps.length; si++) {
+          html += lsmRenderMapCard(maps[si], isFirstSection && si === 0, false);
+          if (lsmShowLessonMaps && lessonMapsByParent[maps[si].mapId]) {
+            var children = lessonMapsByParent[maps[si].mapId];
+            for (var sc = 0; sc < children.length; sc++) {
+              html += lsmRenderMapCard(children[sc], false, true);
+            }
+          }
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    function mlsToggleSection(courseId) {
+      mlsCollapsedSections[courseId] = !mlsCollapsedSections[courseId];
+      showMaps();
+    }
+
+    function lsmRenderMapCard(map, isFirst, isChild) {
+      var hexCount = map.hexes ? map.hexes.length : 0;
+      var connectionCount = countConnections(map);
+      var cls = 'data-item' + (isChild ? ' lsm-child-map' : '');
+      var html = '<div class="' + cls + '"' + (isFirst ? ' data-tour="map-card-first"' : '') + '>';
+      var prefix = isChild ? '<span class="lsm-child-prefix">↳</span> ' : '';
+      html += '<h3>' + prefix + escapeHtml(map.title) + '</h3>';
+      html += '<p><strong>Hexes:</strong> ' + hexCount + ' | <strong>Connections:</strong> ' + connectionCount + '</p>';
+      html += '<div class="data-item-actions">';
+      if (currentViewMode === 'teacher') {
+        html += '<button class="btn" onclick="openMapInBuilder(\'' + map.mapId + '\')">Open in Builder</button>';
+        html += '<button id="dup-btn-' + map.mapId + '" class="btn btn-outline btn-small" onclick="handleDuplicateMap(\'' + map.mapId + '\', \'' + escapeHtml(map.title).replace(/'/g, "\\'") + '\')">Duplicate</button>';
+      } else {
+        html += '<button class="btn btn-success" onclick="openMapInBuilder(\'' + map.mapId + '\')">View Map</button>';
+      }
+      html += '</div></div>';
+      return html;
+    }
+
+    // ================================================
+    // MAP CREATION
+    // ================================================
+
+    function openCreateMapDialog() {
+      if (document.getElementById('inlineCreateMapRow')) return;
+      var header = document.querySelector('#mapsView .card-header');
+      if (!header) return;
+      var row = document.createElement('div');
+      row.id = 'inlineCreateMapRow';
+      row.style.cssText = 'display:flex;gap:8px;margin-top:8px;align-items:center;';
+      row.innerHTML = '<input id="inlineCreateMapInput" type="text" placeholder="Map title..." '
+        + 'maxlength="100" style="flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;" '
+        + 'onkeydown="if(event.key===\'Enter\'){confirmCreateMap();}">'
+        + '<button onclick="confirmCreateMap()" style="padding:8px 16px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Create</button>'
+        + '<button onclick="cancelCreateMap()" style="padding:8px 16px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Cancel</button>';
+      header.appendChild(row);
+      document.getElementById('inlineCreateMapInput').focus();
+    }
+
+    function confirmCreateMap() {
+      var input = document.getElementById('inlineCreateMapInput');
+      var title = (input ? input.value : '').trim();
+      if (!title) { showToast('Map title cannot be empty.', 'error'); return; }
+      var row = document.getElementById('inlineCreateMapRow');
+      if (row) row.parentNode.removeChild(row);
+
+      var btn = document.getElementById('createMapBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+
+      google.script.run
+        .withSuccessHandler(function(newMap) {
+          mapsData.push(newMap);
+          showMaps();
+          showToast('Map created!', 'success');
+          if (btn) { btn.disabled = false; btn.textContent = '+ New Map'; }
+          openMapInBuilder(newMap.mapId);
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error creating map: ' + escapeHtml(err.message), 'error');
+          if (btn) { btn.disabled = false; btn.textContent = '+ New Map'; }
+        })
+        .saveMap({ title: title });
+    }
+
+    function cancelCreateMap() {
+      var row = document.getElementById('inlineCreateMapRow');
+      if (row) row.parentNode.removeChild(row);
+    }
+
+    function countConnections(map) {
+      if (!map.hexes) return 0;
+      var count = 0;
+      for (var i = 0; i < map.hexes.length; i++) {
+        if (map.hexes[i].branches) count += map.hexes[i].branches.length;
+      }
+      return count;
+    }
+
+    // ================================================
+    // MAP DUPLICATION
+    // ================================================
+
+    function handleDuplicateMap(mapId, currentTitle) {
+      var rowId = 'inlineDupRow-' + mapId;
+      if (document.getElementById(rowId)) return;
+      var btn = document.getElementById('dup-btn-' + mapId);
+      var parent = btn ? btn.parentNode : null;
+      if (!parent) return;
+      var defaultTitle = 'Copy of ' + currentTitle;
+      var row = document.createElement('div');
+      row.id = rowId;
+      row.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;';
+      row.innerHTML = '<input id="inlineDupInput-' + escapeHtml(mapId) + '" type="text" value="' + escapeHtml(defaultTitle) + '" '
+        + 'maxlength="100" style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+        + 'onkeydown="if(event.key===\'Enter\'){confirmDuplicateMap(\'' + escapeHtml(mapId) + '\');}">'
+        + '<button onclick="confirmDuplicateMap(\'' + escapeHtml(mapId) + '\')" style="padding:6px 12px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Duplicate</button>'
+        + '<button onclick="cancelDuplicateMap(\'' + escapeHtml(mapId) + '\')" style="padding:6px 12px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+      parent.appendChild(row);
+      var input = document.getElementById('inlineDupInput-' + mapId);
+      if (input) { input.focus(); input.select(); }
+    }
+
+    function confirmDuplicateMap(mapId) {
+      var input = document.getElementById('inlineDupInput-' + mapId);
+      var newTitle = (input ? input.value : '').trim();
+      if (!newTitle) { showToast('Map title cannot be empty', 'error'); return; }
+      var row = document.getElementById('inlineDupRow-' + mapId);
+      if (row) row.parentNode.removeChild(row);
+
+      var btn = document.getElementById('dup-btn-' + mapId);
+      if (btn) { btn.disabled = true; btn.textContent = 'Duplicating...'; }
+
+      google.script.run
+        .withSuccessHandler(function(newMap) {
+          showToast('Map duplicated successfully!', 'success');
+          loadMaps();
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error duplicating map: ' + err.message, 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Duplicate'; }
+        })
+        .duplicateMap(mapId, newTitle);
+    }
+
+    function cancelDuplicateMap(mapId) {
+      var row = document.getElementById('inlineDupRow-' + mapId);
+      if (row) row.parentNode.removeChild(row);
+    }
+
+    // ================================================
+    // CLASSES VIEW
+    // ================================================
+
+    function showClasses() {
+      var container = document.getElementById('classesContent');
+      if (classesData.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><h3>No classes yet</h3><p>Create your first class to organize students.</p><button class="btn btn-success" onclick="openClassModal()">+ Create Class</button></div>';
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < classesData.length; i++) {
+        var cls = classesData[i];
+        var isArchived = cls.status === 'archived';
+        var safeClassName = escapeHtml(cls.className).replace(/'/g, "\\'");
+
+        html += '<div class="class-card">';
+        html += '<div class="class-card-header"><div>';
+        html += '<div class="class-card-title"><span class="icon">📚</span>' + escapeHtml(cls.className) + '</div>';
+        if (cls.courseName || cls.sectionId) {
+          html += '<div class="class-card-subtitle">';
+          if (cls.courseName) html += escapeHtml(cls.courseName);
+          if (cls.courseName && cls.sectionId) html += ' • ';
+          if (cls.sectionId) html += 'Section: ' + escapeHtml(cls.sectionId);
+          html += '</div>';
+        }
+        html += '</div>';
+        html += '<span class="class-card-badge' + (isArchived ? ' archived' : '') + '">' + (isArchived ? 'Archived' : 'Active') + '</span></div>';
+
+        html += '<div class="class-card-meta">';
+        if (cls.subject) html += '<span>📖 ' + escapeHtml(cls.subject) + '</span>';
+        if (cls.year) html += '<span>📅 ' + escapeHtml(cls.year) + '</span>';
+        html += '<span class="student-count" id="count-' + cls.classId + '">👤 Loading...</span>';
+        html += '<span class="asgn-map-count" id="mapcount-' + cls.classId + '" style="display:none;">🗺️ ...</span></div>';
+
+        html += '<div class="class-card-actions">';
+        html += '<button class="btn btn-success btn-small" onclick="openAddStudentsModal(\'' + cls.classId + '\', \'' + safeClassName + '\')">+ Add Students</button>';
+        html += '<button class="btn btn-outline btn-small" onclick="openAssignMapsModal(\'' + cls.classId + '\', \'' + safeClassName + '\')">📗 Assign Maps</button>';
+        html += '<button class="btn btn-outline btn-small" onclick="openRosterModal(\'' + cls.classId + '\', \'' + safeClassName + '\')">Manage Roster</button>';
+        html += '<button class="btn btn-ghost btn-small" onclick="openClassModal(\'' + cls.classId + '\')">Edit</button>';
+        html += '<button class="btn btn-ghost btn-small" style="color:#dc2626;" onclick="confirmDeleteClass(\'' + cls.classId + '\', \'' + safeClassName + '\')">Delete</button>';
+        html += '</div></div>';
+      }
+      container.innerHTML = html;
+
+      for (var j = 0; j < classesData.length; j++) {
+        loadStudentCount(classesData[j].classId);
+        loadMapCount(classesData[j].classId);
+      }
+    }
+
+    function confirmDeleteClass(classId, className) {
+      if (!confirm('Delete class "' + className + '" and all its roster, map assignments, formative checks, and groups?\n\nThis cannot be undone.')) return;
+      showToast('Deleting class...', 'info');
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Class deleted', 'success');
+          classesData = classesData.filter(function(c) { return c.classId !== classId; });
+          showClasses();
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+        })
+        .deleteClass(classId);
+    }
+
+    function loadStudentCount(classId) {
+      google.script.run
+        .withSuccessHandler(function(roster) {
+          var activeCount = 0;
+          for (var i = 0; i < roster.length; i++) {
+            if (roster[i].status !== 'removed') activeCount++;
+          }
+          var el = document.getElementById('count-' + classId);
+          if (el) el.textContent = '👤 ' + activeCount + ' student' + (activeCount !== 1 ? 's' : '');
+        })
+        .withFailureHandler(function() {
+          var el = document.getElementById('count-' + classId);
+          if (el) el.textContent = '👤 --';
+        })
+        .getClassRoster(classId);
+    }
+
+    // ================================================
+    // USERS VIEW
+    // ================================================
+
+    function showUsers() {
+      var container = document.getElementById('usersContent');
+      if (usersData.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><h3>No users found</h3></div>';
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < usersData.length; i++) {
+        var user = usersData[i];
+        var isActive = user.active !== false;
+
+        html += '<div class="user-card' + (isActive ? '' : ' inactive') + '">';
+        html += '<div class="user-card-info">';
+        html += '<div class="user-card-email">' + escapeHtml(user.email) + '</div>';
+        html += '<div class="user-card-name">' + escapeHtml(user.name || user.displayName || '--') + '</div>';
+        html += '</div>';
+        html += '<div class="user-card-role">';
+        html += '<select class="role-select" onchange="changeRole(\'' + escapeHtml(user.email).replace(/'/g, "\\'") + '\', this.value)" ' + (user.email === userData.email ? 'disabled title="Cannot change your own role"' : '') + '>';
+        html += '<option value="Administrator"' + (user.role === 'Administrator' ? ' selected' : '') + '>Administrator</option>';
+        html += '<option value="Teacher"' + (user.role === 'Teacher' ? ' selected' : '') + '>Teacher</option>';
+        html += '<option value="Student"' + (user.role === 'Student' ? ' selected' : '') + '>Student</option>';
+        html += '</select>';
+        html += '</div>';
+        html += '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function changeRole(email, newRole) {
+      if (!confirm('Change role for ' + email + ' to ' + newRole + '?')) {
+        loadUsers();
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          showToast(result.message || 'Role updated!', 'success');
+          loadUsers();
+          if (email === userData.email) loadAllData();
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + err.message, 'error');
+          loadUsers();
+        })
+        .changeUserRole(email, newRole);
+    }
+
+    function openUserManagement() {
+      if (userData && userData.isAdmin) {
+        switchTab(document.querySelector('[data-view="users"]'));
+      } else {
+        showToast('Only administrators can manage users', 'error');
+      }
+    }
+
+    // ================================================
+    // CLASS MODAL
+    // ================================================
+
+    function openClassModal(classId) {
+      document.getElementById('classFormId').value = '';
+      document.getElementById('classFormName').value = '';
+      document.getElementById('classFormCourseName').value = '';
+      document.getElementById('classFormSectionId').value = '';
+      document.getElementById('classFormSubject').value = '';
+
+      var yearSelect = document.getElementById('classFormYear');
+      if (yearSelect.options.length > 1) yearSelect.selectedIndex = 1;
+
+      if (classId) {
+        document.getElementById('classModalTitle').textContent = 'Edit Class';
+        for (var i = 0; i < classesData.length; i++) {
+          if (classesData[i].classId === classId) {
+            var cls = classesData[i];
+            document.getElementById('classFormId').value = cls.classId;
+            document.getElementById('classFormName').value = cls.className || '';
+            document.getElementById('classFormCourseName').value = cls.courseName || '';
+            document.getElementById('classFormSectionId').value = cls.sectionId || '';
+            document.getElementById('classFormSubject').value = cls.subject || '';
+            document.getElementById('classFormYear').value = cls.year || '';
+            break;
+          }
+        }
+      } else {
+        document.getElementById('classModalTitle').textContent = 'Create New Class';
+      }
+
+      document.getElementById('classModal').classList.add('active');
+      document.getElementById('classFormName').focus();
+    }
+
+    function closeClassModal() {
+      document.getElementById('classModal').classList.remove('active');
+    }
+
+    function saveClass() {
+      var classId = document.getElementById('classFormId').value;
+      var className = document.getElementById('classFormName').value.trim();
+      var courseName = document.getElementById('classFormCourseName').value.trim();
+      var sectionId = document.getElementById('classFormSectionId').value.trim();
+      var subject = document.getElementById('classFormSubject').value;
+      var year = document.getElementById('classFormYear').value;
+
+      if (!className) { showToast('Please enter a class name', 'error'); return; }
+      if (!subject) { showToast('Please select a subject', 'error'); return; }
+      if (!year) { showToast('Please select an academic year', 'error'); return; }
+
+      var classData = { className: className, courseName: courseName, sectionId: sectionId, subject: subject, year: year };
+
+      if (classId) {
+        classData.classId = classId;
+        google.script.run
+          .withSuccessHandler(function(result) {
+            showToast('Class updated!', 'success');
+            closeClassModal();
+            loadClasses();
+          })
+          .withFailureHandler(function(err) {
+            showToast('Error: ' + err.message, 'error');
+          })
+          .updateClass(classData);
+      } else {
+        google.script.run
+          .withSuccessHandler(function(result) {
+            showToast('Class created!', 'success');
+            closeClassModal();
+            loadClasses();
+          })
+          .withFailureHandler(function(err) {
+            showToast('Error: ' + err.message, 'error');
+          })
+          .createClass(classData);
+      }
+    }
+
+    // ================================================
+    // ROSTER MODAL
+    // ================================================
+
+    function openRosterModal(classId, className) {
+      document.getElementById('rosterClassId').value = classId;
+      document.getElementById('rosterModalTitle').textContent = 'Manage Roster: ' + className;
+      document.getElementById('rosterAddEmails').value = '';
+      document.getElementById('rosterModal').classList.add('active');
+      loadRoster(classId);
+    }
+
+    function closeRosterModal() {
+      document.getElementById('rosterModal').classList.remove('active');
+      currentRoster = [];
+    }
+
+    function loadRoster(classId) {
+      document.getElementById('rosterList').innerHTML = '<div class="roster-empty"><span class="loading-spinner"></span> Loading...</div>';
+      google.script.run
+        .withSuccessHandler(function(roster) { currentRoster = roster; renderRoster(); })
+        .withFailureHandler(function() { document.getElementById('rosterList').innerHTML = '<div class="roster-empty" style="color:#dc2626;">Error loading roster</div>'; })
+        .getClassRoster(classId);
+    }
+
+    function renderRoster() {
+      var container = document.getElementById('rosterList');
+      var activeStudents = currentRoster.filter(function(s) { return s.status !== 'removed'; });
+      document.getElementById('rosterCount').textContent = activeStudents.length;
+
+      if (activeStudents.length === 0) {
+        container.innerHTML = '<div class="roster-empty">No students enrolled yet</div>';
+        return;
+      }
+
+      var html = '';
+      // Support Profiles button (teacher-only)
+      if (userData && userData.canEdit) {
+        var classId = document.getElementById('rosterClassId').value;
+        html += '<div style="margin-bottom:10px;text-align:right;">';
+        html += '<button class="ssp-btn ssp-btn-primary ssp-btn-sm" onclick="openSupportProfilesPanel(\'' + classId + '\')">&#128203; Support Profiles</button>';
+        html += '</div>';
+      }
+      for (var j = 0; j < activeStudents.length; j++) {
+        var student = activeStudents[j];
+        html += '<div class="roster-item"><div class="roster-item-info">';
+        html += '<div class="roster-item-name">' + escapeHtml(student.name || student.studentName || 'Unknown') + '</div>';
+        html += '<div class="roster-item-email">' + escapeHtml(student.email || student.studentEmail);
+        if (student.studentId) html += ' <span class="ssp-student-id">(ID: ' + escapeHtml(student.studentId) + ')</span>';
+        html += '</div></div>';
+        html += '<button class="btn btn-ghost btn-small danger" onclick="confirmRemoveStudent(\'' + escapeHtml(student.email || student.studentEmail).replace(/'/g, "\\'") + '\')">Remove</button></div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function addStudentsToRoster() {
+      var classId = document.getElementById('rosterClassId').value;
+      var emailsText = document.getElementById('rosterAddEmails').value;
+      var emails = emailsText.split(/[\n,;]+/);
+      var students = [];
+
+      for (var i = 0; i < emails.length; i++) {
+        var email = emails[i].trim().toLowerCase();
+        if (email && email.indexOf('@') > 0) students.push({ email: email, name: email.split('@')[0] });
+      }
+
+      if (students.length === 0) { showToast('Please enter valid email addresses', 'error'); return; }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          showToast('Added ' + result.added + ' student(s)!', 'success');
+          document.getElementById('rosterAddEmails').value = '';
+          loadRoster(classId);
+          loadStudentCount(classId);
+        })
+        .withFailureHandler(function(err) { showToast('Error: ' + err.message, 'error'); })
+        .addStudentsToClass(classId, students);
+    }
+
+    function confirmRemoveStudent(email) {
+      if (confirm('Remove ' + email + ' from this class?')) removeStudent(email);
+    }
+
+    function removeStudent(email) {
+      var classId = document.getElementById('rosterClassId').value;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) { showToast('Student removed', 'success'); loadRoster(classId); loadStudentCount(classId); }
+          else showToast(result.error || result.message || 'Error', 'error');
+        })
+        .withFailureHandler(function(err) { showToast('Error: ' + err.message, 'error'); })
+        .removeStudentFromClass(classId, email);
+    }
+
+    function openSupportProfilesPanel(classId) {
+      // Close roster modal and open support profiles overlay
+      closeRosterModal();
+      var overlay = document.getElementById('sspProfileListOverlay');
+      if (overlay) overlay.style.display = 'flex';
+      if (typeof loadSupportProfiles === 'function') {
+        loadSupportProfiles(classId);
+      } else {
+        showToast('Support profiles module not loaded', 'error');
+      }
+    }
+
+    // ================================================
+    // ADD STUDENTS MODAL
+    // ================================================
+
+    function openAddStudentsModal(classId, className) {
+      currentAddClassId = classId;
+      studentsQueue = [];
+
+      document.getElementById('addStudentsModalTitle').textContent = 'Add Students to: ' + (className || classId);
+      document.getElementById('newStudentEmail').value = '';
+      document.getElementById('newStudentName').value = '';
+      document.getElementById('studentLookupStatus').textContent = '';
+      document.getElementById('addStudentsError').style.display = 'none';
+      document.getElementById('studentsQueueList').innerHTML = '';
+      document.getElementById('studentsQueueSection').style.display = 'none';
+      document.getElementById('studentsQueueCount').textContent = '0';
+      document.getElementById('submitAddStudentsBtn').disabled = true;
+      document.getElementById('submitAddStudentsBtn').textContent = 'Add Students';
+
+      document.getElementById('addStudentsModal').classList.add('active');
+      setTimeout(function() { document.getElementById('newStudentEmail').focus(); }, 100);
+    }
+
+    function closeAddStudentsModal() {
+      document.getElementById('addStudentsModal').classList.remove('active');
+      currentAddClassId = null;
+      studentsQueue = [];
+    }
+
+    function lookupStudentEmail() {
+      var email = document.getElementById('newStudentEmail').value.trim();
+      var statusEl = document.getElementById('studentLookupStatus');
+      var nameInput = document.getElementById('newStudentName');
+
+      if (!email) { statusEl.textContent = ''; return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        statusEl.innerHTML = '<span style="color: #dc3545;">⚠ Invalid email format</span>';
+        return;
+      }
+
+      statusEl.innerHTML = '<span style="color: #666;">🔍 Looking up...</span>';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.found) {
+            nameInput.value = result.name;
+            statusEl.innerHTML = '<span style="color: #28a745;">✓ Found: ' + escapeHtml(result.name) + '</span>';
+          } else {
+            statusEl.innerHTML = '<span style="color: #666;">New student - please enter name</span>';
+            if (!nameInput.value) nameInput.focus();
+          }
+        })
+        .withFailureHandler(function(error) {
+          statusEl.innerHTML = '<span style="color: #dc3545;">Error looking up email</span>';
+        })
+        .lookupUserByEmail(email);
+    }
+
+    function addStudentToQueue() {
+      var emailInput = document.getElementById('newStudentEmail');
+      var nameInput = document.getElementById('newStudentName');
+      var errorEl = document.getElementById('addStudentsError');
+
+      var email = emailInput.value.trim().toLowerCase();
+      var name = nameInput.value.trim();
+
+      if (!email) { showAddStudentsError('Please enter an email address'); emailInput.focus(); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showAddStudentsError('Please enter a valid email address'); emailInput.focus(); return; }
+      if (!name) { showAddStudentsError('Please enter the student name'); nameInput.focus(); return; }
+
+      for (var i = 0; i < studentsQueue.length; i++) {
+        if (studentsQueue[i].email === email) { showAddStudentsError('This email is already in the list'); return; }
+      }
+
+      var statusEl = document.getElementById('studentLookupStatus');
+      var isExisting = statusEl.textContent.indexOf('Found:') !== -1;
+
+      studentsQueue.push({ email: email, name: name, isExisting: isExisting });
+      renderStudentsQueue();
+
+      emailInput.value = '';
+      nameInput.value = '';
+      statusEl.textContent = '';
+      errorEl.style.display = 'none';
+      emailInput.focus();
+    }
+
+    function removeFromQueue(index) {
+      studentsQueue.splice(index, 1);
+      renderStudentsQueue();
+    }
+
+    function renderStudentsQueue() {
+      var listEl = document.getElementById('studentsQueueList');
+      var sectionEl = document.getElementById('studentsQueueSection');
+      var countEl = document.getElementById('studentsQueueCount');
+      var submitBtn = document.getElementById('submitAddStudentsBtn');
+
+      countEl.textContent = studentsQueue.length;
+
+      if (studentsQueue.length === 0) {
+        sectionEl.style.display = 'none';
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Add Students';
+        return;
+      }
+
+      sectionEl.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Add ' + studentsQueue.length + ' Student' + (studentsQueue.length > 1 ? 's' : '');
+
+      var html = '';
+      for (var i = 0; i < studentsQueue.length; i++) {
+        var student = studentsQueue[i];
+        var badgeClass = student.isExisting ? 'existing-user' : 'new-user';
+        var badgeText = student.isExisting ? 'Existing' : 'New';
+
+        html += '<div class="student-queue-item">' +
+          '<div class="student-info">' +
+            '<span class="student-name">' + escapeHtml(student.name) +
+              '<span class="student-badge ' + badgeClass + '">' + badgeText + '</span>' +
+            '</span>' +
+            '<span class="student-email">' + escapeHtml(student.email) + '</span>' +
+          '</div>' +
+          '<button class="remove-btn" onclick="removeFromQueue(' + i + ')" title="Remove">&times;</button>' +
+        '</div>';
+      }
+
+      listEl.innerHTML = html;
+    }
+
+    function submitAddStudents() {
+      if (!currentAddClassId) { showAddStudentsError('No class selected'); return; }
+      if (studentsQueue.length === 0) { showAddStudentsError('No students to add'); return; }
+
+      var submitBtn = document.getElementById('submitAddStudentsBtn');
+      var errorEl = document.getElementById('addStudentsError');
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Adding...';
+      errorEl.style.display = 'none';
+
+      var students = studentsQueue.map(function(s) { return { email: s.email, name: s.name }; });
+      var classIdToAdd = currentAddClassId;
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.added > 0) {
+            closeAddStudentsModal();
+            showToast(result.message || (result.added + ' student(s) added!'), 'success');
+            loadStudentCount(classIdToAdd);
+          } else if (result.skipped > 0 && result.added === 0) {
+            showAddStudentsError('All students were already enrolled in this class');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add ' + studentsQueue.length + ' Student' + (studentsQueue.length > 1 ? 's' : '');
+          }
+        })
+        .withFailureHandler(function(error) {
+          showAddStudentsError('Error: ' + error.message);
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Add ' + studentsQueue.length + ' Student' + (studentsQueue.length > 1 ? 's' : '');
+        })
+        .addStudentsToClass(classIdToAdd, students);
+    }
+
+    function showAddStudentsError(message) {
+      var errorEl = document.getElementById('addStudentsError');
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+    }
+
+    // ================================================
+    // ADD USER MODAL
+    // ================================================
+
+    function openAddUserModal() {
+      document.getElementById('addUserEmail').value = '';
+      document.getElementById('addUserName').value = '';
+      document.getElementById('addUserRole').value = 'Student';
+      document.getElementById('addUserModal').classList.add('active');
+      document.getElementById('addUserEmail').focus();
+    }
+
+    function closeAddUserModal() {
+      document.getElementById('addUserModal').classList.remove('active');
+    }
+
+    function addNewUser() {
+      var email = document.getElementById('addUserEmail').value.trim();
+      var name = document.getElementById('addUserName').value.trim();
+      var role = document.getElementById('addUserRole').value;
+
+      if (!email || email.indexOf('@') < 0) { showToast('Please enter a valid email address', 'error'); return; }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          showToast(result.message || 'User added!', 'success');
+          closeAddUserModal();
+          loadUsers();
+        })
+        .withFailureHandler(function(err) { showToast('Error: ' + err.message, 'error'); })
+        .addUser({ email: email, name: name, role: role });
+    }
+
+    // ================================================
+    // ASSIGN MAPS MODAL
+    // ================================================
+
+    var assignMapsClassId = null;
+    var assignMapsOriginal = [];  // mapIds that were assigned when modal opened
+
+    function loadMapCount(classId) {
+      google.script.run
+        .withSuccessHandler(function(mapIds) {
+          var el = document.getElementById('mapcount-' + classId);
+          if (!el) return;
+          if (mapIds && mapIds.length > 0) {
+            el.textContent = '🗺️ ' + mapIds.length + ' map' + (mapIds.length !== 1 ? 's' : '');
+            el.style.display = 'inline-flex';
+          } else {
+            el.style.display = 'none';
+          }
+        })
+        .withFailureHandler(function() {
+          var el = document.getElementById('mapcount-' + classId);
+          if (el) el.style.display = 'none';
+        })
+        .getClassMapAssignments(classId);
+    }
+
+    function openAssignMapsModal(classId, className) {
+      assignMapsClassId = classId;
+      assignMapsOriginal = [];
+
+      document.getElementById('assignMapsModalTitle').textContent = 'Assign Maps: ' + (className || classId);
+      document.getElementById('assignMapsSearch').value = '';
+      document.getElementById('assignMapsWarning').style.display = 'none';
+      document.getElementById('assignMapsList').innerHTML = '<div class="loading"><span class="loading-spinner"></span>Loading assignments...</div>';
+
+      // Show info bar with class name (student count loads async)
+      var infoBar = document.getElementById('assignMapsInfo');
+      infoBar.innerHTML = '<span class="asgn-info-icon">📚</span><span class="asgn-info-text">' + escapeHtml(className || classId) + '</span><span class="asgn-info-count" id="assignMapsStudentCount">Loading students...</span>';
+
+      document.getElementById('assignMapsModal').classList.add('active');
+
+      // Load student count for info bar
+      google.script.run
+        .withSuccessHandler(function(roster) {
+          var activeCount = 0;
+          for (var i = 0; i < roster.length; i++) {
+            if (roster[i].status !== 'removed') activeCount++;
+          }
+          var countEl = document.getElementById('assignMapsStudentCount');
+          if (countEl) countEl.textContent = '👤 ' + activeCount + ' student' + (activeCount !== 1 ? 's' : '');
+        })
+        .withFailureHandler(function() {
+          var countEl = document.getElementById('assignMapsStudentCount');
+          if (countEl) countEl.textContent = '👤 --';
+        })
+        .getClassRoster(classId);
+
+      // Load current map assignments
+      google.script.run
+        .withSuccessHandler(function(mapIds) {
+          assignMapsOriginal = mapIds || [];
+          renderAssignMapsList(assignMapsOriginal);
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('assignMapsList').innerHTML = '<div class="roster-empty" style="color:#dc2626;">Error loading assignments: ' + escapeHtml(err.message) + '</div>';
+        })
+        .getClassMapAssignments(classId);
+    }
+
+    function closeAssignMapsModal() {
+      document.getElementById('assignMapsModal').classList.remove('active');
+      assignMapsClassId = null;
+      assignMapsOriginal = [];
+    }
+
+    function renderAssignMapsList(assignedMapIds) {
+      var container = document.getElementById('assignMapsList');
+      var searchVal = (document.getElementById('assignMapsSearch').value || '').toLowerCase();
+
+      if (!mapsData || mapsData.length === 0) {
+        container.innerHTML = '<div class="roster-empty">No maps available. Create a map first.</div>';
+        return;
+      }
+
+      var html = '';
+      var visibleCount = 0;
+      for (var i = 0; i < mapsData.length; i++) {
+        var map = mapsData[i];
+        var title = map.title || 'Untitled Map';
+        var mapId = map.mapId;
+
+        // Filter by search
+        if (searchVal && title.toLowerCase().indexOf(searchVal) === -1) continue;
+
+        var isAssigned = false;
+        for (var j = 0; j < assignedMapIds.length; j++) {
+          if (String(assignedMapIds[j]) === String(mapId)) { isAssigned = true; break; }
+        }
+
+        var hexCount = (map.hexes && map.hexes.length) ? map.hexes.length : 0;
+
+        html += '<label class="asgn-map-item' + (isAssigned ? ' checked' : '') + '" id="asgn-item-' + mapId + '">';
+        html += '<input type="checkbox" value="' + escapeHtml(mapId) + '"' + (isAssigned ? ' checked' : '') + ' onchange="onAssignMapToggle(this)">';
+        html += '<div class="asgn-map-info">';
+        html += '<div class="asgn-map-title">' + escapeHtml(title) + '</div>';
+        html += '<div class="asgn-map-meta">' + hexCount + ' hex' + (hexCount !== 1 ? 'es' : '') + '</div>';
+        html += '</div>';
+        html += '<input type="date" class="asgn-due-date" id="asgn-due-' + mapId + '" title="Due date (optional)" style="margin-left:auto;font-size:12px;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;min-width:130px;">';
+        html += '</label>';
+        visibleCount++;
+      }
+
+      if (visibleCount === 0) {
+        container.innerHTML = '<div class="roster-empty">No maps match your search.</div>';
+      } else {
+        container.innerHTML = html;
+      }
+    }
+
+    function onAssignMapToggle(checkbox) {
+      var item = checkbox.closest('.asgn-map-item');
+      if (checkbox.checked) {
+        item.classList.add('checked');
+      } else {
+        item.classList.remove('checked');
+      }
+    }
+
+    function filterAssignMapsList() {
+      // Re-render the list with current filter + keeping checkbox states
+      var container = document.getElementById('assignMapsList');
+      var checkboxes = container.querySelectorAll('input[type="checkbox"]');
+      var currentChecked = [];
+      for (var i = 0; i < checkboxes.length; i++) {
+        if (checkboxes[i].checked) currentChecked.push(checkboxes[i].value);
+      }
+      renderAssignMapsList(currentChecked);
+    }
+
+    function saveMapAssignments() {
+      if (!assignMapsClassId) return;
+
+      // Gather currently checked mapIds
+      var container = document.getElementById('assignMapsList');
+      var checkboxes = container.querySelectorAll('input[type="checkbox"]');
+      var currentChecked = [];
+      for (var i = 0; i < checkboxes.length; i++) {
+        if (checkboxes[i].checked) currentChecked.push(checkboxes[i].value);
+      }
+
+      // Compute diff
+      var toAssign = [];
+      var toUnassign = [];
+
+      // Find new assignments (checked now but not originally)
+      for (var a = 0; a < currentChecked.length; a++) {
+        var found = false;
+        for (var b = 0; b < assignMapsOriginal.length; b++) {
+          if (String(currentChecked[a]) === String(assignMapsOriginal[b])) { found = true; break; }
+        }
+        if (!found) toAssign.push(currentChecked[a]);
+      }
+
+      // Find removals (originally assigned but not checked now)
+      for (var c = 0; c < assignMapsOriginal.length; c++) {
+        var stillChecked = false;
+        for (var d = 0; d < currentChecked.length; d++) {
+          if (String(assignMapsOriginal[c]) === String(currentChecked[d])) { stillChecked = true; break; }
+        }
+        if (!stillChecked) toUnassign.push(assignMapsOriginal[c]);
+      }
+
+      // Nothing changed
+      if (toAssign.length === 0 && toUnassign.length === 0) {
+        showToast('No changes to save.', 'info');
+        return;
+      }
+
+      // Warn about unassignment (deletes progress)
+      if (toUnassign.length > 0) {
+        var mapNames = [];
+        for (var u = 0; u < toUnassign.length; u++) {
+          for (var m = 0; m < mapsData.length; m++) {
+            if (String(mapsData[m].mapId) === String(toUnassign[u])) {
+              mapNames.push(mapsData[m].title || 'Untitled');
+              break;
+            }
+          }
+        }
+        if (!confirm('Warning: Removing maps will DELETE all student progress for:\n\n- ' + mapNames.join('\n- ') + '\n\nThis cannot be undone. Continue?')) {
+          return;
+        }
+      }
+
+      // Disable save button
+      var saveBtn = document.getElementById('saveAssignMapsBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+
+      var classId = assignMapsClassId;
+      var totalOps = toAssign.length + toUnassign.length;
+      var completedOps = 0;
+      var errors = [];
+
+      function checkDone() {
+        completedOps++;
+        if (completedOps < totalOps) return;
+
+        // All operations complete
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Assignments';
+
+        if (errors.length > 0) {
+          showToast('Some assignments failed: ' + errors.join(', '), 'error');
+        } else {
+          var msg = '';
+          if (toAssign.length > 0) msg += toAssign.length + ' map' + (toAssign.length > 1 ? 's' : '') + ' assigned';
+          if (toAssign.length > 0 && toUnassign.length > 0) msg += ', ';
+          if (toUnassign.length > 0) msg += toUnassign.length + ' map' + (toUnassign.length > 1 ? 's' : '') + ' removed';
+          showToast(msg + '!', 'success');
+        }
+
+        closeAssignMapsModal();
+        loadMapCount(classId);
+      }
+
+      // Handle case where no operations
+      if (totalOps === 0) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Assignments';
+        return;
+      }
+
+      // Execute assignments (with optional due dates)
+      for (var ea = 0; ea < toAssign.length; ea++) {
+        (function(mapId) {
+          var dueDateInput = document.getElementById('asgn-due-' + mapId);
+          var dueDate = dueDateInput ? dueDateInput.value : '';
+          google.script.run
+            .withSuccessHandler(function() { checkDone(); })
+            .withFailureHandler(function(err) { errors.push(err.message); checkDone(); })
+            .assignMapToClass(classId, mapId, dueDate);
+        })(toAssign[ea]);
+      }
+
+      // Execute unassignments
+      for (var eu = 0; eu < toUnassign.length; eu++) {
+        (function(mapId) {
+          google.script.run
+            .withSuccessHandler(function() { checkDone(); })
+            .withFailureHandler(function(err) { errors.push(err.message); checkDone(); })
+            .unassignMapFromClass(classId, mapId);
+        })(toUnassign[eu]);
+      }
+    }
+</script>

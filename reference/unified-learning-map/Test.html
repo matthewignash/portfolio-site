@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Test Page</title>
+<style>
+body {
+font-family: Arial, sans-serif;
+max-width: 600px;
+margin: 50px auto;
+padding: 20px;
+background: #f0f0f0;
+    }
+.box {
+background: white;
+padding: 30px;
+border-radius: 10px;
+box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+h1 { color: #667eea; }
+.timestamp {
+background: #fffbeb;
+border-left: 4px solid #f59e0b;
+padding: 12px;
+margin: 20px 0;
+font-family: monospace;
+    }
+button {
+background: #667eea;
+color: white;
+border: none;
+padding: 12px 24px;
+border-radius: 6px;
+cursor: pointer;
+font-size: 16px;
+margin-top: 20px;
+    }
+button:hover { background: #5568d3; }
+</style>
+</head>
+<body>
+<div class="box">
+<h1>✅ Deployment Test - SUCCESS!</h1>
+<div class="timestamp">
+<strong>Timestamp:</strong> 2026-01-20 09:45:00 UTC<br>
+<strong>Version:</strong> TEST-v1
+</div>
+<p><strong>This means:</strong></p>
+<ul>
+<li>✅ Your deployment IS working</li>
+<li>✅ HTML files ARE being served</li>
+<li>✅ The issue is with the Index.html file specifically</li>
+</ul>
+<button onclick="testBackend()">Test Backend Connection</button>
+<div id="result" style="margin-top: 20px;"></div>
+</div>
+<script>
+console.log('TEST PAGE LOADED - Version TEST-v1');
+console.log('Timestamp: 2026-01-20 09:45:00');
+function testBackend() {
+document.getElementById('result').innerHTML = '<p>Testing backend...</p>';
+google.script.run
+        .withSuccessHandler(function(user) {
+document.getElementById('result').innerHTML = `
+            <div style="background: #d1fae5; padding: 15px; border-radius: 6px; margin-top: 10px;">
+              <strong>✅ Backend Working!</strong><br>
+              Email: ${user.email}<br>
+              Role: ${user.role}<br>
+              Name: ${user.name}
+            </div>
+          `;
+        })
+        .withFailureHandler(function(error) {
+document.getElementById('result').innerHTML = `
+            <div style="background: #fee2e2; padding: 15px; border-radius: 6px; margin-top: 10px;">
+              <strong>❌ Backend Error:</strong><br>
+${error.message}
+            </div>
+          `;
+        })
+        .getCurrentUser();
+    }
+</script>
+</body>
+</html>

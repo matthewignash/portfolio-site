@@ -1,0 +1,805 @@
+<script>
+// ================================================
+// KNOWLEDGE GAP ANALYSIS (ES5)
+// kga- prefix
+// ================================================
+
+// ================================================
+// COMPUTATION FUNCTIONS
+// ================================================
+
+/**
+ * 1. kgaComputePerHexStats — Per-hex avg score, completion, confidence, status counts
+ */
+function kgaComputePerHexStats(students, hexes) {
+  var stats = [];
+  if (!hexes || !students) return stats;
+
+  for (var h = 0; h < hexes.length; h++) {
+    var hex = hexes[h];
+    var hexId = String(hex.id);
+    var totalScore = 0;
+    var totalMaxScore = 0;
+    var totalConfidence = 0;
+    var confidenceCount = 0;
+    var statusCounts = { mastered: 0, completed: 0, in_progress: 0, not_started: 0 };
+    var studentCount = students.length;
+
+    for (var s = 0; s < students.length; s++) {
+      var prog = (students[s].hexProgress || {})[hexId];
+      if (prog) {
+        var st = (prog.status || 'not_started').toLowerCase();
+        if (st === 'mastered') statusCounts.mastered++;
+        else if (st === 'completed') statusCounts.completed++;
+        else if (st === 'in_progress') statusCounts.in_progress++;
+        else statusCounts.not_started++;
+
+        var sc = parseFloat(prog.score) || 0;
+        var mx = parseFloat(prog.maxScore) || 0;
+        totalScore += sc;
+        totalMaxScore += mx;
+
+        var rating = parseInt(prog.selfAssessRating, 10);
+        if (rating > 0) {
+          totalConfidence += rating;
+          confidenceCount++;
+        }
+      } else {
+        statusCounts.not_started++;
+      }
+    }
+
+    var avgScorePct = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : -1;
+    var completionPct = studentCount > 0 ? Math.round(((statusCounts.mastered + statusCounts.completed) / studentCount) * 100) : 0;
+    var avgConfidence = confidenceCount > 0 ? Math.round((totalConfidence / confidenceCount) * 10) / 10 : -1;
+
+    stats.push({
+      hexId: hexId,
+      label: hex.label || hexId,
+      type: hex.type || 'core',
+      avgScorePct: avgScorePct,
+      completionPct: completionPct,
+      avgConfidence: avgConfidence,
+      statusCounts: statusCounts,
+      studentCount: studentCount,
+      sbarDomains: (hex.curriculum && hex.curriculum.sbarDomains) ? hex.curriculum.sbarDomains : [],
+      checkCount: hex.checkCount || 0,
+      gotItRate: (hex.gotItRate !== undefined && hex.gotItRate !== null) ? hex.gotItRate : null
+    });
+  }
+
+  return stats;
+}
+
+/**
+ * 2. kgaComputeSbarClassBreakdown — Class-level SBAR avg per strand
+ */
+function kgaComputeSbarClassBreakdown(students, hexes) {
+  var strandTotals = {};
+  var strandCounts = {};
+  var hasSbar = false;
+
+  if (!hexes || !students) return { hasSbar: false, strands: [] };
+
+  for (var h = 0; h < hexes.length; h++) {
+    var hex = hexes[h];
+    var domains = (hex.curriculum && hex.curriculum.sbarDomains) ? hex.curriculum.sbarDomains : [];
+    if (domains.length === 0) continue;
+    hasSbar = true;
+    var hexId = String(hex.id);
+
+    for (var d = 0; d < domains.length; d++) {
+      var strand = domains[d];
+      if (!strandTotals[strand]) {
+        strandTotals[strand] = 0;
+        strandCounts[strand] = 0;
+      }
+
+      for (var s = 0; s < students.length; s++) {
+        var prog = (students[s].hexProgress || {})[hexId];
+        if (prog && parseFloat(prog.maxScore) > 0) {
+          var pct = (parseFloat(prog.score) || 0) / parseFloat(prog.maxScore) * 100;
+          strandTotals[strand] += pct;
+          strandCounts[strand]++;
+        }
+      }
+    }
+  }
+
+  if (!hasSbar) return { hasSbar: false, strands: [] };
+
+  var strandNames = ['KU', 'TT', 'C'];
+  var strandLabels = { KU: 'Knowledge & Understanding', TT: 'Thinking & Transfer', C: 'Communication' };
+  var strands = [];
+  var weakestIdx = -1;
+  var weakestVal = Infinity;
+
+  for (var i = 0; i < strandNames.length; i++) {
+    var name = strandNames[i];
+    var avg = strandCounts[name] > 0 ? Math.round(strandTotals[name] / strandCounts[name]) : -1;
+    strands.push({
+      name: name,
+      label: strandLabels[name] || name,
+      avgPct: avg,
+      count: strandCounts[name] || 0
+    });
+    if (avg >= 0 && avg < weakestVal) {
+      weakestVal = avg;
+      weakestIdx = i;
+    }
+  }
+
+  return {
+    hasSbar: true,
+    strands: strands,
+    weakestIdx: weakestIdx
+  };
+}
+
+/**
+ * 3. kgaComputeStudentStruggles — Struggle score, sorted top 10
+ */
+function kgaComputeStudentStruggles(students, hexes) {
+  var results = [];
+  if (!students || !hexes) return results;
+
+  for (var s = 0; s < students.length; s++) {
+    var stu = students[s];
+    var progress = stu.hexProgress || {};
+    var totalCompletion = 0;
+    var totalScore = 0;
+    var totalConfidence = 0;
+    var confCount = 0;
+    var hexCount = hexes.length;
+    var lowHexes = [];
+
+    for (var h = 0; h < hexes.length; h++) {
+      var hexId = String(hexes[h].id);
+      var prog = progress[hexId];
+      var st = prog ? (prog.status || 'not_started').toLowerCase() : 'not_started';
+      var isComplete = (st === 'completed' || st === 'mastered') ? 1 : 0;
+      totalCompletion += isComplete;
+
+      var scorePct = 0;
+      if (prog && parseFloat(prog.maxScore) > 0) {
+        scorePct = (parseFloat(prog.score) || 0) / parseFloat(prog.maxScore) * 100;
+      }
+      totalScore += scorePct;
+
+      var rating = prog ? parseInt(prog.selfAssessRating, 10) : 0;
+      if (rating > 0) {
+        totalConfidence += rating;
+        confCount++;
+      }
+
+      // Track low-performing hexes (score < 70% on started hexes)
+      if (prog && st !== 'not_started' && parseFloat(prog.maxScore) > 0 && scorePct < 70) {
+        lowHexes.push({
+          label: hexes[h].label || hexId,
+          scorePct: Math.round(scorePct)
+        });
+      }
+    }
+
+    var completionPct = hexCount > 0 ? (totalCompletion / hexCount) * 100 : 100;
+    var avgScore = hexCount > 0 ? totalScore / hexCount : 100;
+    var avgConf = confCount > 0 ? totalConfidence / confCount : 2.5;
+
+    // Struggle score: higher = more struggling
+    var struggleScore = (100 - completionPct) * 0.4 +
+                        (100 - avgScore) * 0.4 +
+                        ((4 - avgConf) / 4) * 100 * 0.2;
+
+    results.push({
+      name: stu.name || stu.email || 'Unknown',
+      email: stu.email || '',
+      struggleScore: Math.round(struggleScore),
+      completionPct: Math.round(completionPct),
+      avgScorePct: Math.round(avgScore),
+      avgConfidence: Math.round(avgConf * 10) / 10,
+      lowHexes: lowHexes
+    });
+  }
+
+  // Sort by struggle score descending
+  results.sort(function(a, b) { return b.struggleScore - a.struggleScore; });
+
+  // Top 10
+  return results.slice(0, 10);
+}
+
+/**
+ * 4. kgaComputeConfidenceMismatches — Over-confident + under-confident
+ */
+function kgaComputeConfidenceMismatches(students, hexes) {
+  var overConfident = [];
+  var underConfident = [];
+  var hasAnyConfidence = false;
+
+  if (!students || !hexes) return { overConfident: [], underConfident: [], hasData: false };
+
+  for (var s = 0; s < students.length; s++) {
+    var stu = students[s];
+    var progress = stu.hexProgress || {};
+
+    for (var h = 0; h < hexes.length; h++) {
+      var hexId = String(hexes[h].id);
+      var prog = progress[hexId];
+      if (!prog) continue;
+
+      var rating = parseInt(prog.selfAssessRating, 10);
+      if (!rating || rating <= 0) continue;
+      hasAnyConfidence = true;
+
+      var scorePct = 0;
+      if (parseFloat(prog.maxScore) > 0) {
+        scorePct = (parseFloat(prog.score) || 0) / parseFloat(prog.maxScore) * 100;
+      }
+
+      // Over-confident: confidence 3-4, score < 50%
+      if (rating >= 3 && scorePct < 50 && parseFloat(prog.maxScore) > 0) {
+        overConfident.push({
+          student: stu.name || stu.email || 'Unknown',
+          hex: hexes[h].label || hexId,
+          confidence: rating,
+          scorePct: Math.round(scorePct)
+        });
+      }
+
+      // Under-confident: confidence 1-2, score > 75%
+      if (rating <= 2 && scorePct > 75 && parseFloat(prog.maxScore) > 0) {
+        underConfident.push({
+          student: stu.name || stu.email || 'Unknown',
+          hex: hexes[h].label || hexId,
+          confidence: rating,
+          scorePct: Math.round(scorePct)
+        });
+      }
+    }
+  }
+
+  return {
+    overConfident: overConfident,
+    underConfident: underConfident,
+    hasData: hasAnyConfidence
+  };
+}
+
+/**
+ * 5. kgaComputeSummaryCards — Derive 4 summary values
+ */
+function kgaComputeSummaryCards(hexStats, sbar, mismatches) {
+  var summary = {
+    hardestHex: { label: 'N/A', value: '-' },
+    bottleneck: { label: 'N/A', value: '-' },
+    weakestStrand: { label: 'N/A', value: '-' },
+    mismatches: { count: 0, label: 'None' },
+    formativeInsight: { label: 'N/A', value: '-' }
+  };
+
+  // Hardest hex: lowest avg score (excluding -1 = no scores)
+  var lowestScore = Infinity;
+  for (var i = 0; i < hexStats.length; i++) {
+    if (hexStats[i].avgScorePct >= 0 && hexStats[i].avgScorePct < lowestScore) {
+      lowestScore = hexStats[i].avgScorePct;
+      summary.hardestHex = {
+        label: hexStats[i].label,
+        value: lowestScore + '%'
+      };
+    }
+  }
+
+  // Biggest bottleneck: most students in_progress
+  var maxInProgress = 0;
+  for (var j = 0; j < hexStats.length; j++) {
+    if (hexStats[j].statusCounts.in_progress > maxInProgress) {
+      maxInProgress = hexStats[j].statusCounts.in_progress;
+      summary.bottleneck = {
+        label: hexStats[j].label,
+        value: maxInProgress + ' stuck'
+      };
+    }
+  }
+
+  // Weakest strand
+  if (sbar.hasSbar && sbar.weakestIdx >= 0) {
+    var ws = sbar.strands[sbar.weakestIdx];
+    summary.weakestStrand = {
+      label: ws.name,
+      value: ws.avgPct >= 0 ? ws.avgPct + '%' : 'N/A'
+    };
+  }
+
+  // Confidence mismatches
+  var total = mismatches.overConfident.length + mismatches.underConfident.length;
+  summary.mismatches = {
+    count: total,
+    label: total > 0 ? total + ' alert' + (total !== 1 ? 's' : '') : 'None'
+  };
+
+  // Formative check insight: hex with lowest got-it rate
+  var lowestGotIt = Infinity;
+  for (var fi = 0; fi < hexStats.length; fi++) {
+    if (hexStats[fi].gotItRate !== null && hexStats[fi].gotItRate < lowestGotIt) {
+      lowestGotIt = hexStats[fi].gotItRate;
+      summary.formativeInsight = { label: hexStats[fi].label, value: lowestGotIt + '%' };
+    }
+  }
+
+  return summary;
+}
+
+
+// ================================================
+// RENDERING FUNCTIONS
+// ================================================
+
+/**
+ * 6. renderKnowledgeGapAnalysis — Main entry point
+ */
+function renderKnowledgeGapAnalysis(data) {
+  var container = document.getElementById('knowledgeGapContent');
+  if (!container) return;
+
+  if (!data || !data.students || data.students.length === 0 || !data.hexes || data.hexes.length === 0) {
+    container.innerHTML = '<div class="kga-empty"><div class="icon">&#128269;</div>' +
+      '<p>Select a class and map in Class Progress, then switch to Knowledge Gaps.</p></div>';
+    return;
+  }
+
+  var students = data.students;
+  var hexes = data.hexes;
+
+  // Compute all analytics
+  var hexStats = kgaComputePerHexStats(students, hexes);
+  var sbar = kgaComputeSbarClassBreakdown(students, hexes);
+  var struggles = kgaComputeStudentStruggles(students, hexes);
+  var mismatches = kgaComputeConfidenceMismatches(students, hexes);
+  var summary = kgaComputeSummaryCards(hexStats, sbar, mismatches);
+
+  // Compute AISC competency coverage (if function available)
+  var compCoverageData = null;
+  if (typeof ascComputeMapCompetencyCoverage === 'function') {
+    compCoverageData = ascComputeMapCompetencyCoverage(hexes, students);
+  }
+
+  // Cache for re-sorting
+  kgaComputedData = {
+    hexStats: hexStats,
+    sbar: sbar,
+    struggles: struggles,
+    mismatches: mismatches,
+    summary: summary,
+    compCoverage: compCoverageData
+  };
+
+  var html = '<div class="kga-container">';
+
+  // Section 1: Summary Cards
+  html += renderKgaSummaryCards(summary);
+
+  // Section 2: Per-Hex Table
+  html += renderKgaHexTable(hexStats);
+
+  // Section 3: SBAR Breakdown (if available)
+  if (sbar.hasSbar) {
+    html += renderKgaSbarBreakdown(sbar);
+  }
+
+  // Section 3b: AISC Competency Coverage
+  if (compCoverageData) {
+    var hasAnyCompTags = false;
+    for (var ci = 0; ci < compCoverageData.items.length; ci++) {
+      if (compCoverageData.items[ci].hexCount > 0) { hasAnyCompTags = true; break; }
+    }
+    if (hasAnyCompTags) {
+      html += '<div class="kga-section-title">Competency Coverage</div>';
+      html += '<div class="asc-coverage-section">';
+      html += ascRenderCoverageSection(compCoverageData);
+      html += '</div>';
+    }
+  }
+
+  // Section 4: Student Struggles
+  html += renderKgaStudentStruggles(struggles);
+
+  // Section 5: Confidence Mismatches
+  if (mismatches.hasData) {
+    html += renderKgaConfidenceMismatches(mismatches);
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+/**
+ * 7. renderKgaSummaryCards — 4 stat cards
+ */
+function renderKgaSummaryCards(summary) {
+  var html = '<div class="kga-section-title">Gap Summary</div>';
+  html += '<div class="kga-summary-cards">';
+
+  // Hardest Hex
+  var hardestClass = (summary.hardestHex.value !== '-' && parseInt(summary.hardestHex.value, 10) < 50) ? ' danger' : '';
+  html += '<div class="kga-summary-card' + hardestClass + '">';
+  html += '<div class="kga-summary-label">Hardest Hex</div>';
+  html += '<div class="kga-summary-value' + (hardestClass ? ' danger' : '') + '">' + escapeHtml(summary.hardestHex.value) + '</div>';
+  html += '<div class="kga-summary-sub">' + escapeHtml(summary.hardestHex.label) + '</div>';
+  html += '</div>';
+
+  // Biggest Bottleneck
+  var bottleneckClass = (parseInt(summary.bottleneck.value, 10) > 3) ? ' alert' : '';
+  html += '<div class="kga-summary-card' + bottleneckClass + '">';
+  html += '<div class="kga-summary-label">Biggest Bottleneck</div>';
+  html += '<div class="kga-summary-value' + (bottleneckClass ? ' alert' : '') + '">' + escapeHtml(summary.bottleneck.value) + '</div>';
+  html += '<div class="kga-summary-sub">' + escapeHtml(summary.bottleneck.label) + '</div>';
+  html += '</div>';
+
+  // Weakest Strand
+  var strandClass = (summary.weakestStrand.value !== '-' && summary.weakestStrand.value !== 'N/A' && parseInt(summary.weakestStrand.value, 10) < 50) ? ' danger' : '';
+  html += '<div class="kga-summary-card' + strandClass + '">';
+  html += '<div class="kga-summary-label">Weakest Strand</div>';
+  html += '<div class="kga-summary-value' + (strandClass ? ' danger' : '') + '">' + escapeHtml(summary.weakestStrand.value) + '</div>';
+  html += '<div class="kga-summary-sub">' + escapeHtml(summary.weakestStrand.label) + '</div>';
+  html += '</div>';
+
+  // Mismatches
+  var mismatchClass = summary.mismatches.count > 0 ? ' alert' : '';
+  html += '<div class="kga-summary-card' + mismatchClass + '">';
+  html += '<div class="kga-summary-label">Confidence Mismatches</div>';
+  html += '<div class="kga-summary-value' + (mismatchClass ? ' alert' : '') + '">' + escapeHtml(summary.mismatches.label) + '</div>';
+  html += '<div class="kga-summary-sub">Over/under-confident</div>';
+  html += '</div>';
+
+  // Formative Check Insight (only show if data exists)
+  if (summary.formativeInsight && summary.formativeInsight.value !== '-') {
+    var fcClass = (parseInt(summary.formativeInsight.value, 10) < 50) ? ' danger' : '';
+    html += '<div class="kga-summary-card' + fcClass + '">';
+    html += '<div class="kga-summary-label">Lowest Got-It Rate</div>';
+    html += '<div class="kga-summary-value' + (fcClass ? ' danger' : '') + '">' + escapeHtml(summary.formativeInsight.value) + '</div>';
+    html += '<div class="kga-summary-sub">' + escapeHtml(summary.formativeInsight.label) + '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * 8. renderKgaHexTable — Sortable table with status bars
+ */
+function renderKgaHexTable(hexStats) {
+  var sorted = hexStats.slice();
+  var col = kgaHexSortColumn || 'avgScorePct';
+  var asc = kgaHexSortAsc;
+
+  sorted.sort(function(a, b) {
+    var va = a[col];
+    var vb = b[col];
+    if (typeof va === 'string') {
+      va = va.toLowerCase();
+      vb = (vb || '').toLowerCase();
+      return asc ? (va < vb ? -1 : va > vb ? 1 : 0) : (va > vb ? -1 : va < vb ? 1 : 0);
+    }
+    return asc ? va - vb : vb - va;
+  });
+
+  var html = '<div class="kga-section-title">Per-Hex Performance <button class="csv-export-btn" onclick="csvExportKnowledgeGaps()" title="Export as CSV" aria-label="Export knowledge gaps as CSV">&#128229; Export</button></div>';
+  html += '<div style="overflow-x:auto;">';
+  html += '<table class="kga-hex-table">';
+  html += '<thead><tr>';
+
+  var columns = [
+    { key: 'label', label: 'Hex' },
+    { key: 'avgScorePct', label: 'Avg Score' },
+    { key: 'completionPct', label: 'Completion' },
+    { key: 'avgConfidence', label: 'Confidence' },
+    { key: 'checkCount', label: 'Checks' },
+    { key: 'gotItRate', label: 'Got-It Rate' },
+    { key: 'status', label: 'Status Distribution' }
+  ];
+
+  for (var c = 0; c < columns.length; c++) {
+    var isActive = (col === columns[c].key);
+    var arrow = '';
+    if (columns[c].key !== 'status') {
+      arrow = ' <span class="kga-sort-arrow' + (isActive ? ' active' : '') + '">' +
+              (isActive ? (asc ? '&#9650;' : '&#9660;') : '&#9650;') + '</span>';
+      html += '<th onclick="kgaSortHexTable(\'' + columns[c].key + '\')">' + columns[c].label + arrow + '</th>';
+    } else {
+      html += '<th>' + columns[c].label + '</th>';
+    }
+  }
+  html += '</tr></thead><tbody>';
+
+  for (var i = 0; i < sorted.length; i++) {
+    var s = sorted[i];
+    var rowClass = '';
+    if (s.avgScorePct >= 0 && s.avgScorePct < 50) rowClass = ' class="kga-row-danger"';
+    else if (s.avgScorePct >= 0 && s.avgScorePct < 70) rowClass = ' class="kga-row-warn"';
+
+    html += '<tr' + rowClass + '>';
+
+    // Hex name + type badge
+    var badgeClass = s.type === 'ext' ? 'ext' : (s.type === 'scaf' ? 'scaf' : 'core');
+    html += '<td>' + escapeHtml(s.label) + ' <span class="kga-type-badge ' + badgeClass + '">' + escapeHtml(s.type) + '</span></td>';
+
+    // Avg Score
+    html += '<td>' + (s.avgScorePct >= 0 ? s.avgScorePct + '%' : '-') + '</td>';
+
+    // Completion
+    html += '<td>' + s.completionPct + '%</td>';
+
+    // Confidence
+    html += '<td>' + (s.avgConfidence >= 0 ? s.avgConfidence + '/4' : '-') + '</td>';
+
+    // Check Count
+    html += '<td>' + (s.checkCount > 0 ? s.checkCount : '-') + '</td>';
+
+    // Got-It Rate (color-coded)
+    if (s.gotItRate !== null) {
+      var gotItClass = s.gotItRate < 50 ? ' danger' : (s.gotItRate < 70 ? ' alert' : '');
+      html += '<td><span class="kga-got-it-badge' + gotItClass + '">' + s.gotItRate + '%</span></td>';
+    } else {
+      html += '<td>-</td>';
+    }
+
+    // Status bar
+    var total = s.studentCount || 1;
+    var masteredW = Math.round((s.statusCounts.mastered / total) * 100);
+    var completedW = Math.round((s.statusCounts.completed / total) * 100);
+    var inProgressW = Math.round((s.statusCounts.in_progress / total) * 100);
+    var notStartedW = 100 - masteredW - completedW - inProgressW;
+    if (notStartedW < 0) notStartedW = 0;
+
+    html += '<td><div class="kga-status-bar">';
+    if (masteredW > 0) html += '<div class="kga-status-seg mastered" style="width:' + masteredW + '%" title="Mastered: ' + s.statusCounts.mastered + '"></div>';
+    if (completedW > 0) html += '<div class="kga-status-seg completed" style="width:' + completedW + '%" title="Completed: ' + s.statusCounts.completed + '"></div>';
+    if (inProgressW > 0) html += '<div class="kga-status-seg in_progress" style="width:' + inProgressW + '%" title="In Progress: ' + s.statusCounts.in_progress + '"></div>';
+    if (notStartedW > 0) html += '<div class="kga-status-seg not_started" style="width:' + notStartedW + '%" title="Not Started: ' + s.statusCounts.not_started + '"></div>';
+    html += '</div></td>';
+
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
+/**
+ * 9. renderKgaSbarBreakdown — Strand comparison bars
+ */
+function renderKgaSbarBreakdown(sbarData) {
+  var html = '<div class="kga-section-title">SBAR Strand Breakdown (Class Level)</div>';
+  html += '<div class="kga-sbar-section">';
+
+  for (var i = 0; i < sbarData.strands.length; i++) {
+    var strand = sbarData.strands[i];
+    var isWeakest = (i === sbarData.weakestIdx);
+    var fillClass = strand.name.toLowerCase();
+    var pct = strand.avgPct >= 0 ? strand.avgPct : 0;
+    var displayVal = strand.avgPct >= 0 ? strand.avgPct + '%' : 'N/A';
+
+    html += '<div class="kga-sbar-row' + (isWeakest ? ' kga-sbar-weakest' : '') + '">';
+    html += '<div class="kga-sbar-label">' + escapeHtml(strand.label) + '</div>';
+    html += '<div class="kga-bar-container">';
+    html += '<div class="kga-bar-fill ' + fillClass + '" style="width:' + pct + '%"></div>';
+    html += '</div>';
+    html += '<div class="kga-bar-value">' + displayVal + '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * 10. renderKgaStudentStruggles — Expandable student cards
+ */
+function renderKgaStudentStruggles(struggles) {
+  var html = '<div class="kga-section-title">Student Struggle Patterns (Top 10)</div>';
+
+  if (struggles.length === 0) {
+    html += '<div class="kga-empty"><p>No student data available.</p></div>';
+    return html;
+  }
+
+  html += '<div class="kga-struggle-list">';
+
+  for (var i = 0; i < struggles.length; i++) {
+    var stu = struggles[i];
+    var isOpen = kgaExpandedStudents[stu.email] === true;
+
+    html += '<div class="kga-struggle-item">';
+    html += '<div class="kga-struggle-header" onclick="kgaToggleStudentDetail(\'' + escapeHtml(stu.email) + '\')">';
+    html += '<div class="kga-struggle-rank">' + (i + 1) + '</div>';
+    html += '<div class="kga-struggle-name">' + escapeHtml(stu.name) + '</div>';
+    html += '<div class="kga-struggle-score">Score: ' + stu.avgScorePct + '% | Completion: ' + stu.completionPct + '%</div>';
+
+    // Formative check "not yet" badge
+    var notYetCount = 0;
+    if (progressDashboardData && progressDashboardData.formativeCheckSummary) {
+      var nyPatterns = progressDashboardData.formativeCheckSummary.studentNotYetPatterns || [];
+      for (var np = 0; np < nyPatterns.length; np++) {
+        if (nyPatterns[np].email === stu.email) { notYetCount = nyPatterns[np].notYetCount; break; }
+      }
+    }
+    if (notYetCount > 0) {
+      html += '<div class="kga-struggle-formative">' + notYetCount + ' formative "not yet"</div>';
+    }
+
+    html += '<div class="kga-struggle-chevron' + (isOpen ? ' open' : '') + '">&#9654;</div>';
+    html += '</div>';
+
+    html += '<div class="kga-struggle-detail' + (isOpen ? ' open' : '') + '">';
+    if (stu.lowHexes.length > 0) {
+      for (var h = 0; h < stu.lowHexes.length; h++) {
+        var lh = stu.lowHexes[h];
+        var scoreClass = lh.scorePct < 50 ? 'low' : 'mid';
+        html += '<div class="kga-struggle-hex">';
+        html += '<span class="kga-struggle-hex-name">' + escapeHtml(lh.label) + '</span>';
+        html += '<span class="kga-struggle-hex-score ' + scoreClass + '">' + lh.scorePct + '%</span>';
+        html += '</div>';
+      }
+    } else {
+      html += '<div style="color:#94a3b8;font-style:italic;">No low-scoring hexes (below 70%)</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * 11. renderKgaConfidenceMismatches — Alert cards
+ */
+function renderKgaConfidenceMismatches(mismatches) {
+  var html = '<div class="kga-section-title">Confidence-Score Mismatches</div>';
+  html += '<div class="kga-mismatch-grid">';
+
+  // Over-confident column
+  html += '<div>';
+  html += '<div class="kga-mismatch-col-title over">&#9888; Over-confident (' + mismatches.overConfident.length + ')</div>';
+  if (mismatches.overConfident.length > 0) {
+    for (var i = 0; i < mismatches.overConfident.length; i++) {
+      var oc = mismatches.overConfident[i];
+      html += '<div class="kga-mismatch-card over">';
+      html += '<div class="kga-mismatch-student">' + escapeHtml(oc.student) + '</div>';
+      html += '<div class="kga-mismatch-detail">' + escapeHtml(oc.hex) + ' &mdash; Confidence: ' + oc.confidence + '/4, Score: ' + oc.scorePct + '%</div>';
+      html += '</div>';
+    }
+  } else {
+    html += '<div class="kga-mismatch-none">No over-confident mismatches</div>';
+  }
+  html += '</div>';
+
+  // Under-confident column
+  html += '<div>';
+  html += '<div class="kga-mismatch-col-title under">&#128170; Under-confident (' + mismatches.underConfident.length + ')</div>';
+  if (mismatches.underConfident.length > 0) {
+    for (var j = 0; j < mismatches.underConfident.length; j++) {
+      var uc = mismatches.underConfident[j];
+      html += '<div class="kga-mismatch-card under">';
+      html += '<div class="kga-mismatch-student">' + escapeHtml(uc.student) + '</div>';
+      html += '<div class="kga-mismatch-detail">' + escapeHtml(uc.hex) + ' &mdash; Confidence: ' + uc.confidence + '/4, Score: ' + uc.scorePct + '%</div>';
+      html += '</div>';
+    }
+  } else {
+    html += '<div class="kga-mismatch-none">No under-confident mismatches</div>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+
+// ================================================
+// INTERACTION FUNCTIONS
+// ================================================
+
+/**
+ * 12. kgaSortHexTable — Re-sort and re-render table only
+ */
+function kgaSortHexTable(column) {
+  if (kgaHexSortColumn === column) {
+    kgaHexSortAsc = !kgaHexSortAsc;
+  } else {
+    kgaHexSortColumn = column;
+    kgaHexSortAsc = true;
+  }
+
+  // Re-render full view to update table
+  if (kgaComputedData) {
+    var container = document.getElementById('knowledgeGapContent');
+    if (!container) return;
+
+    var html = '<div class="kga-container">';
+    html += renderKgaSummaryCards(kgaComputedData.summary);
+    html += renderKgaHexTable(kgaComputedData.hexStats);
+    if (kgaComputedData.sbar.hasSbar) {
+      html += renderKgaSbarBreakdown(kgaComputedData.sbar);
+    }
+    html += kgaRenderCompCoverage_();
+    html += renderKgaStudentStruggles(kgaComputedData.struggles);
+    if (kgaComputedData.mismatches.hasData) {
+      html += renderKgaConfidenceMismatches(kgaComputedData.mismatches);
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+}
+
+/**
+ * 13. kgaToggleStudentDetail — Expand/collapse student detail
+ */
+function kgaToggleStudentDetail(email) {
+  if (kgaExpandedStudents[email]) {
+    kgaExpandedStudents[email] = false;
+  } else {
+    kgaExpandedStudents[email] = true;
+  }
+
+  // Re-render to update expand state
+  if (kgaComputedData) {
+    var container = document.getElementById('knowledgeGapContent');
+    if (!container) return;
+
+    var html = '<div class="kga-container">';
+    html += renderKgaSummaryCards(kgaComputedData.summary);
+    html += renderKgaHexTable(kgaComputedData.hexStats);
+    if (kgaComputedData.sbar.hasSbar) {
+      html += renderKgaSbarBreakdown(kgaComputedData.sbar);
+    }
+    html += kgaRenderCompCoverage_();
+    html += renderKgaStudentStruggles(kgaComputedData.struggles);
+    if (kgaComputedData.mismatches.hasData) {
+      html += renderKgaConfidenceMismatches(kgaComputedData.mismatches);
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+}
+
+/**
+ * Helper: render cached competency coverage for re-render blocks.
+ */
+function kgaRenderCompCoverage_() {
+  if (!kgaComputedData || !kgaComputedData.compCoverage) return '';
+  var cc = kgaComputedData.compCoverage;
+  var hasAnyCompTags = false;
+  for (var i = 0; i < cc.items.length; i++) {
+    if (cc.items[i].hexCount > 0) { hasAnyCompTags = true; break; }
+  }
+  if (!hasAnyCompTags) return '';
+  if (typeof ascRenderCoverageSection !== 'function') return '';
+
+  var html = '<div class="kga-section-title">Competency Coverage</div>';
+  html += '<div class="asc-coverage-section">';
+  html += ascRenderCoverageSection(cc);
+  html += '</div>';
+  return html;
+}
+
+/**
+ * CSV Export: Knowledge Gaps — per-hex performance table
+ */
+function csvExportKnowledgeGaps() {
+  if (!kgaComputedData || !kgaComputedData.hexStats) { showToast('No data to export', 'error'); return; }
+  var stats = kgaComputedData.hexStats;
+  var headers = ['Hex', 'Avg Score %', 'Completion %', 'Avg Confidence', 'Checks', 'Got-It Rate %', 'Mastered', 'Completed', 'In Progress', 'Not Started'];
+  var rows = [];
+  for (var i = 0; i < stats.length; i++) {
+    var s = stats[i];
+    rows.push([
+      s.label, s.avgScorePct, s.completionPct, s.avgConfidence,
+      s.checkCount || 0, s.gotItRate || '',
+      s.statusCounts.mastered, s.statusCounts.completed, s.statusCounts.in_progress, s.statusCounts.not_started
+    ]);
+  }
+  var mapTitle = currentMap ? (currentMap.title || 'map') : 'map';
+  csvExportData(headers, rows, 'knowledge-gaps-' + mapTitle.replace(/[^a-zA-Z0-9]/g, '_') + '.csv');
+}
+</script>

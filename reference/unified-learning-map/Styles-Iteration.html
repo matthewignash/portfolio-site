@@ -1,0 +1,235 @@
+<style>
+/* ============================================================================
+   ITERATION HISTORY — itr- prefix
+   Timeline, iteration cards, evidence display, submission form
+   ============================================================================ */
+
+/* Timeline container */
+.itr-timeline {
+  position: relative;
+  padding-left: 24px;
+  margin: 12px 0;
+}
+.itr-timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+/* Iteration Card */
+.itr-card {
+  position: relative;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.itr-card::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 18px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #e2e8f0;
+}
+.itr-card.itr-submitted::before { background: #3b82f6; box-shadow: 0 0 0 2px #93c5fd; }
+.itr-card.itr-approved::before { background: #10b981; box-shadow: 0 0 0 2px #6ee7b7; }
+.itr-card.itr-revision_requested::before { background: #f59e0b; box-shadow: 0 0 0 2px #fcd34d; }
+
+.itr-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.itr-attempt-num {
+  font-weight: 600;
+  color: #1e293b;
+}
+.itr-status-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.itr-status-badge.itr-submitted { background: #dbeafe; color: #1d4ed8; }
+.itr-status-badge.itr-approved { background: #d1fae5; color: #065f46; }
+.itr-status-badge.itr-revision_requested { background: #fef3c7; color: #92400e; }
+
+.itr-card-date {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+/* Evidence links */
+.itr-evidence-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.itr-evidence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #2563eb;
+  text-decoration: none;
+}
+.itr-evidence-chip:hover { background: #e0e7ff; }
+
+/* Reflection note */
+.itr-reflection {
+  font-size: 12px;
+  color: #475569;
+  font-style: italic;
+  background: #f8fafc;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  border-left: 3px solid #cbd5e1;
+}
+
+/* Teacher feedback */
+.itr-feedback {
+  font-size: 12px;
+  color: #1e293b;
+  background: #fffbeb;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-left: 3px solid #f59e0b;
+}
+.itr-feedback-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #92400e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+/* Score display */
+.itr-score {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+.itr-score strong { color: #1e293b; }
+
+/* Submission Form */
+.itr-submit-form {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 12px;
+}
+.itr-submit-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+.itr-form-group {
+  margin-bottom: 12px;
+}
+.itr-form-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  margin-bottom: 4px;
+  display: block;
+}
+.itr-form-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.itr-form-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  min-height: 60px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.itr-evidence-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+.itr-evidence-row input { flex: 1; }
+.itr-evidence-remove {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+}
+.itr-add-evidence-btn {
+  font-size: 12px;
+  color: #3b82f6;
+  background: none;
+  border: 1px dashed #93c5fd;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.itr-add-evidence-btn:hover { background: #eff6ff; }
+.itr-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #3b82f6;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+  justify-content: center;
+}
+.itr-submit-btn:hover { background: #2563eb; }
+.itr-submit-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* Section header in hex modal */
+.itr-section-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 16px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.itr-iteration-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: #64748b;
+  margin-left: 6px;
+}
+</style>

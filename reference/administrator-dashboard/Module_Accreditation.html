@@ -1,0 +1,1128 @@
+<script>
+/**
+ * Accreditation Module — Framework management, standards tracker, evidence & narratives
+ *
+ * Registers as App.ModuleRegistry.accreditation.
+ * Admin-only: framework list, framework detail (accordion), standard detail, visit readiness.
+ */
+
+App.ModuleRegistry.accreditation = {
+
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      overviewData: null,
+      currentFrameworkId: null,
+      frameworkDetail: null,
+      currentStandardId: null,
+      standardDetail: null,
+      readinessData: null,
+      filters: { status: '' },
+      expandedDomains: {}
+    };
+
+    // ── DOM Refs ──
+    var subNav, viewContainer;
+
+    // ── StatusBadge custom map for accreditation-specific statuses ──
+    var accStatusMap = {
+      'preparing': 'badge-neutral',
+      'self_study': 'badge-info',
+      'visit_scheduled': 'badge-warning',
+      'completed': 'badge-success',
+      'draft': 'badge-neutral',
+      'under_review': 'badge-info',
+      'review': 'badge-info',
+      'approved': 'badge-success',
+      'insufficient': 'badge-danger',
+      'final': 'badge-success'
+    };
+
+    // ── Build Layout ──
+    function buildLayout() {
+      container.innerHTML = '';
+
+      subNav = ClientUtils.el('div', { className: 'filter-bar', style: 'margin-bottom: var(--space-md);' });
+      var btnFrameworks = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { switchView('list'); }
+      }, ['Frameworks']);
+      var btnReadiness = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() {
+          if (state.currentFrameworkId) {
+            switchView('readiness', { frameworkId: state.currentFrameworkId });
+          } else {
+            Toast.error('Select a framework first.');
+          }
+        }
+      }, ['Visit Readiness']);
+      subNav.appendChild(btnFrameworks);
+      subNav.appendChild(btnReadiness);
+      container.appendChild(subNav);
+
+      viewContainer = ClientUtils.el('div', { className: 'relative' });
+      container.appendChild(viewContainer);
+      switchView('list');
+    }
+
+    function switchView(viewKey, opts) {
+      viewContainer.innerHTML = '';
+      var btns = subNav.querySelectorAll('.btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].className = 'btn btn-sm ' + (
+          (i === 0 && (viewKey === 'list' || viewKey === 'framework' || viewKey === 'standard')) ||
+          (i === 1 && viewKey === 'readiness') ? 'btn-primary' : 'btn-secondary'
+        );
+      }
+
+      if (viewKey === 'list') renderFrameworkList();
+      else if (viewKey === 'framework') renderFrameworkDetail(opts && opts.frameworkId);
+      else if (viewKey === 'standard') renderStandardDetail(opts && opts.standardId);
+      else if (viewKey === 'readiness') renderVisitReadiness(opts && opts.frameworkId);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Framework List
+    // ═══════════════════════════════════════════════
+
+    async function renderFrameworkList() {
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getAccreditationOverview(state.filters);
+        state.overviewData = data;
+        LoadingSpinner.hide(viewContainer);
+        buildFrameworkListUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load frameworks: ' + err.message);
+      }
+    }
+
+    function buildFrameworkListUI(data) {
+      viewContainer.innerHTML = '';
+      var frameworks = data.frameworks || [];
+      var stats = data.stats || {};
+
+      // Filter bar
+      var filterBar = ClientUtils.el('div', { className: 'filter-bar' });
+
+      var statusSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() { state.filters.status = this.value; renderFrameworkList(); }
+      });
+      statusSelect.innerHTML = '<option value="">All Statuses</option>' +
+        '<option value="preparing">Preparing</option>' +
+        '<option value="self_study">Self-Study</option>' +
+        '<option value="visit_scheduled">Visit Scheduled</option>' +
+        '<option value="completed">Completed</option>';
+      statusSelect.value = state.filters.status;
+
+      var clearBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { state.filters = { status: '' }; renderFrameworkList(); }
+      }, ['Clear']);
+
+      var spacer = ClientUtils.el('div', { style: 'flex:1' });
+
+      var newBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showCreateFrameworkModal(); }
+      }, ['+ New Framework']);
+
+      filterBar.appendChild(statusSelect);
+      filterBar.appendChild(clearBtn);
+      filterBar.appendChild(spacer);
+      filterBar.appendChild(newBtn);
+      viewContainer.appendChild(filterBar);
+
+      // Stats
+      var statsGrid = ClientUtils.el('div', { className: 'acc-stats' });
+      [
+        { label: 'Frameworks', value: stats.frameworks || 0 },
+        { label: 'Standards', value: stats.standards || 0 },
+        { label: 'Evidence Items', value: stats.evidence || 0 },
+        { label: 'Avg. Progress', value: (stats.averageProgress || 0) + '%' }
+      ].forEach(function(s) {
+        var card = ClientUtils.el('div', { className: 'acc-stat-card' });
+        card.innerHTML = '<div class="acc-stat-card__value">' + s.value + '</div>' +
+          '<div class="acc-stat-card__label">' + s.label + '</div>';
+        statsGrid.appendChild(card);
+      });
+      viewContainer.appendChild(statsGrid);
+
+      // Framework cards
+      if (frameworks.length === 0) {
+        viewContainer.innerHTML += '<div class="acc-empty"><div class="acc-empty__icon">&#127891;</div>' +
+          '<div class="acc-empty__text">No frameworks found. Create one to start your accreditation journey.</div></div>';
+        return;
+      }
+
+      var list = ClientUtils.el('div', { className: 'acc-framework-list' });
+
+      frameworks.forEach(function(fw) {
+        var card = ClientUtils.el('div', { className: 'acc-framework-card' });
+
+        var header = ClientUtils.el('div', { className: 'acc-framework-card__header' });
+        header.innerHTML = '<h3 class="acc-framework-card__title">' + ClientUtils.escapeHtml(fw.name) + '</h3>' +
+          StatusBadge.html(fw.status, accStatusMap);
+
+        var meta = ClientUtils.el('div', { className: 'acc-framework-card__meta' });
+        meta.innerHTML = (fw.visitDate ? '<span>Visit: ' + ClientUtils.formatDate(fw.visitDate) + '</span>' : '') +
+          '<span>Created: ' + ClientUtils.formatDate(fw.createdAt) + '</span>';
+
+        var fwStats = ClientUtils.el('div', { className: 'acc-framework-card__stats' });
+        fwStats.innerHTML =
+          '<span class="acc-framework-card__stat"><span class="acc-framework-card__stat-value">' + fw.domainCount + '</span> domains</span>' +
+          '<span class="acc-framework-card__stat"><span class="acc-framework-card__stat-value">' + fw.standardCount + '</span> standards</span>' +
+          '<span class="acc-framework-card__stat"><span class="acc-framework-card__stat-value">' + fw.evidenceCount + '</span> evidence</span>' +
+          '<span class="acc-framework-card__stat"><span class="acc-readiness acc-readiness--green"></span> ' + fw.greenCount + '</span>' +
+          '<span class="acc-framework-card__stat"><span class="acc-readiness acc-readiness--amber"></span> ' + fw.amberCount + '</span>' +
+          '<span class="acc-framework-card__stat"><span class="acc-readiness acc-readiness--red"></span> ' + fw.redCount + '</span>';
+
+        var progressBar = ClientUtils.el('div', { className: 'acc-progress-bar' });
+        progressBar.innerHTML = '<div class="acc-progress-bar__fill acc-progress-bar__fill--green" style="width:' + fw.progress + '%"></div>';
+
+        card.appendChild(header);
+        card.appendChild(meta);
+        card.appendChild(fwStats);
+        card.appendChild(progressBar);
+
+        card.addEventListener('click', function() {
+          state.currentFrameworkId = fw.id;
+          switchView('framework', { frameworkId: fw.id });
+        });
+
+        list.appendChild(card);
+      });
+
+      viewContainer.appendChild(list);
+    }
+
+    function showCreateFrameworkModal() {
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Framework Name *</label>' +
+          '<input type="text" class="form-input" id="acc-fw-name" placeholder="e.g., CIS Preparatory Visit 2025">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Description</label>' +
+          '<textarea class="form-input" id="acc-fw-desc" rows="3" placeholder="Brief description"></textarea>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md)">' +
+          '<div class="form-group">' +
+            '<label class="form-label">Visit Date</label>' +
+            '<input type="date" class="form-input" id="acc-fw-visit">' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Status</label>' +
+            '<select class="form-select" id="acc-fw-status">' +
+              '<option value="preparing">Preparing</option>' +
+              '<option value="self_study">Self-Study</option>' +
+              '<option value="visit_scheduled">Visit Scheduled</option>' +
+            '</select>' +
+          '</div>' +
+        '</div>';
+
+      Modal.open('New Accreditation Framework', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Create', className: 'btn-primary', onClick: async function() {
+          var name = document.getElementById('acc-fw-name').value.trim();
+          if (!name) { Toast.error('Name is required.'); return; }
+
+          try {
+            await ServerAPI.createFramework({
+              name: name,
+              description: document.getElementById('acc-fw-desc').value.trim(),
+              visit_date: document.getElementById('acc-fw-visit').value,
+              status: document.getElementById('acc-fw-status').value
+            });
+            Modal.close();
+            Toast.success('Framework created.');
+            renderFrameworkList();
+          } catch (err) {
+            Toast.error('Failed to create: ' + err.message);
+          }
+        }}
+      ]);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Framework Detail — Domain Accordion
+    // ═══════════════════════════════════════════════
+
+    async function renderFrameworkDetail(frameworkId) {
+      if (!frameworkId) frameworkId = state.currentFrameworkId;
+      if (!frameworkId) { switchView('list'); return; }
+      state.currentFrameworkId = frameworkId;
+
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getFrameworkDetail(frameworkId);
+        state.frameworkDetail = data;
+        LoadingSpinner.hide(viewContainer);
+        buildFrameworkDetailUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load framework: ' + err.message);
+      }
+    }
+
+    function buildFrameworkDetailUI(data) {
+      viewContainer.innerHTML = '';
+      var fw = data.framework;
+      var domains = data.domains || [];
+
+      // Back link
+      var backLink = ClientUtils.el('a', {
+        href: '#', style: 'display:inline-flex;align-items:center;gap:4px;font-size:var(--font-size-sm);color:var(--color-primary);margin-bottom:var(--space-md);text-decoration:none;',
+        onClick: function(e) { e.preventDefault(); switchView('list'); }
+      }, ['\u2190 Back to Frameworks']);
+      viewContainer.appendChild(backLink);
+
+      // Header card
+      var header = ClientUtils.el('div', { className: 'acc-header' });
+
+      var headerTop = ClientUtils.el('div', { className: 'acc-header__top' });
+      var titleDiv = ClientUtils.el('div');
+      titleDiv.innerHTML = '<h2 class="acc-header__title">' + ClientUtils.escapeHtml(fw.name) + '</h2>';
+      if (fw.description) {
+        titleDiv.innerHTML += '<p class="acc-header__desc">' + ClientUtils.escapeHtml(fw.description) + '</p>';
+      }
+
+      var actionsDiv = ClientUtils.el('div', { className: 'acc-header__actions' });
+      var statusSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() { updateFrameworkStatus(fw.id, this.value); }
+      });
+      ['preparing', 'self_study', 'visit_scheduled', 'completed'].forEach(function(s) {
+        statusSelect.appendChild(ClientUtils.el('option', { value: s }, [s.replace(/_/g, ' ')]));
+      });
+      statusSelect.value = fw.status;
+
+      var deleteBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-danger',
+        onClick: function() { confirmDeleteFramework(fw.id, fw.name); }
+      }, ['Delete']);
+
+      actionsDiv.appendChild(statusSelect);
+      actionsDiv.appendChild(deleteBtn);
+      headerTop.appendChild(titleDiv);
+      headerTop.appendChild(actionsDiv);
+      header.appendChild(headerTop);
+
+      // Meta + progress
+      var meta = ClientUtils.el('div', { className: 'acc-header__meta' });
+      meta.innerHTML =
+        '<span><span class="acc-header__meta-label">Status:</span> ' + StatusBadge.html(fw.status, accStatusMap) + '</span>' +
+        (fw.visitDate ? '<span><span class="acc-header__meta-label">Visit:</span> ' + ClientUtils.formatDate(fw.visitDate) + '</span>' : '') +
+        '<span><span class="acc-header__meta-label">Standards:</span> ' + fw.standardCount + '</span>';
+      header.appendChild(meta);
+
+      var progressWrap = ClientUtils.el('div', { className: 'acc-header__progress', style: 'margin-top:var(--space-md)' });
+      progressWrap.innerHTML =
+        '<span class="acc-header__progress-label">Ready</span>' +
+        '<div class="acc-progress-bar acc-progress-bar--lg" style="flex:1"><div class="acc-progress-bar__fill acc-progress-bar__fill--green" style="width:' + fw.progress + '%"></div></div>' +
+        '<span class="acc-header__progress-value" style="color:' + (fw.progress >= 75 ? 'var(--color-success)' : fw.progress >= 40 ? 'var(--color-warning)' : 'var(--color-danger)') + '">' + fw.progress + '%</span>';
+      header.appendChild(progressWrap);
+      viewContainer.appendChild(header);
+
+      // Action bar
+      var exportBar = ClientUtils.el('div', { className: 'acc-export-bar' });
+      var addStdBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showAddStandardModal(fw.id, domains); }
+      }, ['+ Add Standard']);
+      var exportStudyBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { doExportSelfStudy(fw.id); }
+      }, ['Export Self-Study']);
+      var exportPdfBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { doExportSelfStudyPdf(fw.id); }
+      }, ['Export PDF']);
+      var binderBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { doCreateBinder(fw.id); }
+      }, ['Create Evidence Binder']);
+      var readinessBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { switchView('readiness', { frameworkId: fw.id }); }
+      }, ['Visit Readiness']);
+
+      exportBar.appendChild(addStdBtn);
+      exportBar.appendChild(exportStudyBtn);
+      exportBar.appendChild(exportPdfBtn);
+      exportBar.appendChild(binderBtn);
+      exportBar.appendChild(readinessBtn);
+      viewContainer.appendChild(exportBar);
+
+      // Domain accordion
+      if (domains.length === 0) {
+        viewContainer.innerHTML += '<div class="acc-empty"><div class="acc-empty__text">No standards defined yet. Add your first standard.</div></div>';
+        return;
+      }
+
+      var accordion = ClientUtils.el('div', { className: 'acc-accordion' });
+
+      domains.forEach(function(domain) {
+        var domainEl = ClientUtils.el('div', { className: 'acc-domain' });
+
+        var isExpanded = state.expandedDomains[domain.name] !== false; // Default expanded
+
+        var domainHeader = ClientUtils.el('div', { className: 'acc-domain__header' });
+        domainHeader.innerHTML =
+          '<span class="acc-domain__name">' + ClientUtils.escapeHtml(domain.name) + '</span>' +
+          '<span class="acc-domain__progress">' +
+            '<span>' + domain.greenCount + '/' + domain.standardCount + ' ready</span>' +
+            '<span class="acc-domain__toggle' + (isExpanded ? ' acc-domain__toggle--open' : '') + '">\u25BC</span>' +
+          '</span>';
+
+        var domainBody = ClientUtils.el('div', {
+          className: 'acc-domain__body' + (isExpanded ? ' acc-domain__body--open' : '')
+        });
+
+        // Standards rows
+        domain.standards.forEach(function(std) {
+          var row = ClientUtils.el('div', { className: 'acc-standard-row' });
+
+          row.innerHTML =
+            '<span class="acc-standard-row__code">' + ClientUtils.escapeHtml(std.standardCode) + '</span>' +
+            '<span class="acc-standard-row__text">' + ClientUtils.escapeHtml(std.standardText) + '</span>' +
+            '<span class="acc-standard-row__info">' +
+              '<span class="acc-readiness acc-readiness--' + std.readiness + '"></span>' +
+              '<span>' + std.evidenceCount + ' ev</span>' +
+              (std.latestNarrativeStatus ? StatusBadge.html(std.latestNarrativeStatus, accStatusMap) : '<span style="color:var(--color-text-muted)">no narrative</span>') +
+            '</span>';
+
+          row.addEventListener('click', function() {
+            state.currentStandardId = std.id;
+            switchView('standard', { standardId: std.id });
+          });
+
+          domainBody.appendChild(row);
+        });
+
+        // Toggle
+        domainHeader.addEventListener('click', function() {
+          var isOpen = domainBody.classList.contains('acc-domain__body--open');
+          domainBody.classList.toggle('acc-domain__body--open');
+          state.expandedDomains[domain.name] = !isOpen;
+          var toggle = domainHeader.querySelector('.acc-domain__toggle');
+          toggle.classList.toggle('acc-domain__toggle--open');
+        });
+
+        domainEl.appendChild(domainHeader);
+        domainEl.appendChild(domainBody);
+        accordion.appendChild(domainEl);
+      });
+
+      viewContainer.appendChild(accordion);
+    }
+
+    async function updateFrameworkStatus(frameworkId, newStatus) {
+      try {
+        await ServerAPI.updateFramework(frameworkId, { status: newStatus });
+        Toast.success('Status updated.');
+      } catch (err) {
+        Toast.error('Failed to update: ' + err.message);
+        renderFrameworkDetail(frameworkId);
+      }
+    }
+
+    function confirmDeleteFramework(frameworkId, name) {
+      var body = ClientUtils.el('div');
+      body.innerHTML = '<p>Delete <strong>' + ClientUtils.escapeHtml(name) + '</strong>?</p>' +
+        '<p style="color:var(--color-danger);font-size:var(--font-size-sm)">This will delete all standards, evidence, and narratives.</p>';
+      Modal.open('Delete Framework', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Delete', className: 'btn-danger', onClick: async function() {
+          try {
+            await ServerAPI.deleteFramework(frameworkId);
+            Modal.close();
+            Toast.success('Framework deleted.');
+            state.currentFrameworkId = null;
+            switchView('list');
+          } catch (err) { Toast.error('Failed to delete: ' + err.message); }
+        }}
+      ]);
+    }
+
+    function showAddStandardModal(frameworkId, existingDomains) {
+      var body = ClientUtils.el('div');
+
+      var domainOptions = '';
+      existingDomains.forEach(function(d) {
+        domainOptions += '<option value="' + ClientUtils.escapeHtml(d.name) + '">' + ClientUtils.escapeHtml(d.name) + '</option>';
+      });
+
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Domain *</label>' +
+          '<div style="display:flex;gap:var(--space-xs)">' +
+            '<select class="form-select" id="acc-std-domain-select" style="flex:1">' +
+              '<option value="">Select existing or type new...</option>' +
+              domainOptions +
+            '</select>' +
+            '<input type="text" class="form-input" id="acc-std-domain-new" style="flex:1" placeholder="Or type new domain name">' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Standard Code *</label>' +
+          '<input type="text" class="form-input" id="acc-std-code" placeholder="e.g., A.1, B.3.2">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Standard Text *</label>' +
+          '<textarea class="form-input" id="acc-std-text" rows="3" placeholder="Full text of the standard"></textarea>' +
+        '</div>';
+
+      Modal.open('Add Standard', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Add', className: 'btn-primary', onClick: async function() {
+          var domainSelect = document.getElementById('acc-std-domain-select').value;
+          var domainNew = document.getElementById('acc-std-domain-new').value.trim();
+          var domain = domainNew || domainSelect;
+          var code = document.getElementById('acc-std-code').value.trim();
+          var text = document.getElementById('acc-std-text').value.trim();
+
+          if (!domain || !code || !text) {
+            Toast.error('Domain, Code, and Text are required.');
+            return;
+          }
+
+          try {
+            await ServerAPI.createStandard({
+              framework_id: frameworkId,
+              domain: domain,
+              standard_code: code,
+              standard_text: text
+            });
+            Modal.close();
+            Toast.success('Standard added.');
+            renderFrameworkDetail(frameworkId);
+          } catch (err) { Toast.error('Failed to add: ' + err.message); }
+        }}
+      ]);
+    }
+
+    // ── Export functions ──
+
+    async function doExportSelfStudy(frameworkId) {
+      Toast.success('Generating self-study document...');
+      try {
+        var result = await ServerAPI.exportSelfStudy(frameworkId);
+        Toast.success('Self-study exported.');
+        window.open(result.docUrl, '_blank');
+      } catch (err) { Toast.error('Export failed: ' + err.message); }
+    }
+
+    async function doExportSelfStudyPdf(frameworkId) {
+      Toast.success('Generating PDF...');
+      try {
+        var docResult = await ServerAPI.exportSelfStudy(frameworkId);
+        var pdfResult = await ServerAPI.exportToPdf(docResult.docId);
+        Toast.success('PDF exported.');
+        window.open(pdfResult.pdfUrl, '_blank');
+      } catch (err) { Toast.error('PDF export failed: ' + err.message); }
+    }
+
+    async function doCreateBinder(frameworkId) {
+      Toast.success('Creating evidence binder folder structure...');
+      try {
+        var result = await ServerAPI.createEvidenceBinder(frameworkId);
+        Toast.success('Evidence binder created.');
+        window.open(result.folderUrl, '_blank');
+      } catch (err) { Toast.error('Binder creation failed: ' + err.message); }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Standard Detail — Evidence + Narrative
+    // ═══════════════════════════════════════════════
+
+    async function renderStandardDetail(standardId) {
+      if (!standardId) standardId = state.currentStandardId;
+      if (!standardId) { switchView('framework'); return; }
+      state.currentStandardId = standardId;
+
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getStandardDetail(standardId);
+        state.standardDetail = data;
+        LoadingSpinner.hide(viewContainer);
+        buildStandardDetailUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load standard: ' + err.message);
+      }
+    }
+
+    function buildStandardDetailUI(data) {
+      viewContainer.innerHTML = '';
+      var std = data.standard;
+      var evidence = data.evidence || [];
+      var narratives = data.narratives || [];
+
+      // Back link
+      var backLink = ClientUtils.el('a', {
+        href: '#', style: 'display:inline-flex;align-items:center;gap:4px;font-size:var(--font-size-sm);color:var(--color-primary);margin-bottom:var(--space-md);text-decoration:none;',
+        onClick: function(e) { e.preventDefault(); switchView('framework', { frameworkId: std.frameworkId }); }
+      }, ['\u2190 Back to Framework']);
+      viewContainer.appendChild(backLink);
+
+      // Header
+      var header = ClientUtils.el('div', { className: 'acc-header' });
+      header.innerHTML =
+        '<div class="acc-header__top">' +
+          '<div>' +
+            '<h2 class="acc-header__title">' + ClientUtils.escapeHtml(std.standardCode) + ': ' + ClientUtils.escapeHtml(std.standardText) + '</h2>' +
+            '<p class="acc-header__desc">Domain: ' + ClientUtils.escapeHtml(std.domain) + '</p>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:var(--space-sm)">' +
+            '<span class="acc-readiness acc-readiness--' + std.readiness + '" style="width:20px;height:20px"></span>' +
+            '<span style="font-weight:600;text-transform:capitalize">' + std.readiness + '</span>' +
+          '</div>' +
+        '</div>';
+      viewContainer.appendChild(header);
+
+      // Export bar
+      var exportBar = ClientUtils.el('div', { className: 'acc-export-bar' });
+      var exportDocBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: async function() {
+          Toast.success('Exporting standard to Doc...');
+          try {
+            var r = await ServerAPI.exportStandardDoc(std.id);
+            Toast.success('Exported.');
+            window.open(r.docUrl, '_blank');
+          } catch (err) { Toast.error('Export failed: ' + err.message); }
+        }
+      }, ['Export to Doc']);
+      var exportPdfBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: async function() {
+          Toast.success('Exporting to PDF...');
+          try {
+            var docR = await ServerAPI.exportStandardDoc(std.id);
+            var pdfR = await ServerAPI.exportToPdf(docR.docId);
+            Toast.success('PDF exported.');
+            window.open(pdfR.pdfUrl, '_blank');
+          } catch (err) { Toast.error('PDF export failed: ' + err.message); }
+        }
+      }, ['Export to PDF']);
+      var exportDomainBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: async function() {
+          Toast.success('Exporting domain...');
+          try {
+            var r = await ServerAPI.exportDomainDoc(std.frameworkId, std.domain);
+            Toast.success('Domain exported.');
+            window.open(r.docUrl, '_blank');
+          } catch (err) { Toast.error('Export failed: ' + err.message); }
+        }
+      }, ['Export Domain']);
+      exportBar.appendChild(exportDocBtn);
+      exportBar.appendChild(exportPdfBtn);
+      exportBar.appendChild(exportDomainBtn);
+      viewContainer.appendChild(exportBar);
+
+      // ── Evidence Section ──
+      buildEvidenceSection(evidence, std.id);
+
+      // ── Narrative Section ──
+      buildNarrativeSection(narratives, std.id);
+    }
+
+    // ── Evidence Section ──
+
+    function buildEvidenceSection(evidence, standardId) {
+      var section = ClientUtils.el('div', { className: 'acc-section' });
+
+      var sectionHeader = ClientUtils.el('div', { className: 'acc-section__header' });
+      sectionHeader.innerHTML = '<h3 class="acc-section__title">Evidence (' + evidence.length + ')</h3>';
+      var addBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showAddEvidenceModal(standardId); }
+      }, ['+ Add Evidence']);
+      sectionHeader.appendChild(addBtn);
+      section.appendChild(sectionHeader);
+
+      if (evidence.length === 0) {
+        section.innerHTML += '<div class="acc-empty"><div class="acc-empty__text">No evidence linked to this standard yet.</div></div>';
+        viewContainer.appendChild(section);
+        return;
+      }
+
+      var list = ClientUtils.el('div', { className: 'acc-evidence-list' });
+
+      evidence.forEach(function(ev) {
+        var row = ClientUtils.el('div', { className: 'acc-evidence-row' });
+
+        var titleSpan = ClientUtils.el('span', { className: 'acc-evidence-row__title' });
+        if (ev.driveFileUrl) {
+          titleSpan.innerHTML = '<a href="' + ClientUtils.escapeHtml(ev.driveFileUrl) + '" target="_blank" rel="noopener">' + ClientUtils.escapeHtml(ev.title) + '</a>';
+        } else {
+          titleSpan.textContent = ev.title;
+        }
+
+        var typeSpan = ClientUtils.el('span', { className: 'acc-evidence-row__type' }, [ev.fileType]);
+
+        var statusSpan = ClientUtils.el('span');
+        statusSpan.innerHTML = StatusBadge.html(ev.status, accStatusMap);
+
+        var metaSpan = ClientUtils.el('span', { className: 'acc-evidence-row__meta' });
+        metaSpan.textContent = 'by ' + ev.uploadedBy + (ev.reviewerName ? ' | Reviewer: ' + ev.reviewerName : '');
+
+        var actionsDiv = ClientUtils.el('div', { className: 'acc-evidence-row__actions' });
+
+        var reviewBtn = ClientUtils.el('button', {
+          className: 'btn btn-sm btn-secondary',
+          style: 'padding:2px 8px;font-size:var(--font-size-xs);',
+          onClick: function(e) { e.stopPropagation(); showReviewEvidenceModal(ev, standardId); }
+        }, ['Review']);
+
+        var delBtn = ClientUtils.el('button', {
+          className: 'btn btn-sm btn-danger',
+          style: 'padding:2px 8px;font-size:var(--font-size-xs);',
+          onClick: function(e) {
+            e.stopPropagation();
+            if (confirm('Delete this evidence?')) deleteEvidenceItem(ev.id, standardId);
+          }
+        }, ['Del']);
+
+        actionsDiv.appendChild(reviewBtn);
+        actionsDiv.appendChild(delBtn);
+
+        row.appendChild(titleSpan);
+        row.appendChild(typeSpan);
+        row.appendChild(statusSpan);
+        row.appendChild(metaSpan);
+        row.appendChild(actionsDiv);
+        list.appendChild(row);
+      });
+
+      section.appendChild(list);
+      viewContainer.appendChild(section);
+    }
+
+    function showAddEvidenceModal(standardId) {
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Title *</label>' +
+          '<input type="text" class="form-input" id="acc-ev-title" placeholder="Evidence document title">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Description</label>' +
+          '<textarea class="form-input" id="acc-ev-desc" rows="2" placeholder="How this evidence supports the standard"></textarea>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Google Drive URL</label>' +
+          '<input type="url" class="form-input" id="acc-ev-url" placeholder="Paste Google Drive link">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">File Type</label>' +
+          '<select class="form-select" id="acc-ev-type">' +
+            '<option value="doc">Document</option>' +
+            '<option value="pdf">PDF</option>' +
+            '<option value="sheet">Spreadsheet</option>' +
+            '<option value="image">Image</option>' +
+            '<option value="video">Video</option>' +
+            '<option value="link" selected>Link</option>' +
+          '</select>' +
+        '</div>';
+
+      Modal.open('Add Evidence', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Add', className: 'btn-primary', onClick: async function() {
+          var title = document.getElementById('acc-ev-title').value.trim();
+          if (!title) { Toast.error('Title is required.'); return; }
+
+          try {
+            await ServerAPI.createEvidence({
+              standard_id: standardId,
+              title: title,
+              description: document.getElementById('acc-ev-desc').value.trim(),
+              drive_file_url: document.getElementById('acc-ev-url').value.trim(),
+              file_type: document.getElementById('acc-ev-type').value
+            });
+            Modal.close();
+            Toast.success('Evidence added.');
+            renderStandardDetail(standardId);
+          } catch (err) { Toast.error('Failed: ' + err.message); }
+        }}
+      ]);
+    }
+
+    function showReviewEvidenceModal(ev, standardId) {
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Evidence: ' + ClientUtils.escapeHtml(ev.title) + '</label>' +
+          (ev.description ? '<p style="font-size:var(--font-size-sm);color:var(--color-text-secondary)">' + ClientUtils.escapeHtml(ev.description) + '</p>' : '') +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Review Status *</label>' +
+          '<select class="form-select" id="acc-ev-rev-status">' +
+            '<option value="draft"' + (ev.status === 'draft' ? ' selected' : '') + '>Draft</option>' +
+            '<option value="under_review"' + (ev.status === 'under_review' ? ' selected' : '') + '>Under Review</option>' +
+            '<option value="approved"' + (ev.status === 'approved' ? ' selected' : '') + '>Approved</option>' +
+            '<option value="insufficient"' + (ev.status === 'insufficient' ? ' selected' : '') + '>Insufficient</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Review Notes</label>' +
+          '<textarea class="form-input" id="acc-ev-rev-notes" rows="3" placeholder="Feedback or comments">' + ClientUtils.escapeHtml(ev.reviewNotes) + '</textarea>' +
+        '</div>';
+
+      Modal.open('Review Evidence', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Save Review', className: 'btn-primary', onClick: async function() {
+          try {
+            await ServerAPI.reviewEvidence(ev.id, {
+              status: document.getElementById('acc-ev-rev-status').value,
+              review_notes: document.getElementById('acc-ev-rev-notes').value.trim()
+            });
+            Modal.close();
+            Toast.success('Review saved.');
+            renderStandardDetail(standardId);
+          } catch (err) { Toast.error('Failed: ' + err.message); }
+        }}
+      ]);
+    }
+
+    async function deleteEvidenceItem(evidenceId, standardId) {
+      try {
+        await ServerAPI.deleteEvidence(evidenceId);
+        Toast.success('Evidence deleted.');
+        renderStandardDetail(standardId);
+      } catch (err) { Toast.error('Failed: ' + err.message); }
+    }
+
+    // ── Narrative Section ──
+
+    function buildNarrativeSection(narratives, standardId) {
+      var section = ClientUtils.el('div', { className: 'acc-section' });
+
+      var sectionHeader = ClientUtils.el('div', { className: 'acc-section__header' });
+      sectionHeader.innerHTML = '<h3 class="acc-section__title">Self-Study Narrative</h3>';
+      var newVersionBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showNarrativeModal(standardId, narratives); }
+      }, [narratives.length > 0 ? 'New Version' : 'Write Narrative']);
+      sectionHeader.appendChild(newVersionBtn);
+      section.appendChild(sectionHeader);
+
+      if (narratives.length === 0) {
+        section.innerHTML += '<div class="acc-empty"><div class="acc-empty__text">No narrative written for this standard yet.</div></div>';
+        viewContainer.appendChild(section);
+        return;
+      }
+
+      // Latest narrative card
+      var latest = narratives[0];
+      var card = ClientUtils.el('div', { className: 'acc-narrative-card' });
+
+      var cardHeader = ClientUtils.el('div', { className: 'acc-narrative-card__header' });
+      cardHeader.innerHTML =
+        '<div>' +
+          '<span style="font-weight:600">Version ' + latest.version + '</span> ' +
+          StatusBadge.html(latest.status, accStatusMap) +
+        '</div>' +
+        '<span class="acc-narrative-card__word-count">' + latest.wordCount + ' words</span>';
+      card.appendChild(cardHeader);
+
+      var textDiv = ClientUtils.el('div', { className: 'acc-narrative-card__text' });
+      textDiv.textContent = latest.narrativeText;
+      card.appendChild(textDiv);
+
+      var metaDiv = ClientUtils.el('div', { className: 'acc-narrative-card__meta' });
+      metaDiv.innerHTML =
+        '<span>Author: ' + ClientUtils.escapeHtml(latest.authorName) + '</span>' +
+        '<span>Created: ' + ClientUtils.formatDate(latest.createdAt) + '</span>' +
+        (latest.updatedAt ? '<span>Updated: ' + ClientUtils.formatDate(latest.updatedAt) + '</span>' : '');
+      card.appendChild(metaDiv);
+
+      // Status buttons
+      var statusActions = ClientUtils.el('div', { style: 'display:flex;gap:var(--space-xs);margin-top:var(--space-md)' });
+      if (latest.status === 'draft') {
+        statusActions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-sm btn-secondary',
+          onClick: function() { updateNarStatus(latest.id, 'review', standardId); }
+        }, ['Submit for Review']));
+      } else if (latest.status === 'review') {
+        statusActions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-sm btn-secondary',
+          onClick: function() { updateNarStatus(latest.id, 'draft', standardId); }
+        }, ['Return to Draft']));
+        statusActions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-sm btn-success',
+          style: 'background:var(--color-success);color:white;',
+          onClick: function() { updateNarStatus(latest.id, 'final', standardId); }
+        }, ['Approve as Final']));
+      } else if (latest.status === 'final') {
+        statusActions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-sm btn-secondary',
+          onClick: function() { updateNarStatus(latest.id, 'review', standardId); }
+        }, ['Reopen for Review']));
+      }
+      card.appendChild(statusActions);
+
+      section.appendChild(card);
+
+      // Version history
+      if (narratives.length > 1) {
+        var historyTitle = ClientUtils.el('h4', {
+          style: 'font-size:var(--font-size-sm);font-weight:600;color:var(--color-text-secondary);margin:var(--space-md) 0 var(--space-xs);'
+        }, ['Version History (' + narratives.length + ')']);
+        section.appendChild(historyTitle);
+
+        var versionList = ClientUtils.el('div', { className: 'acc-version-list' });
+        narratives.forEach(function(n, idx) {
+          if (idx === 0) return; // Skip latest
+          var item = ClientUtils.el('div', { className: 'acc-version-item' });
+          item.innerHTML =
+            '<span class="acc-version-item__label">Version ' + n.version + ' ' + StatusBadge.html(n.status, accStatusMap) + '</span>' +
+            '<span class="acc-version-item__meta">' + n.wordCount + ' words &middot; ' +
+              ClientUtils.escapeHtml(n.authorName) + ' &middot; ' + ClientUtils.formatDate(n.createdAt) + '</span>';
+
+          item.addEventListener('click', function() {
+            Modal.open('Version ' + n.version, ClientUtils.el('div', {
+              style: 'white-space:pre-wrap;font-size:var(--font-size-sm);line-height:1.7;max-height:400px;overflow-y:auto;'
+            }, [n.narrativeText]), [
+              { label: 'Close', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+            ]);
+          });
+
+          versionList.appendChild(item);
+        });
+        section.appendChild(versionList);
+      }
+
+      viewContainer.appendChild(section);
+    }
+
+    function showNarrativeModal(standardId, existingNarratives) {
+      var latestText = existingNarratives.length > 0 ? existingNarratives[0].narrativeText : '';
+
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Narrative Text *</label>' +
+          '<textarea class="form-input" id="acc-nar-text" rows="12" style="font-size:var(--font-size-sm);line-height:1.6">' + ClientUtils.escapeHtml(latestText) + '</textarea>' +
+        '</div>' +
+        '<div id="acc-nar-wordcount" style="font-size:var(--font-size-xs);color:var(--color-text-secondary);text-align:right;margin-top:-8px"></div>';
+
+      Modal.open((existingNarratives.length > 0 ? 'New Version (v' + (existingNarratives[0].version + 1) + ')' : 'Write Narrative'), body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Save', className: 'btn-primary', onClick: async function() {
+          var text = document.getElementById('acc-nar-text').value.trim();
+          if (!text) { Toast.error('Narrative text is required.'); return; }
+
+          try {
+            await ServerAPI.saveNarrative({
+              standard_id: standardId,
+              narrative_text: text
+            });
+            Modal.close();
+            Toast.success('Narrative saved as new version.');
+            renderStandardDetail(standardId);
+          } catch (err) { Toast.error('Failed: ' + err.message); }
+        }}
+      ]);
+
+      // Word count updater
+      var textarea = document.getElementById('acc-nar-text');
+      var wcEl = document.getElementById('acc-nar-wordcount');
+      function updateWC() {
+        var words = textarea.value.trim().split(/\s+/).filter(Boolean).length;
+        wcEl.textContent = words + ' words';
+      }
+      textarea.addEventListener('input', updateWC);
+      updateWC();
+    }
+
+    async function updateNarStatus(narrativeId, newStatus, standardId) {
+      try {
+        await ServerAPI.updateNarrativeStatus(narrativeId, newStatus);
+        Toast.success('Status updated to ' + newStatus);
+        renderStandardDetail(standardId);
+      } catch (err) { Toast.error('Failed: ' + err.message); }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Visit Readiness View
+    // ═══════════════════════════════════════════════
+
+    async function renderVisitReadiness(frameworkId) {
+      if (!frameworkId) frameworkId = state.currentFrameworkId;
+      if (!frameworkId) { Toast.error('Select a framework first.'); switchView('list'); return; }
+
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getVisitReadiness(frameworkId);
+        state.readinessData = data;
+        LoadingSpinner.hide(viewContainer);
+        buildReadinessUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load readiness data: ' + err.message);
+      }
+    }
+
+    function buildReadinessUI(data) {
+      viewContainer.innerHTML = '';
+
+      // Back link
+      var backLink = ClientUtils.el('a', {
+        href: '#', style: 'display:inline-flex;align-items:center;gap:4px;font-size:var(--font-size-sm);color:var(--color-primary);margin-bottom:var(--space-md);text-decoration:none;',
+        onClick: function(e) { e.preventDefault(); switchView('framework', { frameworkId: state.currentFrameworkId }); }
+      }, ['\u2190 Back to Framework']);
+      viewContainer.appendChild(backLink);
+
+      // Title
+      var title = ClientUtils.el('h2', {
+        style: 'font-size:1.25rem;font-weight:600;margin-bottom:var(--space-md);'
+      }, ['Visit Readiness: ' + (data.frameworkName || '')]);
+      viewContainer.appendChild(title);
+
+      if (data.visitDate) {
+        var visitInfo = ClientUtils.el('p', {
+          style: 'font-size:var(--font-size-sm);color:var(--color-text-secondary);margin-bottom:var(--space-lg);'
+        }, ['Visit Date: ' + ClientUtils.formatDate(data.visitDate)]);
+        viewContainer.appendChild(visitInfo);
+      }
+
+      // Summary stats
+      var summary = ClientUtils.el('div', { className: 'acc-readiness-summary' });
+      summary.innerHTML =
+        '<div class="acc-readiness-stat">' +
+          '<div class="acc-readiness-stat__value">' + data.progress + '%</div>' +
+          '<div class="acc-readiness-stat__label">Overall Progress</div>' +
+        '</div>' +
+        '<div class="acc-readiness-stat">' +
+          '<div class="acc-readiness-stat__value acc-readiness-stat__value--green">' + data.greenCount + '</div>' +
+          '<div class="acc-readiness-stat__label">Ready</div>' +
+        '</div>' +
+        '<div class="acc-readiness-stat">' +
+          '<div class="acc-readiness-stat__value acc-readiness-stat__value--amber">' + data.amberCount + '</div>' +
+          '<div class="acc-readiness-stat__label">In Progress</div>' +
+        '</div>' +
+        '<div class="acc-readiness-stat">' +
+          '<div class="acc-readiness-stat__value acc-readiness-stat__value--red">' + data.redCount + '</div>' +
+          '<div class="acc-readiness-stat__label">Gaps</div>' +
+        '</div>';
+      viewContainer.appendChild(summary);
+
+      // Progress bar
+      var progressSection = ClientUtils.el('div', { style: 'margin-bottom:var(--space-lg)' });
+      progressSection.innerHTML =
+        '<div class="acc-progress-bar acc-progress-bar--lg">' +
+          '<div class="acc-progress-bar__fill acc-progress-bar__fill--green" style="width:' + data.progress + '%"></div>' +
+        '</div>';
+      viewContainer.appendChild(progressSection);
+
+      // Gaps (red)
+      if (data.gaps && data.gaps.length > 0) {
+        var gapsSection = ClientUtils.el('div', { className: 'acc-section' });
+        gapsSection.innerHTML = '<h3 class="acc-section__title" style="color:var(--color-danger);margin-bottom:var(--space-md)">Critical Gaps (' + data.gaps.length + ')</h3>';
+
+        var gapsByDomain = {};
+        data.gaps.forEach(function(g) {
+          if (!gapsByDomain[g.domain]) gapsByDomain[g.domain] = [];
+          gapsByDomain[g.domain].push(g);
+        });
+
+        var gapsList = ClientUtils.el('div', { className: 'acc-gaps-list' });
+        Object.keys(gapsByDomain).forEach(function(domain) {
+          var group = ClientUtils.el('div', { className: 'acc-gap-domain' });
+          group.innerHTML = '<div class="acc-gap-domain__title">' + ClientUtils.escapeHtml(domain) + '</div>';
+
+          gapsByDomain[domain].forEach(function(gap) {
+            var item = ClientUtils.el('div', { className: 'acc-gap-item acc-gap-item--red' });
+            item.innerHTML =
+              '<span class="acc-gap-item__code">' + ClientUtils.escapeHtml(gap.standardCode) + '</span>' +
+              '<span class="acc-gap-item__text">' + ClientUtils.escapeHtml(gap.standardText) + '</span>' +
+              '<span class="acc-gap-item__issues">' +
+                gap.issues.map(function(i) { return '<span class="acc-gap-issue acc-gap-issue--red">' + i + '</span>'; }).join('') +
+              '</span>';
+            item.addEventListener('click', function() {
+              state.currentStandardId = gap.standardId;
+              switchView('standard', { standardId: gap.standardId });
+            });
+            group.appendChild(item);
+          });
+
+          gapsList.appendChild(group);
+        });
+
+        gapsSection.appendChild(gapsList);
+        viewContainer.appendChild(gapsSection);
+      }
+
+      // Amber items
+      if (data.amberItems && data.amberItems.length > 0) {
+        var amberSection = ClientUtils.el('div', { className: 'acc-section' });
+        amberSection.innerHTML = '<h3 class="acc-section__title" style="color:var(--color-warning);margin-bottom:var(--space-md)">Needs Attention (' + data.amberItems.length + ')</h3>';
+
+        var amberByDomain = {};
+        data.amberItems.forEach(function(a) {
+          if (!amberByDomain[a.domain]) amberByDomain[a.domain] = [];
+          amberByDomain[a.domain].push(a);
+        });
+
+        var amberList = ClientUtils.el('div', { className: 'acc-gaps-list' });
+        Object.keys(amberByDomain).forEach(function(domain) {
+          var group = ClientUtils.el('div', { className: 'acc-gap-domain' });
+          group.innerHTML = '<div class="acc-gap-domain__title">' + ClientUtils.escapeHtml(domain) + '</div>';
+
+          amberByDomain[domain].forEach(function(item) {
+            var row = ClientUtils.el('div', { className: 'acc-gap-item acc-gap-item--amber' });
+            row.innerHTML =
+              '<span class="acc-gap-item__code">' + ClientUtils.escapeHtml(item.standardCode) + '</span>' +
+              '<span class="acc-gap-item__text">' + ClientUtils.escapeHtml(item.standardText) + '</span>' +
+              '<span class="acc-gap-item__issues">' +
+                item.issues.map(function(i) { return '<span class="acc-gap-issue acc-gap-issue--amber">' + i + '</span>'; }).join('') +
+              '</span>';
+            row.addEventListener('click', function() {
+              state.currentStandardId = item.standardId;
+              switchView('standard', { standardId: item.standardId });
+            });
+            group.appendChild(row);
+          });
+
+          amberList.appendChild(group);
+        });
+
+        amberSection.appendChild(amberList);
+        viewContainer.appendChild(amberSection);
+      }
+
+      // All green message
+      if (data.gaps.length === 0 && data.amberItems.length === 0) {
+        viewContainer.innerHTML += '<div class="acc-empty" style="color:var(--color-success)"><div class="acc-empty__icon">&#9989;</div>' +
+          '<div class="acc-empty__text">All standards are ready! You are fully prepared for the accreditation visit.</div></div>';
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Init & Return
+    // ═══════════════════════════════════════════════
+
+    buildLayout();
+
+    return {
+      onActivate: function() {
+        if (state.currentStandardId && viewContainer.querySelector('.acc-evidence-list, .acc-narrative-card')) {
+          renderStandardDetail(state.currentStandardId);
+        } else if (state.currentFrameworkId && viewContainer.querySelector('.acc-accordion')) {
+          renderFrameworkDetail(state.currentFrameworkId);
+        } else {
+          renderFrameworkList();
+        }
+      }
+    };
+  }
+};
+</script>

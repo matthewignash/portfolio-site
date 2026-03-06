@@ -1,0 +1,217 @@
+<style>
+/* ============================================================================
+   REFLECTION PROMPTS — rfl- prefix
+   Completion reflection card, iteration scaffolding enhancements,
+   design thinking phase transition prompts
+   ============================================================================ */
+
+/* Completion Reflection Card (Story 1.1) */
+.rfl-card {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 12px 0;
+  position: relative;
+}
+.rfl-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.rfl-card-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.rfl-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #166534;
+}
+.rfl-prompt-text {
+  font-size: 13px;
+  color: #1e293b;
+  margin-bottom: 10px;
+  font-style: italic;
+  line-height: 1.5;
+}
+.rfl-textarea {
+  width: 100%;
+  min-height: 60px;
+  max-height: 120px;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+.rfl-textarea:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.15);
+}
+.rfl-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 8px;
+}
+.rfl-save-btn {
+  background: #059669;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.rfl-save-btn:hover { background: #047857; }
+.rfl-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.rfl-save-btn:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+.rfl-skip-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 8px;
+  font-family: inherit;
+}
+.rfl-skip-btn:hover { color: #334155; text-decoration: underline; }
+.rfl-skip-btn:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+.rfl-char-count {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.rfl-saved-msg {
+  font-size: 12px;
+  color: #059669;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.rfl-saved-msg.visible { opacity: 1; }
+
+/* Iteration Reflection Scaffolding (Story 1.2) */
+.itr-scaffold-label {
+  font-size: 12px;
+  color: #0d9488;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.itr-scaffold-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.itr-scaffold-chip {
+  display: inline-block;
+  background: #f0fdfa;
+  border: 1px dashed #99f6e4;
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #0f766e;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.itr-scaffold-chip:hover { background: #ccfbf1; border-style: solid; }
+.itr-scaffold-chip:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+.itr-word-quality {
+  font-size: 12px;
+  margin-top: 4px;
+  display: inline-block;
+}
+.itr-word-quality.itr-wq-good { color: #059669; }
+.itr-word-quality.itr-wq-ok { color: #d97706; }
+.itr-word-quality.itr-wq-low { color: #94a3b8; }
+
+/* Design Thinking Phase Transition (Story 1.3) */
+.dtk-transition-card {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.dtk-transition-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dtk-transition-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.dtk-transition-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #5b21b6;
+}
+.dtk-transition-prompt {
+  font-size: 13px;
+  color: #1e293b;
+  font-style: italic;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.dtk-transition-textarea {
+  width: 100%;
+  min-height: 60px;
+  max-height: 120px;
+  padding: 10px;
+  border: 1px solid #c4b5fd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+.dtk-transition-textarea:focus {
+  outline: none;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+.dtk-transition-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 8px;
+}
+.dtk-transition-save {
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.dtk-transition-save:hover { background: #6d28d9; }
+.dtk-transition-save:disabled { opacity: 0.6; cursor: not-allowed; }
+.dtk-transition-save:focus-visible { outline: 3px solid #7c3aed; outline-offset: 2px; }
+.dtk-transition-skip {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 8px;
+  font-family: inherit;
+}
+.dtk-transition-skip:hover { color: #334155; text-decoration: underline; }
+.dtk-transition-skip:focus-visible { outline: 3px solid #7c3aed; outline-offset: 2px; }
+</style>

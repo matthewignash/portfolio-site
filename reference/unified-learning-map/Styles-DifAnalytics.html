@@ -1,0 +1,262 @@
+<style>
+/* ============================================================================
+   DIFFERENTIATION ANALYTICS — dfa- prefix
+   Group Insights sub-tab in Progress tab
+   ============================================================================ */
+
+/* --- Group Overview Cards --- */
+.dfa-group-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.dfa-group-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  border-left: 4px solid #e5e7eb;
+}
+.dfa-group-card:hover { border-color: #9ca3af; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.dfa-group-card.expanded { border-color: #8b5cf6; background: #faf5ff; }
+.dfa-group-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.dfa-group-card-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dfa-group-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dfa-group-card-count {
+  font-size: 11px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+.dfa-group-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dfa-group-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dfa-group-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.dfa-group-stat-label {
+  font-size: 10px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* WIDA mini-bar */
+.dfa-wida-minibar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+  background: #f3f4f6;
+}
+.dfa-wida-seg { min-width: 2px; }
+.dfa-wida-seg.seg-low { background: #ef4444; }
+.dfa-wida-seg.seg-mid { background: #f59e0b; }
+.dfa-wida-seg.seg-high { background: #22c55e; }
+.dfa-wida-seg.seg-none { background: #06b6d4; }
+
+/* --- Group Comparison Bars --- */
+.dfa-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 12px;
+  margin-top: 20px;
+}
+.dfa-comp-rows { display: flex; flex-direction: column; gap: 8px; }
+.dfa-comp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dfa-comp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dfa-comp-label {
+  width: 130px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dfa-comp-bar-container {
+  flex: 1;
+  height: 16px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+.dfa-comp-bar-fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.3s;
+}
+.dfa-comp-bar-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  width: 42px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.dfa-comp-ref-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #1e293b;
+  z-index: 1;
+}
+
+/* --- Per-Group Student List (expandable) --- */
+.dfa-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f3f4f6;
+}
+.dfa-student-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.dfa-student-row:hover { background: #f9fafb; }
+.dfa-student-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #374151;
+}
+.dfa-student-stat {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  width: 50px;
+  text-align: right;
+}
+.dfa-student-stat.danger { color: #dc2626; }
+.dfa-student-stat.alert { color: #d97706; }
+.dfa-student-wida {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 10px;
+  font-weight: 600;
+}
+.dfa-hex-dots {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.dfa-hex-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.dfa-hex-dot.mastered { background: #166534; }
+.dfa-hex-dot.completed { background: #16a34a; }
+.dfa-hex-dot.in_progress { background: #3b82f6; }
+.dfa-hex-dot.not_started { background: #d1d5db; }
+
+/* --- Hex Assignment Coverage --- */
+.dfa-coverage-summary {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.dfa-coverage-stat {
+  font-size: 13px;
+  color: #374151;
+}
+.dfa-coverage-stat strong {
+  font-weight: 700;
+  color: #1e293b;
+}
+.dfa-coverage-group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: #475569;
+}
+.dfa-coverage-group-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dfa-gap-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #dc2626;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+/* --- Empty & Loading States --- */
+.dfa-empty {
+  text-align: center;
+  padding: 40px 16px;
+  color: #9ca3af;
+}
+.dfa-empty .icon { font-size: 36px; margin-bottom: 8px; }
+.dfa-empty p { font-size: 13px; margin: 4px 0; }
+.dfa-loading {
+  text-align: center;
+  padding: 40px 16px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+</style>

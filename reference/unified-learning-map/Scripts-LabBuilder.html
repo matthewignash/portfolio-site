@@ -1,0 +1,1107 @@
+<script>
+/* ============================================================================
+   Lab Assignment Builder — Teacher UI
+   Prefix: lab
+   ES5 ONLY — no const, let, =>, template literals, .includes()
+   ============================================================================ */
+
+
+// ============================================================================
+// BUILDER — OPEN / CLOSE
+// ============================================================================
+
+/**
+ * Open the lab assignment builder for a hex.
+ * If an assignment already exists, loads it and goes to Step 3 (configure).
+ * Otherwise starts at Step 1 (pick template).
+ *
+ * @param {string} hexId - The hex ID to build/edit an assignment for
+ */
+function labOpenBuilder(hexId) {
+  if (!hexId) return;
+
+  // Find the hex data
+  var hex = null;
+  for (var m = 0; m < mapsData.length; m++) {
+    var hexes = mapsData[m].hexes || [];
+    for (var h = 0; h < hexes.length; h++) {
+      if (String(hexes[h].id) === String(hexId)) {
+        hex = hexes[h];
+        break;
+      }
+    }
+    if (hex) break;
+  }
+  if (!hex) {
+    showToast('Hex not found.', 'error');
+    return;
+  }
+
+  // Find mapId for this hex
+  var mapId = '';
+  for (var mi = 0; mi < mapsData.length; mi++) {
+    var mHexes = mapsData[mi].hexes || [];
+    for (var hi = 0; hi < mHexes.length; hi++) {
+      if (String(mHexes[hi].id) === String(hexId)) {
+        mapId = String(mapsData[mi].id);
+        break;
+      }
+    }
+    if (mapId) break;
+  }
+
+  // Initialize builder state
+  labBuilderData = {
+    hexId: hexId,
+    mapId: mapId,
+    hex: hex,
+    assignmentId: null,
+    templateId: null,
+    rubricId: null,
+    scaffoldLevel: 'medium',
+    sectionOverrides: {},
+    instructions: '',
+    dueDate: '',
+    classId: '',
+    title: '',
+    isEditing: false,
+    selectedTemplate: null,
+    selectedRubric: null
+  };
+  labBuilderStep = 1;
+
+  // Show overlay immediately with loading state
+  var overlay = document.getElementById('labBuilderOverlay');
+  if (overlay) overlay.style.display = 'flex';
+  var body = document.getElementById('labBuilderBody');
+  if (body) body.innerHTML = '<div style="text-align:center;padding:60px;color:#64748b;">Loading...</div>';
+  var footer = document.getElementById('labBuilderFooter');
+  if (footer) footer.innerHTML = '';
+
+  // Check for existing assignment on this hex
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!labBuilderData || String(labBuilderData.hexId) !== String(hexId)) return;
+
+      if (rows && rows.length > 0) {
+        // Existing assignment — load it
+        var asmt = rows[0];
+        labBuilderData.assignmentId = asmt.assignmentId;
+        labBuilderData.templateId = asmt.templateId;
+        labBuilderData.rubricId = asmt.rubricId;
+        labBuilderData.scaffoldLevel = asmt.scaffoldLevel || 'medium';
+        labBuilderData.sectionOverrides = asmt.sectionOverridesJson || {};
+        labBuilderData.instructions = asmt.instructions || '';
+        labBuilderData.dueDate = asmt.dueDate || '';
+        labBuilderData.classId = asmt.classId || '';
+        labBuilderData.title = asmt.title || '';
+        labBuilderData.isEditing = true;
+        labBuilderStep = 3; // Jump to configure
+      }
+
+      // Load templates and rubrics, then render
+      labLoadTemplatesAndRubrics(function() {
+        if (!labBuilderData) return;
+
+        // If editing, resolve the selected template and rubric
+        if (labBuilderData.isEditing) {
+          labResolveSelected_();
+        }
+
+        labRenderCurrentStep();
+      });
+    })
+    .withFailureHandler(function(err) {
+      if (!labBuilderData || String(labBuilderData.hexId) !== String(hexId)) return;
+      // Treat failure (e.g. Lab Reports not enabled) as "no existing assignment"
+      // Proceed to template picker — actual validation happens on save
+      labLoadTemplatesAndRubrics(function() {
+        if (!labBuilderData) return;
+        labRenderCurrentStep();
+      });
+    })
+    .getLabAssignmentsForHex(hexId);
+}
+
+
+/**
+ * Close the builder overlay and reset state.
+ */
+function labCloseBuilder() {
+  labBuilderData = null;
+  labBuilderStep = 1;
+  var overlay = document.getElementById('labBuilderOverlay');
+  if (overlay) overlay.style.display = 'none';
+
+  // Refresh the hex editor panel assignment info if open
+  if (typeof selectedHexId !== 'undefined' && selectedHexId) {
+    labRefreshAssignmentInfo_(selectedHexId);
+  }
+}
+
+
+// ============================================================================
+// BUILDER — DATA LOADING
+// ============================================================================
+
+/**
+ * Load templates and rubrics from backend, then call callback.
+ */
+function labLoadTemplatesAndRubrics(callback) {
+  var loaded = { templates: false, rubrics: false };
+
+  function checkDone() {
+    if (loaded.templates && loaded.rubrics && callback) callback();
+  }
+
+  // Load templates
+  if (labTemplatesCache) {
+    loaded.templates = true;
+    checkDone();
+  } else {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        labTemplatesCache = result;
+        loaded.templates = true;
+        checkDone();
+      })
+      .withFailureHandler(function(err) {
+        labTemplatesCache = { templates: [], preloaded: [] };
+        loaded.templates = true;
+        checkDone();
+      })
+      .getLabTemplates();
+  }
+
+  // Load rubrics
+  if (labRubricsCache) {
+    loaded.rubrics = true;
+    checkDone();
+  } else {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        labRubricsCache = result;
+        loaded.rubrics = true;
+        checkDone();
+      })
+      .withFailureHandler(function(err) {
+        labRubricsCache = { rubrics: [] };
+        loaded.rubrics = true;
+        checkDone();
+      })
+      .getLabRubrics();
+  }
+}
+
+
+/**
+ * Resolve the selected template and rubric objects from cache.
+ * Called when editing an existing assignment.
+ */
+function labResolveSelected_() {
+  if (!labBuilderData || !labTemplatesCache) return;
+
+  var tid = labBuilderData.templateId;
+  var rid = labBuilderData.rubricId;
+
+  // Find template
+  var all = (labTemplatesCache.preloaded || []).concat(labTemplatesCache.templates || []);
+  for (var i = 0; i < all.length; i++) {
+    if (String(all[i].templateId) === String(tid)) {
+      labBuilderData.selectedTemplate = all[i];
+      break;
+    }
+  }
+
+  // Find rubric — need full rubric with criteria
+  var preloadedRubrics = labGetPreloadedRubrics_();
+  var customRubrics = (labRubricsCache && labRubricsCache.rubrics) ? labRubricsCache.rubrics : [];
+  var allRubrics = preloadedRubrics.concat(customRubrics);
+  for (var j = 0; j < allRubrics.length; j++) {
+    if (String(allRubrics[j].rubricId) === String(rid)) {
+      labBuilderData.selectedRubric = allRubrics[j];
+      break;
+    }
+  }
+}
+
+
+// ============================================================================
+// BUILDER — STEP NAVIGATION
+// ============================================================================
+
+/**
+ * Set the current wizard step and render.
+ */
+function labBuilderSetStep(step) {
+  if (step < 1 || step > 3) return;
+
+  // Validate before advancing
+  if (step === 2 && !labBuilderData.templateId) {
+    showToast('Please select a template first.', 'error');
+    return;
+  }
+  if (step === 3 && !labBuilderData.rubricId) {
+    showToast('Please select a rubric first.', 'error');
+    return;
+  }
+
+  labBuilderStep = step;
+  labRenderCurrentStep();
+}
+
+
+/**
+ * Render the current step content + stepper + footer.
+ */
+function labRenderCurrentStep() {
+  if (!labBuilderData) return;
+
+  labRenderStepper_();
+
+  var body = document.getElementById('labBuilderBody');
+  if (!body) return;
+
+  if (labBuilderStep === 1) {
+    labRenderTemplateStep(body);
+  } else if (labBuilderStep === 2) {
+    labRenderRubricStep(body);
+  } else if (labBuilderStep === 3) {
+    labRenderConfigStep(body);
+  }
+
+  labRenderFooter_();
+}
+
+
+/**
+ * Render the stepper indicator.
+ */
+function labRenderStepper_() {
+  var el = document.getElementById('labBuilderStepper');
+  if (!el) return;
+
+  var steps = [
+    { num: 1, label: 'Template' },
+    { num: 2, label: 'Rubric' },
+    { num: 3, label: 'Configure' }
+  ];
+
+  var html = '';
+  for (var i = 0; i < steps.length; i++) {
+    var s = steps[i];
+    var cls = 'lab-step';
+    if (s.num === labBuilderStep) cls += ' lab-step-active';
+    if (s.num < labBuilderStep) cls += ' lab-step-done';
+    html += '<div class="' + cls + '">' +
+      '<span class="lab-step-num">' + s.num + '</span>' +
+      '<span class="lab-step-label">' + s.label + '</span>' +
+      '</div>';
+  }
+  el.innerHTML = html;
+}
+
+
+/**
+ * Render the footer with Back / Next / Save buttons.
+ */
+function labRenderFooter_() {
+  var footer = document.getElementById('labBuilderFooter');
+  if (!footer) return;
+
+  var html = '';
+
+  if (labBuilderStep > 1 && !labBuilderData.isEditing) {
+    html += '<button class="btn btn-outline" onclick="labBuilderSetStep(' + (labBuilderStep - 1) + ')">&#8592; Back</button>';
+  }
+
+  html += '<div style="flex:1;"></div>';
+
+  if (labBuilderData.isEditing && labBuilderData.assignmentId) {
+    html += '<button class="btn btn-outline" style="color:#ef4444;border-color:#ef4444;" onclick="labDeleteAssignment()">Delete</button>';
+    html += '<button class="btn btn-outline" onclick="labActivateAssignment()" style="margin-left:8px;">Activate</button>';
+  }
+
+  if (labBuilderStep < 3) {
+    html += '<button class="btn btn-primary" onclick="labBuilderSetStep(' + (labBuilderStep + 1) + ')" style="margin-left:8px;">Next &#8594;</button>';
+  } else {
+    html += '<button class="btn btn-primary" onclick="labSaveAssignment()" style="margin-left:8px;">&#128190; Save Assignment</button>';
+  }
+
+  footer.innerHTML = html;
+}
+
+
+// ============================================================================
+// STEP 1 — TEMPLATE PICKER
+// ============================================================================
+
+function labRenderTemplateStep(container) {
+  var preloaded = (labTemplatesCache && labTemplatesCache.preloaded) ? labTemplatesCache.preloaded : [];
+  var custom = (labTemplatesCache && labTemplatesCache.templates) ? labTemplatesCache.templates : [];
+
+  var html = '<h3 class="lab-builder-section-title">Choose a Lab Template</h3>';
+  html += '<p class="lab-builder-section-desc">Select the structure for this lab report. Each template defines the sections students will complete.</p>';
+
+  // Preloaded templates
+  if (preloaded.length > 0) {
+    html += '<div class="lab-builder-group-label">Built-in Templates</div>';
+    html += '<div class="lab-card-grid">';
+    for (var i = 0; i < preloaded.length; i++) {
+      html += labRenderTemplateCard_(preloaded[i]);
+    }
+    html += '</div>';
+  }
+
+  // Custom templates
+  html += '<div class="lab-builder-group-label" style="margin-top:16px;">Custom Templates</div>';
+  html += '<div class="lab-card-grid">';
+  if (custom.length > 0) {
+    for (var j = 0; j < custom.length; j++) {
+      html += labRenderTemplateCard_(custom[j]);
+    }
+  }
+  // + Create Custom Template card
+  html += '<div class="lte-add-card" onclick="event.stopPropagation();lteOpenTemplateEditor(null)" tabindex="0" role="button" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();event.stopPropagation();lteOpenTemplateEditor(null);}">';
+  html += '<div style="font-size:24px;margin-bottom:6px;">+</div>';
+  html += '<div>Create Custom Template</div>';
+  html += '</div>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+
+function labRenderTemplateCard_(template) {
+  var tid = template.templateId;
+  var isSelected = labBuilderData && String(labBuilderData.templateId) === String(tid);
+  var sections = template.sectionsJson || [];
+  var sectionCount = sections.length;
+  var requiredCount = 0;
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].required) requiredCount++;
+  }
+
+  var cls = 'lab-card' + (isSelected ? ' lab-card-active' : '');
+  var html = '<div class="' + cls + '" onclick="labSelectTemplate(\'' + escapeHtml(tid) + '\')">';
+  html += '<div class="lab-card-title">' + escapeHtml(template.title) + '</div>';
+  html += '<div class="lab-card-meta">';
+  if (template.framework) {
+    html += '<span class="lab-card-badge">' + escapeHtml(template.framework) + '</span>';
+  }
+  if (template.gradeband) {
+    html += '<span class="lab-card-badge lab-card-badge-gray">' + escapeHtml(template.gradeband) + '</span>';
+  }
+  html += '</div>';
+  html += '<div class="lab-card-detail">' + sectionCount + ' sections (' + requiredCount + ' required)</div>';
+  if (template.isPreloaded) {
+    html += '<div class="lab-card-tag">Built-in</div>';
+    html += '<div class="lte-card-actions">';
+    html += '<button type="button" class="lte-card-action" onclick="event.stopPropagation();lteDuplicateTemplate(\'' + escapeHtml(tid) + '\')" aria-label="Duplicate ' + escapeHtml(template.title) + '">&#128203; Duplicate</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="lte-card-actions">';
+    html += '<button type="button" class="lte-card-action" onclick="event.stopPropagation();lteOpenTemplateEditor(\'' + escapeHtml(tid) + '\')" aria-label="Edit ' + escapeHtml(template.title) + '">&#9998; Edit</button>';
+    html += '<button type="button" class="lte-card-action lte-card-action-delete" onclick="event.stopPropagation();lteDeleteTemplate(\'' + escapeHtml(tid) + '\')" aria-label="Delete ' + escapeHtml(template.title) + '">&#128465; Delete</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+function labSelectTemplate(templateId) {
+  if (!labBuilderData) return;
+  labBuilderData.templateId = templateId;
+
+  // Resolve the template object
+  var all = ((labTemplatesCache && labTemplatesCache.preloaded) || [])
+    .concat((labTemplatesCache && labTemplatesCache.templates) || []);
+  labBuilderData.selectedTemplate = null;
+  for (var i = 0; i < all.length; i++) {
+    if (String(all[i].templateId) === String(templateId)) {
+      labBuilderData.selectedTemplate = all[i];
+      // Default title from template
+      if (!labBuilderData.title) {
+        labBuilderData.title = all[i].title;
+      }
+      break;
+    }
+  }
+
+  // Re-render to update selection highlight
+  var body = document.getElementById('labBuilderBody');
+  if (body) labRenderTemplateStep(body);
+  labRenderFooter_();
+}
+
+
+// ============================================================================
+// STEP 2 — RUBRIC PICKER
+// ============================================================================
+
+function labRenderRubricStep(container) {
+  var preloaded = labGetPreloadedRubrics_();
+  var custom = (labRubricsCache && labRubricsCache.rubrics) ? labRubricsCache.rubrics : [];
+
+  var html = '<h3 class="lab-builder-section-title">Choose a Rubric</h3>';
+  html += '<p class="lab-builder-section-desc">Select how this lab report will be scored. Each rubric defines the criteria and scoring scale.</p>';
+
+  // Preloaded rubrics
+  if (preloaded.length > 0) {
+    html += '<div class="lab-builder-group-label">Built-in Rubrics</div>';
+    html += '<div class="lab-card-grid">';
+    for (var i = 0; i < preloaded.length; i++) {
+      html += labRenderRubricCard_(preloaded[i]);
+    }
+    html += '</div>';
+  }
+
+  // Custom rubrics
+  html += '<div class="lab-builder-group-label" style="margin-top:16px;">Custom Rubrics</div>';
+  html += '<div class="lab-card-grid">';
+  if (custom.length > 0) {
+    for (var j = 0; j < custom.length; j++) {
+      html += labRenderRubricCard_(custom[j]);
+    }
+  }
+  // + Create Custom Rubric card
+  html += '<div class="lte-add-card" onclick="event.stopPropagation();lteOpenRubricEditor(null)" tabindex="0" role="button" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();event.stopPropagation();lteOpenRubricEditor(null);}">';
+  html += '<div style="font-size:24px;margin-bottom:6px;">+</div>';
+  html += '<div>Create Custom Rubric</div>';
+  html += '</div>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+
+function labRenderRubricCard_(rubric) {
+  var rid = rubric.rubricId;
+  var isSelected = labBuilderData && String(labBuilderData.rubricId) === String(rid);
+  var criteriaCount = (rubric.criteria || []).length;
+  var scaleInfo = (rubric.scaleType || 'level') + ' (0-' + (rubric.scaleMax || 8) + ')';
+
+  var cls = 'lab-card' + (isSelected ? ' lab-card-active' : '');
+  var html = '<div class="' + cls + '" onclick="labSelectRubric(\'' + escapeHtml(rid) + '\')">';
+  html += '<div class="lab-card-title">' + escapeHtml(rubric.title) + '</div>';
+  html += '<div class="lab-card-meta">';
+  if (rubric.frameworkId) {
+    html += '<span class="lab-card-badge">' + escapeHtml(rubric.frameworkId) + '</span>';
+  }
+  html += '<span class="lab-card-badge lab-card-badge-gray">' + escapeHtml(scaleInfo) + '</span>';
+  html += '</div>';
+  html += '<div class="lab-card-detail">' + criteriaCount + ' criteria';
+  if (rubric.multiScorer) html += ' &middot; Multi-scorer';
+  html += '</div>';
+  if (rubric.isPreloaded) {
+    html += '<div class="lab-card-tag">Built-in</div>';
+    html += '<div class="lte-card-actions">';
+    html += '<button type="button" class="lte-card-action" onclick="event.stopPropagation();lteDuplicateRubric(\'' + escapeHtml(rid) + '\')" aria-label="Duplicate ' + escapeHtml(rubric.title) + '">&#128203; Duplicate</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="lte-card-actions">';
+    html += '<button type="button" class="lte-card-action" onclick="event.stopPropagation();lteOpenRubricEditor(\'' + escapeHtml(rid) + '\')" aria-label="Edit ' + escapeHtml(rubric.title) + '">&#9998; Edit</button>';
+    html += '<button type="button" class="lte-card-action lte-card-action-delete" onclick="event.stopPropagation();lteDeleteRubric(\'' + escapeHtml(rid) + '\')" aria-label="Delete ' + escapeHtml(rubric.title) + '">&#128465; Delete</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+function labSelectRubric(rubricId) {
+  if (!labBuilderData) return;
+  labBuilderData.rubricId = rubricId;
+
+  // Resolve the rubric object
+  var preloaded = labGetPreloadedRubrics_();
+  var custom = (labRubricsCache && labRubricsCache.rubrics) ? labRubricsCache.rubrics : [];
+  var all = preloaded.concat(custom);
+  labBuilderData.selectedRubric = null;
+  for (var i = 0; i < all.length; i++) {
+    if (String(all[i].rubricId) === String(rubricId)) {
+      labBuilderData.selectedRubric = all[i];
+      break;
+    }
+  }
+
+  // Re-render to update selection highlight
+  var body = document.getElementById('labBuilderBody');
+  if (body) labRenderRubricStep(body);
+  labRenderFooter_();
+}
+
+
+/**
+ * Client-side mirror of preloaded rubrics for card rendering.
+ * We only need id, title, framework, scaleType, scaleMax, criteria count.
+ * The full data is loaded via RPC when needed.
+ */
+function labGetPreloadedRubrics_() {
+  return [
+    { rubricId: 'preload-rubric-myp-bc', title: 'MYP Sciences B+C (Year 4-5)', frameworkId: 'IB-MYP-SCI', scaleType: 'level', scaleMax: 8, multiScorer: false, isPreloaded: true, criteria: [{}, {}] },
+    { rubricId: 'preload-rubric-dp-ia', title: 'IB DP IA 2025', frameworkId: 'IB-DP-SCI', scaleType: 'numeric', scaleMax: 6, multiScorer: true, isPreloaded: true, criteria: [{}, {}, {}, {}] },
+    { rubricId: 'preload-rubric-ap', title: 'AP Lab Report', frameworkId: 'AP-SCI', scaleType: 'level', scaleMax: 4, multiScorer: false, isPreloaded: true, criteria: [{}, {}, {}, {}] },
+    { rubricId: 'preload-rubric-quick', title: 'Quick Lab', frameworkId: '', scaleType: 'level', scaleMax: 4, multiScorer: false, isPreloaded: true, criteria: [{}, {}, {}] },
+    { rubricId: 'preload-rubric-myp-y13', title: 'MYP B+C (Year 1-3)', frameworkId: 'IB-MYP-SCI', scaleType: 'level', scaleMax: 8, multiScorer: false, isPreloaded: true, criteria: [{}, {}] }
+  ];
+}
+
+
+// ============================================================================
+// STEP 3 — CONFIGURE
+// ============================================================================
+
+function labRenderConfigStep(container) {
+  var d = labBuilderData;
+  var template = d.selectedTemplate;
+  var sections = (template && template.sectionsJson) ? template.sectionsJson : [];
+
+  var html = '<h3 class="lab-builder-section-title">Configure Assignment</h3>';
+
+  // Title
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Assignment Title</label>';
+  html += '<input type="text" class="lab-builder-input" id="labBuilderTitle" value="' + escapeHtml(d.title || '') + '" maxlength="200" placeholder="e.g. Photosynthesis Investigation" oninput="labBuilderData.title=this.value">';
+  html += '</div>';
+
+  // Scaffold level
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Scaffold Level</label>';
+  html += '<div class="lab-scaffold-chips">';
+  var levels = ['high', 'medium', 'low', 'none'];
+  var levelLabels = { high: '🟢 High', medium: '🟡 Medium', low: '🟠 Low', none: '⬜ None' };
+  for (var i = 0; i < levels.length; i++) {
+    var lvl = levels[i];
+    var isActive = d.scaffoldLevel === lvl;
+    html += '<button class="lab-scaffold-chip' + (isActive ? ' lab-scaffold-chip-active' : '') + '" onclick="labSetScaffoldLevel(\'' + lvl + '\')">' + levelLabels[lvl] + '</button>';
+  }
+  html += '</div>';
+  html += '<div class="lab-builder-hint">High = sentence starters + guide questions. None = no scaffolding.</div>';
+  html += '</div>';
+
+  // Instructions
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Teacher Instructions (optional)</label>';
+  html += '<textarea class="lab-builder-textarea" id="labBuilderInstructions" maxlength="2000" rows="3" placeholder="Additional instructions for students..." oninput="labBuilderData.instructions=this.value">' + escapeHtml(d.instructions || '') + '</textarea>';
+  html += '</div>';
+
+  // Due date
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Due Date (optional)</label>';
+  html += '<input type="date" class="lab-builder-input" id="labBuilderDueDate" value="' + escapeHtml(d.dueDate || '') + '" oninput="labBuilderData.dueDate=this.value">';
+  html += '</div>';
+
+  // Class assignment
+  html += '<div class="lab-builder-field">';
+  html += '<label class="lab-builder-label">Assign to Class (optional)</label>';
+  html += '<select class="lab-builder-input" id="labBuilderClass" onchange="labBuilderData.classId=this.value">';
+  html += '<option value="">— Not assigned —</option>';
+  if (typeof classesData !== 'undefined') {
+    for (var c = 0; c < classesData.length; c++) {
+      var cl = classesData[c];
+      var sel = String(d.classId) === String(cl.classId) ? ' selected' : '';
+      html += '<option value="' + escapeHtml(String(cl.classId)) + '"' + sel + '>' + escapeHtml(cl.className || cl.classId) + '</option>';
+    }
+  }
+  html += '</select>';
+  html += '</div>';
+
+  // Section list
+  if (sections.length > 0) {
+    html += '<div class="lab-builder-field">';
+    html += '<label class="lab-builder-label">Sections (' + sections.length + ')</label>';
+    html += '<div class="lab-section-list">';
+    for (var s = 0; s < sections.length; s++) {
+      var sec = sections[s];
+      var secKey = sec.sectionId;
+      var isEnabled = !d.sectionOverrides[secKey] || d.sectionOverrides[secKey].enabled !== false;
+      html += '<div class="lab-section-item' + (isEnabled ? '' : ' lab-section-item-disabled') + '">';
+      html += '<div class="lab-section-item-main">';
+      html += '<label class="lab-section-toggle">';
+      html += '<input type="checkbox"' + (isEnabled ? ' checked' : '') + ' onchange="labToggleSectionEnabled(\'' + escapeHtml(secKey) + '\', this.checked)">';
+      html += '<span class="lab-section-item-title">' + escapeHtml(sec.title) + '</span>';
+      html += '</label>';
+      html += '<span class="lab-section-item-type">' + escapeHtml(sec.sectionType) + '</span>';
+      if (sec.required) html += '<span class="lab-section-item-req">Required</span>';
+      html += '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+
+  // Template + Rubric summary
+  html += '<div class="lab-builder-summary">';
+  html += '<div class="lab-builder-summary-item"><strong>Template:</strong> ' + escapeHtml(template ? template.title : 'None') + '</div>';
+  html += '<div class="lab-builder-summary-item"><strong>Rubric:</strong> ' + escapeHtml(d.selectedRubric ? d.selectedRubric.title : 'None') + '</div>';
+  if (!d.isEditing) {
+    html += '<div class="lab-builder-summary-change"><a href="#" onclick="labBuilderSetStep(1);return false;">Change template</a> · <a href="#" onclick="labBuilderSetStep(2);return false;">Change rubric</a></div>';
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+
+function labSetScaffoldLevel(level) {
+  if (!labBuilderData) return;
+  labBuilderData.scaffoldLevel = level;
+  var body = document.getElementById('labBuilderBody');
+  if (body) labRenderConfigStep(body);
+}
+
+
+function labToggleSectionEnabled(sectionKey, isEnabled) {
+  if (!labBuilderData) return;
+  if (!labBuilderData.sectionOverrides[sectionKey]) {
+    labBuilderData.sectionOverrides[sectionKey] = {};
+  }
+  labBuilderData.sectionOverrides[sectionKey].enabled = isEnabled;
+}
+
+
+// ============================================================================
+// BUILDER — SAVE / DELETE / ACTIVATE
+// ============================================================================
+
+function labSaveAssignment() {
+  if (!labBuilderData) return;
+  var d = labBuilderData;
+
+  // Collect form data
+  var titleEl = document.getElementById('labBuilderTitle');
+  var instructionsEl = document.getElementById('labBuilderInstructions');
+  var dueDateEl = document.getElementById('labBuilderDueDate');
+  var classEl = document.getElementById('labBuilderClass');
+
+  var title = titleEl ? titleEl.value.trim() : (d.title || '');
+  var instructions = instructionsEl ? instructionsEl.value : (d.instructions || '');
+  var dueDate = dueDateEl ? dueDateEl.value : (d.dueDate || '');
+  var classId = classEl ? classEl.value : (d.classId || '');
+
+  if (!d.templateId) {
+    showToast('Please select a template.', 'error');
+    return;
+  }
+  if (!d.rubricId) {
+    showToast('Please select a rubric.', 'error');
+    return;
+  }
+
+  if (d.isEditing && d.assignmentId) {
+    // Update existing
+    var updates = {
+      title: title || 'Lab Assignment',
+      instructions: instructions,
+      dueDate: dueDate,
+      classId: classId,
+      scaffoldLevel: d.scaffoldLevel,
+      sectionOverrides: d.sectionOverrides
+    };
+
+    google.script.run
+      .withSuccessHandler(function() {
+        showToast('Assignment updated!', 'success');
+        labCloseBuilder();
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error: ' + err.message, 'error');
+      })
+      .updateLabAssignment(d.assignmentId, updates);
+  } else {
+    // Create new
+    var assignment = {
+      templateId: d.templateId,
+      rubricId: d.rubricId,
+      mapId: d.mapId,
+      hexId: d.hexId,
+      title: title || 'Lab Assignment',
+      instructions: instructions,
+      dueDate: dueDate,
+      classId: classId,
+      scaffoldLevel: d.scaffoldLevel,
+      sectionOverrides: d.sectionOverrides
+    };
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        showToast('Assignment created!', 'success');
+        labCloseBuilder();
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error: ' + err.message, 'error');
+      })
+      .createLabAssignment(assignment);
+  }
+}
+
+
+function labDeleteAssignment() {
+  if (!labBuilderData || !labBuilderData.assignmentId) return;
+
+  if (!confirm('Delete this lab assignment? This cannot be undone.')) return;
+
+  var asmtId = labBuilderData.assignmentId;
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Assignment deleted.', 'success');
+      labCloseBuilder();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    })
+    .deleteLabAssignment(asmtId);
+}
+
+
+function labActivateAssignment() {
+  if (!labBuilderData || !labBuilderData.assignmentId) return;
+
+  var asmtId = labBuilderData.assignmentId;
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Assignment activated! Students can now see it.', 'success');
+      labCloseBuilder();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    })
+    .activateLabAssignment(asmtId);
+}
+
+
+// ============================================================================
+// HEX EDITOR — ASSIGNMENT INFO PANEL
+// ============================================================================
+
+/**
+ * Render assignment info in the hex editor panel.
+ * Called from openHexEditorPanel when hex.type === 'lab'.
+ *
+ * @param {string} hexId - The hex ID
+ */
+function labRenderAssignmentInfo(hexId) {
+  var infoEl = document.getElementById('labHexAssignmentInfo');
+  if (!infoEl) return;
+
+  // Show loading
+  infoEl.innerHTML = '<div class="lab-editor-note" style="color:#94a3b8;">Loading assignment info...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      var el = document.getElementById('labHexAssignmentInfo');
+      if (!el) return;
+
+      if (!rows || rows.length === 0) {
+        // No assignment yet
+        el.innerHTML = '<button class="btn btn-primary btn-small" onclick="labOpenBuilder(\'' + escapeHtml(String(hexId)) + '\')" style="width:100%;">&#129514; Configure Lab Assignment</button>';
+        return;
+      }
+
+      var asmt = rows[0];
+      var statusBadge = '';
+      if (asmt.status === 'active') {
+        statusBadge = '<span style="color:#059669;font-weight:600;">Active</span>';
+      } else if (asmt.status === 'draft') {
+        statusBadge = '<span style="color:#d97706;font-weight:600;">Draft</span>';
+      } else {
+        statusBadge = '<span style="color:#64748b;font-weight:600;">' + escapeHtml(asmt.status || 'draft') + '</span>';
+      }
+
+      var html = '<div class="lab-hex-info">';
+      html += '<div class="lab-hex-info-title">' + escapeHtml(asmt.title || 'Lab Assignment') + '</div>';
+      html += '<div class="lab-hex-info-meta">';
+      html += 'Status: ' + statusBadge;
+      if (asmt.scaffoldLevel) html += ' &middot; Scaffold: ' + escapeHtml(asmt.scaffoldLevel);
+      if (asmt.dueDate) html += ' &middot; Due: ' + escapeHtml(asmt.dueDate);
+      html += '</div>';
+
+      // Class assignment section
+      html += '<div class="lab-class-section">';
+      html += '<div class="lab-class-label">Class:</div>';
+      if (asmt.classId) {
+        html += '<span class="lab-class-name">' + escapeHtml(labResolveClassName_(asmt.classId)) + '</span> ';
+        html += '<button type="button" class="lab-class-assign-btn" onclick="labShowChangeClassSelect(\'' + escapeHtml(String(asmt.assignmentId)) + '\', \'' + escapeHtml(String(hexId)) + '\')" aria-label="Change class assignment">Change</button>';
+        html += ' <button type="button" class="lab-class-assign-btn" onclick="labChangeAssignmentClass(\'' + escapeHtml(String(asmt.assignmentId)) + '\', \'' + escapeHtml(String(hexId)) + '\', \'unassign\')" style="color:#dc2626;" aria-label="Unassign class">Unassign</button>';
+        html += '<div id="labChangeClassRow" style="display:none;width:100%;margin-top:4px;">';
+        html += '<select id="labClassSelect" class="lab-class-select" aria-label="Select class">';
+        html += '<option value="">-- Select class --</option>';
+        if (typeof classesData !== 'undefined') {
+          for (var ci2 = 0; ci2 < classesData.length; ci2++) {
+            var selAttr = (String(classesData[ci2].classId) === String(asmt.classId)) ? ' selected' : '';
+            html += '<option value="' + escapeHtml(String(classesData[ci2].classId)) + '"' + selAttr + '>' + escapeHtml(classesData[ci2].className) + '</option>';
+          }
+        }
+        html += '</select> ';
+        html += '<button type="button" class="lab-class-assign-btn" onclick="labChangeAssignmentClass(\'' + escapeHtml(String(asmt.assignmentId)) + '\', \'' + escapeHtml(String(hexId)) + '\', \'assign\')" aria-label="Confirm class change">OK</button>';
+        html += '</div>';
+      } else {
+        html += '<select id="labClassSelect" class="lab-class-select" aria-label="Select class">';
+        html += '<option value="">-- Select class --</option>';
+        if (typeof classesData !== 'undefined') {
+          for (var ci = 0; ci < classesData.length; ci++) {
+            html += '<option value="' + escapeHtml(String(classesData[ci].classId)) + '">' + escapeHtml(classesData[ci].className) + '</option>';
+          }
+        }
+        html += '</select> ';
+        html += '<button type="button" class="lab-class-assign-btn" onclick="labChangeAssignmentClass(\'' + escapeHtml(String(asmt.assignmentId)) + '\', \'' + escapeHtml(String(hexId)) + '\', \'assign\')" aria-label="Assign class">Assign</button>';
+      }
+      html += '</div>';
+
+      html += '</div>';
+      html += '<button class="btn btn-outline btn-small" onclick="labOpenBuilder(\'' + escapeHtml(String(hexId)) + '\')" style="width:100%;margin-top:8px;">&#9998; Edit Assignment</button>';
+
+      // Score Submissions button (only for active assignments)
+      if (String(asmt.status) === 'active' && asmt.assignmentId) {
+        html += '<button class="btn btn-outline btn-small" onclick="labScoringOpen(\'' + escapeHtml(String(asmt.assignmentId)) + '\')" style="width:100%;margin-top:4px;">&#128203; Score Submissions</button>';
+      }
+
+      // Show submission summary for active assignments
+      if (String(asmt.status) === 'active' && asmt.assignmentId) {
+        html += '<div id="labSubmissionSummary"></div>';
+      }
+
+      el.innerHTML = html;
+
+      // Load submissions if assignment is active
+      if (String(asmt.status) === 'active' && asmt.assignmentId) {
+        labRenderSubmissionSummary(asmt.assignmentId);
+      }
+    })
+    .withFailureHandler(function(err) {
+      var el = document.getElementById('labHexAssignmentInfo');
+      if (el) {
+        el.innerHTML = '<button class="btn btn-primary btn-small" onclick="labOpenBuilder(\'' + escapeHtml(String(hexId)) + '\')" style="width:100%;">&#129514; Configure Lab Assignment</button>';
+      }
+    })
+    .getLabAssignmentsForHex(hexId);
+}
+
+
+/**
+ * Refresh the assignment info after builder closes.
+ */
+function labRefreshAssignmentInfo_(hexId) {
+  if (!hexId) return;
+  var section = document.getElementById('labHexInfoSection');
+  if (section && section.style.display !== 'none') {
+    labRenderAssignmentInfo(hexId);
+  }
+}
+
+
+/**
+ * Resolve a classId to a class name from classesData.
+ * @param {string} classId
+ * @return {string}
+ */
+function labResolveClassName_(classId) {
+  for (var i = 0; i < classesData.length; i++) {
+    if (String(classesData[i].classId) === String(classId)) {
+      return classesData[i].className || 'Unnamed class';
+    }
+  }
+  return 'Unknown class';
+}
+
+/**
+ * Show the inline class change dropdown row.
+ * @param {string} assignmentId
+ * @param {string} hexId
+ */
+function labShowChangeClassSelect(assignmentId, hexId) {
+  var row = document.getElementById('labChangeClassRow');
+  if (row) {
+    row.style.display = (row.style.display === 'none') ? 'flex' : 'none';
+  }
+}
+
+/**
+ * Assign or unassign a class on a lab assignment.
+ * @param {string} assignmentId
+ * @param {string} hexId
+ * @param {string} action - 'assign' or 'unassign'
+ */
+function labChangeAssignmentClass(assignmentId, hexId, action) {
+  var newClassId = '';
+
+  if (action === 'unassign') {
+    if (!confirm('Remove class assignment from this lab?')) return;
+    newClassId = '';
+  } else {
+    // 'assign' — read from dropdown
+    var sel = document.getElementById('labClassSelect');
+    if (!sel || !sel.value) {
+      showToast('Please select a class first.', 'warning');
+      return;
+    }
+    newClassId = sel.value;
+  }
+
+  var expectedHexId = String(hexId);
+
+  if (newClassId) {
+    // Assign: use assignLabToClass
+    google.script.run
+      .withSuccessHandler(function() {
+        if (String(hexId) !== expectedHexId) return;
+        labAssignmentsCache = null;
+        labRefreshAssignmentInfo_(hexId);
+        showToast('Class assigned successfully.', 'success');
+      })
+      .withFailureHandler(function(err) {
+        showToast('Failed to assign class: ' + escapeHtml(friendlyError(err)), 'error');
+      })
+      .assignLabToClass(assignmentId, newClassId);
+  } else {
+    // Unassign: use updateLabAssignment with empty classId
+    google.script.run
+      .withSuccessHandler(function() {
+        if (String(hexId) !== expectedHexId) return;
+        labAssignmentsCache = null;
+        labRefreshAssignmentInfo_(hexId);
+        showToast('Class unassigned.', 'success');
+      })
+      .withFailureHandler(function(err) {
+        showToast('Failed to unassign class: ' + escapeHtml(friendlyError(err)), 'error');
+      })
+      .updateLabAssignment(assignmentId, { classId: '' });
+  }
+}
+
+
+/**
+ * Load and render submission summary for an active lab assignment.
+ * Shows list of student submissions with status and Return buttons.
+ *
+ * @param {string} assignmentId
+ */
+function labRenderSubmissionSummary(assignmentId) {
+  var container = document.getElementById('labSubmissionSummary');
+  if (!container) return;
+
+  container.innerHTML = '<div class="lab-editor-note" style="color:#94a3b8;font-size:11px;">Loading submissions...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(submissions) {
+      var el = document.getElementById('labSubmissionSummary');
+      if (!el) return;
+
+      if (!submissions || submissions.length === 0) {
+        el.innerHTML = '<div class="lab-editor-note" style="margin-top:8px;">No student submissions yet.</div>';
+        return;
+      }
+
+      // Count by status
+      var draftCount = 0;
+      var submittedCount = 0;
+      var returnedCount = 0;
+      var scoredCount = 0;
+      for (var i = 0; i < submissions.length; i++) {
+        var s = String(submissions[i].status || 'draft');
+        if (s === 'submitted') submittedCount++;
+        else if (s === 'returned') returnedCount++;
+        else if (s === 'scored') scoredCount++;
+        else draftCount++;
+      }
+
+      var html = '<div class="lab-submission-list">';
+      html += '<div class="lab-submission-list-header">';
+      html += '<span>Student Submissions</span>';
+      html += '<span>';
+      if (scoredCount > 0) html += '<span class="lab-submission-badge lab-submission-badge-scored">' + scoredCount + ' scored</span> ';
+      if (submittedCount > 0) html += '<span class="lab-submission-badge lab-submission-badge-submitted">' + submittedCount + ' submitted</span> ';
+      if (returnedCount > 0) html += '<span class="lab-submission-badge lab-submission-badge-returned">' + returnedCount + ' returned</span> ';
+      if (draftCount > 0) html += '<span class="lab-submission-badge lab-submission-badge-draft">' + draftCount + ' draft</span>';
+      html += '</span>';
+      html += '</div>';
+
+      for (var j = 0; j < submissions.length; j++) {
+        var sub = submissions[j];
+        var subStatus = String(sub.status || 'draft');
+        var badgeClass = 'lab-submission-badge-' + subStatus;
+
+        html += '<div class="lab-submission-item">';
+        html += '<span class="lab-submission-email">' + escapeHtml(sub.studentEmail || '') + '</span>';
+        html += '<span class="lab-submission-badge ' + badgeClass + '">' + escapeHtml(subStatus) + '</span>';
+        if (subStatus === 'submitted') {
+          html += '<button class="lab-submission-return-btn" onclick="labReturnSubmission(\'' +
+            escapeHtml(sub.submissionId || '') + '\',\'' + escapeHtml(assignmentId) + '\')">Return</button>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      var el = document.getElementById('labSubmissionSummary');
+      if (el) {
+        el.innerHTML = '<div class="lab-editor-note" style="color:#dc2626;margin-top:8px;">Could not load submissions.</div>';
+      }
+    })
+    .getLabSubmissionsForAssignment(assignmentId);
+}
+
+
+/**
+ * Return a submitted lab report to the student.
+ * Prompts for feedback text, calls RPC, refreshes list.
+ *
+ * @param {string} submissionId
+ * @param {string} assignmentId
+ */
+function labReturnSubmission(submissionId, assignmentId) {
+  if (!submissionId) return;
+  var rowId = 'labReturnFeedbackRow-' + submissionId;
+  if (document.getElementById(rowId)) return;
+
+  // Find the return button's parent to insert inline textarea nearby
+  var returnBtn = document.querySelector('[onclick*="labReturnSubmission(\'' + submissionId + '\'"]');
+  var container = returnBtn ? returnBtn.parentNode : document.getElementById('labSubmissionsList');
+  if (!container) return;
+
+  var row = document.createElement('div');
+  row.id = rowId;
+  row.style.cssText = 'margin-top:8px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;';
+  row.innerHTML = '<div style="font-size:13px;color:#475569;margin-bottom:4px;">Feedback for student (optional):</div>'
+    + '<textarea id="labReturnFeedbackInput-' + escapeHtml(submissionId) + '" maxlength="500" '
+    + 'placeholder="Enter feedback..." style="width:100%;min-height:60px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;"></textarea>'
+    + '<div style="display:flex;gap:6px;margin-top:6px;">'
+    + '<button onclick="labConfirmReturnSubmission(\'' + escapeHtml(submissionId) + '\',\'' + escapeHtml(assignmentId) + '\')" '
+    + 'style="padding:6px 12px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Return to Student</button>'
+    + '<button onclick="labCancelReturnSubmission(\'' + escapeHtml(submissionId) + '\')" '
+    + 'style="padding:6px 12px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>'
+    + '</div>';
+  container.appendChild(row);
+  var ta = document.getElementById('labReturnFeedbackInput-' + submissionId);
+  if (ta) ta.focus();
+}
+
+function labConfirmReturnSubmission(submissionId, assignmentId) {
+  var ta = document.getElementById('labReturnFeedbackInput-' + submissionId);
+  var feedback = String(ta ? ta.value : '').substring(0, 500);
+  var row = document.getElementById('labReturnFeedbackRow-' + submissionId);
+  if (row) row.parentNode.removeChild(row);
+
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Lab report returned to student.', 'success');
+      if (assignmentId) {
+        labRenderSubmissionSummary(assignmentId);
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to return report: ' + escapeHtml(friendlyError(err)), 'error');
+    })
+    .returnLabReport(submissionId, feedback);
+}
+
+function labCancelReturnSubmission(submissionId) {
+  var row = document.getElementById('labReturnFeedbackRow-' + submissionId);
+  if (row) row.parentNode.removeChild(row);
+}
+
+</script>

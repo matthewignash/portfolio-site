@@ -1,0 +1,2305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Learning Map System</title>
+  <?!= include('Styles') ?>
+  <?!= include('Styles-UbdPlanner') ?>
+  <?!= include('Styles-Progress') ?>
+  <?!= include('Styles-Settings') ?>
+  <?!= include('Styles-Lessons') ?>
+  <?!= include('Styles-Integrations') ?>
+  <?!= include('Styles-Standards') ?>
+  <?!= include('Styles-Analytics') ?>
+  <?!= include('Styles-Notifications') ?>
+  <?!= include('Styles-StudentAnalytics') ?>
+  <?!= include('Styles-NotifCenter') ?>
+  <?!= include('Styles-SelfAssess') ?>
+  <?!= include('Styles-Search') ?>
+  <?!= include('Styles-KnowledgeGaps') ?>
+  <?!= include('Styles-FormativeChecks') ?>
+  <?!= include('Styles-Assessment') ?>
+  <?!= include('Styles-Planner') ?>
+  <?!= include('Styles-ProcessJournal') ?>
+  <?!= include('Styles-StudentSupport') ?>
+  <?!= include('Styles-ATLToolkit') ?>
+  <?!= include('Styles-Celebrations') ?>
+  <?!= include('Styles-PromptBuilder') ?>
+  <?!= include('Styles-TeacherSupportDashboard') ?>
+  <?!= include('Styles-DesignThinking') ?>
+  <?!= include('Styles-Iteration') ?>
+  <?!= include('Styles-PeerFeedback') ?>
+  <?!= include('Styles-PBLDashboard') ?>
+  <?!= include('Styles-TeachingMethods') ?>
+  <?!= include('Styles-EALStrategies') ?>
+  <?!= include('Styles-Dictionary') ?>
+  <?!= include('Styles-Portfolio') ?>
+  <?!= include('Styles-PortfolioInsights') ?>
+  <?!= include('Styles-CornellNotes') ?>
+  <?!= include('Styles-NoteCoaching') ?>
+  <?!= include('Styles-Tour') ?>
+  <?!= include('Styles-StudentTasks') ?>
+  <?!= include('Styles-TeacherReminders') ?>
+  <?!= include('Styles-AiscCore') ?>
+  <?!= include('Styles-LabReport') ?>
+  <?!= include('Styles-LabInsights') ?>
+  <?!= include('Styles-LabTemplateEditor') ?>
+  <?!= include('Styles-ReviewInsights') ?>
+  <?!= include('Styles-CompetencyATL') ?>
+  <?!= include('Styles-LessonMap') ?>
+  <?!= include('Styles-Collab') ?>
+  <?!= include('Styles-CollabBoard') ?>
+  <?!= include('Styles-Differentiation') ?>
+  <?!= include('Styles-BranchExpansion') ?>
+  <?!= include('Styles-Calendar') ?>
+  <?!= include('Styles-LessonRundown') ?>
+  <?!= include('Styles-DifAnalytics') ?>
+  <?!= include('Styles-GradeReview') ?>
+  <?!= include('Styles-NameSelector') ?>
+  <?!= include('Styles-CountdownTimer') ?>
+  <?!= include('Styles-QuickPolls') ?>
+  <?!= include('Styles-Whiteboard') ?>
+  <?!= include('Styles-ProjectorMode') ?>
+  <?!= include('Styles-StudyDashboard') ?>
+  <?!= include('Styles-Onboarding') ?>
+  <?!= include('Styles-Reflection') ?>
+  <?!= include('Styles-Responsive') ?>
+</head>
+<body>
+  <a href="#mainContent" class="a11y-skip-link">Skip to main content</a>
+  <div id="a11yLiveRegion" class="a11y-sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div class="app-container">
+    <!-- Student Preview Banner -->
+    <div class="student-preview-banner" id="studentPreviewBanner">
+      <div class="tpv-global-left">
+        <span>&#128065; <strong>Student Preview</strong></span>
+        <select id="tpvGlobalClassSelect" class="tpv-global-select" aria-label="Preview class" onchange="onGlobalPreviewClassChange(this.value)">
+          <option value="">-- Class --</option>
+        </select>
+        <select id="tpvGlobalStudentSelect" class="tpv-global-select" aria-label="Preview student" onchange="onGlobalPreviewStudentChange(this.value)" disabled>
+          <option value="">-- Student --</option>
+        </select>
+        <span id="tpvGlobalStudentName" class="tpv-global-name" aria-live="polite"></span>
+        <label for="tpvWidaBracket" id="tpvWidaBracketLabel" class="tpv-global-name" style="display:none;font-size:12px;opacity:0.8;">WIDA:</label>
+        <select id="tpvWidaBracket" class="tpv-global-select" aria-label="Preview WIDA bracket" style="display:none;" onchange="onPreviewWidaBracketChange(this.value)">
+          <option value="">Auto (from profile)</option>
+          <option value="low">WIDA 1-2 (Low)</option>
+          <option value="mid">WIDA 3-4 (Mid)</option>
+          <option value="high">WIDA 5-6 (High)</option>
+        </select>
+      </div>
+      <button class="exit-btn" onclick="exitStudentPreview()">Exit Preview</button>
+    </div>
+
+    <header class="header" role="banner">
+      <div class="header-left">
+        <div class="app-title">Learning Map System</div>
+        <div class="user-info" id="userInfo">
+          <span id="userEmail">Loading...</span>
+          <span class="user-role-badge" id="userRoleBadge" onclick="openUserManagement()" title="Click to manage users">--</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <!-- Search Trigger -->
+        <button class="cmd-trigger-btn" onclick="openCommandPalette()" title="Search (Ctrl+K)" aria-label="Search">&#128269; <span class="cmd-trigger-label">Search</span> <span class="cmd-trigger-shortcut">Ctrl+K</span></button>
+        <!-- Notification Bell -->
+        <div class="ntf-bell-container" id="ntfBellContainer" style="display:none;">
+          <button class="ntf-bell-btn" id="ntfBellBtn" onclick="toggleNotificationPanel()" aria-label="Notifications">
+            <span class="ntf-bell-icon">&#128276;</span>
+            <span class="ntf-badge" id="ntfBadge" style="display:none;">0</span>
+          </button>
+          <div class="ntf-panel" id="ntfPanel">
+            <div class="ntf-panel-header">
+              <span class="ntf-panel-title">Notifications</span>
+              <button class="ntf-mark-all" onclick="markAllNtfRead()">Mark all read</button>
+            </div>
+            <div class="ntf-panel-body" id="ntfPanelBody">
+              <div class="ntf-empty">No notifications yet</div>
+            </div>
+          </div>
+        </div>
+        <div class="view-mode-switcher" id="viewModeSwitcher" style="display:none;">
+          <span class="view-mode-label">View as:</span>
+          <button class="view-mode-btn active" id="teacherViewBtn" onclick="setViewMode('teacher')">Teacher</button>
+          <button class="view-mode-btn" id="studentViewBtn" onclick="setViewMode('student')">Student</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="tabs" id="tabsContainer" role="tablist" aria-label="Main navigation">
+      <button class="tab active" data-view="maps" id="tab-maps" role="tab" aria-selected="true" aria-controls="mapsView" tabindex="0" onclick="switchTab(this)">My Maps</button>
+      <button class="tab" data-view="courses" id="coursesTab" role="tab" aria-selected="false" aria-controls="coursesView" tabindex="-1" onclick="switchTab(this)">Courses</button>
+      <button class="tab" data-view="classes" id="classesTab" role="tab" aria-selected="false" aria-controls="classesView" tabindex="-1" onclick="switchTab(this)">Classes</button>
+      <button class="tab" data-view="users" id="usersTab" role="tab" aria-selected="false" aria-controls="usersView" tabindex="-1" onclick="switchTab(this)">Users</button>
+      <button class="tab" data-view="builder" id="builderTab" role="tab" aria-selected="false" aria-controls="builderView" tabindex="-1" onclick="switchTab(this)">Map Builder</button>
+      <button class="tab" data-view="standards" id="standardsTab" role="tab" aria-selected="false" aria-controls="standardsView" tabindex="-1" onclick="switchTab(this)">Standards</button>
+      <button class="tab" data-view="ubdPlanner" id="ubdPlannerTab" role="tab" aria-selected="false" aria-controls="ubdPlannerView" tabindex="-1" onclick="switchTab(this)">UBD Planner</button>
+      <button class="tab" data-view="progress" id="progressTab" role="tab" aria-selected="false" aria-controls="progressView" tabindex="-1" onclick="switchTab(this)">Progress</button>
+      <button class="tab hidden" data-view="planner" id="plannerTab" role="tab" aria-selected="false" aria-controls="plannerView" tabindex="-1" onclick="switchTab(this)">&#128203; My Planner</button>
+      <button class="tab hidden" data-view="studyDash" id="studyDashTab" role="tab" aria-selected="false" aria-controls="studyDashView" tabindex="-1" onclick="switchTab(this)">&#128218; Study</button>
+      <button class="tab hidden" data-view="settings" id="settingsTab" role="tab" aria-selected="false" aria-controls="settingsView" tabindex="-1" onclick="switchTab(this)">Settings</button>
+      <button class="tab hidden" data-view="integrations" id="integrationsTab" role="tab" aria-selected="false" aria-controls="integrationsView" tabindex="-1" onclick="switchTab(this)">Integrations</button>
+      <button class="tab hidden" data-view="collab" id="collabTab" role="tab" aria-selected="false" aria-controls="collabView" tabindex="-1" onclick="switchTab(this)">&#128204; Collab</button>
+      <button class="tab hidden" data-view="teachingMethods" id="teachingMethodsTab" role="tab" aria-selected="false" aria-controls="teachingMethodsView" tabindex="-1" onclick="switchTab(this)">Teaching Methods</button>
+      <button class="tab hidden" data-view="ealStrategies" id="ealStrategiesTab" role="tab" aria-selected="false" aria-controls="ealStrategiesView" tabindex="-1" onclick="switchTab(this)">EAL Strategies</button>
+    </div>
+
+    <main id="mainContent">
+    <div class="content">
+      <!-- My Maps View -->
+      <div id="mapsView" class="view active" role="tabpanel" aria-labelledby="tab-maps">
+        <div class="scroll-container">
+          <div class="card">
+            <div class="card-header">
+              <h2 id="mapsViewTitle">Your Learning Maps</h2>
+              <button class="btn btn-success" id="createMapBtn" onclick="openCreateMapDialog()">+ New Map</button>
+            </div>
+            <div id="mapsContent">
+              <div class="onb-skeleton-cards" id="onbSkeletonCards">
+                <div class="onb-skeleton-card"><div class="onb-skeleton-line onb-skeleton-title"></div><div class="onb-skeleton-line onb-skeleton-short"></div><div class="onb-skeleton-line onb-skeleton-bar"></div></div>
+                <div class="onb-skeleton-card"><div class="onb-skeleton-line onb-skeleton-title"></div><div class="onb-skeleton-line onb-skeleton-short"></div><div class="onb-skeleton-line onb-skeleton-bar"></div></div>
+                <div class="onb-skeleton-card"><div class="onb-skeleton-line onb-skeleton-title"></div><div class="onb-skeleton-line onb-skeleton-short"></div><div class="onb-skeleton-line onb-skeleton-bar"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Courses View (Story 2.1) -->
+      <div id="coursesView" class="view" role="tabpanel" aria-labelledby="coursesTab">
+        <div class="courses-layout">
+          <div class="courses-main">
+            <div class="scroll-container">
+              <div class="card">
+                <div class="card-header">
+                  <h2>Your Courses</h2>
+                  <div style="display:flex; gap:12px; align-items:center;">
+                    <input type="text" class="form-input" id="courseSearchInput"
+                           placeholder="🔍 Search courses..." style="width:200px;"
+                           oninput="filterCourses()">
+                    <select class="form-select" id="courseStatusFilter"
+                            style="width:120px;" onchange="filterCourses()">
+                      <option value="all">All</option>
+                      <option value="active" selected>Active</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                    <button class="btn btn-success" onclick="openCourseModal()">+ New Course</button>
+                  </div>
+                </div>
+                <div id="coursesContent">
+                  <div class="loading"><span class="loading-spinner"></span>Loading courses...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Units Side Panel (Story 2.1b) -->
+          <div class="units-panel" id="unitsPanel">
+            <div class="units-panel-header">
+              <h3 id="unitsPanelTitle">Units</h3>
+              <button class="btn btn-ghost btn-small" onclick="closeUnitsPanel()" aria-label="Close units panel">&times;</button>
+            </div>
+            <div class="units-panel-body" id="unitsPanelBody">
+              <div class="loading"><span class="loading-spinner"></span>Loading units...</div>
+            </div>
+            <div class="units-panel-footer" id="unitsPanelFooter" style="display:none;">
+              <button class="btn btn-success btn-small" onclick="openUnitModal()" style="width:100%;">+ Add Unit</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Classes View -->
+      <div id="classesView" class="view" role="tabpanel" aria-labelledby="classesTab">
+        <div class="scroll-container">
+          <div class="card">
+            <div class="card-header">
+              <h2>Your Classes</h2>
+              <button class="btn btn-success" onclick="openClassModal()">+ New Class</button>
+            </div>
+            <div id="classesContent"><div class="loading"><span class="loading-spinner"></span>Loading classes...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users View (Admin Only) -->
+      <div id="usersView" class="view" role="tabpanel" aria-labelledby="usersTab">
+        <div class="scroll-container">
+          <div class="card">
+            <div class="card-header">
+              <h2>User Management</h2>
+              <button class="btn btn-success" onclick="openAddUserModal()">+ Add User</button>
+            </div>
+            <div id="usersContent"><div class="loading"><span class="loading-spinner"></span>Loading users...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Builder View -->
+      <div id="builderView" class="view" role="tabpanel" aria-labelledby="builderTab">
+        <div class="status-bar" id="statusBar">
+          <span class="status-text" id="statusText">Connect Mode: Click a source hex</span>
+          <button class="btn btn-small" onclick="cancelConnectMode()">Cancel (Esc)</button>
+        </div>
+
+        <div class="builder-toolbar">
+          <div class="builder-map-title" id="builderTitle">Map Builder</div>
+          <button class="btn btn-outline lsm-back-btn" id="lsmBackBtn" onclick="lsmGoBack()" style="display:none;">← Back to Unit</button>
+          <div class="toolbar-buttons" id="builderTools">
+            <button class="btn btn-outline lsm-autogen-btn" id="lsmAutoGenBtn" onclick="lsmAutoGenerateFromUnit()" style="display:none;" title="Auto-generate lesson hexes from unit lessons">📖 Auto-Generate Lessons</button>
+            <button class="btn btn-outline lsm-convert-btn" id="lsmConvertBtn" onclick="lsmStartConvertMode()" style="display:none;" title="Convert selected hexes to lesson type">📖 Convert to Lessons</button>
+            <button class="btn btn-outline" id="connectBtn" onclick="toggleConnectMode()">🔗 Connect</button>
+            <div class="toolbar-divider"></div>
+            <button class="btn btn-success" onclick="addHexToMap()">+ Add Hex</button>
+            <button class="btn" onclick="saveCurrentMap()">💾 Save Map</button>
+            <div class="toolbar-divider dif-toolbar-divider" id="difToolbarDivider" style="display:none;"></div>
+            <select class="dif-mode-select" id="difModeSelect" style="display:none;" onchange="difOnModeChange(this.value)" aria-label="Differentiation mode">
+              <option value="none">Differentiation: Off</option>
+              <option value="hidden">Differentiation: Hidden</option>
+              <option value="dimmed">Differentiation: Dimmed</option>
+            </select>
+            <button class="btn btn-outline dif-manage-btn" id="difManageBtn" style="display:none;" onclick="difOpenOverlay()">👥 Groups</button>
+            <button class="btn btn-outline" id="phmToggleBtn" onclick="phmToggleOverlay()" style="display:none;" title="Progress Heatmap Overlay">🌡️ Heatmap</button>
+            <button class="btn btn-outline" id="tclCalendarBtn" onclick="tclOpenCalendar()" style="display:none;" title="View time-gated hex timeline">📅 Calendar</button>
+            <button class="btn btn-outline" id="lrdToggleBtn" onclick="lrdToggleSidebar()" style="display:none;">📋 Overview</button>
+            <button class="btn btn-outline" id="nsgPickerBtn" onclick="nsgOpenPicker()" style="display:none;" title="Random Name Picker &amp; Grouping">🎲 Picker</button>
+            <button class="btn btn-outline" id="ctdTimerBtn" onclick="ctdOpenTimer()" style="display:none;" title="Countdown Timer">⏱️ Timer</button>
+            <button class="btn btn-outline" id="qpPollBtn" onclick="qpOpenCreator()" style="display:none;" title="Quick Poll / Exit Ticket">📊 Poll</button>
+            <button class="btn btn-outline" id="pjmProjectorBtn" onclick="pjmOpen()" style="display:none;" title="Projector Mode">📽️ Projector</button>
+            <button class="onb-legend-btn" id="onbLegendBtn" onclick="onbToggleLegend()" aria-label="Color legend" aria-expanded="false" style="display:none;" type="button">?</button>
+          </div>
+        </div>
+
+        <div class="builder-main">
+          <!-- Lesson Rundown Sidebar -->
+          <div class="lrd-sidebar" id="lrdSidebar" style="display:none;">
+            <div class="lrd-sidebar-header">
+              <span class="lrd-sidebar-title">Lesson Overview</span>
+              <button class="lrd-sidebar-close" onclick="lrdToggleSidebar()" aria-label="Close lesson sidebar">&times;</button>
+            </div>
+            <div class="lrd-sidebar-body" id="lrdSidebarBody"></div>
+          </div>
+          <div class="builder-canvas" id="builderCanvas">
+            <!-- Design Phase Progress Bar (Student) + Filter (Teacher) -->
+            <div id="dtkPhaseProgressBar" style="display:none;"></div>
+            <div id="dtkPhaseFilter" style="display:none;"></div>
+            <div class="grid-background"></div>
+            <div class="grid-container" id="gridContainer" data-tour="hex-grid">
+              <svg class="connections-layer" id="connectionsLayer"></svg>
+              <div class="empty-state" id="emptyState">
+                <div class="empty-icon">🗺️</div>
+                <p>Click a map from "My Maps" to start editing</p>
+              </div>
+            </div>
+            <!-- Student Journey Panel (Design Thinking) -->
+            <div id="dtkJourneyPanel" style="display:none;"></div>
+          </div>
+
+          <!-- HEX EDITOR PANEL (NEW) -->
+          <div class="editor-panel" id="hexEditorPanel">
+            <div class="editor-header">
+              <h3>✏️ Hex Editor</h3>
+              <div class="editor-header-subtitle" id="hexEditorId">hex-xxxxx</div>
+            </div>
+            <!-- Student Support Info Bar (teacher only) -->
+            <div class="ssp-hex-info-bar" id="sspHexInfoBar" style="display:none;"></div>
+            <!-- Support Detail Panel (E1-S2) -->
+            <div class="pb-detail-panel" id="pbDetailPanel" style="display:none;">
+              <div class="pb-detail-header">
+                <span class="pb-detail-title">Student Support Details</span>
+                <button class="pb-detail-close" onclick="closeSupportDetailPanel()" aria-label="Close support details">&times;</button>
+              </div>
+              <div class="pb-detail-body" id="pbDetailBody"></div>
+              <div class="pb-detail-actions">
+                <button class="btn btn-outline btn-small" onclick="openProfilesFromHex()" style="flex:1;">View All Profiles</button>
+              </div>
+            </div>
+            <div class="editor-body">
+
+              <!-- Basic Properties -->
+              <div class="editor-section-title">Basic Properties</div>
+
+              <div class="editor-section">
+                <label class="editor-label">Label</label>
+                <input type="text" class="editor-input" id="hexLabel" placeholder="Hex name..." onchange="onHexFieldChange('label', this.value)" oninput="onHexFieldChange('label', this.value)">
+              </div>
+
+              <div class="editor-row">
+                <div class="editor-section">
+                  <label class="editor-label">Icon</label>
+                  <input type="text" class="editor-input" id="hexIcon" placeholder="🔬" style="text-align:center; font-size:18px;" maxlength="4" onchange="onHexFieldChange('icon', this.value)" oninput="onHexFieldChange('icon', this.value)">
+                </div>
+                <div class="editor-section">
+                  <label class="editor-label">Type</label>
+                  <select class="editor-select" id="hexType" onchange="onHexFieldChange('type', this.value)">
+                    <option value="core">🔵 Core</option>
+                    <option value="ext">🟢 Extension</option>
+                    <option value="scaf">🟡 Scaffold</option>
+                    <option value="student">🟣 Student</option>
+                    <option value="class">🩷 Class</option>
+                    <option value="lab">🧪 Lab Report</option>
+                    <option value="lesson">📖 Lesson</option>
+                    <option value="resource">📦 Resource</option>
+                    <option value="whiteboard">&#x1F3A8; Whiteboard</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="editor-row">
+                <div class="editor-section">
+                  <label class="editor-label">Status</label>
+                  <select class="editor-select" id="hexStatus" onchange="onHexFieldChange('status', this.value)">
+                    <option value="">Active</option>
+                    <option value="locked">🔒 Locked</option>
+                    <option value="completed">✅ Completed</option>
+                  </select>
+                </div>
+                <div class="editor-section">
+                  <label class="editor-label">Size</label>
+                  <select class="editor-select" id="hexSize" onchange="onHexFieldChange('size', this.value)">
+                    <option value="default">Default</option>
+                    <option value="large">Large</option>
+                    <option value="small">Small</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Auto-Unlock (teacher only) -->
+              <div class="editor-section" id="hexAutoUnlockSection" style="display:none;">
+                <label class="editor-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input type="checkbox" id="hexAutoUnlock" onchange="onHexFieldChange('autoUnlock', this.checked)">
+                  Auto-unlock for students
+                </label>
+                <div class="editor-hint">Available from the start — no prerequisites needed.</div>
+              </div>
+
+              <!-- Resource Link -->
+              <div class="editor-section-title">Resource Link</div>
+
+              <div class="editor-section">
+                <label class="editor-label">Link URL</label>
+                <input type="url" class="editor-input" id="hexLinkUrl" placeholder="https://..." onchange="onHexFieldChange('linkUrl', this.value)">
+                <div class="editor-hint">Opens when student clicks the hex</div>
+              </div>
+
+              <div class="editor-section">
+                <button class="btn btn-outline btn-small" onclick="testHexLink()" style="width:100%;">🔗 Test Link</button>
+              </div>
+
+              <!-- Google Slides URL (teacher only) -->
+              <div class="editor-section" id="pjmSlidesSection" style="display:none;">
+                <label class="editor-label">📊 Google Slides URL</label>
+                <input type="url" class="editor-input" id="hexSlidesUrl" placeholder="https://docs.google.com/presentation/d/..." onchange="pjmOnSlidesUrlChange(this.value)">
+                <div class="editor-hint">Paste a Google Slides URL to embed in Projector Mode</div>
+              </div>
+
+              <!-- SBAR Focus -->
+              <div class="editor-section-title">SBAR Focus</div>
+
+              <div class="editor-section">
+                <div class="sbar-toggles">
+                  <label class="sbar-toggle" id="sbarKU">
+                    <input type="checkbox" onchange="toggleSbarDomain('KU')">
+                    <span class="sbar-code">KU</span>
+                    <span class="sbar-label">Know/Understand</span>
+                  </label>
+                  <label class="sbar-toggle" id="sbarTT">
+                    <input type="checkbox" onchange="toggleSbarDomain('TT')">
+                    <span class="sbar-code">TT</span>
+                    <span class="sbar-label">Think</span>
+                  </label>
+                  <label class="sbar-toggle" id="sbarC">
+                    <input type="checkbox" onchange="toggleSbarDomain('C')">
+                    <span class="sbar-code">C</span>
+                    <span class="sbar-label">Communicate</span>
+                  </label>
+                </div>
+                <label class="editor-label" style="margin-top:12px;">Custom Tags</label>
+                <input type="text" class="editor-input" id="hexSbarCustom" placeholder="e.g., SCI.1, inquiry" onchange="onCurriculumFieldChange('sbarCustom', this.value)">
+                <div class="editor-hint">Comma-separated custom SBAR tags</div>
+              </div>
+
+              <!-- Design Phase (PBL/Design Thinking) -->
+              <div class="dtk-hex-section" id="dtkHexSection">
+                <div class="editor-section-title">Design Phase</div>
+                <div class="editor-section">
+                  <label class="editor-label">Phase</label>
+                  <select class="editor-select" id="dtkHexPhase" onchange="dtkOnHexPhaseChange(this.value)">
+                    <option value="">Not Set</option>
+                  </select>
+                </div>
+                <div class="dtk-checkpoint-row">
+                  <label class="dtk-toggle" style="margin:0;">
+                    <input type="checkbox" id="dtkHexCheckpoint" onchange="dtkOnHexCheckpointChange(this.checked)">
+                    <span class="dtk-toggle-slider"></span>
+                  </label>
+                  <span class="dtk-checkpoint-label">Checkpoint Hex (requires teacher review)</span>
+                </div>
+              </div>
+
+              <!-- Peer Feedback Config (PBL) -->
+              <div class="pfb-hex-section" id="pfbHexSection">
+                <div class="editor-section-title">Peer Feedback</div>
+                <div class="pfb-toggle-row">
+                  <label class="dtk-toggle" style="margin:0;">
+                    <input type="checkbox" id="pfbHexEnabled" onchange="pfbOnHexEnabledChange(this.checked)">
+                    <span class="dtk-toggle-slider"></span>
+                  </label>
+                  <span class="dtk-checkpoint-label">Enable peer feedback on this hex</span>
+                </div>
+                <div id="pfbHexConfig" style="display:none;">
+                  <div class="editor-section">
+                    <label class="editor-label">Required Reviews</label>
+                    <select class="editor-select" id="pfbRequiredReviews" onchange="pfbOnConfigChange()">
+                      <option value="1">1 review</option>
+                      <option value="2" selected>2 reviews</option>
+                      <option value="3">3 reviews</option>
+                      <option value="4">4 reviews</option>
+                      <option value="5">5 reviews</option>
+                    </select>
+                  </div>
+                  <div class="pfb-toggle-row" style="margin-top:8px;">
+                    <label class="dtk-toggle" style="margin:0;">
+                      <input type="checkbox" id="pfbAnonymous" onchange="pfbOnConfigChange()">
+                      <span class="dtk-toggle-slider"></span>
+                    </label>
+                    <span class="dtk-checkpoint-label">Anonymous reviews</span>
+                  </div>
+                  <div class="editor-section" style="margin-top:8px;">
+                    <label class="editor-label">Criteria (up to 3)</label>
+                    <div id="pfbCriteriaList"></div>
+                    <button class="btn btn-outline btn-small" id="pfbAddCriterionBtn" onclick="pfbAddCriterion()" style="margin-top:6px;">+ Add Criterion</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hex-Level Vocabulary -->
+              <div class="dct-hex-section" id="dctHexSection">
+                <div class="editor-section-title">&#128218; Hex Vocabulary</div>
+                <div id="dctHexVocabContent"></div>
+              </div>
+
+              <!-- Curriculum Metadata -->
+              <div class="editor-section-title">Curriculum Metadata</div>
+
+              <div class="editor-section">
+                <label class="editor-label">Standards</label>
+                <div class="sal-strength-legend">
+                  <span><span class="sal-strength-dot introduced"></span> Introduced</span>
+                  <span><span class="sal-strength-dot practiced"></span> Practiced</span>
+                  <span><span class="sal-strength-dot mastered"></span> Mastered</span>
+                </div>
+                <div class="standards-picker" id="hexStandardsPicker">
+                  <div class="std-scope-indicator" style="display:none;"></div>
+                  <div class="standards-picker-tags" id="hexStandardsTags"></div>
+                  <input type="text" class="editor-input" id="hexStandardsSearch" placeholder="Search standards..." oninput="searchStandardsForHex(this.value)" onfocus="searchStandardsForHex(this.value)">
+                  <div class="standards-picker-list" id="hexStandardsList" style="display:none;"></div>
+                </div>
+                <div class="editor-hint">Search and select standards from the library</div>
+              </div>
+
+              <div class="editor-section">
+                <label class="editor-label">ATL Skills</label>
+                <input type="text" class="editor-input" id="hexAtlSkills" placeholder="Critical Thinking, Research..." onchange="onCurriculumFieldChange('atlSkills', this.value)">
+                <div class="editor-hint">Approaches to Learning skills</div>
+              </div>
+
+              <div class="editor-section">
+                <label class="editor-label">AISC Competencies</label>
+                <div class="asc-toggle-group" id="ascCompetencyToggles">
+                  <div class="asc-toggle" data-key="criticalThinkers" onclick="toggleAscCompetency('criticalThinkers')"><input type="checkbox" tabindex="-1"><span class="asc-short">CT</span> Critical Thinkers</div>
+                  <div class="asc-toggle" data-key="resilientLearners" onclick="toggleAscCompetency('resilientLearners')"><input type="checkbox" tabindex="-1"><span class="asc-short">RL</span> Resilient Learners</div>
+                  <div class="asc-toggle" data-key="skillfulCommunicators" onclick="toggleAscCompetency('skillfulCommunicators')"><input type="checkbox" tabindex="-1"><span class="asc-short">SC</span> Skillful Communicators</div>
+                  <div class="asc-toggle" data-key="effectiveCollaborators" onclick="toggleAscCompetency('effectiveCollaborators')"><input type="checkbox" tabindex="-1"><span class="asc-short">EC</span> Effective Collaborators</div>
+                  <div class="asc-toggle" data-key="digitalNavigators" onclick="toggleAscCompetency('digitalNavigators')"><input type="checkbox" tabindex="-1"><span class="asc-short">DN</span> Digital Navigators</div>
+                  <div class="asc-toggle" data-key="changeMakers" onclick="toggleAscCompetency('changeMakers')"><input type="checkbox" tabindex="-1"><span class="asc-short">CM</span> Change Makers</div>
+                </div>
+                <div class="editor-hint">AISC learner competencies this hex develops</div>
+              </div>
+
+              <div class="editor-section">
+                <label class="editor-label">AISC Values</label>
+                <div class="asc-toggle-group" id="ascValueToggles">
+                  <div class="asc-toggle" data-key="discovery" onclick="toggleAscValue('discovery')"><input type="checkbox" tabindex="-1">&#128269; Discovery</div>
+                  <div class="asc-toggle" data-key="belonging" onclick="toggleAscValue('belonging')"><input type="checkbox" tabindex="-1">&#129309; Belonging</div>
+                  <div class="asc-toggle" data-key="wellbeing" onclick="toggleAscValue('wellbeing')"><input type="checkbox" tabindex="-1">&#128154; Wellbeing</div>
+                  <div class="asc-toggle" data-key="responsibility" onclick="toggleAscValue('responsibility')"><input type="checkbox" tabindex="-1">&#9878;&#65039; Responsibility</div>
+                  <div class="asc-toggle" data-key="purpose" onclick="toggleAscValue('purpose')"><input type="checkbox" tabindex="-1">&#127919; Purpose</div>
+                </div>
+                <div class="editor-hint">AISC values this hex connects to</div>
+              </div>
+
+              <div class="editor-section">
+                <label class="editor-label">UbD Stage</label>
+                <select class="editor-select" id="hexUbdStage" onchange="onCurriculumFieldChange('ubdStage', this.value)">
+                  <option value="">Not Assigned</option>
+                  <option value="stage1">Stage 1: Desired Results</option>
+                  <option value="stage2">Stage 2: Evidence & Assessment</option>
+                  <option value="stage3">Stage 3: Learning Plan</option>
+                </select>
+              </div>
+
+              <div class="editor-section">
+                <label class="editor-label">Key Language Use</label>
+                <select class="editor-select" id="hexKeyLanguageUse" onchange="onCurriculumFieldChange('keyLanguageUse', this.value)">
+                  <option value="">Not Set</option>
+                  <option value="narrate">Narrate</option>
+                  <option value="inform">Inform</option>
+                  <option value="explain">Explain</option>
+                  <option value="argue">Argue</option>
+                </select>
+                <div class="editor-hint">WIDA Key Language Use for this activity</div>
+              </div>
+
+              <!-- UDL Strategy Selector (E2-S1, teacher mode only) -->
+              <div id="pbUdlSelectorSection" style="display:none;">
+                <div class="editor-section-title">UDL Strategies <span class="pb-udl-section-badge" id="pbUdlSectionBadge"></span></div>
+                <div class="pb-udl-legend">
+                  <span class="pb-legend-item"><span class="pb-legend-dot pb-dot-suggested"></span> Suggested (WIDA)</span>
+                  <span class="pb-legend-item"><span class="pb-legend-dot pb-dot-confirmed"></span> Confirmed</span>
+                </div>
+                <div class="editor-section">
+                  <div class="pb-udl-principle">
+                    <div class="pb-udl-label">Representation (The &ldquo;What&rdquo;)</div>
+                    <div class="pb-chips-wrap" id="pbChips-representation"></div>
+                  </div>
+                  <div class="pb-udl-principle">
+                    <div class="pb-udl-label">Action &amp; Expression (The &ldquo;How&rdquo;)</div>
+                    <div class="pb-chips-wrap" id="pbChips-actionExpression"></div>
+                  </div>
+                  <div class="pb-udl-principle">
+                    <div class="pb-udl-label">Engagement (The &ldquo;Why&rdquo;)</div>
+                    <div class="pb-chips-wrap" id="pbChips-engagement"></div>
+                  </div>
+                </div>
+                <div class="editor-section" style="margin-top:8px;">
+                  <label class="editor-label">Planning Notes</label>
+                  <textarea class="editor-textarea" id="pbPlanningNotes" placeholder="Notes on differentiation approach..." style="min-height:60px;" onchange="onPbPlanningNotesChange(this.value)"></textarea>
+                  <div class="editor-hint">Private teacher notes on UDL/EAL planning</div>
+                </div>
+                <div class="editor-section" style="margin-top:8px;">
+                  <button class="btn btn-outline btn-small" data-tour="prompt-builder-btn" onclick="openPromptBuilder()" style="width:100%;">&#129302; Generate AI Prompt</button>
+                </div>
+              </div>
+
+              <!-- Inline Content -->
+              <div class="editor-section-title">Inline Content</div>
+
+              <div class="editor-section">
+                <label class="editor-label">Content Type</label>
+                <select class="editor-select" id="hexContentType" onchange="onInlineContentChange('type', this.value)">
+                  <option value="none">None (Link Only)</option>
+                  <option value="text">📄 Text / Reading Passage</option>
+                  <option value="instructions">📋 Instructions / Steps</option>
+                  <option value="embedded">🎬 Embedded Content</option>
+                </select>
+              </div>
+
+              <div id="inlineContentFields" style="display:none;">
+                <div class="editor-section">
+                  <label class="editor-label">Content Title</label>
+                  <input type="text" class="editor-input" id="hexContentTitle" placeholder="Title for this content..." onchange="onInlineContentChange('title', this.value)">
+                </div>
+
+                <div class="editor-section">
+                  <label class="editor-label">Content Body</label>
+                  <textarea class="editor-textarea" id="hexContentBody" placeholder="Enter the content students will see..." style="min-height:120px;" onchange="onInlineContentChange('body', this.value)" oninput="updateContentCharCount()"></textarea>
+                  <div class="char-count" id="contentCharCount">0 / 2000 characters</div>
+                </div>
+
+                <div class="editor-section">
+                  <label class="editor-label" style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="hexContentShowOnClick" onchange="onInlineContentChange('showOnClick', this.checked)" style="width:auto;">
+                    Show content when hex clicked
+                  </label>
+                </div>
+              </div>
+
+              <!-- Formative Check Button (teacher only) -->
+              <div class="editor-section" id="fclLogBtnSection" style="display:none;">
+                <button class="btn btn-outline btn-small" onclick="openFclModal(selectedHexId, currentMap && currentMap.mapId)" style="width:100%;">&#128203; Log Formative Check</button>
+              </div>
+
+              <!-- Assessment Builder Button (teacher only) -->
+              <div class="editor-section" id="efaBuilderBtnSection" data-tour="efa-builder-btn" style="display:none;">
+                <button class="btn btn-outline btn-small" onclick="openAssessmentBuilder(selectedHexId)" style="width:100%;">&#128221; Edit Assessment</button>
+                <div id="efaHexAssessmentInfo"></div>
+                <div id="efaResultsContainer"></div>
+              </div>
+
+              <!-- Lab Report Assignment Info (teacher only, lab hex type) -->
+              <div class="editor-section" id="labHexInfoSection" style="display:none;">
+                <div class="lab-editor-section">
+                  <div class="lab-editor-section-title">🧪 Lab Report Assignment</div>
+                  <div id="labHexAssignmentInfo">
+                    <!-- Rendered by labRenderAssignmentInfo() -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Lesson Map Linking (teacher only, lesson hex type) -->
+              <div class="editor-section" id="lessonHexInfoSection" style="display:none;">
+                <div class="lsm-editor-section">
+                  <div class="lsm-editor-section-title">📖 Lesson Map</div>
+                  <div id="lessonHexLinkInfo">
+                    <div class="lsm-editor-note">Loading...</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Resource Hex Config (teacher only, resource hex type) -->
+              <div class="editor-section" id="resHexInfoSection" style="display:none;">
+                <div class="bex-res-section">
+                  <div class="bex-res-section-title">📦 Resource Configuration</div>
+                  <div class="bex-res-field">
+                    <label class="editor-label">Resource Type</label>
+                    <select class="editor-input" id="resTypeSelect" onchange="resOnFieldChange('resourceType')">
+                      <option value="">-- Select --</option>
+                      <option value="video">🎬 Video</option>
+                      <option value="practice">✏️ Practice Problem</option>
+                      <option value="reading">📖 Reading</option>
+                      <option value="worksheet">📄 Worksheet</option>
+                      <option value="link">🔗 Link</option>
+                    </select>
+                  </div>
+                  <div class="bex-res-field">
+                    <label class="editor-label">Resource URL</label>
+                    <input type="text" class="editor-input" id="resUrlInput" placeholder="https://..." onchange="resOnFieldChange('resourceUrl')">
+                  </div>
+                  <div class="bex-res-field">
+                    <label class="editor-label">Instructions for Student</label>
+                    <textarea class="editor-input" id="resInstructionsInput" placeholder="What should the student do with this resource?" maxlength="500" rows="3" onchange="resOnFieldChange('instructions')"></textarea>
+                    <div class="editor-hint"><span id="resInstructionsCount">0</span> / 500</div>
+                  </div>
+                  <div class="bex-res-field">
+                    <label class="editor-label">Estimated Time (minutes)</label>
+                    <input type="number" class="editor-input" id="resTimeInput" min="0" max="120" placeholder="e.g., 15" onchange="resOnFieldChange('estimatedMinutes')">
+                  </div>
+                  <div class="bex-res-field">
+                    <label class="bex-res-checkbox-label">
+                      <input type="checkbox" id="resPlannerCheckbox" checked onchange="resOnFieldChange('addToPlanner')">
+                      Add to student planner when unlocked
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Whiteboard Settings (teacher only) -->
+              <div class="editor-section" id="wbHexInfoSection" style="display:none;">
+                <div class="wb-config-section">
+                  <div class="wb-config-title">&#x1F3A8; Whiteboard Settings</div>
+                  <div class="wb-config-field" id="wbEnableRow">
+                    <label class="wb-checkbox-label">
+                      <input type="checkbox" id="wbEnableCheckbox" onchange="wbOnEnableChange()">
+                      Enable whiteboard on this hex
+                    </label>
+                  </div>
+                  <div class="wb-config-field" id="wbFolderRow" style="display:none;">
+                    <label class="editor-label">Drive Folder URL</label>
+                    <input type="text" class="editor-input" id="wbFolderUrl"
+                           placeholder="https://drive.google.com/drive/folders/..."
+                           onchange="wbOnFolderChange()">
+                    <div class="wb-folder-status" id="wbFolderStatus"></div>
+                    <button type="button" class="btn btn-outline wb-test-btn" onclick="wbTestFolder()" aria-label="Test folder access">Test Access</button>
+                  </div>
+                  <div class="wb-config-field" id="wbTemplateRow" style="display:none;">
+                    <div class="wb-template-preview" id="wbTemplatePreview">
+                      <span class="wb-template-empty">No template drawing yet</span>
+                    </div>
+                    <button type="button" class="btn btn-primary wb-open-canvas-btn" onclick="wbOpenTeacherCanvas()" aria-label="Open whiteboard to create template">&#x1F3A8; Create Template Drawing</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Differentiation: Group Assignment (teacher only) -->
+              <div class="editor-section" id="difHexSection" style="display:none;">
+                <div class="dif-section-title">👥 Group Assignment</div>
+                <div class="dif-hex-groups" id="difHexGroups">
+                  <div class="dif-empty-note">No groups configured. Use the Groups button in the toolbar to create groups.</div>
+                </div>
+                <div class="dif-hex-overrides-toggle" id="difOverridesToggle" style="display:none;">
+                  <button class="btn btn-ghost btn-small" onclick="difToggleOverrides()">Individual Overrides ▸</button>
+                </div>
+                <div class="dif-hex-overrides" id="difHexOverrides" style="display:none;"></div>
+              </div>
+
+              <!-- Estimated Time + Checkpoint Due Date (teacher only) -->
+              <div class="editor-section" id="hexEstTimeSection" style="display:none;">
+                <label>Estimated Time (minutes)</label>
+                <input type="number" class="form-input" id="hexEstMinutes" min="0" max="999" placeholder="e.g. 30" onchange="onHexFieldChange('estimatedMinutes', parseInt(this.value) || 0)">
+              </div>
+              <div class="editor-section" id="hexDueDateSection" style="display:none;">
+                <label>Checkpoint Due Date (optional)</label>
+                <input type="date" class="form-input" id="hexDueDate" onchange="onHexFieldChange('dueDate', this.value)">
+              </div>
+
+              <!-- Outgoing Connections Summary -->
+              <div class="bch-connections-summary" id="hexConnectionsSummary" style="display:none;">
+                <div class="editor-section-title">Outgoing Connections <span class="bch-conn-count" id="hexConnectionsCount"></span></div>
+                <div id="hexConnectionsList"></div>
+              </div>
+
+            </div>
+            <div class="editor-footer">
+              <button class="hex-dup-btn" onclick="duplicateSelectedHex()" title="Duplicate this hex" aria-label="Duplicate selected hex">📋 Duplicate</button>
+              <button class="btn btn-danger" onclick="deleteSelectedHex()">🗑️ Delete Hex</button>
+            </div>
+          </div>
+
+          <!-- CONNECTION EDITOR PANEL (Existing) -->
+          <div class="editor-panel" id="connectionEditorPanel">
+            <div class="editor-header">
+              <h3>🔗 Connection</h3>
+              <div class="editor-connection-info">
+                <span class="hex-name" id="editorFromHex">Start</span>
+                <span class="arrow-icon">→</span>
+                <span class="hex-name" id="editorToHex">End</span>
+              </div>
+            </div>
+            <div class="editor-body">
+              <div class="bch-presets">
+                <div class="bch-presets-label">Quick Apply</div>
+                <div class="bch-presets-row">
+                  <button class="bch-preset-btn" style="border-color:#3b82f6; color:#3b82f6;" onclick="applyBranchPreset('sequential')">Sequential</button>
+                  <button class="bch-preset-btn" style="border-color:#f59e0b; color:#f59e0b;" onclick="applyBranchPreset('score_gte_70')">&#8805;70%</button>
+                  <button class="bch-preset-btn" style="border-color:#f59e0b; color:#f59e0b;" onclick="applyBranchPreset('score_lt_70')">&lt;70%</button>
+                  <button class="bch-preset-btn" style="border-color:#f59e0b; color:#f59e0b;" onclick="applyBranchPreset('score_gte_85')">&#8805;85%</button>
+                  <button class="bch-preset-btn" style="border-color:#8b5cf6; color:#8b5cf6;" onclick="applyBranchPreset('approval')">Approval</button>
+                  <button class="bch-preset-btn" style="border-color:#10b981; color:#10b981;" onclick="applyBranchPreset('completed')">Completed</button>
+                  <button class="bch-preset-btn" style="border-color:#10b981; color:#10b981;" onclick="applyBranchPreset('mastered')">Mastered</button>
+                  <button class="bch-preset-btn" style="border-color:#dc2626; color:#dc2626;" onclick="applyBranchPreset('assessment_pass')">Assessment</button>
+                  <button class="bch-preset-btn" style="border-color:#f59e0b; color:#f59e0b;" onclick="applyBranchPreset('checkpoint_gate')">Checkpoint</button>
+                  <button class="bch-preset-btn" style="border-color:#ec4899; color:#ec4899;" onclick="applyBranchPreset('peer_feedback')">Peer Reviews</button>
+                </div>
+              </div>
+              <div class="editor-section">
+                <label class="editor-label">Condition Type</label>
+                <select class="editor-select" id="editorConditionType" onchange="onConditionTypeChange()">
+                  <option value="always">Always (Sequential)</option>
+                  <option value="score">Score Threshold</option>
+                  <option value="status">Status Check</option>
+                  <option value="teacher_approval">Teacher Approval</option>
+                  <option value="assessment">Assessment Result</option>
+                  <option value="time">Time-Based</option>
+                  <option value="compound">Multi-Condition</option>
+                  <option value="choice">Student Choice</option>
+                  <option value="peer_feedback">Peer Feedback</option>
+                </select>
+                <div class="color-indicator">
+                  <span class="color-dot" id="editorColorDot"></span>
+                  <span id="editorColorLabel">Arrow color: Blue (sequential)</span>
+                </div>
+              </div>
+              <div class="editor-section" id="scoreSection" style="display:none;">
+                <label class="editor-label">Score Threshold</label>
+                <div class="threshold-row active">
+                  <select class="editor-select" id="editorScoreOperator" onchange="onConditionChange()">
+                    <option value="gte">≥</option>
+                    <option value="lte">≤</option>
+                    <option value="gt">></option>
+                    <option value="lt"><</option>
+                    <option value="eq">=</option>
+                  </select>
+                  <input type="number" class="editor-input" id="editorScoreValue" min="0" max="100" value="70" onchange="onConditionChange()" oninput="onConditionChange()">
+                  <span class="percent-label">%</span>
+                </div>
+              </div>
+              <div class="editor-section" id="statusSection" style="display:none;">
+                <label class="editor-label">Required Status</label>
+                <select class="editor-select" id="editorStatusValue" onchange="onConditionChange()">
+                  <option value="completed">Completed</option>
+                  <option value="mastered">Mastered</option>
+                  <option value="in_progress">In Progress</option>
+                </select>
+              </div>
+              <div class="editor-section" id="assessmentSection" style="display:none;">
+                <label class="editor-label">Assessment Condition</label>
+                <select class="editor-select" id="editorAssessmentSubType" onchange="onConditionChange()">
+                  <option value="total_score">Total Score Threshold</option>
+                  <option value="question_correct">Specific Question Correct</option>
+                  <option value="all_type_correct">All Questions of Type Correct</option>
+                </select>
+                <div id="efaAssessmentScoreRow" style="margin-top:6px;">
+                  <div class="threshold-row active">
+                    <select class="editor-select" id="editorAssessmentOperator" onchange="onConditionChange()">
+                      <option value="gte">&#8805;</option>
+                      <option value="lte">&#8804;</option>
+                      <option value="gt">&gt;</option>
+                      <option value="lt">&lt;</option>
+                    </select>
+                    <input type="number" class="editor-input" id="editorAssessmentValue" min="0" max="100" value="70" onchange="onConditionChange()">
+                    <span class="percent-label">%</span>
+                  </div>
+                </div>
+                <div id="efaAssessmentQuestionRow" style="display:none;margin-top:6px;">
+                  <label class="editor-label" style="font-size:11px;">Question ID</label>
+                  <select class="editor-select" id="editorAssessmentQuestionId" onchange="onConditionChange()">
+                    <option value="">-- Select Question --</option>
+                  </select>
+                </div>
+                <div id="efaAssessmentTypeRow" style="display:none;margin-top:6px;">
+                  <label class="editor-label" style="font-size:11px;">Question Type</label>
+                  <select class="editor-select" id="editorAssessmentQuestionType" onchange="onConditionChange()">
+                    <option value="multiple_choice">Multiple Choice</option>
+                    <option value="short_answer">Short Answer</option>
+                    <option value="matching">Matching</option>
+                    <option value="ordering">Ordering</option>
+                  </select>
+                </div>
+              </div>
+              <div class="editor-section" id="timeSection" style="display:none;">
+                <label class="editor-label">Available After</label>
+                <input type="date" class="editor-input" id="editorTimeAfter" onchange="onConditionChange()">
+                <label class="editor-label" style="margin-top:8px;">Available Before</label>
+                <input type="date" class="editor-input" id="editorTimeBefore" onchange="onConditionChange()">
+                <p style="font-size:12px;color:#64748b;margin-top:6px;">Leave blank for open-ended. Uses server date (YYYY-MM-DD).</p>
+              </div>
+              <div class="editor-section" id="compoundSection" style="display:none;">
+                <div class="bex-logic-toggle">
+                  <button class="bex-logic-btn active" id="bexLogicAnd" onclick="bexSetLogic('and')">AND</button>
+                  <button class="bex-logic-btn" id="bexLogicOr" onclick="bexSetLogic('or')">OR</button>
+                </div>
+                <div id="bexSubConditions"></div>
+                <button class="btn btn-outline bex-add-sub-btn" onclick="bexAddSubCondition()">+ Add Condition</button>
+                <p style="font-size:12px;color:#64748b;margin-top:4px;">Max 5 sub-conditions.</p>
+              </div>
+              <div class="editor-section" id="choiceSection" style="display:none;">
+                <label class="editor-label">Choice Label (shown to student)</label>
+                <input type="text" class="editor-input" id="editorChoiceLabel" placeholder="e.g., Write an essay" maxlength="100" onchange="onConditionChange()">
+                <p style="font-size:12px;color:#64748b;margin-top:4px;">Create multiple choice branches from the same hex. Students pick one path.</p>
+              </div>
+              <div class="editor-section" id="peerFeedbackSection" style="display:none;">
+                <label class="editor-label">Required Reviews</label>
+                <input type="number" class="editor-input" id="editorPfbRequiredReviews" min="1" max="5" value="2" onchange="onConditionChange()">
+                <p style="font-size:12px;color:#64748b;margin-top:4px;">Student must complete this many peer reviews before unlocking the next hex.</p>
+              </div>
+              <div class="editor-section">
+                <label class="editor-label">Label (Short)</label>
+                <input type="text" class="editor-input" id="editorLabel" placeholder="e.g., Core Path, Review" maxlength="30" onchange="onConditionChange()">
+              </div>
+              <div class="editor-section">
+                <label class="editor-label">Description</label>
+                <textarea class="editor-textarea" id="editorDescription" placeholder="Describe this path..." onchange="onConditionChange()"></textarea>
+              </div>
+              <div class="editor-section-title">Student Messages</div>
+              <div class="message-field">
+                <label class="message-label unlocked"><span>✓</span> When Path is UNLOCKED</label>
+                <textarea class="message-textarea unlocked-input" id="editorUnlockedMessage" placeholder="e.g., Great work!" onchange="onConditionChange()" oninput="updateCharCount('unlocked')"></textarea>
+                <div class="char-count" id="unlockedCharCount">0 / 150 characters</div>
+              </div>
+              <div class="message-field">
+                <label class="message-label locked"><span>🔒</span> When Path is LOCKED</label>
+                <textarea class="message-textarea locked-input" id="editorLockedMessage" placeholder="e.g., Complete the quiz with 70%..." onchange="onConditionChange()" oninput="updateCharCount('locked')"></textarea>
+                <div class="char-count" id="lockedCharCount">0 / 150 characters</div>
+              </div>
+            </div>
+            <div class="editor-footer">
+              <button class="btn btn-danger" onclick="deleteSelectedConnection()">Delete Connection</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Standards View (Story 2.3) -->
+      <div id="standardsView" class="view" role="tabpanel" aria-labelledby="standardsTab">
+        <div class="scroll-container">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title"><span class="icon">📏</span>Standards Library</h2>
+            </div>
+            <div class="standards-toolbar">
+              <select id="standardsFrameworkFilter" onchange="onStandardsFrameworkFilterChange()">
+                <option value="">All Frameworks</option>
+                <option value="NGSS">NGSS</option>
+                <option value="CCSS">CCSS</option>
+                <option value="IB-MYP">IB-MYP</option>
+                <option value="AP">AP</option>
+                <option value="Custom">Custom</option>
+              </select>
+              <select id="standardsSubjectFilter" onchange="filterStandards()" disabled>
+                <option value="">All Subjects</option>
+              </select>
+              <input type="text" id="standardsSearchInput" placeholder="Search standards..." oninput="filterStandards()">
+              <button class="btn btn-success btn-small" onclick="openStandardModal()">+ Add Standard</button>
+              <button class="btn btn-outline btn-small" id="seedStandardsBtn" onclick="seedStandards()">Seed Examples</button>
+            </div>
+            <div id="standardsContent">
+              <div class="loading"><span class="loading-spinner"></span>Loading standards...</div>
+            </div>
+
+            <!-- Coverage Report Section -->
+            <div class="coverage-section">
+              <h3 style="margin:0 0 12px; font-size:16px; color:#1e293b;">Coverage Report</h3>
+              <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
+                <label style="font-size:13px; color:#64748b; white-space:nowrap;">Select Map:</label>
+                <select id="coverageMapSelect" class="form-select" onchange="loadCoverageForMap(this.value)" style="flex:1;">
+                  <option value="">-- Choose a map --</option>
+                </select>
+              </div>
+              <div id="coverageContent">
+                <p style="color:#94a3b8; font-size:13px; text-align:center;">Select a map above to view standards coverage.</p>
+              </div>
+
+              <!-- Bulk Operations Panel -->
+              <div class="sal-bulk-panel" id="salBulkPanel">
+                <h4 style="margin:0 0 8px; font-size:14px; color:#1e293b;">Bulk Link/Unlink</h4>
+                <div class="sal-bulk-tabs">
+                  <button class="sal-bulk-tab active" onclick="setBulkMode('stdToHexes')">Standard &rarr; Hexes</button>
+                  <button class="sal-bulk-tab" onclick="setBulkMode('hexToStds')">Hex &rarr; Standards</button>
+                </div>
+                <div id="salBulkContent">
+                  <p style="color:#94a3b8; font-size:12px;">Select a mode above to begin bulk linking.</p>
+                </div>
+              </div>
+              <div style="margin-top:12px;">
+                <button class="btn btn-outline btn-small" onclick="toggleBulkPanel()">Bulk Link/Unlink</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- UBD Planner View -->
+      <div id="ubdPlannerView" class="view" role="tabpanel" aria-labelledby="ubdPlannerTab">
+        <div class="ubd-planner-layout">
+          <!-- Browser Panel (left) -->
+          <div class="ubd-planner-browser">
+            <div class="scroll-container">
+              <div class="card">
+                <div class="card-header">
+                  <h2>UBD Unit Plans</h2>
+                  <div style="display:flex; gap:12px; align-items:center;">
+                    <input type="text" class="form-input" id="ubdSearchInput"
+                           placeholder="&#128269; Search units..." style="width:200px;"
+                           oninput="filterUbdUnits()">
+                  </div>
+                </div>
+                <div id="ubdBrowserContent">
+                  <div class="loading"><span class="loading-spinner"></span>Loading UBD plans...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Editor Panel (right) -->
+          <div class="ubd-editor-panel" id="ubdEditorPanel">
+            <div class="ubd-editor-header">
+              <h3 id="ubdEditorTitle">UBD Editor</h3>
+              <button class="btn btn-ghost btn-small" onclick="closeUbdEditor()" title="Close editor" aria-label="Close editor">&times;</button>
+            </div>
+            <div class="ubd-editor-subtabs">
+              <button class="ubd-subtab active" data-subtab="overview" onclick="showUbdSubtab('overview')">Overview</button>
+              <button class="ubd-subtab" data-subtab="stage1" onclick="showUbdSubtab('stage1')">Stage 1</button>
+              <button class="ubd-subtab" data-subtab="stage2" onclick="showUbdSubtab('stage2')">Stage 2</button>
+              <button class="ubd-subtab" data-subtab="stage3" onclick="showUbdSubtab('stage3')">Stage 3</button>
+              <button class="ubd-subtab" data-subtab="report" onclick="showUbdSubtab('report')">Report</button>
+            </div>
+            <div class="ubd-editor-body" id="ubdEditorBody">
+              <div class="ubd-no-map-state">
+                <div class="icon">&#128218;</div>
+                <p>Select a unit from the list to begin editing its UBD plan.</p>
+              </div>
+            </div>
+            <div class="ubd-editor-footer">
+              <button class="btn btn-success" onclick="saveUbdPlan()">&#128190; Save</button>
+              <button class="btn btn-outline" onclick="validateUbdPlan()">&#10003; Validate</button>
+              <button class="btn btn-outline" onclick="exportUbdPlan()">&#128196; Export</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress Dashboard View -->
+      <div id="progressView" class="view" role="tabpanel" aria-labelledby="progressTab">
+        <div class="pgd-layout">
+          <!-- Browser Panel (left) -->
+          <div class="pgd-browser">
+            <div class="scroll-container">
+              <div class="card">
+                <div class="card-header">
+                  <h2 id="progressViewTitle">Student Progress</h2>
+                  <div id="progressToolbar" style="display:flex; gap:8px; align-items:center;">
+                    <button class="pf-export-btn" id="pfExportBtn" onclick="pfExportToDoc()" style="display:none;">&#128228; Export to Google Doc</button>
+                    <button class="btn btn-outline btn-small" id="progressExportBtn" onclick="exportProgressCsv()" style="display:none;">Export CSV</button>
+                  </div>
+                </div>
+                <!-- Student sub-nav: My Progress vs My Portfolio -->
+                <div id="pfStudentSubNav" class="pf-subnav" style="display:none;">
+                  <button class="pf-subnav-btn active" data-pf-view="progress" onclick="pfSwitchSubNav('progress')">My Progress</button>
+                  <button class="pf-subnav-btn" data-pf-view="portfolio" onclick="pfSwitchSubNav('portfolio')">My Portfolio</button>
+                </div>
+
+                <!-- Sub-nav: Class Progress vs Course Analytics (teacher/admin only) -->
+                <div id="progressSubNav" class="cad-subnav" style="display:none;">
+                  <button class="cad-subnav-btn active" onclick="switchProgressSubNav('classProgress')">Class Progress</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('courseAnalytics')">Course Analytics</button>
+                  <button class="cad-subnav-btn" data-tour="knowledge-gaps" onclick="switchProgressSubNav('knowledgeGaps')">Knowledge Gaps</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('formativeChecks')">Formative Checks</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('supportInsights')">Support Insights</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('pblInsights')">PBL Insights</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('noteInsights')">Note Insights</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('myReminders')">My Reminders</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('difInsights')">Group Insights</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('gradeReview')">Grade &amp; Review</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('portfolioInsights')">Portfolio Insights</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('labInsights')">Lab Insights</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('lessonInsights')">Lesson Insights</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('reviewInsights')">Review Insights</button>
+                  <button class="cad-subnav-btn" onclick="switchProgressSubNav('compAtl')">Competency &amp; ATL</button>
+                </div>
+
+                <!-- Class Progress sub-view (default) -->
+                <div id="classProgressContainer">
+                  <!-- Teacher: class + map selector bar -->
+                  <div id="progressSelectorBar" style="display:none;">
+                    <div class="pgd-selector-bar">
+                      <div class="pgd-selector-group">
+                        <label>Class</label>
+                        <select id="progressClassSelect" onchange="onProgressClassChange(this.value)">
+                          <option value="">-- Select Class --</option>
+                        </select>
+                      </div>
+                      <div class="pgd-selector-group">
+                        <label>Map</label>
+                        <select id="progressMapSelect" onchange="onProgressMapChange(this.value)" disabled>
+                          <option value="">-- Select Map --</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="progressContent">
+                    <div class="loading"><span class="loading-spinner"></span> Loading progress data...</div>
+                  </div>
+                </div>
+
+                <!-- Student Portfolio container -->
+                <div id="pfPortfolioContainer" style="display:none;"></div>
+
+                <!-- Course Analytics sub-view (teacher/admin only) -->
+                <div id="courseAnalyticsContainer" style="display:none;">
+                  <div class="cad-selector" style="padding:16px 24px;">
+                    <div class="pgd-selector-group">
+                      <label>Course</label>
+                      <select id="cadCourseSelect" onchange="onCadCourseChange(this.value)">
+                        <option value="">-- Select Course --</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div id="cadContent">
+                    <div class="cad-empty"><div class="icon">&#128202;</div><p>Select a course to view analytics.</p></div>
+                  </div>
+                </div>
+
+                <div id="knowledgeGapContainer" style="display:none;">
+                  <div id="knowledgeGapContent">
+                    <div class="kga-empty"><div class="icon">&#128269;</div><p>Select a class and map in Class Progress, then switch to Knowledge Gaps.</p></div>
+                  </div>
+                </div>
+
+                <div id="formativeChecksContainer" style="display:none;">
+                  <div id="formativeChecksContent">
+                    <div class="fcl-empty"><div class="icon">&#128203;</div><p>Select a class and map in Class Progress, then switch to Formative Checks.</p></div>
+                  </div>
+                </div>
+
+                <div id="supportInsightsContainer" style="display:none;">
+                  <div id="supportInsightsContent">
+                    <div class="tsd-empty"><div class="icon">&#128161;</div><p>Select a class and map in Class Progress, then switch to Support Insights.</p></div>
+                  </div>
+                </div>
+
+                <div id="pblInsightsContainer" style="display:none;">
+                  <div id="pblInsightsContent">
+                    <div class="pbl-empty"><div class="icon">&#128202;</div><p>Select a class and map in Class Progress, then switch to PBL Insights.</p></div>
+                  </div>
+                </div>
+
+                <div id="noteInsightsContainer" style="display:none;">
+                  <div id="noteInsightsContent"></div>
+                </div>
+
+                <div id="myRemindersContainer" style="display:none;"></div>
+                <div id="difInsightsContainer" style="display:none;"><div id="difInsightsContent"></div></div>
+                <div id="gradeReviewContainer" style="display:none;"><div id="gradeReviewContent"></div></div>
+                <div id="portfolioInsightsContainer" style="display:none;"></div>
+                <div id="labInsightsContainer" style="display:none;"><div id="labInsightsContent"></div></div>
+                <div id="lessonInsightsContainer" style="display:none;"></div>
+                <div id="reviewInsightsContainer" style="display:none;"><div id="reviewInsightsContent"></div></div>
+                <div id="compAtlContainer" style="display:none;"><div id="compAtlContent"></div></div>
+              </div>
+            </div>
+          </div>
+          <!-- Detail Panel (right) -->
+          <div class="pgd-detail-panel" id="progressDetailPanel">
+            <div class="pgd-detail-header">
+              <h3 id="progressDetailTitle">Student Details</h3>
+              <button class="btn btn-ghost btn-small" onclick="closeProgressDetail()" aria-label="Close student details">&times;</button>
+            </div>
+            <div class="pgd-detail-body" id="progressDetailBody">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Student Planner View (Students Only) -->
+      <div id="plannerView" class="view" role="tabpanel" aria-labelledby="plannerTab">
+        <div class="pln-layout">
+          <div class="pln-task-panel" id="plannerTaskPanel">
+            <div id="ascPlannerPanel"></div>
+            <div id="stlSection"></div>
+            <div id="uclSection"></div>
+            <div id="pjrSection"></div>
+            <div class="pln-stats-bar" id="plannerStats"></div>
+            <div class="pln-filter-bar" id="plannerFilters"></div>
+            <div id="plnStrategyBanner"></div>
+            <div class="pln-task-list" id="plannerTaskList">
+              <div class="pln-empty-state"><div class="pln-empty-icon">&#128203;</div><div class="pln-empty-title">Loading...</div></div>
+            </div>
+          </div>
+          <div class="pln-schedule-panel" id="plannerSchedulePanel">
+            <div class="pln-schedule-placeholder" id="plannerSchedulePlaceholder"></div>
+          </div>
+        </div>
+        <!-- My Notebook Panel (student only, Cornell Notes PARA browser) -->
+        <div id="cnNotebookPanel" class="cn-notebook-panel" style="display:none;"></div>
+        <!-- Badge Gallery (student only, celebrations) -->
+        <div id="celBadgeGallery" data-tour="cel-badge-area" style="display:none;"></div>
+        <!-- ATL Toolkit Panel (student only) -->
+        <div class="atl-toolkit-panel" id="atlToolkitPanel">
+          <div class="atl-toolkit-header">
+            <div class="atl-toolkit-title">&#127891; Approaches to Learning</div>
+            <button class="atl-toolkit-toggle" id="atlToggleBtn" onclick="toggleATLToolkit()">Hide ATL Toolkit</button>
+          </div>
+          <div id="atlToolkitContainer"></div>
+        </div>
+      </div>
+
+      <!-- Study Dashboard View (Student Only) -->
+      <div id="studyDashView" class="view" role="tabpanel" aria-labelledby="studyDashTab">
+        <div class="scroll-container">
+          <div class="ssd-loading">Loading your study data...</div>
+        </div>
+      </div>
+
+      <!-- Settings View (Admin Only) -->
+      <div id="settingsView" class="view" role="tabpanel" aria-labelledby="settingsTab">
+        <div class="scroll-container">
+          <div id="settingsContent">
+            <div class="loading"><span class="loading-spinner"></span> Loading settings...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Integrations View (Admin/Teacher) -->
+      <div id="integrationsView" class="view" role="tabpanel" aria-labelledby="integrationsTab">
+        <div class="scroll-container">
+          <div id="integrationsContent">
+            <div class="loading"><span class="loading-spinner"></span> Loading integrations...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CollabSpace View (All roles) -->
+      <div id="collabView" class="view" role="tabpanel" aria-labelledby="collabTab">
+        <div class="scroll-container">
+          <div class="colab-view-container" id="colabBoardListContainer">
+            <div class="colab-loading"><span class="loading-spinner"></span> Loading boards...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Teaching Methods Guide View (Teacher-only) -->
+      <div id="teachingMethodsView" class="view" role="tabpanel" aria-labelledby="teachingMethodsTab">
+        <div class="tmg-subnav" id="tmgSubNav">
+          <button class="tmg-subnav-btn active" onclick="switchTmgSection('gettingStarted')">Getting Started</button>
+          <button class="tmg-subnav-btn" onclick="switchTmgSection('concepts')">Key Concepts</button>
+          <button class="tmg-subnav-btn" onclick="switchTmgSection('demo')">Interactive Demo</button>
+          <button class="tmg-subnav-btn" onclick="switchTmgSection('setup')">Setup Guide</button>
+          <button class="tmg-subnav-btn" onclick="switchTmgSection('templates')">Templates</button>
+          <button class="tmg-subnav-btn" onclick="switchTmgSection('strategies')">Research Strategies</button>
+        </div>
+        <div class="scroll-container">
+          <div id="tmgSectionGettingStarted" class="tmg-section-panel"></div>
+          <div id="tmgSectionConcepts" class="tmg-section-panel" style="display:none;"></div>
+          <div id="tmgSectionDemo" class="tmg-section-panel" style="display:none;"></div>
+          <div id="tmgSectionSetup" class="tmg-section-panel" style="display:none;"></div>
+          <div id="tmgSectionTemplates" class="tmg-section-panel" style="display:none;"></div>
+          <div id="tmgSectionStrategies" class="tmg-section-panel" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- EAL Strategies Guide View (Teacher-only) -->
+      <div id="ealStrategiesView" class="view" role="tabpanel" aria-labelledby="ealStrategiesTab">
+        <div class="esg-subnav" id="esgSubNav">
+          <button class="esg-subnav-btn active" onclick="switchEsgSection('gettingStarted')">Getting Started</button>
+          <button class="esg-subnav-btn" onclick="switchEsgSection('concepts')">Key Concepts</button>
+          <button class="esg-subnav-btn" onclick="switchEsgSection('demo')">How It Works</button>
+          <button class="esg-subnav-btn" onclick="switchEsgSection('setup')">Setup Guide</button>
+          <button class="esg-subnav-btn" onclick="switchEsgSection('gallery')">Strategy Gallery</button>
+        </div>
+        <div class="scroll-container">
+          <div id="esgSectionGettingStarted" class="esg-section-panel"></div>
+          <div id="esgSectionConcepts" class="esg-section-panel" style="display:none;"></div>
+          <div id="esgSectionDemo" class="esg-section-panel" style="display:none;"></div>
+          <div id="esgSectionSetup" class="esg-section-panel" style="display:none;"></div>
+          <div id="esgSectionGallery" class="esg-section-panel" style="display:none;"></div>
+        </div>
+      </div>
+
+    </div>
+    </main>
+  </div>
+
+  <!-- Floating Dictionary Panel (Student View) -->
+  <div class="dct-dict-panel" id="dctDictPanel">
+    <div class="dct-panel-header">
+      <span class="dct-panel-title">&#128218; Dictionary</span>
+      <button class="dct-panel-close" onclick="dctCloseDictPanel()" title="Close" aria-label="Close dictionary">&times;</button>
+    </div>
+    <div class="dct-panel-search">
+      <input class="dct-panel-search-input" id="dctDictSearch" placeholder="Search terms..." oninput="dctFilterDict()">
+    </div>
+    <div class="dct-panel-body" id="dctDictPanelBody"></div>
+  </div>
+
+  <!-- Dictionary Trigger Button (Student View) -->
+  <button class="dct-dict-trigger" id="dctDictTrigger" onclick="dctOpenDictPanel()" title="Open Dictionary">Aa</button>
+
+  <!-- Inline Content Modal (for students) -->
+  <div class="content-modal-overlay" id="contentModal" role="dialog" aria-modal="true" aria-labelledby="contentModalTitle">
+    <div class="content-modal">
+      <div class="content-modal-header">
+        <h2 id="contentModalTitle">Content Title</h2>
+        <span class="content-type-badge" id="contentModalType">Text</span>
+        <button class="csb-toggle-btn" id="csbToggleBtn" onclick="csbToggleSidebar()" title="Toggle supports sidebar" aria-label="Toggle supports sidebar" style="display:none;">&#128203;</button>
+        <button class="content-modal-close-x" onclick="closeContentModal()" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="content-modal-body">
+        <div class="csb-main" id="csbMainColumn">
+          <div id="contentModalStatus" style="display:none;"></div>
+          <div id="ascHexContext" class="asc-hex-context"></div>
+          <div class="content-text" id="contentModalBody">Content goes here...</div>
+        </div>
+        <div class="csb-sidebar csb-hidden" id="csbSidebar">
+          <div class="csb-sidebar-header">
+            <span class="csb-sidebar-title">My Tools</span>
+            <button class="csb-sidebar-close" onclick="csbToggleSidebar()" title="Hide sidebar" aria-label="Hide sidebar">&times;</button>
+          </div>
+          <div class="csb-sidebar-body" id="csbSidebarBody"></div>
+        </div>
+      </div>
+      <div class="content-modal-footer" id="contentModalFooter">
+        <button class="btn" onclick="closeContentModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Formative Check Modal -->
+  <div class="fcl-modal-overlay" id="fclModalOverlay" onclick="if(event.target===this)closeFclModal()">
+    <div class="fcl-modal" onclick="event.stopPropagation()">
+      <div class="fcl-modal-header">
+        <span class="fcl-modal-title">Log Formative Check</span>
+        <span class="fcl-modal-hex-label" id="fclHexLabel"></span>
+        <button class="fcl-close-btn" onclick="closeFclModal()" aria-label="Close formative check">&times;</button>
+      </div>
+      <div class="fcl-modal-body">
+        <!-- Log Mode -->
+        <div id="fclLogView">
+          <div class="fcl-form-group">
+            <label class="fcl-label">Class</label>
+            <select class="fcl-select" id="fclClassSelect" onchange="fclOnClassChange(this.value)">
+              <option value="">-- Select Class --</option>
+            </select>
+          </div>
+
+          <div class="fcl-form-group">
+            <label class="fcl-label">Date</label>
+            <input type="date" class="fcl-date-input" id="fclDateInput">
+          </div>
+
+          <div class="fcl-form-group">
+            <label class="fcl-label">Strategy</label>
+            <div class="fcl-strategy-chips" id="fclStrategyChips"></div>
+          </div>
+
+          <div class="fcl-form-group">
+            <label class="fcl-label">Topic</label>
+            <input type="text" class="fcl-topic-input" id="fclTopicInput" placeholder="What did you check?" maxlength="150">
+          </div>
+
+          <div class="fcl-form-group">
+            <label class="fcl-label">Notes</label>
+            <textarea class="fcl-notes-area" id="fclNotesArea" placeholder="What did you observe?" maxlength="500" oninput="fclUpdateNotesCount()"></textarea>
+            <div class="fcl-char-count" id="fclNotesCount">0 / 500</div>
+          </div>
+
+          <div class="fcl-form-group">
+            <div class="fcl-student-section">
+              <button class="fcl-student-toggle" onclick="fclToggleStudents()">
+                <span class="fcl-student-toggle-chevron" id="fclStudentChevron">&#9654;</span>
+                Tag Students (optional)
+                <span class="fcl-student-toggle-count" id="fclStudentToggleCount"></span>
+              </button>
+              <div class="fcl-student-body" id="fclStudentBody">
+                <input type="text" class="fcl-student-filter" id="fclStudentFilter" placeholder="Filter students..." oninput="fclFilterStudents(this.value)">
+                <div class="fcl-student-list" id="fclStudentList"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- History Mode -->
+        <div id="fclHistoryView" style="display:none;">
+          <div id="fclHistoryContent"></div>
+        </div>
+      </div>
+      <div class="fcl-modal-footer">
+        <button class="fcl-mode-link" id="fclModeLink" onclick="fclSwitchMode('history')">View History &#8594;</button>
+        <button class="fcl-save-btn" id="fclSaveBtn" onclick="fclSaveCheck()">Save Check</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assessment Builder Modal -->
+  <div class="efa-builder-overlay" id="efaBuilderOverlay" onclick="if(event.target===this)closeAssessmentBuilder()">
+    <div class="efa-builder-modal" onclick="event.stopPropagation()">
+      <div class="efa-builder-header">
+        <span class="efa-builder-title">Assessment Builder</span>
+        <span class="efa-builder-hex-label" id="efaBuilderHexLabel"></span>
+        <button class="efa-close-btn" onclick="closeAssessmentBuilder()" aria-label="Close assessment builder">&times;</button>
+      </div>
+      <div class="efa-builder-body">
+        <div class="efa-settings-panel">
+          <div class="efa-form-row">
+            <div class="efa-form-group">
+              <label>Title</label>
+              <input type="text" id="efaTitle" placeholder="Assessment title..." maxlength="100">
+            </div>
+          </div>
+          <div class="efa-form-row">
+            <div class="efa-form-group">
+              <label>Passing Score (%)</label>
+              <input type="number" id="efaPassingScore" min="0" max="100" value="70">
+            </div>
+            <div class="efa-form-group">
+              <label>Max Attempts</label>
+              <input type="number" id="efaMaxAttempts" min="0" max="99" value="3" title="0 = unlimited">
+            </div>
+            <div class="efa-form-group">
+              <label>Time Limit (min)</label>
+              <input type="number" id="efaTimeLimit" min="0" max="999" value="0" title="0 = no limit">
+            </div>
+          </div>
+          <div class="efa-form-group">
+            <label>Description</label>
+            <textarea id="efaDescription" placeholder="Brief description..." maxlength="300"></textarea>
+          </div>
+        </div>
+        <div class="efa-q-toolbar">
+          <span class="efa-q-toolbar-label">Questions</span>
+          <div class="efa-add-buttons">
+            <button class="efa-add-btn" onclick="efaAddQuestion('multiple_choice')">+ MC</button>
+            <button class="efa-add-btn" onclick="efaAddQuestion('short_answer')">+ Short</button>
+            <button class="efa-add-btn" onclick="efaAddQuestion('matching')">+ Match</button>
+            <button class="efa-add-btn" onclick="efaAddQuestion('ordering')">+ Order</button>
+          </div>
+        </div>
+        <div id="efaQuestionList"></div>
+        <div id="efaPreviewContainer" style="display:none;"></div>
+      </div>
+      <div class="efa-builder-footer">
+        <button class="efa-preview-btn" id="efaPreviewBtn" onclick="efaTogglePreview()">Preview</button>
+        <button class="efa-save-btn" onclick="efaSaveAssessment()">Save Assessment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Course Modal (Story 2.1) -->
+  <div class="modal-overlay" id="courseModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="courseModalTitle">Create New Course</h3>
+        <button class="modal-close" onclick="closeCourseModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="courseFormId">
+        <div class="form-group">
+          <label class="form-label">Course Title <span class="required">*</span></label>
+          <input type="text" class="form-input" id="courseFormTitle" placeholder="e.g., Chemistry 101">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Department <span class="required">*</span></label>
+            <select class="form-select" id="courseFormDepartment">
+              <option value="">-- Select --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Grade Level <span class="required">*</span></label>
+            <select class="form-select" id="courseFormGradeLevel">
+              <option value="">-- Select --</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Academic Year <span class="required">*</span></label>
+          <select class="form-select" id="courseFormYear"></select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Standards Framework</label>
+            <select class="form-select" id="courseFormStdFramework" onchange="onCourseFrameworkChange()">
+              <option value="">None</option>
+              <option value="AP">AP</option>
+              <option value="IB-MYP">IB-MYP</option>
+              <option value="NGSS">NGSS</option>
+              <option value="CCSS">CCSS</option>
+              <option value="Custom">Custom</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Subject</label>
+            <select class="form-select" id="courseFormStdSubject" disabled>
+              <option value="">Select framework first</option>
+            </select>
+          </div>
+        </div>
+        <div class="grd-editor" id="gradingEditor">
+          <!-- Primary Scale -->
+          <div class="grd-scale-section">
+            <div class="grd-scale-header">
+              <label class="form-label">Primary Grading Scale</label>
+            </div>
+            <select class="form-select" id="grdPrimaryPreset" onchange="onGradingPresetChange('primary')">
+              <option value="">Loading...</option>
+            </select>
+            <div class="grd-customize-toggle">
+              <a href="#" onclick="toggleGradingCustomize('primary'); return false;" id="grdPrimaryCustomizeLink">Customize...</a>
+              <span class="grd-reset-link" id="grdPrimaryResetLink" style="display:none;" onclick="resetToPreset('primary')">Reset to preset</span>
+            </div>
+            <div class="grd-customize-panel" id="grdPrimaryCustomize" style="display:none;">
+              <div id="grdPrimaryEditor"></div>
+            </div>
+          </div>
+          <!-- Secondary Scale (hidden by default) -->
+          <div class="grd-scale-section" id="grdSecondarySection" style="display:none;">
+            <div class="grd-scale-header">
+              <label class="form-label">Secondary Grading Scale</label>
+              <button class="btn btn-ghost btn-small" type="button" onclick="removeSecondaryScale()" aria-label="Remove secondary scale">&times; Remove</button>
+            </div>
+            <select class="form-select" id="grdSecondaryPreset" onchange="onGradingPresetChange('secondary')">
+              <option value="">Loading...</option>
+            </select>
+            <div class="grd-customize-toggle">
+              <a href="#" onclick="toggleGradingCustomize('secondary'); return false;" id="grdSecondaryCustomizeLink">Customize...</a>
+              <span class="grd-reset-link" id="grdSecondaryResetLink" style="display:none;" onclick="resetToPreset('secondary')">Reset to preset</span>
+            </div>
+            <div class="grd-customize-panel" id="grdSecondaryCustomize" style="display:none;">
+              <div id="grdSecondaryEditor"></div>
+            </div>
+          </div>
+          <div id="grdAddSecondaryRow">
+            <button class="btn btn-outline btn-small" type="button" onclick="addSecondaryScale()">+ Add Secondary Scale</button>
+          </div>
+          <!-- Combined Preview -->
+          <div id="gradingPreview" class="grading-preview" style="display:none;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeCourseModal()">Cancel</button>
+        <button class="btn btn-success" onclick="saveCourse()">Save Course</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unit Modal (Story 2.1b) -->
+  <div class="modal-overlay" id="unitModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="unitModalTitle">Create New Unit</h3>
+        <button class="modal-close" onclick="closeUnitModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="unitFormId">
+        <input type="hidden" id="unitFormCourseId">
+        <div class="form-group">
+          <label class="form-label">Unit Title <span class="required">*</span></label>
+          <input type="text" class="form-input" id="unitFormTitle" placeholder="e.g., Introduction to Forces">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="unitFormStatus">
+            <option value="active">Active</option>
+            <option value="draft">Draft</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Link to Map</label>
+          <select class="form-select" id="unitFormMapId">
+            <option value="">-- No Map Linked --</option>
+          </select>
+          <div class="form-hint">Link this unit to an existing learning map</div>
+        </div>
+
+        <!-- PBL / Design Thinking Section -->
+        <div class="dtk-pbl-section" id="dtkPblSection">
+          <div class="dtk-pbl-toggle-row">
+            <div>
+              <div class="dtk-pbl-toggle-label">Enable PBL / Design Thinking</div>
+              <div class="dtk-pbl-toggle-hint">Adds design phases, checkpoints, iteration, and peer feedback to this unit</div>
+            </div>
+            <label class="dtk-toggle">
+              <input type="checkbox" id="dtkPblEnabled" onchange="dtkTogglePbl()">
+              <span class="dtk-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="dtk-framework-config" id="dtkFrameworkConfig">
+            <div class="dtk-framework-label">Design Thinking Framework</div>
+            <select class="dtk-framework-select" id="dtkFrameworkSelect" onchange="dtkOnFrameworkChange()">
+              <option value="dschool">d.school 5-Phase</option>
+              <option value="doubleDiamond">Double Diamond</option>
+              <option value="ibDesign">IB Design Cycle</option>
+              <option value="custom">Custom Framework</option>
+            </select>
+            <div class="dtk-phase-list" id="dtkPhaseList"></div>
+            <div class="dtk-custom-editor" id="dtkCustomEditor" style="display:none;"></div>
+          </div>
+        </div>
+
+        <!-- Academic Vocabulary Section -->
+        <div id="dctUnitVocabSection"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeUnitModal()">Cancel</button>
+        <button class="btn btn-success" onclick="saveUnitFromModal()">Save Unit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lesson Modal — Rich Editor (Story 2.2) -->
+  <div class="modal-overlay" id="lessonModal">
+    <div class="modal lsn-modal">
+      <div class="modal-header">
+        <h3 id="lessonModalTitle">Create New Lesson</h3>
+        <button class="modal-close" onclick="closeLessonModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="lessonFormId">
+        <input type="hidden" id="lessonFormUnitId">
+
+        <!-- Section 1: Basic Info (open) -->
+        <div class="lsn-section" id="lsnSec-basic">
+          <div class="lsn-section-header" onclick="toggleLessonSection('basic')">
+            <span class="lsn-section-title">Basic Info</span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <div class="form-group">
+              <label class="form-label">Lesson Title <span class="required">*</span></label>
+              <input type="text" class="form-input" id="lessonFormTitle" placeholder="e.g., Introduction to Newton's Laws">
+            </div>
+            <div class="lsn-row">
+              <div>
+                <label class="form-label">Duration</label>
+                <input type="text" class="form-input" id="lessonFormDuration" placeholder="e.g., 45 min">
+              </div>
+              <div>
+                <label class="form-label">Status</label>
+                <select class="form-select" id="lessonFormStatus">
+                  <option value="active">Active</option>
+                  <option value="draft">Draft</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Linked Hex Nodes</label>
+              <div class="form-hint">Select which map hexes this lesson covers</div>
+              <div id="lessonHexCheckboxes">
+                <div class="hex-checkbox-empty">Loading...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Learning Objectives (open) -->
+        <div class="lsn-section" id="lsnSec-objectives">
+          <div class="lsn-section-header" onclick="toggleLessonSection('objectives')">
+            <span class="lsn-section-title">Learning Objectives</span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <textarea class="lsn-form-textarea tall" id="lessonFormObjectives" rows="4" placeholder="Students will be able to...&#10;Identify key concepts...&#10;Apply understanding to..."></textarea>
+          </div>
+        </div>
+
+        <!-- Section: Standards Alignment (collapsed) -->
+        <div class="lsn-section lsn-collapsed" id="lsnSec-standards">
+          <div class="lsn-section-header" onclick="toggleLessonSection('standards')">
+            <span class="lsn-section-title">Standards Alignment <span class="lsn-badge" id="lessonStandardsBadge" style="display:none;">0</span></span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <div class="sal-lesson-picker">
+              <div class="std-scope-indicator" style="display:none;"></div>
+              <div class="sal-lesson-search-row">
+                <input type="text" class="form-input" id="lessonStandardsSearch" placeholder="Search standards by code or description..." oninput="searchStandardsForLesson(this.value)">
+              </div>
+              <div class="sal-lesson-results" id="lessonStandardsResults"></div>
+              <div class="sal-lesson-tags" id="lessonStandardsTags">
+                <span style="color:#94a3b8;font-size:12px;">No standards linked yet</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 3: Lesson Sequence (open) -->
+        <div class="lsn-section" id="lsnSec-sequence">
+          <div class="lsn-section-header" onclick="toggleLessonSection('sequence')">
+            <span class="lsn-section-title">Lesson Sequence</span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <!-- Opening Activity -->
+            <div class="lsn-activity-card">
+              <div class="lsn-activity-card-header">
+                <span class="lsn-activity-card-label">Opening Activity</span>
+              </div>
+              <div class="lsn-template-row">
+                <select class="lsn-template-select" id="lsnTmplOpening"><option value="">-- Template --</option></select>
+                <button class="lsn-template-apply" onclick="applyActivityTemplate('opening')">Apply</button>
+              </div>
+              <input type="text" class="lsn-form-input" id="lsnOpeningName" placeholder="Activity name" style="margin-bottom:4px;">
+              <textarea class="lsn-form-textarea" id="lsnOpeningDesc" rows="2" placeholder="Description..."></textarea>
+              <input type="text" class="lsn-form-input" id="lsnOpeningDuration" placeholder="Duration (e.g., 10 min)" style="margin-top:4px;">
+            </div>
+
+            <!-- Main Activities (dynamic list) -->
+            <div style="margin-bottom:8px;">
+              <div class="lsn-activity-card-label" style="margin-bottom:6px;">Main Activities</div>
+              <div id="lsnMainActivitiesList"></div>
+              <button class="lsn-add-btn" onclick="addMainActivity()">+ Add Main Activity</button>
+            </div>
+
+            <!-- Closing Activity -->
+            <div class="lsn-activity-card">
+              <div class="lsn-activity-card-header">
+                <span class="lsn-activity-card-label">Closing Activity</span>
+              </div>
+              <div class="lsn-template-row">
+                <select class="lsn-template-select" id="lsnTmplClosing"><option value="">-- Template --</option></select>
+                <button class="lsn-template-apply" onclick="applyActivityTemplate('closing')">Apply</button>
+              </div>
+              <input type="text" class="lsn-form-input" id="lsnClosingName" placeholder="Activity name" style="margin-bottom:4px;">
+              <textarea class="lsn-form-textarea" id="lsnClosingDesc" rows="2" placeholder="Description..."></textarea>
+              <input type="text" class="lsn-form-input" id="lsnClosingDuration" placeholder="Duration (e.g., 5 min)" style="margin-top:4px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 4: UDL Differentiation (collapsed) -->
+        <div class="lsn-section lsn-collapsed" id="lsnSec-udl">
+          <div class="lsn-section-header" onclick="toggleLessonSection('udl')">
+            <span class="lsn-section-title">UDL Differentiation <span class="lsn-section-badge empty" id="lsnUdlBadge">0</span></span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <div class="lsn-udl-principle representation" id="lsnUdlRepresentation">
+              <div class="lsn-udl-label">Representation (The &ldquo;What&rdquo;)</div>
+              <div class="lsn-chips-wrap" id="lsnChips-representation"></div>
+              <textarea class="lsn-form-textarea" id="lsnUdlCustom-representation" rows="2" placeholder="Custom strategies..."></textarea>
+            </div>
+            <div class="lsn-udl-principle action-expression" id="lsnUdlActionExpression">
+              <div class="lsn-udl-label">Action &amp; Expression (The &ldquo;How&rdquo;)</div>
+              <div class="lsn-chips-wrap" id="lsnChips-actionExpression"></div>
+              <textarea class="lsn-form-textarea" id="lsnUdlCustom-actionExpression" rows="2" placeholder="Custom strategies..."></textarea>
+            </div>
+            <div class="lsn-udl-principle engagement" id="lsnUdlEngagement">
+              <div class="lsn-udl-label">Engagement (The &ldquo;Why&rdquo;)</div>
+              <div class="lsn-chips-wrap" id="lsnChips-engagement"></div>
+              <textarea class="lsn-form-textarea" id="lsnUdlCustom-engagement" rows="2" placeholder="Custom strategies..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 5: Assessment (collapsed) -->
+        <div class="lsn-section lsn-collapsed" id="lsnSec-assessment">
+          <div class="lsn-section-header" onclick="toggleLessonSection('assessment')">
+            <span class="lsn-section-title">Assessment <span class="lsn-section-badge empty" id="lsnAssessBadge">0</span></span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <div class="lsn-small-label">Formative Assessment Strategy</div>
+            <div class="lsn-assess-row">
+              <select class="lsn-assess-select" id="lsnAssessSelect"><option value="">-- Strategy --</option></select>
+              <button class="lsn-assess-apply" onclick="applyAssessmentTemplate()">Apply</button>
+            </div>
+            <textarea class="lsn-form-textarea" id="lsnFormativeAssessment" rows="3" placeholder="How will you check for understanding?"></textarea>
+            <div class="lsn-small-label" style="margin-top:10px;">Success Criteria</div>
+            <div id="lsnSuccessCriteriaList"></div>
+            <button class="lsn-add-btn" onclick="addSuccessCriteria()">+ Add Criterion</button>
+          </div>
+        </div>
+
+        <!-- Section 6: Materials & Resources (collapsed) -->
+        <div class="lsn-section lsn-collapsed" id="lsnSec-materials">
+          <div class="lsn-section-header" onclick="toggleLessonSection('materials')">
+            <span class="lsn-section-title">Materials &amp; Resources</span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <div class="lsn-small-label">Materials</div>
+            <textarea class="lsn-form-textarea" id="lessonFormMaterials" rows="3" placeholder="Textbook Ch. 3&#10;Worksheet handout&#10;Lab equipment"></textarea>
+            <div class="lsn-small-label" style="margin-top:10px;">Resources / Links</div>
+            <textarea class="lsn-form-textarea" id="lsnResources" rows="3" placeholder="Khan Academy link&#10;YouTube video&#10;Google Slides deck"></textarea>
+          </div>
+        </div>
+
+        <!-- Section 7: Teacher Notes (collapsed) -->
+        <div class="lsn-section lsn-collapsed" id="lsnSec-notes">
+          <div class="lsn-section-header" onclick="toggleLessonSection('notes')">
+            <span class="lsn-section-title">Teacher Notes</span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <div class="lsn-small-label">Notes</div>
+            <textarea class="lsn-form-textarea tall" id="lsnTeacherNotes" rows="3" placeholder="Pacing notes, reminders, room setup..."></textarea>
+            <div class="lsn-small-label" style="margin-top:10px;">Modifications / Accommodations</div>
+            <textarea class="lsn-form-textarea" id="lsnModifications" rows="3" placeholder="ELL supports, IEP accommodations, extensions..."></textarea>
+          </div>
+        </div>
+
+        <!-- Section 8: Student Accommodations (auto-loaded from support profiles) -->
+        <div class="lsn-section lsn-collapsed" id="lsnSec-accommodations">
+          <div class="lsn-section-header" onclick="toggleLessonSection('accommodations')">
+            <span class="lsn-section-title">Student Accommodations</span>
+            <span class="ssp-reminder-badge" id="lsnAccommodationCount" style="display:none;">0</span>
+            <span class="lsn-section-chevron">&#9660;</span>
+          </div>
+          <div class="lsn-section-body">
+            <div id="lsnAccommodationsContent">
+              <div class="loading">Checking for student accommodations...</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeLessonModal()">Cancel</button>
+        <button class="btn btn-success" onclick="saveLessonFromModal()">Save Lesson</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Standard Modal (Story 2.3) -->
+  <div class="modal-overlay" id="standardModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="standardModalTitle">Add Standard</h3>
+        <button class="modal-close" onclick="closeStandardModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="standardFormId">
+        <div class="form-group" style="display:flex; gap:12px;">
+          <div style="flex:1;">
+            <label class="form-label">Code <span class="required">*</span></label>
+            <input type="text" class="form-input" id="standardFormCode" placeholder="e.g., HS-PS1-1">
+          </div>
+          <div style="flex:1;">
+            <label class="form-label">Framework <span class="required">*</span></label>
+            <select class="form-select" id="standardFormFramework">
+              <option value="NGSS">NGSS</option>
+              <option value="CCSS">CCSS</option>
+              <option value="IB-MYP">IB-MYP</option>
+              <option value="AP">AP</option>
+              <option value="Custom">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-input" id="standardFormDescription" rows="2" placeholder="What students should know and be able to do..."></textarea>
+        </div>
+        <div class="form-group" style="display:flex; gap:12px;">
+          <div style="flex:1;">
+            <label class="form-label">Subject</label>
+            <input type="text" class="form-input" id="standardFormSubject" placeholder="e.g., Science">
+          </div>
+          <div style="flex:1;">
+            <label class="form-label">Grade Level</label>
+            <input type="text" class="form-input" id="standardFormGradeLevel" placeholder="e.g., High School">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Strand</label>
+          <input type="text" class="form-input" id="standardFormStrand" placeholder="e.g., Physical Science">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeStandardModal()">Cancel</button>
+        <button class="btn btn-success" onclick="saveStandardFromModal()">Save Standard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Class Modal -->
+  <div class="modal-overlay" id="classModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="classModalTitle">Create New Class</h3>
+        <button class="modal-close" onclick="closeClassModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="classFormId">
+        <div class="form-group">
+          <label class="form-label">Class Name <span class="required">*</span></label>
+          <input type="text" class="form-input" id="classFormName" placeholder="e.g., Period 1 - Chemistry">
+          <div class="form-hint">Display name for this class section</div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Course Name</label>
+            <input type="text" class="form-input" id="classFormCourseName" placeholder="e.g., Chemistry 101">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Section ID</label>
+            <input type="text" class="form-input" id="classFormSectionId" placeholder="e.g., SCI-101-P1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Subject <span class="required">*</span></label>
+            <select class="form-select" id="classFormSubject">
+              <option value="">-- Select Subject --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Academic Year <span class="required">*</span></label>
+            <select class="form-select" id="classFormYear"></select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeClassModal()">Cancel</button>
+        <button class="btn btn-success" onclick="saveClass()">Save Class</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roster Modal -->
+  <div class="modal-overlay" id="rosterModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3 id="rosterModalTitle">Manage Students</h3>
+        <button class="modal-close" onclick="closeRosterModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="rosterClassId">
+        <div class="roster-section">
+          <div class="roster-section-title">Bulk Add Students</div>
+          <div class="form-group">
+            <label class="form-label">Student Emails</label>
+            <textarea class="form-textarea" id="rosterAddEmails" placeholder="Enter student emails, one per line or comma-separated"></textarea>
+          </div>
+          <button class="btn" onclick="addStudentsToRoster()">Add Students</button>
+        </div>
+        <div class="roster-section">
+          <div class="roster-section-title">Current Roster (<span id="rosterCount">0</span> students)</div>
+          <div id="rosterList" class="roster-list">
+            <div class="roster-empty">No students enrolled yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Support Profiles Panel (opened from roster) -->
+  <div class="modal-overlay" id="sspProfileListOverlay" style="display:none;">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>Student Support Profiles</h3>
+        <button class="modal-close" onclick="document.getElementById('sspProfileListOverlay').style.display='none';" aria-label="Close profiles">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="sspProfileListContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Students Modal -->
+  <div class="modal-overlay" id="addStudentsModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3 id="addStudentsModalTitle">Add Students to Class</h3>
+        <button class="modal-close" onclick="closeAddStudentsModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="add-student-input-section">
+          <div class="form-row" style="align-items: flex-end;">
+            <div class="form-group" style="flex: 1;">
+              <label class="form-label">Email <span class="required">*</span></label>
+              <input type="email" class="form-input" id="newStudentEmail" placeholder="student@school.edu" onblur="lookupStudentEmail()">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label class="form-label">Name <span class="required">*</span></label>
+              <input type="text" class="form-input" id="newStudentName" placeholder="Student Name">
+            </div>
+            <div class="form-group" style="flex: 0;">
+              <button type="button" class="btn btn-outline" onclick="addStudentToQueue()" style="white-space: nowrap;">+ Add</button>
+            </div>
+          </div>
+          <div id="studentLookupStatus" style="font-size: 12px; color: #666; margin-top: 5px; min-height: 18px;"></div>
+        </div>
+        <div id="studentsQueueSection" style="margin-top: 20px; display: none;">
+          <div class="roster-section-title">Students to Add (<span id="studentsQueueCount">0</span>)</div>
+          <div id="studentsQueueList" style="max-height: 200px; overflow-y: auto;"></div>
+        </div>
+        <div id="addStudentsError" class="error-message" style="display: none; margin-top: 15px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeAddStudentsModal()">Cancel</button>
+        <button type="button" class="btn btn-success" id="submitAddStudentsBtn" onclick="submitAddStudents()" disabled>Add Students</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign Maps Modal -->
+  <div class="modal-overlay" id="assignMapsModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3 id="assignMapsModalTitle">Assign Maps to Class</h3>
+        <button class="modal-close" onclick="closeAssignMapsModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="asgn-info-bar" id="assignMapsInfo"></div>
+        <div class="asgn-search">
+          <input type="text" class="form-input" id="assignMapsSearch"
+                 placeholder="Search maps..." oninput="filterAssignMapsList()" style="width:100%;">
+        </div>
+        <div id="assignMapsList" class="asgn-map-list">
+          <div class="loading"><span class="loading-spinner"></span>Loading assignments...</div>
+        </div>
+        <div id="assignMapsWarning" class="error-message" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeAssignMapsModal()">Cancel</button>
+        <button class="btn btn-success" id="saveAssignMapsBtn" onclick="saveMapAssignments()">Save Assignments</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div class="modal-overlay" id="addUserModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add New User</h3>
+        <button class="modal-close" onclick="closeAddUserModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Email <span class="required">*</span></label>
+          <input type="email" class="form-input" id="addUserEmail" placeholder="user@school.edu">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input type="text" class="form-input" id="addUserName" placeholder="Display name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role <span class="required">*</span></label>
+          <select class="form-select" id="addUserRole">
+            <option value="Student">Student</option>
+            <option value="Teacher">Teacher</option>
+            <option value="Administrator">Administrator</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeAddUserModal()">Cancel</button>
+        <button class="btn btn-success" onclick="addNewUser()">Add User</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Command Palette Search -->
+  <div class="cmd-overlay" id="cmdOverlay" onclick="cmdOverlayClick(event)">
+    <div class="cmd-palette" onclick="event.stopPropagation()">
+      <div class="cmd-header">
+        <span class="cmd-search-icon">&#128269;</span>
+        <input type="text" class="cmd-input" id="cmdInput"
+               placeholder="Search maps, hexes, courses, standards..."
+               oninput="cmdOnInput()" onkeydown="cmdHandleKeydown(event)"
+               autocomplete="off" spellcheck="false">
+        <span class="cmd-shortcut-hint">ESC</span>
+      </div>
+      <div class="cmd-body" id="cmdBody">
+        <div class="cmd-empty">Type at least 2 characters to search&#8230;</div>
+      </div>
+      <div class="cmd-footer">
+        <span class="cmd-footer-hint"><span class="cmd-footer-key">&#8593;&#8595;</span> navigate</span>
+        <span class="cmd-footer-hint"><span class="cmd-footer-key">&#9166;</span> open</span>
+        <span class="cmd-footer-hint"><span class="cmd-footer-key">esc</span> close</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Prompt Builder Modal (E2-S2) -->
+  <div class="modal-overlay" id="pbPromptOverlay" style="display:none;">
+    <div class="modal modal-lg pb-prompt-modal">
+      <div class="modal-header">
+        <h2>AI Lesson Differentiation Prompt</h2>
+        <button class="modal-close" onclick="closePromptBuilder()" aria-label="Close prompt builder">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="pb-depth-selector">
+          <span class="pb-depth-label">Depth:</span>
+          <button class="pb-depth-btn pb-depth-active" id="pbDepthQuick" onclick="setPbDepth('quick')">Quick (3-5 tips)</button>
+          <button class="pb-depth-btn" id="pbDepthStandard" onclick="setPbDepth('standard')">Standard Plan</button>
+          <button class="pb-depth-btn" id="pbDepthDetailed" onclick="setPbDepth('detailed')">Detailed Plan</button>
+        </div>
+        <div class="pb-context-summary" id="pbContextSummary"></div>
+        <textarea class="pb-prompt-textarea" id="pbPromptTextarea" rows="20"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closePromptBuilder()">Close</button>
+        <button class="btn btn-primary pb-copy-btn" onclick="copyPbPrompt()">&#128203; Copy to Clipboard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Differentiation Group Manager (Teacher) -->
+  <div class="dif-overlay" id="difOverlay" style="display:none;" onclick="if(event.target===this)difCloseOverlay()">
+    <div class="dif-modal" onclick="event.stopPropagation()">
+      <div class="dif-modal-header">
+        <span class="dif-modal-title">👥 Differentiation Groups</span>
+        <button class="dif-close-btn" onclick="difCloseOverlay()" aria-label="Close">&times;</button>
+      </div>
+      <div class="dif-modal-body">
+        <div class="dif-scope-toggle" id="difScopeToggle">
+          <label class="dif-scope-radio"><input type="radio" name="difScope" value="class" checked onchange="difSetScope('class')"> Class-wide</label>
+          <label class="dif-scope-radio"><input type="radio" name="difScope" value="map" onchange="difSetScope('map')"> This map only</label>
+        </div>
+        <div class="dif-panels">
+          <div class="dif-left-panel">
+            <button class="btn btn-success btn-small dif-add-btn" onclick="difCreateGroup()">+ New Group</button>
+            <button class="btn btn-outline btn-small dif-suggest-btn" onclick="difShowSuggestions()">Suggest Groups</button>
+            <div class="dif-group-list" id="difGroupList"></div>
+          </div>
+          <div class="dif-right-panel" id="difRightPanel">
+            <div class="dif-select-prompt">Select a group to manage members</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lab Scoring Overlay (Teacher) -->
+  <div class="lab-scoring-overlay" id="labScoringOverlay" style="display:none;" onclick="if(event.target===this)labScoringClose()">
+    <div class="lab-scoring-modal" onclick="event.stopPropagation()">
+      <div class="lab-scoring-header">
+        <span class="lab-scoring-title">&#128203; Score Lab Reports</span>
+        <button class="lab-close-btn" onclick="labScoringClose()" aria-label="Close scoring">&times;</button>
+      </div>
+      <div class="lab-scoring-content">
+        <div class="lab-scoring-left" id="labScoringLeft"></div>
+        <div class="lab-scoring-right" id="labScoringRight"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lab Assignment Builder (Teacher) -->
+  <div class="lab-builder-overlay" id="labBuilderOverlay" style="display:none;" onclick="if(event.target===this)labCloseBuilder()">
+    <div class="lab-builder-modal" onclick="event.stopPropagation()">
+      <div class="lab-builder-header">
+        <span class="lab-builder-title">&#129514; Lab Assignment Builder</span>
+        <div class="lab-stepper" id="labBuilderStepper"></div>
+        <button class="lab-close-btn" onclick="labCloseBuilder()" aria-label="Close lab builder">&times;</button>
+      </div>
+      <div class="lab-builder-body" id="labBuilderBody"></div>
+      <div class="lab-builder-footer" id="labBuilderFooter"></div>
+    </div>
+  </div>
+
+  <!-- Teacher Calendar Overlay -->
+  <div class="tcl-overlay" id="tclOverlay" onclick="if(event.target===this)tclCloseCalendar()">
+    <div class="tcl-modal">
+      <div class="tcl-header">
+        <span class="tcl-header-title">📅 Map Calendar</span>
+        <button class="tcl-header-close" onclick="tclCloseCalendar()" aria-label="Close calendar">&times;</button>
+      </div>
+      <div class="tcl-toolbar" id="tclToolbar"></div>
+      <div class="tcl-body" id="tclModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Name Selector & Grouping Overlay -->
+  <div class="nsg-overlay" id="nsgOverlay" onclick="if(event.target===this)nsgClosePicker()">
+    <div class="nsg-modal" id="nsgModal" onclick="event.stopPropagation()">
+      <div class="nsg-header">
+        <div class="nsg-mode-tabs">
+          <button class="nsg-mode-btn active" data-mode="picker" onclick="nsgSetMode('picker')">🎯 Name Picker</button>
+          <button class="nsg-mode-btn" data-mode="groups" onclick="nsgSetMode('groups')">👥 Groups</button>
+        </div>
+        <div class="nsg-header-right">
+          <button class="nsg-projector-btn" id="nsgProjectorBtn" onclick="nsgToggleProjector()" title="Projector mode" aria-label="Toggle projector mode" style="display:none;">🖥️</button>
+          <button class="nsg-close-btn" onclick="nsgClosePicker()" aria-label="Close picker">&times;</button>
+        </div>
+      </div>
+      <div class="nsg-body" id="nsgContent"></div>
+    </div>
+  </div>
+
+  <!-- Countdown Timer Overlay -->
+  <div class="ctd-overlay" id="ctdOverlay" onclick="if(event.target===this)ctdCloseTimer()">
+    <div class="ctd-modal" id="ctdModal" onclick="event.stopPropagation()">
+      <div class="ctd-header">
+        <span class="ctd-header-title">⏱️ Countdown Timer</span>
+        <div class="ctd-header-right">
+          <button class="ctd-mode-btn" id="ctdProjectorBtn" onclick="ctdSetDisplayMode('projector')" title="Projector mode" aria-label="Toggle projector mode" style="display:none;">🖥️</button>
+          <button class="ctd-mode-btn" id="ctdMiniBtn" onclick="ctdSetDisplayMode('mini')" title="Minimize" aria-label="Minimize timer" style="display:none;">➖</button>
+          <button class="ctd-close-btn" onclick="ctdCloseTimer()" aria-label="Close timer">&times;</button>
+        </div>
+      </div>
+      <div class="ctd-body" id="ctdTimerBody"></div>
+    </div>
+  </div>
+  <button class="ctd-mini-pill" id="ctdMiniPill" onclick="ctdSetDisplayMode('overlay')" aria-label="Restore timer">
+    <span class="ctd-mini-dot" id="ctdMiniDot"></span>
+    <span class="ctd-mini-time" id="ctdMiniTime">00:00</span>
+    <span class="ctd-mini-label" id="ctdMiniLabel"></span>
+  </button>
+
+  <!-- Student Timer Bar (fixed bottom, shown when teacher has active timer) -->
+  <div class="ctd-student-bar" id="ctdStudentBar" style="display:none;" aria-live="polite" aria-label="Class timer">
+    <div class="ctd-student-label" id="ctdStudentLabel"></div>
+    <div class="ctd-student-time" id="ctdStudentTime" aria-label="Time remaining">00:00</div>
+    <div class="ctd-student-progress-wrap">
+      <div class="ctd-student-progress" id="ctdStudentProgress"></div>
+    </div>
+    <div class="ctd-student-station" id="ctdStudentStation"></div>
+  </div>
+
+  <!-- Quick Poll Overlay -->
+  <div class="qp-overlay" id="qpOverlay"></div>
+
+  <!-- Whiteboard Teacher Overlay -->
+  <div class="wb-overlay" id="wbOverlay">
+    <div class="wb-overlay-modal" onclick="event.stopPropagation();">
+      <div class="wb-overlay-header">
+        <h3>&#x1F3A8; Template Drawing</h3>
+        <button type="button" class="wb-overlay-close" onclick="wbCloseTeacherCanvas()" aria-label="Close whiteboard">&times;</button>
+      </div>
+      <div class="wb-overlay-body">
+        <div id="wbOverlayToolbar"></div>
+        <div class="wb-canvas-container" id="wbOverlayCanvasContainer"></div>
+      </div>
+      <div class="wb-overlay-footer">
+        <button type="button" class="btn" onclick="wbCloseTeacherCanvas()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="wbSaveTemplateBtn" onclick="wbSaveTemplate()">&#x1F4BE; Save Template</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Projector Mode Overlay -->
+  <div class="pjm-overlay" id="pjmOverlay">
+    <div class="pjm-chrome">
+      <div class="pjm-topbar">
+        <div class="pjm-view-tabs">
+          <button class="pjm-view-tab active" data-view="overview" onclick="pjmSwitchView('overview')">Map Overview</button>
+          <button class="pjm-view-tab" data-view="focus" onclick="pjmSwitchView('focus')">Focus Hex</button>
+          <button class="pjm-view-tab" data-view="feed" onclick="pjmSwitchView('feed')">Activity Feed</button>
+          <button class="pjm-view-tab" data-view="timer" onclick="pjmSwitchView('timer')">Timer + Map</button>
+          <button class="pjm-view-tab" data-view="slides" onclick="pjmSwitchView('slides')">📊 Slides</button>
+          <button class="pjm-view-tab" data-view="poll" onclick="pjmSwitchView('poll')">📊 Poll</button>
+        </div>
+        <div class="pjm-topbar-right">
+          <span class="pjm-updated-text" id="pjmUpdatedText"></span>
+          <span class="pjm-map-title" id="pjmMapTitle"></span>
+          <button class="pjm-close-btn" onclick="pjmClose()" aria-label="Close projector mode">&times;</button>
+        </div>
+      </div>
+      <div class="pjm-stats-bar" id="pjmStatsBar"></div>
+    </div>
+    <div class="pjm-view-container" id="pjmViewContainer"></div>
+  </div>
+
+  <!-- Student Choice Modal -->
+  <div class="bex-choice-overlay" id="bexChoiceModal" style="display:none;" onclick="if(event.target===this)bexCloseChoiceModal()">
+    <div class="bex-choice-modal">
+      <div class="bex-choice-header">
+        <span class="bex-choice-title">Choose Your Path</span>
+        <button class="bex-choice-close" onclick="bexCloseChoiceModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="bex-choice-body" id="bexChoiceBody"></div>
+    </div>
+  </div>
+
+  <?!= include('Scripts-Core') ?>
+  <?!= include('Scripts-Courses') ?>
+  <?!= include('Scripts-MapBuilder') ?>
+  <?!= include('Scripts-Calendar') ?>
+  <?!= include('Scripts-TimeReeval') ?>
+  <?!= include('Scripts-LessonRundown') ?>
+  <?!= include('Scripts-Modals') ?>
+  <?!= include('Scripts-Standards') ?>
+  <?!= include('Scripts-UbdPlanner') ?>
+  <?!= include('Scripts-Progress') ?>
+  <?!= include('Scripts-Analytics') ?>
+  <?!= include('Scripts-StudentAnalytics') ?>
+  <?!= include('Scripts-Settings') ?>
+  <?!= include('Scripts-Integrations') ?>
+  <?!= include('Scripts-NotifCenter') ?>
+  <?!= include('Scripts-Search') ?>
+  <?!= include('Scripts-KnowledgeGaps') ?>
+  <?!= include('Scripts-FormativeChecks') ?>
+  <?!= include('Scripts-Assessment') ?>
+  <?!= include('Scripts-Planner') ?>
+  <?!= include('Scripts-ProcessJournal') ?>
+  <?!= include('Scripts-ScheduleImport') ?>
+  <?!= include('Scripts-StudentSupport') ?>
+  <?!= include('Scripts-SupportImport') ?>
+  <?!= include('Scripts-ATLToolkit') ?>
+  <?!= include('Scripts-Celebrations') ?>
+  <?!= include('Scripts-Portfolio') ?>
+  <?!= include('Scripts-PortfolioInsights') ?>
+  <?!= include('Scripts-PromptBuilder') ?>
+  <?!= include('Scripts-TeacherSupportDashboard') ?>
+  <?!= include('Scripts-Iteration') ?>
+  <?!= include('Scripts-PeerFeedback') ?>
+  <?!= include('Scripts-DesignThinking') ?>
+  <?!= include('Scripts-PBLDashboard') ?>
+  <?!= include('Scripts-TeachingMethods') ?>
+  <?!= include('Scripts-EALStrategies') ?>
+  <?!= include('Scripts-Dictionary') ?>
+  <?!= include('Scripts-CornellNotes') ?>
+  <?!= include('Scripts-NoteCoaching') ?>
+  <?!= include('Scripts-StudentTasks') ?>
+  <?!= include('Scripts-TeacherReminders') ?>
+  <?!= include('Scripts-AiscCore') ?>
+  <?!= include('Scripts-LabBuilder') ?>
+  <?!= include('Scripts-LabEditor') ?>
+  <?!= include('Scripts-LabRenderers') ?>
+  <?!= include('Scripts-LabRichEditor') ?>
+  <?!= include('Scripts-LabScoring') ?>
+  <?!= include('Scripts-LabTemplateEditor') ?>
+  <?!= include('Scripts-LabInsights') ?>
+  <?!= include('Scripts-ReviewInsights') ?>
+  <?!= include('Scripts-CompetencyATL') ?>
+  <?!= include('Scripts-CollabList') ?>
+  <?!= include('Scripts-CollabBoard') ?>
+  <?!= include('Scripts-Differentiation') ?>
+  <?!= include('Scripts-DifAnalytics') ?>
+  <?!= include('Scripts-GradeReview') ?>
+  <?!= include('Scripts-Tour') ?>
+  <?!= include('Scripts-Onboarding') ?>
+  <?!= include('Scripts-NameSelector') ?>
+  <?!= include('Scripts-StudyDashboard') ?>
+  <?!= include('Scripts-CountdownTimer') ?>
+  <?!= include('Scripts-QuickPolls') ?>
+  <?!= include('Scripts-Whiteboard') ?>
+  <?!= include('Scripts-ProjectorMode') ?>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>Builder Test</title>
+<style>
+body {
+font-family: Arial, sans-serif;
+padding: 40px;
+background: #f1f5f9;
+    }
+.box {
+background: white;
+padding: 40px;
+border-radius: 12px;
+box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+max-width: 600px;
+margin: 0 auto;
+    }
+h1 { color: #1a202c; margin-bottom: 20px; }
+.status { padding: 12px; background: #d1fae5; color: #065f46; border-radius: 8px; margin-bottom: 12px; }
+button {
+background: #667eea;
+color: white;
+border: none;
+padding: 12px 24px;
+border-radius: 8px;
+cursor: pointer;
+font-weight: 600;
+    }
+button:hover { background: #5568d3; }
+</style>
+</head>
+<body>
+<div class="box">
+<h1>🎯 Builder Test Page</h1>
+<div class="status" id="status">✅ HTML loaded successfully!</div>
+<p style="color: #64748b; margin-bottom: 20px;">If you can see this, the HTML file is loading correctly.</p>
+<button onclick="testBackend()">Test Backend Connection</button>
+<div id="result" style="margin-top: 20px;"></div>
+</div>
+<script>
+console.log('Builder test page loaded');
+async function testBackend() {
+const resultDiv = document.getElementById('result');
+resultDiv.innerHTML = '<p style="color: #94a3b8;">Calling getMaps()...</p>';
+try {
+const maps = await runAsync('getMaps');
+resultDiv.innerHTML = `
+          <div style="background: #d1fae5; color: #065f46; padding: 16px; border-radius: 8px;">
+            <strong>✅ Backend works!</strong><br>
+            Found ${maps.length} map(s)<br>
+${maps.length > 0 ? 'First map: "' + maps[0].title + '"' : ''}
+          </div>
+        `;
+      } catch (err) {
+resultDiv.innerHTML = `
+          <div style="background: #fee2e2; color: #991b1b; padding: 16px; border-radius: 8px;">
+            <strong>❌ Backend error:</strong><br>
+${err.message}
+          </div>
+        `;
+      }
+    }
+function runAsync(functionName, ...args) {
+return new Promise((resolve, reject) => {
+google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          [functionName](...args);
+      });
+    }
+</script>
+</body>
+</html>

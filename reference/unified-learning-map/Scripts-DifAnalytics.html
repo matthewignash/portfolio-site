@@ -1,0 +1,455 @@
+<script>
+    // ================================================
+    // DIFFERENTIATION ANALYTICS — Group Insights (ES5)
+    // 9th sub-tab in Progress tab
+    // ================================================
+
+    /**
+     * 1. dfaLoadDashboard — Entry point; loads differentiation + profile data
+     */
+    function dfaLoadDashboard() {
+      var content = document.getElementById('difInsightsContent');
+      if (!content) return;
+
+      // Need a map selected
+      if (!progressSelectedMapId || !progressSelectedClassId) {
+        content.innerHTML = '<div class="dfa-empty"><div class="icon">&#128202;</div>' +
+          '<p>Select a class and map on the Class Progress tab first.</p></div>';
+        return;
+      }
+
+      // If cached and same map, just render
+      if (dfaInitialized && dfaMapId === progressSelectedMapId && dfaComputedData) {
+        dfaRender(content);
+        return;
+      }
+
+      content.innerHTML = '<div class="dfa-loading"><span class="loading-spinner"></span> Loading group insights...</div>';
+
+      var expectedMapId = progressSelectedMapId;
+      var expectedClassId = progressSelectedClassId;
+
+      // Load differentiation data for this map
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (progressSelectedMapId !== expectedMapId) return;
+          dfaGroupsData = (data && data.groups) ? data.groups : [];
+          dfaMemberships = (data && data.memberships) ? data.memberships : [];
+          dfaHexAssignments = (data && data.hexAssignments) ? data.hexAssignments : [];
+          dfaMapId = expectedMapId;
+
+          // Load profiles in parallel if not cached
+          if (!difProfilesCache) {
+            google.script.run
+              .withSuccessHandler(function(profiles) {
+                if (progressSelectedMapId !== expectedMapId) return;
+                dfaProfilesData = profiles || [];
+                difProfilesCache = dfaProfilesData;
+                dfaFinishLoad(content, expectedMapId);
+              })
+              .withFailureHandler(function() {
+                dfaProfilesData = [];
+                difProfilesCache = [];
+                dfaFinishLoad(content, expectedMapId);
+              })
+              .getClassSupportProfiles(expectedClassId);
+          } else {
+            dfaProfilesData = difProfilesCache;
+            dfaFinishLoad(content, expectedMapId);
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (progressSelectedMapId !== expectedMapId) return;
+          content.innerHTML = '<div class="dfa-empty"><p style="color:#dc2626;">Error: ' + escapeHtml(err.message) + '</p></div>';
+        })
+        .getMapDifferentiationData(expectedMapId);
+    }
+
+    /**
+     * 2. dfaFinishLoad — Compute + render after all data ready
+     */
+    function dfaFinishLoad(content, expectedMapId) {
+      if (progressSelectedMapId !== expectedMapId) return;
+      dfaInitialized = true;
+      dfaComputedData = null;
+      dfaRender(content);
+    }
+
+    /**
+     * 3. dfaRender — Orchestrator: compute all sections + build HTML
+     */
+    function dfaRender(content) {
+      if (!content) content = document.getElementById('difInsightsContent');
+      if (!content) return;
+
+      if (!dfaGroupsData || dfaGroupsData.length === 0) {
+        content.innerHTML = '<div class="dfa-empty"><div class="icon">&#128101;</div>' +
+          '<p>No differentiation groups found for this map.</p>' +
+          '<p style="font-size:12px;">Create groups in the Map Builder using the group manager.</p></div>';
+        return;
+      }
+
+      if (!progressDashboardData || !progressDashboardData.students) {
+        content.innerHTML = '<div class="dfa-empty"><p>No student progress data available. Select a map on the Class Progress tab.</p></div>';
+        return;
+      }
+
+      // Compute all analytics
+      var overview = dfaComputeGroupOverview();
+      var comparison = dfaComputeGroupComparison(overview);
+      var coverage = dfaComputeHexCoverage();
+
+      dfaComputedData = { overview: overview, comparison: comparison, coverage: coverage };
+
+      var html = '';
+
+      // Section 1: Group overview cards
+      html += '<div class="dfa-section-title">Group Overview</div>';
+      html += dfaRenderOverviewCards(overview);
+
+      // Section 2: Group comparison bars
+      if (overview.length > 1) {
+        html += '<div class="dfa-section-title">Group Comparison — Avg Completion</div>';
+        html += dfaRenderGroupComparison(comparison);
+      }
+
+      // Section 3: Hex assignment coverage
+      html += '<div class="dfa-section-title">Hex Assignment Coverage</div>';
+      html += dfaRenderHexCoverage(coverage);
+
+      content.innerHTML = html;
+    }
+
+    /**
+     * 4. dfaComputeGroupOverview — Per-group stats
+     */
+    function dfaComputeGroupOverview() {
+      var students = progressDashboardData.students || [];
+      var hexes = progressDashboardData.hexes || [];
+      var result = [];
+
+      for (var g = 0; g < dfaGroupsData.length; g++) {
+        var group = dfaGroupsData[g];
+        var groupId = String(group.groupId);
+
+        // Find members
+        var memberEmails = [];
+        for (var m = 0; m < dfaMemberships.length; m++) {
+          if (String(dfaMemberships[m].groupId) === groupId) {
+            memberEmails.push(dfaMemberships[m].studentEmail.toLowerCase());
+          }
+        }
+
+        // Compute per-member stats
+        var totalCompletion = 0;
+        var totalScore = 0;
+        var scoreCount = 0;
+        var memberCount = memberEmails.length;
+
+        for (var s = 0; s < students.length; s++) {
+          var sEmail = (students[s].email || '').toLowerCase();
+          var isMember = false;
+          for (var me = 0; me < memberEmails.length; me++) {
+            if (memberEmails[me] === sEmail) { isMember = true; break; }
+          }
+          if (!isMember) continue;
+
+          totalCompletion += (students[s].percentComplete || 0);
+          if (students[s].averageScore !== null && students[s].averageScore !== undefined) {
+            totalScore += students[s].averageScore;
+            scoreCount++;
+          }
+        }
+
+        var avgCompletion = memberCount > 0 ? Math.round(totalCompletion / memberCount) : 0;
+        var avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : null;
+
+        // WIDA distribution from profiles
+        var widaDist = { low: 0, mid: 0, high: 0, none: 0 };
+        for (var pe = 0; pe < memberEmails.length; pe++) {
+          var profile = dfaFindProfile(memberEmails[pe]);
+          if (!profile || !profile.widaOverallLevel) {
+            widaDist.none++;
+          } else {
+            var lvl = parseInt(profile.widaOverallLevel) || 0;
+            if (lvl >= 1 && lvl <= 2) widaDist.low++;
+            else if (lvl >= 3 && lvl <= 4) widaDist.mid++;
+            else if (lvl >= 5) widaDist.high++;
+            else widaDist.none++;
+          }
+        }
+
+        result.push({
+          groupId: groupId,
+          name: group.name || 'Untitled',
+          color: group.color || '#8b5cf6',
+          memberCount: memberCount,
+          avgCompletion: avgCompletion,
+          avgScore: avgScore,
+          widaDist: widaDist,
+          memberEmails: memberEmails
+        });
+      }
+
+      return result;
+    }
+
+    /**
+     * 5. dfaComputeGroupComparison — Sorted bars + class average
+     */
+    function dfaComputeGroupComparison(overview) {
+      var sorted = overview.slice().sort(function(a, b) {
+        return b.avgCompletion - a.avgCompletion;
+      });
+
+      // Class average
+      var students = progressDashboardData.students || [];
+      var totalComp = 0;
+      for (var i = 0; i < students.length; i++) {
+        totalComp += (students[i].percentComplete || 0);
+      }
+      var classAvg = students.length > 0 ? Math.round(totalComp / students.length) : 0;
+
+      return { sorted: sorted, classAvg: classAvg };
+    }
+
+    /**
+     * 6. dfaComputeHexCoverage — Assignment coverage per group
+     */
+    function dfaComputeHexCoverage() {
+      var hexes = progressDashboardData.hexes || [];
+      var totalHexes = hexes.length;
+
+      // Build set of all assigned hexes
+      var assignedHexSet = {};
+      var perGroup = {};
+      for (var g = 0; g < dfaGroupsData.length; g++) {
+        perGroup[String(dfaGroupsData[g].groupId)] = 0;
+      }
+
+      for (var a = 0; a < dfaHexAssignments.length; a++) {
+        var ha = dfaHexAssignments[a];
+        assignedHexSet[String(ha.hexId)] = true;
+        var gid = String(ha.groupId);
+        if (perGroup[gid] !== undefined) {
+          perGroup[gid]++;
+        }
+      }
+
+      var assignedCount = 0;
+      for (var key in assignedHexSet) {
+        if (assignedHexSet.hasOwnProperty(key)) assignedCount++;
+      }
+
+      // Build per-group list with gap warnings
+      var groupCoverage = [];
+      for (var g2 = 0; g2 < dfaGroupsData.length; g2++) {
+        var grp = dfaGroupsData[g2];
+        var gId = String(grp.groupId);
+        var count = perGroup[gId] || 0;
+        groupCoverage.push({
+          name: grp.name || 'Untitled',
+          color: grp.color || '#8b5cf6',
+          hexCount: count,
+          hasGap: count === 0
+        });
+      }
+
+      return {
+        totalHexes: totalHexes,
+        assignedHexes: assignedCount,
+        defaultHexes: totalHexes - assignedCount,
+        groupCoverage: groupCoverage
+      };
+    }
+
+    /**
+     * 7. dfaRenderOverviewCards — Card grid
+     */
+    function dfaRenderOverviewCards(overview) {
+      var html = '<div class="dfa-group-cards">';
+      for (var i = 0; i < overview.length; i++) {
+        var g = overview[i];
+        var isExpanded = dfaExpandedGroups[g.groupId] ? true : false;
+        html += '<div class="dfa-group-card' + (isExpanded ? ' expanded' : '') + '" style="border-left-color:' + escapeHtml(g.color) + ';" onclick="dfaToggleGroupDetail(\'' + escapeHtml(g.groupId) + '\')">';
+        html += '<div class="dfa-group-card-header">';
+        html += '<div class="dfa-group-card-dot" style="background:' + escapeHtml(g.color) + ';"></div>';
+        html += '<div class="dfa-group-card-name">' + escapeHtml(g.name) + '</div>';
+        html += '<div class="dfa-group-card-count">' + g.memberCount + ' students</div>';
+        html += '</div>';
+
+        html += '<div class="dfa-group-stats">';
+        html += '<div class="dfa-group-stat"><div class="dfa-group-stat-value">' + g.avgCompletion + '%</div><div class="dfa-group-stat-label">Completion</div></div>';
+        html += '<div class="dfa-group-stat"><div class="dfa-group-stat-value">' + (g.avgScore !== null ? g.avgScore + '%' : '\u2014') + '</div><div class="dfa-group-stat-label">Avg Score</div></div>';
+        html += '</div>';
+
+        // WIDA mini-bar
+        var totalW = g.widaDist.low + g.widaDist.mid + g.widaDist.high + g.widaDist.none;
+        if (totalW > 0) {
+          html += '<div class="dfa-wida-minibar">';
+          if (g.widaDist.low > 0) html += '<div class="dfa-wida-seg seg-low" style="width:' + (g.widaDist.low / totalW * 100) + '%;"></div>';
+          if (g.widaDist.mid > 0) html += '<div class="dfa-wida-seg seg-mid" style="width:' + (g.widaDist.mid / totalW * 100) + '%;"></div>';
+          if (g.widaDist.high > 0) html += '<div class="dfa-wida-seg seg-high" style="width:' + (g.widaDist.high / totalW * 100) + '%;"></div>';
+          if (g.widaDist.none > 0) html += '<div class="dfa-wida-seg seg-none" style="width:' + (g.widaDist.none / totalW * 100) + '%;"></div>';
+          html += '</div>';
+        }
+
+        // Expanded student list
+        if (isExpanded) {
+          html += dfaRenderStudentList(g);
+        }
+
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 8. dfaRenderGroupComparison — Horizontal bars with class avg reference
+     */
+    function dfaRenderGroupComparison(comparison) {
+      var sorted = comparison.sorted;
+      var classAvg = comparison.classAvg;
+
+      var html = '<div class="dfa-comp-rows">';
+      for (var i = 0; i < sorted.length; i++) {
+        var g = sorted[i];
+        html += '<div class="dfa-comp-row">';
+        html += '<div class="dfa-comp-dot" style="background:' + escapeHtml(g.color) + ';"></div>';
+        html += '<div class="dfa-comp-label" title="' + escapeHtml(g.name) + '">' + escapeHtml(g.name) + '</div>';
+        html += '<div class="dfa-comp-bar-container">';
+        html += '<div class="dfa-comp-bar-fill" style="width:' + g.avgCompletion + '%; background:' + escapeHtml(g.color) + ';"></div>';
+        if (classAvg > 0) {
+          html += '<div class="dfa-comp-ref-line" style="left:' + classAvg + '%;" title="Class avg: ' + classAvg + '%"></div>';
+        }
+        html += '</div>';
+        html += '<div class="dfa-comp-bar-value">' + g.avgCompletion + '%</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      if (classAvg > 0) {
+        html += '<div style="font-size:11px;color:#6b7280;margin-top:6px;">Black line = class average (' + classAvg + '%)</div>';
+      }
+
+      return html;
+    }
+
+    /**
+     * 9. dfaRenderStudentList — Per-group expandable student rows
+     */
+    function dfaRenderStudentList(groupOverview) {
+      var students = progressDashboardData.students || [];
+      var hexes = progressDashboardData.hexes || [];
+      var memberEmails = groupOverview.memberEmails || [];
+
+      // Collect member student data
+      var memberData = [];
+      for (var s = 0; s < students.length; s++) {
+        var sEmail = (students[s].email || '').toLowerCase();
+        var found = false;
+        for (var me = 0; me < memberEmails.length; me++) {
+          if (memberEmails[me] === sEmail) { found = true; break; }
+        }
+        if (!found) continue;
+
+        var profile = dfaFindProfile(sEmail);
+        var widaLevel = profile && profile.widaOverallLevel ? profile.widaOverallLevel : null;
+
+        // Hex status dots (first 10)
+        var hexDots = [];
+        var dotLimit = hexes.length > 10 ? 10 : hexes.length;
+        for (var h = 0; h < dotLimit; h++) {
+          var hp = students[s].hexProgress[hexes[h].id];
+          hexDots.push(hp ? hp.status : 'not_started');
+        }
+
+        memberData.push({
+          name: students[s].name || students[s].email,
+          completion: students[s].percentComplete || 0,
+          score: students[s].averageScore,
+          widaLevel: widaLevel,
+          hexDots: hexDots
+        });
+      }
+
+      // Sort by completion ascending (struggling first)
+      memberData.sort(function(a, b) { return a.completion - b.completion; });
+
+      var html = '<div class="dfa-student-list" onclick="event.stopPropagation();">';
+      for (var i = 0; i < memberData.length; i++) {
+        var m = memberData[i];
+        var compClass = m.completion < 25 ? ' danger' : (m.completion < 50 ? ' alert' : '');
+        html += '<div class="dfa-student-row">';
+        html += '<div class="dfa-student-name">' + escapeHtml(m.name) + '</div>';
+        if (m.widaLevel) {
+          html += '<span class="dfa-student-wida">W' + m.widaLevel + '</span>';
+        }
+        html += '<div class="dfa-hex-dots">';
+        for (var d = 0; d < m.hexDots.length; d++) {
+          html += '<div class="dfa-hex-dot ' + m.hexDots[d] + '"></div>';
+        }
+        html += '</div>';
+        html += '<div class="dfa-student-stat' + compClass + '">' + m.completion + '%</div>';
+        html += '</div>';
+      }
+
+      if (memberData.length === 0) {
+        html += '<div style="font-size:12px;color:#9ca3af;padding:8px 0;">No matching students found in progress data.</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 10. dfaRenderHexCoverage — Coverage stats + per-group counts + gap warnings
+     */
+    function dfaRenderHexCoverage(coverage) {
+      var html = '<div class="dfa-coverage-summary">';
+      html += '<div class="dfa-coverage-stat">Total hexes: <strong>' + coverage.totalHexes + '</strong></div>';
+      html += '<div class="dfa-coverage-stat">With group assignments: <strong>' + coverage.assignedHexes + '</strong></div>';
+      html += '<div class="dfa-coverage-stat">Default (all groups): <strong>' + coverage.defaultHexes + '</strong></div>';
+      html += '</div>';
+
+      for (var i = 0; i < coverage.groupCoverage.length; i++) {
+        var gc = coverage.groupCoverage[i];
+        html += '<div class="dfa-coverage-group-row">';
+        html += '<div class="dfa-coverage-group-dot" style="background:' + escapeHtml(gc.color) + ';"></div>';
+        html += '<span>' + escapeHtml(gc.name) + ': <strong>' + gc.hexCount + '</strong> assigned hexes</span>';
+        if (gc.hasGap) {
+          html += '<span class="dfa-gap-warning">&#9888; No assignments</span>';
+        }
+        html += '</div>';
+      }
+
+      return html;
+    }
+
+    /**
+     * 11. dfaToggleGroupDetail — Expand/collapse student list in card
+     */
+    function dfaToggleGroupDetail(groupId) {
+      if (dfaExpandedGroups[groupId]) {
+        delete dfaExpandedGroups[groupId];
+      } else {
+        dfaExpandedGroups[groupId] = true;
+      }
+      var content = document.getElementById('difInsightsContent');
+      dfaRender(content);
+    }
+
+    /**
+     * 12. dfaFindProfile — Look up WIDA profile by email
+     */
+    function dfaFindProfile(email) {
+      if (!dfaProfilesData || dfaProfilesData.length === 0) return null;
+      var lower = email.toLowerCase();
+      for (var i = 0; i < dfaProfilesData.length; i++) {
+        var pEmail = (dfaProfilesData[i].studentEmail || dfaProfilesData[i].email || '').toLowerCase();
+        if (pEmail === lower) return dfaProfilesData[i];
+      }
+      return null;
+    }
+</script>

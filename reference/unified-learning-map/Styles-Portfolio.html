@@ -1,0 +1,591 @@
+<style>
+/* ============================================================================
+   STUDENT PORTFOLIO & GROWTH DASHBOARD — pf- prefix
+   Growth timeline, skill inventory, portfolio curation, export.
+   ============================================================================ */
+
+/* ---- Student Sub-Nav ---- */
+.pf-subnav {
+  display: flex;
+  gap: 4px;
+  padding: 8px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fefce8;
+}
+.pf-subnav-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pf-subnav-btn:hover {
+  background: #f1f5f9;
+}
+.pf-subnav-btn.active {
+  color: #1e40af;
+  background: #dbeafe;
+  border-color: #93c5fd;
+  font-weight: 600;
+}
+
+/* ---- Growth Stats Cards ---- */
+.pf-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.pf-stat-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  transition: box-shadow 0.15s;
+}
+.pf-stat-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.pf-stat-icon {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+.pf-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+.pf-stat-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+.pf-stat-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+.pf-stat-trend-up {
+  color: #059669;
+}
+.pf-stat-trend-down {
+  color: #dc2626;
+}
+
+/* ---- Growth Graph ---- */
+.pf-section {
+  margin-bottom: 24px;
+}
+.pf-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pf-section-toggle {
+  font-size: 12px;
+  color: #3b82f6;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 2px 8px;
+}
+.pf-section-toggle:hover {
+  text-decoration: underline;
+}
+.pf-graph-container {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.pf-graph-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-height: 140px;
+  padding: 0 4px;
+}
+.pf-graph-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 36px;
+  flex-shrink: 0;
+}
+.pf-graph-bar-fill {
+  width: 24px;
+  background: #3b82f6;
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height 0.3s ease;
+  position: relative;
+}
+.pf-graph-bar-count {
+  font-size: 10px;
+  color: #475569;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.pf-graph-dot {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 2px #fff;
+}
+.pf-graph-bar-label {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 6px;
+  writing-mode: vertical-lr;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  max-height: 50px;
+  overflow: hidden;
+}
+.pf-graph-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+.pf-graph-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.pf-graph-legend-dot.blue { background: #3b82f6; }
+.pf-graph-legend-dot.green { background: #10b981; }
+
+/* ---- Growth Message Banner ---- */
+.pf-growth-banner {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.pf-growth-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+/* ---- Skill Inventory ---- */
+.pf-skill-section {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.pf-skill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.pf-skill-header:hover {
+  background: #f8fafc;
+}
+.pf-skill-framework {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+.pf-skill-header-count {
+  font-size: 11px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.pf-skill-chevron {
+  font-size: 12px;
+  color: #94a3b8;
+  transition: transform 0.2s;
+}
+.pf-skill-chevron.open {
+  transform: rotate(90deg);
+}
+.pf-skill-body {
+  display: none;
+  padding: 0 14px 12px;
+}
+.pf-skill-body.open {
+  display: block;
+}
+.pf-skill-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.pf-skill-bar-label {
+  min-width: 90px;
+  max-width: 160px;
+  color: #475569;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pf-skill-bar-container {
+  flex: 1;
+  height: 14px;
+  background: #f1f5f9;
+  border-radius: 7px;
+  overflow: hidden;
+  position: relative;
+}
+.pf-skill-bar-fill {
+  height: 100%;
+  border-radius: 7px;
+  transition: width 0.4s ease;
+}
+.pf-skill-bar-fill.mastered { background: #10b981; }
+.pf-skill-bar-fill.proficient { background: #3b82f6; }
+.pf-skill-bar-fill.developing { background: #f59e0b; }
+.pf-skill-bar-value {
+  font-size: 11px;
+  color: #64748b;
+  min-width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.pf-skill-bar-hexcount {
+  font-size: 10px;
+  color: #94a3b8;
+  min-width: 42px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ---- Portfolio Cards ---- */
+.pf-portfolio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pf-portfolio-card {
+  display: flex;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.pf-portfolio-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.pf-portfolio-card.highlight {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+.pf-portfolio-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+.pf-portfolio-body {
+  flex: 1;
+  min-width: 0;
+}
+.pf-portfolio-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 2px;
+}
+.pf-portfolio-map {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+.pf-portfolio-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.pf-portfolio-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.pf-badge-score {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.pf-badge-status {
+  background: #d1fae5;
+  color: #047857;
+}
+.pf-badge-rating {
+  background: #fef3c7;
+  color: #92400e;
+}
+.pf-portfolio-note {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.pf-portfolio-goal {
+  font-size: 12px;
+  color: #475569;
+  margin-top: 4px;
+}
+.pf-portfolio-evidence {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pf-portfolio-evidence a {
+  font-size: 11px;
+  color: #3b82f6;
+  text-decoration: none;
+}
+.pf-portfolio-evidence a:hover {
+  text-decoration: underline;
+}
+.pf-portfolio-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+.pf-portfolio-action-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pf-portfolio-action-btn:hover { background: #f1f5f9; }
+.pf-portfolio-action-btn.danger { color: #dc2626; border-color: #fca5a5; }
+.pf-portfolio-action-btn.danger:hover { background: #fef2f2; }
+.pf-portfolio-action-btn.star { color: #f59e0b; border-color: #fcd34d; }
+.pf-portfolio-action-btn.star:hover { background: #fffbeb; }
+.pf-portfolio-action-btn.star.active {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  font-weight: 600;
+}
+
+/* ---- Note Edit Inline ---- */
+.pf-note-edit {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 6px;
+}
+.pf-note-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #eff6ff;
+  resize: vertical;
+  min-height: 40px;
+}
+.pf-note-save {
+  padding: 4px 10px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pf-note-cancel {
+  padding: 4px 10px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pf-note-counter {
+  font-size: 10px;
+  color: #94a3b8;
+  text-align: right;
+  margin-top: 2px;
+}
+
+/* ---- Add to Portfolio Button (hex modal) ---- */
+.pf-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 12px;
+}
+.pf-add-btn:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #3b82f6;
+}
+.pf-add-btn.in-portfolio {
+  color: #f59e0b;
+  background: #fffbeb;
+  border-color: #fcd34d;
+  border-style: solid;
+}
+.pf-add-btn.in-portfolio:hover {
+  background: #fef3c7;
+}
+
+/* ---- Export Button ---- */
+.pf-export-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #059669;
+  background: #f0fdf4;
+  border: 1px solid #6ee7b7;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pf-export-btn:hover {
+  background: #dcfce7;
+}
+.pf-export-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* ---- Empty States ---- */
+.pf-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+}
+.pf-empty-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+.pf-empty-text {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.pf-empty-hint {
+  font-size: 12px;
+  color: #cbd5e1;
+  margin-top: 6px;
+}
+
+/* ---- Toolbar Row ---- */
+.pf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.pf-toolbar-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* ---- Loading ---- */
+.pf-loading {
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* ---- Filter Chips ---- */
+.pf-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.pf-filter-chip {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.pf-filter-chip:hover {
+  border-color: #14b8a6;
+  color: #0d9488;
+}
+.pf-filter-chip:focus-visible {
+  outline: 3px solid #14b8a6;
+  outline-offset: 1px;
+}
+.pf-filter-chip.active {
+  background: #0d9488;
+  border-color: #0d9488;
+  color: #fff;
+}
+.pf-group-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  padding: 10px 0 4px 0;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 6px;
+}
+.pf-filter-empty {
+  text-align: center;
+  padding: 24px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+</style>

@@ -1,0 +1,210 @@
+<script>
+    // ================================================
+    // WATERFALL SCHEDULE IMPORT (ES5)
+    // Config card for Integrations tab
+    // ================================================
+
+    var waterfallConfig = null;
+
+    // ---- Render Config Card ----
+
+    function renderWaterfallConfigCard() {
+        var cfg = waterfallConfig || { enabled: false, spreadsheetUrl: '', lastImported: '' };
+        var isAdmin = userData && userData.isAdmin;
+        var canEdit = userData && userData.canEdit;
+        var hasUrl = !!(cfg.spreadsheetUrl);
+
+        var html = '<div class="int-section" id="intCard-waterfall">';
+
+        // Header
+        html += '<div class="int-section-header">';
+        html += '<h3 class="int-section-title">Waterfall Scheduler</h3>';
+        var badgeClass = hasUrl ? 'connected' : 'disabled';
+        var badgeText = hasUrl ? 'Connected' : 'Not Connected';
+        html += '<span class="int-card-badge ' + badgeClass + '">' + badgeText + '</span>';
+        html += '</div>';
+
+        html += '<div class="int-section-body">';
+
+        // Spreadsheet URL
+        html += '<div class="int-field">';
+        html += '<span class="int-field-label">Scheduler URL</span>';
+        html += '<div class="int-field-input">';
+        html += '<input type="text" class="form-input" id="wf-url" value="' + escapeHtml(cfg.spreadsheetUrl) + '" placeholder="https://docs.google.com/spreadsheets/d/..."' + (!canEdit ? ' disabled' : '') + '>';
+        html += '<span class="int-field-help">Paste a Google Sheets URL to connect, or clear to disconnect</span>';
+        html += '</div></div>';
+
+        // Connection status
+        html += '<div class="int-field">';
+        html += '<span class="int-field-label">Connection</span>';
+        html += '<div class="int-field-input">';
+        html += '<div class="int-status-row">';
+        html += '<span class="int-status-dot untested" id="wf-dot"></span>';
+        html += '<span class="int-status-msg" id="wf-msg">Not tested</span>';
+        html += '</div></div></div>';
+
+        // Last imported
+        html += '<div class="int-field">';
+        html += '<span class="int-field-label">Last Import</span>';
+        html += '<div class="int-field-input">';
+        html += '<span id="wf-last-import" style="font-size:13px;color:#6b7280;">';
+        if (cfg.lastImported) {
+            html += escapeHtml(cfg.lastImported);
+        } else {
+            html += 'Never imported';
+        }
+        html += '</span>';
+        html += '</div></div>';
+
+        html += '</div>'; // section-body
+
+        // Footer buttons
+        html += '<div class="int-section-footer">';
+        html += '<div class="int-btn-row" style="justify-content:flex-end; gap:8px;">';
+        html += '<button class="btn btn-small btn-outline" id="wf-test-btn" onclick="testWaterfallConn()">Test Connection</button>';
+        if (canEdit) {
+            html += '<button class="btn btn-small btn-success" id="wf-import-btn" onclick="importWaterfallData()">Import Schedule</button>';
+            html += '<button class="btn btn-small btn-success" id="wf-save-btn" onclick="saveWaterfallSettings()">Save</button>';
+        }
+        html += '</div></div>';
+
+        html += '</div>'; // int-section
+        return html;
+    }
+
+    // ---- Save ----
+
+    function saveWaterfallSettings() {
+        var urlVal = document.getElementById('wf-url').value.trim();
+        var btn = document.getElementById('wf-save-btn');
+
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+        google.script.run
+            .withSuccessHandler(function() {
+                waterfallConfig = { enabled: !!urlVal, spreadsheetUrl: urlVal, lastImported: (waterfallConfig && waterfallConfig.lastImported) || '' };
+                if (btn) { btn.disabled = false; btn.textContent = 'Saved!'; setTimeout(function() { btn.textContent = 'Save'; }, 2000); }
+                // Update badge
+                var badge = document.querySelector('#intCard-waterfall .int-card-badge');
+                if (badge) {
+                    badge.className = 'int-card-badge ' + (urlVal ? 'connected' : 'disabled');
+                    badge.textContent = urlVal ? 'Connected' : 'Not Connected';
+                }
+                showToast('Waterfall settings saved', 'success');
+            })
+            .withFailureHandler(function(err) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+                showToast('Error: ' + err.message, 'error');
+            })
+            .saveWaterfallConfig({ spreadsheetUrl: urlVal });
+    }
+
+    // ---- Test Connection ----
+
+    function testWaterfallConn() {
+        var urlVal = document.getElementById('wf-url').value.trim();
+
+        if (!urlVal) {
+            showToast('Enter a Waterfall Scheduler URL first', 'error');
+            return;
+        }
+
+        var dot = document.getElementById('wf-dot');
+        var msg = document.getElementById('wf-msg');
+        var btn = document.getElementById('wf-test-btn');
+
+        if (dot) dot.className = 'int-status-dot testing';
+        if (msg) { msg.className = 'int-status-msg'; msg.textContent = 'Saving & testing...'; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Testing...'; }
+
+        // Auto-save URL first, then test connection
+        google.script.run
+            .withSuccessHandler(function() {
+                waterfallConfig = { enabled: !!urlVal, spreadsheetUrl: urlVal, lastImported: (waterfallConfig && waterfallConfig.lastImported) || '' };
+                // Now test
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        if (btn) { btn.disabled = false; btn.textContent = 'Test Connection'; }
+                        if (result && result.success) {
+                            if (dot) dot.className = 'int-status-dot connected';
+                            if (msg) { msg.className = 'int-status-msg success'; msg.textContent = result.message || 'Connected'; }
+                        } else {
+                            if (dot) dot.className = 'int-status-dot disconnected';
+                            if (msg) { msg.className = 'int-status-msg error'; msg.textContent = (result && result.message) || 'Connection failed'; }
+                        }
+                    })
+                    .withFailureHandler(function(err) {
+                        if (btn) { btn.disabled = false; btn.textContent = 'Test Connection'; }
+                        if (dot) dot.className = 'int-status-dot disconnected';
+                        if (msg) { msg.className = 'int-status-msg error'; msg.textContent = 'Error: ' + err.message; }
+                    })
+                    .testWaterfallConnection();
+            })
+            .withFailureHandler(function(err) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Test Connection'; }
+                if (dot) dot.className = 'int-status-dot disconnected';
+                if (msg) { msg.className = 'int-status-msg error'; msg.textContent = 'Save error: ' + err.message; }
+            })
+            .saveWaterfallConfig({ spreadsheetUrl: urlVal });
+    }
+
+    // ---- Import ----
+
+    function importWaterfallData() {
+        var urlVal = document.getElementById('wf-url').value.trim();
+
+        if (!urlVal) {
+            showToast('Enter a Waterfall Scheduler URL first', 'error');
+            return;
+        }
+
+        var btn = document.getElementById('wf-import-btn');
+        var lastEl = document.getElementById('wf-last-import');
+
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving & importing...'; }
+
+        // Auto-save URL first, then import
+        google.script.run
+            .withSuccessHandler(function() {
+                waterfallConfig = { enabled: !!urlVal, spreadsheetUrl: urlVal, lastImported: (waterfallConfig && waterfallConfig.lastImported) || '' };
+                // Now import
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        if (btn) { btn.disabled = false; btn.textContent = 'Import Schedule'; }
+                        if (result && result.success) {
+                            var stats = result.stats || {};
+                            showToast('Imported: ' + (stats.rotationDays || 0) + ' rotation days, ' + (stats.bellSchedules || 0) + ' bell schedules, ' + (stats.teachers || 0) + ' teachers', 'success');
+                            if (lastEl) lastEl.textContent = result.importedAt || 'Just now';
+                            if (waterfallConfig) waterfallConfig.lastImported = result.importedAt || '';
+                        } else {
+                            showToast('Import returned no data', 'error');
+                        }
+                    })
+                    .withFailureHandler(function(err) {
+                        if (btn) { btn.disabled = false; btn.textContent = 'Import Schedule'; }
+                        showToast('Import error: ' + err.message, 'error');
+                    })
+                    .importWaterfallSchedule();
+            })
+            .withFailureHandler(function(err) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Import Schedule'; }
+                showToast('Save error: ' + err.message, 'error');
+            })
+            .saveWaterfallConfig({ spreadsheetUrl: urlVal });
+    }
+
+    // ---- Load waterfall config (called from renderIntegrationView) ----
+
+    function loadWaterfallConfig(callback) {
+        google.script.run
+            .withSuccessHandler(function(cfg) {
+                waterfallConfig = cfg || { enabled: false, spreadsheetUrl: '', lastImported: '' };
+                if (callback) callback();
+            })
+            .withFailureHandler(function(err) {
+                waterfallConfig = { enabled: false, spreadsheetUrl: '', lastImported: '' };
+                if (callback) callback();
+            })
+            .getWaterfallConfig();
+    }
+</script>

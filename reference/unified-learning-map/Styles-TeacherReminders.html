@@ -1,0 +1,238 @@
+<style>
+/* ============================================================================
+   TEACHER REMINDERS — trm- prefix
+   Personal followup/reminder list in Progress tab sub-nav
+   ============================================================================ */
+
+/* Container */
+.trm-container { max-width: 800px; margin: 0 auto; padding: 20px 0; }
+
+/* Stats row */
+.trm-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.trm-stat-badge {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+}
+.trm-stat-badge.trm-active { background: #dbeafe; color: #1e40af; }
+.trm-stat-badge.trm-done { background: #d1fae5; color: #065f46; }
+.trm-stat-badge.trm-overdue-stat { background: #fef2f2; color: #dc2626; }
+
+/* Filter bar */
+.trm-filter-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.trm-filter-chip {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.trm-filter-chip:hover { background: #e2e8f0; }
+.trm-filter-chip.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+
+/* Add bar */
+.trm-add-bar {
+  display: flex;
+  gap: 8px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.trm-add-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.trm-add-field.trm-title-field { flex: 1; min-width: 200px; }
+.trm-add-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.trm-add-input {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.trm-add-input:focus { border-color: #3b82f6; }
+.trm-add-input::placeholder { color: #94a3b8; }
+.trm-add-select {
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #475569;
+  background: #fff;
+  min-width: 140px;
+}
+.trm-add-date {
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #475569;
+  background: #fff;
+  width: 130px;
+}
+.trm-add-btn {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #3b82f6;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+.trm-add-btn:hover { background: #2563eb; }
+.trm-add-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* Reminder list */
+.trm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Individual reminder */
+.trm-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  transition: box-shadow 0.15s;
+}
+.trm-item:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+.trm-item.trm-completed { opacity: 0.55; }
+
+/* Checkbox */
+.trm-checkbox {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #cbd5e1;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.2s, background 0.2s;
+  font-size: 13px;
+  color: transparent;
+}
+.trm-checkbox:hover { border-color: #3b82f6; }
+.trm-checkbox.trm-checked {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+}
+
+/* Title + meta */
+.trm-item-body { flex: 1; min-width: 0; }
+.trm-item-title {
+  font-size: 14px;
+  color: #1e293b;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+.trm-completed .trm-item-title { text-decoration: line-through; color: #94a3b8; }
+.trm-item-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.trm-meta-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.trm-meta-date { background: #f1f5f9; color: #475569; }
+.trm-meta-date.trm-overdue { background: #fef2f2; color: #dc2626; }
+.trm-meta-date.trm-due-today { background: #fffbeb; color: #d97706; }
+.trm-meta-map {
+  background: #dbeafe;
+  color: #1e40af;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.trm-meta-map:hover { background: #bfdbfe; }
+.trm-meta-student {
+  background: #ede9fe;
+  color: #5b21b6;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.trm-meta-student:hover { background: #ddd6fe; }
+
+/* Actions */
+.trm-item-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.trm-action-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: #94a3b8;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 15px;
+  transition: color 0.15s, background 0.15s;
+}
+.trm-action-btn:hover { color: #475569; background: #f1f5f9; }
+.trm-action-btn.trm-delete:hover { color: #dc2626; background: #fef2f2; }
+
+/* Empty state */
+.trm-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+}
+.trm-empty-icon { font-size: 36px; margin-bottom: 8px; }
+.trm-empty-title { font-size: 15px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+.trm-empty-text { font-size: 13px; }
+</style>

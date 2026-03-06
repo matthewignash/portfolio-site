@@ -1,0 +1,665 @@
+<script>
+/**
+ * Shared UI Components
+ *
+ * Pure vanilla JS — no framework. Each component is an object with
+ * methods for rendering into a container element.
+ */
+
+// ═══════════════════════════════════════════════
+// Toast — Notification messages
+// ═══════════════════════════════════════════════
+
+var Toast = (function() {
+  var container;
+
+  function ensureContainer() {
+    if (!container) {
+      container = document.createElement('div');
+      container.className = 'toast-container';
+      document.body.appendChild(container);
+    }
+  }
+
+  function show(message, type, duration) {
+    ensureContainer();
+    type = type || 'info';
+    duration = duration || 4000;
+
+    var toast = ClientUtils.el('div', { className: 'toast toast-' + type }, [
+      ClientUtils.el('span', {}, [message]),
+      ClientUtils.el('button', {
+        className: 'toast-dismiss',
+        onClick: function() { remove(toast); }
+      }, ['\u00D7'])
+    ]);
+
+    container.appendChild(toast);
+
+    var timer = setTimeout(function() { remove(toast); }, duration);
+    toast._timer = timer;
+  }
+
+  function remove(toast) {
+    clearTimeout(toast._timer);
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(function() {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 300);
+  }
+
+  return {
+    success: function(msg) { show(msg, 'success'); },
+    error: function(msg) { show(msg, 'error', 6000); },
+    info: function(msg) { show(msg, 'info'); },
+    warning: function(msg) { show(msg, 'warning', 5000); }
+  };
+})();
+
+// ═══════════════════════════════════════════════
+// Modal — Reusable modal dialog
+// ═══════════════════════════════════════════════
+
+var Modal = (function() {
+  var overlay, titleEl, bodyEl, footerEl;
+
+  function ensureDOM() {
+    if (overlay) return;
+
+    overlay = ClientUtils.el('div', { className: 'modal-overlay', id: 'modal-overlay' });
+    var modal = ClientUtils.el('div', { className: 'modal' });
+
+    // Header
+    titleEl = ClientUtils.el('h3', { className: 'modal__title' });
+    var closeBtn = ClientUtils.el('button', {
+      className: 'modal__close',
+      'aria-label': 'Close modal',
+      onClick: close
+    }, ['\u00D7']);
+    var header = ClientUtils.el('div', { className: 'modal__header' }, [titleEl, closeBtn]);
+
+    // Body
+    bodyEl = ClientUtils.el('div', { className: 'modal__body' });
+
+    // Footer
+    footerEl = ClientUtils.el('div', { className: 'modal__footer' });
+
+    modal.appendChild(header);
+    modal.appendChild(bodyEl);
+    modal.appendChild(footerEl);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Close on overlay click
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) close();
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) {
+        close();
+      }
+    });
+  }
+
+  /**
+   * Opens the modal with title, body content, and optional action buttons.
+   * @param {string} title
+   * @param {string|HTMLElement} body - HTML string or DOM element
+   * @param {Array} [actions] - [{ label, onClick, className }]
+   */
+  function open(title, body, actions) {
+    ensureDOM();
+    titleEl.textContent = title;
+
+    bodyEl.innerHTML = '';
+    if (typeof body === 'string') {
+      bodyEl.innerHTML = body;
+    } else if (body instanceof HTMLElement) {
+      bodyEl.appendChild(body);
+    }
+
+    footerEl.innerHTML = '';
+    if (actions && actions.length) {
+      actions.forEach(function(action) {
+        var btn = ClientUtils.el('button', {
+          className: 'btn ' + (action.className || 'btn-secondary'),
+          onClick: action.onClick || close
+        }, [action.label]);
+        footerEl.appendChild(btn);
+      });
+      footerEl.style.display = '';
+    } else {
+      footerEl.style.display = 'none';
+    }
+
+    overlay.classList.add('open');
+  }
+
+  function close() {
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  /**
+   * Returns the modal body element for dynamic content manipulation.
+   */
+  function getBody() {
+    ensureDOM();
+    return bodyEl;
+  }
+
+  return {
+    open: open,
+    close: close,
+    getBody: getBody
+  };
+})();
+
+// ═══════════════════════════════════════════════
+// LoadingSpinner — Overlay spinner for async ops
+// ═══════════════════════════════════════════════
+
+var LoadingSpinner = (function() {
+
+  /**
+   * Shows a loading spinner overlay inside a container.
+   * @param {HTMLElement} container - Must have position: relative
+   */
+  function show(container) {
+    hide(container); // Remove any existing spinner first
+    container.style.position = 'relative';
+    var overlay = ClientUtils.el('div', { className: 'spinner-overlay', dataset: { spinner: 'true' } }, [
+      ClientUtils.el('div', { className: 'spinner' })
+    ]);
+    container.appendChild(overlay);
+  }
+
+  /**
+   * Removes the spinner from a container.
+   * @param {HTMLElement} container
+   */
+  function hide(container) {
+    var existing = container.querySelector('[data-spinner="true"]');
+    if (existing) existing.parentNode.removeChild(existing);
+  }
+
+  return { show: show, hide: hide };
+})();
+
+// ═══════════════════════════════════════════════
+// StaffSelector — Searchable staff dropdown
+// ═══════════════════════════════════════════════
+
+var StaffSelector = (function() {
+
+  var cachedStaff = null;
+
+  /**
+   * Renders a searchable staff dropdown into a container.
+   * @param {HTMLElement} container
+   * @param {Object} opts
+   * @param {Function} opts.onSelect - Called with staff record when selected
+   * @param {string} [opts.filterRole] - Only show staff with this role
+   * @param {string} [opts.placeholder] - Input placeholder
+   * @param {string} [opts.selectedId] - Pre-selected staff ID
+   * @param {string} [opts.name] - Name attribute for the hidden input
+   */
+  function render(container, opts) {
+    opts = opts || {};
+    container.innerHTML = '';
+
+    var wrapper = ClientUtils.el('div', { className: 'staff-selector relative' });
+
+    var hiddenInput = ClientUtils.el('input', {
+      type: 'hidden',
+      name: opts.name || 'staff_id'
+    });
+
+    var searchInput = ClientUtils.el('input', {
+      type: 'text',
+      className: 'form-input',
+      placeholder: opts.placeholder || 'Search staff...',
+      autocomplete: 'off'
+    });
+
+    var dropdown = ClientUtils.el('div', {
+      className: 'staff-selector__dropdown',
+      style: 'display:none; position:absolute; top:100%; left:0; right:0; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); max-height:200px; overflow-y:auto; z-index:50; box-shadow:var(--shadow-md);'
+    });
+
+    wrapper.appendChild(hiddenInput);
+    wrapper.appendChild(searchInput);
+    wrapper.appendChild(dropdown);
+    container.appendChild(wrapper);
+
+    // Load staff data
+    loadStaff(function(staffList) {
+      if (opts.filterRole) {
+        staffList = staffList.filter(function(s) { return s.role === opts.filterRole; });
+      }
+
+      // Pre-select if needed
+      if (opts.selectedId) {
+        var selected = staffList.find(function(s) { return s.id === opts.selectedId; });
+        if (selected) {
+          searchInput.value = selected.first_name + ' ' + selected.last_name;
+          hiddenInput.value = selected.id;
+        }
+      }
+
+      function renderOptions(filter) {
+        dropdown.innerHTML = '';
+        var filtered = staffList;
+        if (filter) {
+          var lower = filter.toLowerCase();
+          filtered = staffList.filter(function(s) {
+            return (s.first_name + ' ' + s.last_name).toLowerCase().indexOf(lower) !== -1 ||
+                   s.email.toLowerCase().indexOf(lower) !== -1 ||
+                   (s.department || '').toLowerCase().indexOf(lower) !== -1;
+          });
+        }
+
+        if (filtered.length === 0) {
+          dropdown.appendChild(ClientUtils.el('div', {
+            style: 'padding:8px 12px; color:var(--color-text-muted); font-size:var(--font-size-sm);'
+          }, ['No matches']));
+          return;
+        }
+
+        filtered.forEach(function(s) {
+          var option = ClientUtils.el('div', {
+            style: 'padding:8px 12px; cursor:pointer; font-size:var(--font-size-sm); display:flex; align-items:center; gap:8px;',
+            onClick: function() {
+              hiddenInput.value = s.id;
+              searchInput.value = s.first_name + ' ' + s.last_name;
+              dropdown.style.display = 'none';
+              if (opts.onSelect) opts.onSelect(s);
+            }
+          }, [
+            ClientUtils.el('span', {
+              className: 'app-header__avatar',
+              style: 'width:24px; height:24px; font-size:10px;'
+            }, [ClientUtils.initials(s.first_name, s.last_name)]),
+            ClientUtils.el('span', {}, [s.first_name + ' ' + s.last_name]),
+            ClientUtils.el('span', { style: 'color:var(--color-text-muted); margin-left:auto;' }, [s.department || ''])
+          ]);
+          option.addEventListener('mouseenter', function() { this.style.background = 'var(--color-surface-alt)'; });
+          option.addEventListener('mouseleave', function() { this.style.background = ''; });
+          dropdown.appendChild(option);
+        });
+      }
+
+      searchInput.addEventListener('focus', function() {
+        renderOptions(searchInput.value);
+        dropdown.style.display = 'block';
+      });
+
+      searchInput.addEventListener('input', ClientUtils.debounce(function() {
+        renderOptions(searchInput.value);
+        dropdown.style.display = 'block';
+        // Clear selection if text changed
+        hiddenInput.value = '';
+      }, 150));
+
+      document.addEventListener('click', function(e) {
+        if (!wrapper.contains(e.target)) {
+          dropdown.style.display = 'none';
+        }
+      });
+    });
+
+    return { getValue: function() { return hiddenInput.value; } };
+  }
+
+  function loadStaff(callback) {
+    if (cachedStaff) {
+      callback(cachedStaff);
+      return;
+    }
+    ServerAPI.getActiveStaff().then(function(staff) {
+      cachedStaff = staff;
+      callback(staff);
+    }).catch(function(e) {
+      Toast.error('Failed to load staff list');
+      callback([]);
+    });
+  }
+
+  function clearCache() {
+    cachedStaff = null;
+  }
+
+  return { render: render, clearCache: clearCache };
+})();
+
+// ═══════════════════════════════════════════════
+// StatusBadge — Colored status pill
+// ═══════════════════════════════════════════════
+
+var StatusBadge = (function() {
+
+  var defaultColorMap = {
+    // Generic statuses
+    'active':       'badge-success',
+    'completed':    'badge-success',
+    'achieved':     'badge-success',
+    'final':        'badge-success',
+    'approved':     'badge-success',
+    'in_progress':  'badge-info',
+    'scheduled':    'badge-info',
+    'under_review': 'badge-info',
+    'review':       'badge-info',
+    'draft':        'badge-neutral',
+    'not_started':  'badge-neutral',
+    'pending':      'badge-neutral',
+    'proposed':     'badge-neutral',
+    'planning':     'badge-neutral',
+    'on_hold':      'badge-warning',
+    'blocked':      'badge-warning',
+    'stalled':      'badge-warning',
+    'overdue':      'badge-danger',
+    'cancelled':    'badge-danger',
+    'abandoned':    'badge-danger',
+    'insufficient': 'badge-danger',
+    'deferred':     'badge-warning',
+    'modified':     'badge-warning'
+  };
+
+  /**
+   * Returns an HTML string for a status badge.
+   * @param {string} status
+   * @param {Object} [colorMap] - Override color mappings
+   * @returns {string} HTML string
+   */
+  function html(status, colorMap) {
+    var map = colorMap || defaultColorMap;
+    var cls = map[status] || 'badge-neutral';
+    var label = (status || '').replace(/_/g, ' ');
+    return '<span class="badge ' + cls + '">' + ClientUtils.escapeHtml(label) + '</span>';
+  }
+
+  return { html: html };
+})();
+
+// ═══════════════════════════════════════════════
+// RatingScale — Clickable 1-5 rating circles
+// ═══════════════════════════════════════════════
+
+var RatingScale = (function() {
+
+  /**
+   * Renders a 1-5 rating scale.
+   * @param {HTMLElement} container
+   * @param {Object} opts
+   * @param {string} opts.name - Input name
+   * @param {number} [opts.value] - Pre-selected value
+   * @param {number} [opts.max] - Max rating (default 5)
+   * @param {Function} [opts.onChange] - Called with new value
+   * @returns {{ getValue: Function }}
+   */
+  function render(container, opts) {
+    opts = opts || {};
+    var max = opts.max || 5;
+    var currentValue = opts.value || 0;
+
+    container.innerHTML = '';
+    var scaleDiv = ClientUtils.el('div', { className: 'rating-scale' });
+    var hiddenInput = ClientUtils.el('input', {
+      type: 'hidden',
+      name: opts.name || 'rating',
+      value: currentValue || ''
+    });
+
+    for (var i = 1; i <= max; i++) {
+      (function(val) {
+        var circle = ClientUtils.el('div', {
+          className: 'rating-circle' + (val === currentValue ? ' selected' : ''),
+          dataset: { value: val },
+          role: 'button',
+          tabindex: '0',
+          'aria-label': 'Rating ' + val + ' of ' + max,
+          onClick: function() { select(val); }
+        }, [String(val)]);
+
+        circle.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            select(val);
+          }
+        });
+
+        scaleDiv.appendChild(circle);
+      })(i);
+    }
+
+    container.appendChild(hiddenInput);
+    container.appendChild(scaleDiv);
+
+    function select(val) {
+      currentValue = val;
+      hiddenInput.value = val;
+      // Update visual state
+      var circles = scaleDiv.querySelectorAll('.rating-circle');
+      for (var j = 0; j < circles.length; j++) {
+        circles[j].classList.toggle('selected', parseInt(circles[j].dataset.value) === val);
+      }
+      if (opts.onChange) opts.onChange(val);
+    }
+
+    return {
+      getValue: function() { return currentValue; },
+      setValue: function(val) { select(val); }
+    };
+  }
+
+  return { render: render };
+})();
+
+// ═══════════════════════════════════════════════
+// DataTable — Sortable, filterable, paginated table
+// ═══════════════════════════════════════════════
+
+var DataTable = (function() {
+
+  /**
+   * Renders a data table into a container.
+   * @param {HTMLElement} container
+   * @param {Object} opts
+   * @param {Array} opts.columns - [{ key, label, sortable, render, width }]
+   * @param {Object[]} opts.data
+   * @param {Function} [opts.onRowClick] - Called with row data
+   * @param {number} [opts.pageSize] - Rows per page (0 = no pagination)
+   * @returns {{ refresh: Function }}
+   */
+  function render(container, opts) {
+    opts = opts || {};
+    var columns = opts.columns || [];
+    var allData = opts.data || [];
+    var pageSize = opts.pageSize || 0;
+    var currentPage = 1;
+    var sortField = null;
+    var sortDir = 'asc';
+
+    container.innerHTML = '';
+
+    function getSortedData() {
+      var data = allData.slice();
+      if (sortField) {
+        data.sort(function(a, b) {
+          var va = a[sortField], vb = b[sortField];
+          if (va < vb) return sortDir === 'asc' ? -1 : 1;
+          if (va > vb) return sortDir === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+      return data;
+    }
+
+    function getPageData() {
+      var data = getSortedData();
+      if (!pageSize) return data;
+      var start = (currentPage - 1) * pageSize;
+      return data.slice(start, start + pageSize);
+    }
+
+    function renderTable() {
+      container.innerHTML = '';
+      var sorted = getSortedData();
+      var pageData = getPageData();
+
+      // Table
+      var table = ClientUtils.el('table', { className: 'data-table' });
+
+      // Head
+      var thead = ClientUtils.el('thead');
+      var headRow = ClientUtils.el('tr');
+      columns.forEach(function(col) {
+        var th = ClientUtils.el('th', {
+          className: (sortField === col.key ? 'sorted' : ''),
+          style: col.width ? 'width:' + col.width : '',
+          onClick: col.sortable !== false ? function() {
+            if (sortField === col.key) {
+              sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+              sortField = col.key;
+              sortDir = 'asc';
+            }
+            renderTable();
+          } : null
+        });
+        th.textContent = col.label;
+        if (col.sortable !== false) {
+          var icon = sortField === col.key ? (sortDir === 'asc' ? ' \u25B2' : ' \u25BC') : ' \u25B4';
+          th.appendChild(ClientUtils.el('span', { className: 'sort-icon' }, [icon]));
+        }
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      // Body
+      var tbody = ClientUtils.el('tbody');
+      if (pageData.length === 0) {
+        var emptyRow = ClientUtils.el('tr');
+        var emptyCell = ClientUtils.el('td', {
+          colspan: String(columns.length),
+          style: 'text-align:center; padding:24px; color:var(--color-text-muted);'
+        }, ['No data to display']);
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
+      } else {
+        pageData.forEach(function(row) {
+          var tr = ClientUtils.el('tr', {
+            style: opts.onRowClick ? 'cursor:pointer' : '',
+            onClick: opts.onRowClick ? function() { opts.onRowClick(row); } : null
+          });
+          columns.forEach(function(col) {
+            var td = ClientUtils.el('td');
+            if (col.render) {
+              var content = col.render(row[col.key], row);
+              if (typeof content === 'string') {
+                td.innerHTML = content;
+              } else if (content instanceof HTMLElement) {
+                td.appendChild(content);
+              }
+            } else {
+              td.textContent = row[col.key] != null ? row[col.key] : '';
+            }
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      }
+      table.appendChild(tbody);
+      container.appendChild(table);
+
+      // Pagination
+      if (pageSize && sorted.length > pageSize) {
+        var totalPages = Math.ceil(sorted.length / pageSize);
+        var pagDiv = ClientUtils.el('div', { className: 'pagination' }, [
+          ClientUtils.el('span', {}, ['Showing ' + ((currentPage - 1) * pageSize + 1) + '-' + Math.min(currentPage * pageSize, sorted.length) + ' of ' + sorted.length]),
+          ClientUtils.el('div', { className: 'pagination__buttons' }, [
+            ClientUtils.el('button', {
+              className: 'btn btn-sm btn-secondary',
+              disabled: currentPage <= 1 ? 'disabled' : null,
+              onClick: function() { if (currentPage > 1) { currentPage--; renderTable(); } }
+            }, ['Prev']),
+            ClientUtils.el('button', {
+              className: 'btn btn-sm btn-secondary',
+              disabled: currentPage >= totalPages ? 'disabled' : null,
+              onClick: function() { if (currentPage < totalPages) { currentPage++; renderTable(); } }
+            }, ['Next'])
+          ])
+        ]);
+        container.appendChild(pagDiv);
+      }
+    }
+
+    renderTable();
+
+    return {
+      refresh: function(newData) {
+        allData = newData || allData;
+        currentPage = 1;
+        renderTable();
+      }
+    };
+  }
+
+  return { render: render };
+})();
+
+// ═══════════════════════════════════════════════
+// TagChips — Selectable tag chips
+// ═══════════════════════════════════════════════
+
+var TagChips = (function() {
+
+  /**
+   * Renders a set of toggleable tag chips.
+   * @param {HTMLElement} container
+   * @param {Object} opts
+   * @param {string[]} opts.tags - Available tags
+   * @param {string[]} [opts.selected] - Pre-selected tags
+   * @param {Function} [opts.onChange] - Called with array of selected tags
+   * @returns {{ getSelected: Function }}
+   */
+  function render(container, opts) {
+    opts = opts || {};
+    var selectedSet = {};
+    (opts.selected || []).forEach(function(t) { selectedSet[t] = true; });
+
+    container.innerHTML = '';
+    var wrapper = ClientUtils.el('div', { className: 'tag-chips' });
+
+    (opts.tags || []).forEach(function(tag) {
+      var chip = ClientUtils.el('button', {
+        className: 'tag-chip' + (selectedSet[tag] ? ' selected' : ''),
+        type: 'button',
+        onClick: function() {
+          if (selectedSet[tag]) {
+            delete selectedSet[tag];
+            chip.classList.remove('selected');
+          } else {
+            selectedSet[tag] = true;
+            chip.classList.add('selected');
+          }
+          if (opts.onChange) opts.onChange(Object.keys(selectedSet));
+        }
+      }, [tag.replace(/_/g, ' ')]);
+      wrapper.appendChild(chip);
+    });
+
+    container.appendChild(wrapper);
+
+    return {
+      getSelected: function() { return Object.keys(selectedSet); }
+    };
+  }
+
+  return { render: render };
+})();
+</script>

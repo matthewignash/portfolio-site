@@ -1,0 +1,1055 @@
+<script>
+/* ================================================
+   EMBEDDED FORMATIVE ASSESSMENT SCRIPTS (efa- prefix)
+   ES5 ONLY — no const, let, =>, template literals, .includes()
+   ================================================ */
+
+// ============================================================================
+// ASSESSMENT BUILDER — MODAL LIFECYCLE
+// ============================================================================
+
+function openAssessmentBuilder(hexId) {
+  if (!currentMap || !currentMap.hexes) return;
+  var hex = null;
+  for (var i = 0; i < currentMap.hexes.length; i++) {
+    if (String(currentMap.hexes[i].id) === String(hexId)) {
+      hex = currentMap.hexes[i];
+      break;
+    }
+  }
+  if (!hex) return;
+
+  efaBuilderHexId = hexId;
+  efaBuilderPreviewMode = false;
+
+  // Load existing or create empty
+  var existing = null;
+  if (hex.assessmentJson) {
+    existing = (typeof hex.assessmentJson === 'string') ? JSON.parse(hex.assessmentJson) : hex.assessmentJson;
+  }
+
+  efaBuilderData = existing || {
+    assessmentId: 'asmnt-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
+    title: '',
+    description: '',
+    passingScorePct: 70,
+    maxAttempts: 3,
+    timeLimitMinutes: 0,
+    questions: []
+  };
+
+  // Populate settings
+  var titleEl = document.getElementById('efaTitle');
+  var descEl = document.getElementById('efaDescription');
+  var passEl = document.getElementById('efaPassingScore');
+  var attEl = document.getElementById('efaMaxAttempts');
+  var timeEl = document.getElementById('efaTimeLimit');
+  if (titleEl) titleEl.value = efaBuilderData.title || '';
+  if (descEl) descEl.value = efaBuilderData.description || '';
+  if (passEl) passEl.value = efaBuilderData.passingScorePct || 70;
+  if (attEl) attEl.value = efaBuilderData.maxAttempts || 3;
+  if (timeEl) timeEl.value = efaBuilderData.timeLimitMinutes || 0;
+
+  // Set hex label
+  var hexLabel = document.getElementById('efaBuilderHexLabel');
+  if (hexLabel) hexLabel.textContent = hex.label || hexId;
+
+  // Show preview container or edit
+  var previewCont = document.getElementById('efaPreviewContainer');
+  if (previewCont) previewCont.style.display = 'none';
+
+  efaRenderQuestionList();
+
+  document.getElementById('efaBuilderOverlay').classList.add('open');
+}
+
+function closeAssessmentBuilder() {
+  document.getElementById('efaBuilderOverlay').classList.remove('open');
+  efaBuilderData = null;
+  efaBuilderHexId = null;
+  efaBuilderPreviewMode = false;
+}
+
+// ============================================================================
+// ASSESSMENT BUILDER — QUESTION MANAGEMENT
+// ============================================================================
+
+function efaRenderQuestionList() {
+  var container = document.getElementById('efaQuestionList');
+  if (!container || !efaBuilderData) return;
+
+  var questions = efaBuilderData.questions || [];
+  if (questions.length === 0) {
+    container.innerHTML = '<div class="efa-q-empty"><div class="icon">&#128221;</div>No questions yet. Click a button above to add one.</div>';
+    return;
+  }
+
+  var html = '<div class="efa-q-list">';
+  for (var i = 0; i < questions.length; i++) {
+    var q = questions[i];
+    var typeLabel = q.type === 'multiple_choice' ? 'MC' : q.type === 'short_answer' ? 'SA' : q.type === 'matching' ? 'Match' : 'Order';
+    var typeCss = q.type === 'multiple_choice' ? 'mc' : q.type === 'short_answer' ? 'sa' : q.type === 'matching' ? 'match' : 'order';
+    var promptText = q.prompt || '(no prompt)';
+    if (promptText.length > 50) promptText = promptText.substring(0, 50) + '...';
+
+    html += '<div class="efa-q-item" id="efaQ' + i + '">';
+    html += '<div class="efa-q-header" onclick="efaToggleQuestion(' + i + ')">';
+    html += '<span class="efa-q-number">' + (i + 1) + '</span>';
+    html += '<span class="efa-q-type-badge ' + typeCss + '">' + typeLabel + '</span>';
+    html += '<span class="efa-q-prompt-preview">' + escapeHtml(promptText) + '</span>';
+    html += '<span class="efa-q-points">' + (q.points || 1) + ' pt' + ((q.points || 1) !== 1 ? 's' : '') + '</span>';
+    html += '<span class="efa-q-chevron">&#9658;</span>';
+    html += '</div>';
+    html += '<div class="efa-q-body">';
+    html += efaRenderQuestionEditor(i, q);
+    html += '<div class="efa-q-actions">';
+    if (i > 0) html += '<button class="efa-q-action-btn" onclick="efaMoveQuestion(' + i + ',-1)">&#9650; Up</button>';
+    if (i < questions.length - 1) html += '<button class="efa-q-action-btn" onclick="efaMoveQuestion(' + i + ',1)">&#9660; Down</button>';
+    html += '<button class="efa-q-action-btn danger" onclick="efaRemoveQuestion(' + i + ')">&#10005; Remove</button>';
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function efaToggleQuestion(index) {
+  var el = document.getElementById('efaQ' + index);
+  if (el) el.classList.toggle('collapsed');
+}
+
+function efaAddQuestion(type) {
+  if (!efaBuilderData) return;
+  var qId = 'q-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+
+  var newQ = {
+    questionId: qId,
+    type: type,
+    prompt: '',
+    points: 1
+  };
+
+  if (type === 'multiple_choice') {
+    newQ.options = [
+      { id: 'a', text: '', explanation: '' },
+      { id: 'b', text: '', explanation: '' }
+    ];
+    newQ.correctAnswer = 'a';
+  } else if (type === 'short_answer') {
+    newQ.acceptedAnswers = [''];
+    newQ.keywords = [];
+    newQ.keywordPointsPct = 50;
+  } else if (type === 'matching') {
+    newQ.pairs = [
+      { left: '', right: '' },
+      { left: '', right: '' }
+    ];
+  } else if (type === 'ordering') {
+    newQ.items = ['', ''];
+  }
+
+  efaBuilderData.questions.push(newQ);
+  efaRenderQuestionList();
+}
+
+function efaRemoveQuestion(index) {
+  if (!efaBuilderData || !efaBuilderData.questions) return;
+  efaCollectAllQuestionData();
+  efaBuilderData.questions.splice(index, 1);
+  efaRenderQuestionList();
+}
+
+function efaMoveQuestion(index, direction) {
+  if (!efaBuilderData || !efaBuilderData.questions) return;
+  efaCollectAllQuestionData();
+  var newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= efaBuilderData.questions.length) return;
+  var temp = efaBuilderData.questions[index];
+  efaBuilderData.questions[index] = efaBuilderData.questions[newIndex];
+  efaBuilderData.questions[newIndex] = temp;
+  efaRenderQuestionList();
+}
+
+// ============================================================================
+// ASSESSMENT BUILDER — TYPE-SPECIFIC EDITORS
+// ============================================================================
+
+function efaRenderQuestionEditor(index, question) {
+  var html = '';
+  html += '<div class="efa-form-group">';
+  html += '<label>Prompt</label>';
+  html += '<textarea id="efaQPrompt' + index + '" class="efa-form-group" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;min-height:50px;box-sizing:border-box;" placeholder="Enter question prompt...">' + escapeHtml(question.prompt || '') + '</textarea>';
+  html += '</div>';
+
+  html += '<div class="efa-form-row">';
+  html += '<div class="efa-form-group" style="max-width:80px;">';
+  html += '<label>Points</label>';
+  html += '<input type="number" id="efaQPoints' + index + '" min="1" max="100" value="' + (question.points || 1) + '">';
+  html += '</div>';
+  html += '</div>';
+
+  if (question.type === 'multiple_choice') {
+    html += efaRenderMcEditor(index, question);
+  } else if (question.type === 'short_answer') {
+    html += efaRenderSaEditor(index, question);
+  } else if (question.type === 'matching') {
+    html += efaRenderMatchEditor(index, question);
+  } else if (question.type === 'ordering') {
+    html += efaRenderOrderEditor(index, question);
+  }
+
+  return html;
+}
+
+function efaRenderMcEditor(index, question) {
+  var options = question.options || [];
+  var correct = question.correctAnswer || '';
+  var html = '<label style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.3px;">Options (select correct answer)</label>';
+  html += '<div class="efa-mc-options" id="efaMcOpts' + index + '">';
+
+  for (var i = 0; i < options.length; i++) {
+    var opt = options[i];
+    var isCorrect = (String(opt.id) === String(correct));
+    html += '<div class="efa-mc-option' + (isCorrect ? ' correct' : '') + '">';
+    html += '<input type="radio" class="efa-mc-correct-radio" name="efaMcCorrect' + index + '" value="' + escapeHtml(opt.id) + '"' + (isCorrect ? ' checked' : '') + ' onchange="efaSetCorrectMc(' + index + ',\'' + escapeHtml(opt.id) + '\')">';
+    html += '<input type="text" class="efa-mc-option-text" id="efaMcText' + index + '_' + i + '" value="' + escapeHtml(opt.text || '') + '" placeholder="Option ' + opt.id.toUpperCase() + '">';
+    html += '<button class="efa-mc-remove-opt" onclick="efaRemoveMcOption(' + index + ',' + i + ')" title="Remove">&times;</button>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  if (options.length < 6) {
+    html += '<button class="efa-add-row-btn" onclick="efaAddMcOption(' + index + ')">+ Add Option</button>';
+  }
+  return html;
+}
+
+function efaRenderSaEditor(index, question) {
+  var answers = question.acceptedAnswers || [''];
+  var keywords = question.keywords || [];
+  var keyPct = question.keywordPointsPct || 50;
+
+  var html = '<label style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.3px;">Accepted Answers</label>';
+  html += '<div class="efa-sa-answers" id="efaSaAnswers' + index + '">';
+  for (var i = 0; i < answers.length; i++) {
+    html += '<div class="efa-sa-answer-row">';
+    html += '<input type="text" class="efa-sa-answer-input" id="efaSaAns' + index + '_' + i + '" value="' + escapeHtml(answers[i] || '') + '" placeholder="Accepted answer...">';
+    if (answers.length > 1) {
+      html += '<button class="efa-remove-btn" onclick="efaRemoveSaAnswer(' + index + ',' + i + ')">&times;</button>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<button class="efa-add-row-btn" onclick="efaAddSaAnswer(' + index + ')">+ Add Answer</button>';
+
+  html += '<div class="efa-sa-keywords" style="margin-top:10px;">';
+  html += '<label style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.3px;">Partial Credit Keywords (optional)</label>';
+  html += '<input type="text" id="efaSaKeywords' + index + '" value="' + escapeHtml(keywords.join(', ')) + '" placeholder="keyword1, keyword2..." style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:13px;box-sizing:border-box;">';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">';
+  html += '<span style="font-size:11px;color:#64748b;">Keyword match gives</span>';
+  html += '<input type="number" id="efaSaKeyPct' + index + '" value="' + keyPct + '" min="0" max="100" style="width:50px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">';
+  html += '<span style="font-size:11px;color:#64748b;">% of points</span>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function efaRenderMatchEditor(index, question) {
+  var pairs = question.pairs || [];
+  var html = '<label style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.3px;">Matching Pairs</label>';
+  html += '<div class="efa-match-pairs" id="efaMatchPairs' + index + '">';
+  for (var i = 0; i < pairs.length; i++) {
+    html += '<div class="efa-match-pair">';
+    html += '<input type="text" class="efa-match-input" id="efaMatchL' + index + '_' + i + '" value="' + escapeHtml(pairs[i].left || '') + '" placeholder="Left item">';
+    html += '<span class="efa-match-arrow">&#8594;</span>';
+    html += '<input type="text" class="efa-match-input" id="efaMatchR' + index + '_' + i + '" value="' + escapeHtml(pairs[i].right || '') + '" placeholder="Right item">';
+    if (pairs.length > 2) {
+      html += '<button class="efa-remove-btn" onclick="efaRemoveMatchPair(' + index + ',' + i + ')">&times;</button>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<button class="efa-add-row-btn" onclick="efaAddMatchPair(' + index + ')">+ Add Pair</button>';
+  return html;
+}
+
+function efaRenderOrderEditor(index, question) {
+  var items = question.items || [];
+  var html = '<label style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.3px;">Items (in correct order)</label>';
+  html += '<div class="efa-order-items" id="efaOrderItems' + index + '">';
+  for (var i = 0; i < items.length; i++) {
+    html += '<div class="efa-order-item">';
+    html += '<span class="efa-order-num">' + (i + 1) + '</span>';
+    html += '<input type="text" class="efa-order-input" id="efaOrdItem' + index + '_' + i + '" value="' + escapeHtml(items[i] || '') + '" placeholder="Item ' + (i + 1) + '">';
+    html += '<button class="efa-reorder-btn" onclick="efaMoveOrderItem(' + index + ',' + i + ',-1)"' + (i === 0 ? ' disabled' : '') + '>&#9650;</button>';
+    html += '<button class="efa-reorder-btn" onclick="efaMoveOrderItem(' + index + ',' + i + ',1)"' + (i === items.length - 1 ? ' disabled' : '') + '>&#9660;</button>';
+    if (items.length > 2) {
+      html += '<button class="efa-remove-btn" onclick="efaRemoveOrderItem(' + index + ',' + i + ')">&times;</button>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<button class="efa-add-row-btn" onclick="efaAddOrderItem(' + index + ')">+ Add Item</button>';
+  return html;
+}
+
+// ============================================================================
+// ASSESSMENT BUILDER — OPTION/ITEM MANIPULATION
+// ============================================================================
+
+function efaSetCorrectMc(qIndex, optId) {
+  if (!efaBuilderData || !efaBuilderData.questions[qIndex]) return;
+  efaCollectQuestionData(qIndex);
+  efaBuilderData.questions[qIndex].correctAnswer = optId;
+  efaRenderQuestionList();
+}
+
+function efaAddMcOption(qIndex) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q || q.options.length >= 6) return;
+  var nextId = String.fromCharCode(97 + q.options.length); // a, b, c...
+  q.options.push({ id: nextId, text: '', explanation: '' });
+  efaRenderQuestionList();
+}
+
+function efaRemoveMcOption(qIndex, optIndex) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q || q.options.length <= 2) return;
+  var removedId = q.options[optIndex].id;
+  q.options.splice(optIndex, 1);
+  if (q.correctAnswer === removedId) q.correctAnswer = q.options[0].id;
+  efaRenderQuestionList();
+}
+
+function efaAddSaAnswer(qIndex) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q) return;
+  q.acceptedAnswers.push('');
+  efaRenderQuestionList();
+}
+
+function efaRemoveSaAnswer(qIndex, ansIndex) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q || q.acceptedAnswers.length <= 1) return;
+  q.acceptedAnswers.splice(ansIndex, 1);
+  efaRenderQuestionList();
+}
+
+function efaAddMatchPair(qIndex) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q) return;
+  q.pairs.push({ left: '', right: '' });
+  efaRenderQuestionList();
+}
+
+function efaRemoveMatchPair(qIndex, pairIndex) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q || q.pairs.length <= 2) return;
+  q.pairs.splice(pairIndex, 1);
+  efaRenderQuestionList();
+}
+
+function efaAddOrderItem(qIndex) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q) return;
+  q.items.push('');
+  efaRenderQuestionList();
+}
+
+function efaRemoveOrderItem(qIndex, itemIndex) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q || q.items.length <= 2) return;
+  q.items.splice(itemIndex, 1);
+  efaRenderQuestionList();
+}
+
+function efaMoveOrderItem(qIndex, itemIndex, direction) {
+  efaCollectQuestionData(qIndex);
+  var q = efaBuilderData.questions[qIndex];
+  if (!q) return;
+  var newIndex = itemIndex + direction;
+  if (newIndex < 0 || newIndex >= q.items.length) return;
+  var temp = q.items[itemIndex];
+  q.items[itemIndex] = q.items[newIndex];
+  q.items[newIndex] = temp;
+  efaRenderQuestionList();
+}
+
+// ============================================================================
+// ASSESSMENT BUILDER — DATA COLLECTION & SAVE
+// ============================================================================
+
+function efaCollectQuestionData(index) {
+  if (!efaBuilderData || !efaBuilderData.questions[index]) return;
+  var q = efaBuilderData.questions[index];
+
+  var promptEl = document.getElementById('efaQPrompt' + index);
+  if (promptEl) q.prompt = promptEl.value;
+
+  var pointsEl = document.getElementById('efaQPoints' + index);
+  if (pointsEl) q.points = parseInt(pointsEl.value) || 1;
+
+  if (q.type === 'multiple_choice') {
+    for (var i = 0; i < q.options.length; i++) {
+      var textEl = document.getElementById('efaMcText' + index + '_' + i);
+      if (textEl) q.options[i].text = textEl.value;
+    }
+  } else if (q.type === 'short_answer') {
+    var answers = q.acceptedAnswers || [];
+    for (var j = 0; j < answers.length; j++) {
+      var ansEl = document.getElementById('efaSaAns' + index + '_' + j);
+      if (ansEl) q.acceptedAnswers[j] = ansEl.value;
+    }
+    var kwEl = document.getElementById('efaSaKeywords' + index);
+    if (kwEl) {
+      var kwText = kwEl.value.trim();
+      q.keywords = kwText ? kwText.split(',').map(function(k) { return k.trim(); }).filter(function(k) { return k; }) : [];
+    }
+    var pctEl = document.getElementById('efaSaKeyPct' + index);
+    if (pctEl) q.keywordPointsPct = parseInt(pctEl.value) || 50;
+  } else if (q.type === 'matching') {
+    for (var m = 0; m < q.pairs.length; m++) {
+      var leftEl = document.getElementById('efaMatchL' + index + '_' + m);
+      var rightEl = document.getElementById('efaMatchR' + index + '_' + m);
+      if (leftEl) q.pairs[m].left = leftEl.value;
+      if (rightEl) q.pairs[m].right = rightEl.value;
+    }
+  } else if (q.type === 'ordering') {
+    for (var o = 0; o < q.items.length; o++) {
+      var itemEl = document.getElementById('efaOrdItem' + index + '_' + o);
+      if (itemEl) q.items[o] = itemEl.value;
+    }
+  }
+}
+
+function efaCollectAllQuestionData() {
+  if (!efaBuilderData || !efaBuilderData.questions) return;
+  for (var i = 0; i < efaBuilderData.questions.length; i++) {
+    efaCollectQuestionData(i);
+  }
+}
+
+function efaCollectSettings() {
+  if (!efaBuilderData) return;
+  var titleEl = document.getElementById('efaTitle');
+  var descEl = document.getElementById('efaDescription');
+  var passEl = document.getElementById('efaPassingScore');
+  var attEl = document.getElementById('efaMaxAttempts');
+  var timeEl = document.getElementById('efaTimeLimit');
+  if (titleEl) efaBuilderData.title = titleEl.value.trim();
+  if (descEl) efaBuilderData.description = descEl.value.trim();
+  if (passEl) efaBuilderData.passingScorePct = parseInt(passEl.value) || 70;
+  if (attEl) efaBuilderData.maxAttempts = parseInt(attEl.value) || 0;
+  if (timeEl) efaBuilderData.timeLimitMinutes = parseInt(timeEl.value) || 0;
+}
+
+function efaValidateAssessment() {
+  if (!efaBuilderData) return 'No assessment data.';
+  if (!efaBuilderData.questions || efaBuilderData.questions.length === 0) return 'Add at least one question.';
+
+  for (var i = 0; i < efaBuilderData.questions.length; i++) {
+    var q = efaBuilderData.questions[i];
+    if (!q.prompt || !q.prompt.trim()) return 'Question ' + (i + 1) + ' needs a prompt.';
+
+    if (q.type === 'multiple_choice') {
+      if (!q.options || q.options.length < 2) return 'Question ' + (i + 1) + ': MC needs at least 2 options.';
+      var hasText = false;
+      for (var j = 0; j < q.options.length; j++) {
+        if (q.options[j].text && q.options[j].text.trim()) hasText = true;
+      }
+      if (!hasText) return 'Question ' + (i + 1) + ': MC options need text.';
+    } else if (q.type === 'short_answer') {
+      var hasAnswer = false;
+      for (var k = 0; k < (q.acceptedAnswers || []).length; k++) {
+        if (q.acceptedAnswers[k] && q.acceptedAnswers[k].trim()) hasAnswer = true;
+      }
+      if (!hasAnswer) return 'Question ' + (i + 1) + ': Add at least one accepted answer.';
+    } else if (q.type === 'matching') {
+      if (!q.pairs || q.pairs.length < 2) return 'Question ' + (i + 1) + ': Matching needs at least 2 pairs.';
+    } else if (q.type === 'ordering') {
+      if (!q.items || q.items.length < 2) return 'Question ' + (i + 1) + ': Ordering needs at least 2 items.';
+    }
+  }
+  return null;
+}
+
+function efaSaveAssessment() {
+  efaCollectSettings();
+  efaCollectAllQuestionData();
+
+  var error = efaValidateAssessment();
+  if (error) {
+    showToast(error, 'error');
+    return;
+  }
+
+  // Write to hex on currentMap (local state, saved when map saves)
+  if (!currentMap || !currentMap.hexes) return;
+  for (var i = 0; i < currentMap.hexes.length; i++) {
+    if (String(currentMap.hexes[i].id) === String(efaBuilderHexId)) {
+      currentMap.hexes[i].assessmentJson = JSON.stringify(efaBuilderData);
+      break;
+    }
+  }
+
+  // Mark map as unsaved
+  if (typeof markMapDirty === 'function') markMapDirty();
+
+  // Update info badge
+  efaUpdateEditorInfo();
+
+  showToast('Assessment saved (' + efaBuilderData.questions.length + ' questions)', 'success');
+  closeAssessmentBuilder();
+}
+
+// ============================================================================
+// ASSESSMENT BUILDER — PREVIEW MODE
+// ============================================================================
+
+function efaTogglePreview() {
+  efaBuilderPreviewMode = !efaBuilderPreviewMode;
+  var previewCont = document.getElementById('efaPreviewContainer');
+  var editCont = document.getElementById('efaQuestionList');
+  var settingsPanel = document.querySelector('.efa-settings-panel');
+  var toolbar = document.querySelector('.efa-q-toolbar');
+  var previewBtn = document.getElementById('efaPreviewBtn');
+
+  if (efaBuilderPreviewMode) {
+    efaCollectSettings();
+    efaCollectAllQuestionData();
+    if (editCont) editCont.style.display = 'none';
+    if (settingsPanel) settingsPanel.style.display = 'none';
+    if (toolbar) toolbar.style.display = 'none';
+    if (previewCont) {
+      previewCont.style.display = 'block';
+      previewCont.innerHTML = efaRenderPreview();
+    }
+    if (previewBtn) { previewBtn.textContent = 'Edit'; previewBtn.classList.add('active'); }
+  } else {
+    if (editCont) editCont.style.display = 'block';
+    if (settingsPanel) settingsPanel.style.display = 'block';
+    if (toolbar) toolbar.style.display = 'flex';
+    if (previewCont) previewCont.style.display = 'none';
+    if (previewBtn) { previewBtn.textContent = 'Preview'; previewBtn.classList.remove('active'); }
+  }
+}
+
+function efaRenderPreview() {
+  if (!efaBuilderData) return '';
+  var html = '<div class="efa-preview-banner">Preview Mode — This is how students will see the assessment</div>';
+  html += efaRenderStudentAssessmentHtml(efaBuilderData, true);
+  return html;
+}
+
+// ============================================================================
+// STUDENT ASSESSMENT — RENDERING
+// ============================================================================
+
+function efaRenderStudentAssessment(hex, progress) {
+  var assessment = null;
+  if (hex.assessmentJson) {
+    assessment = (typeof hex.assessmentJson === 'string') ? JSON.parse(hex.assessmentJson) : hex.assessmentJson;
+  }
+  if (!assessment || !assessment.questions || assessment.questions.length === 0) return '';
+
+  efaStudentAnswers = {};
+  efaCurrentAttempt = null;
+
+  // Check previous attempts
+  var hexId = hex.id;
+  var mapId = currentMap ? currentMap.mapId : '';
+  var alreadyPassed = progress && (progress.status === 'completed' || progress.status === 'mastered');
+
+  var html = '<div class="efa-take-container" id="efaTakeContainer">';
+
+  if (alreadyPassed) {
+    html += '<div class="efa-completed-badge">&#9989; Assessment Complete</div>';
+    html += '<div style="font-size:12px;color:#64748b;margin-top:6px;">Score: ' + (progress.score || 0) + '/' + (progress.maxScore || 0) + '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  // Load attempt info — we'll fetch async and render
+  html += '<div id="efaAssessmentBody">';
+  html += '<div style="text-align:center;padding:20px;color:#94a3b8;">Loading assessment...</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // Async load attempt count
+  setTimeout(function() {
+    google.script.run
+      .withSuccessHandler(function(responses) {
+        var attemptCount = responses ? responses.length : 0;
+        var maxAttempts = assessment.maxAttempts || 0;
+        var hasRetries = maxAttempts === 0 || attemptCount < maxAttempts;
+
+        var bodyEl = document.getElementById('efaAssessmentBody');
+        if (!bodyEl) return;
+
+        if (!hasRetries) {
+          bodyEl.innerHTML = '<div class="efa-no-retries">No attempts remaining (' + attemptCount + '/' + maxAttempts + ' used). Contact your teacher to reset.</div>';
+          return;
+        }
+
+        efaCurrentAttempt = attemptCount + 1;
+        var infoText = maxAttempts > 0 ? 'Attempt ' + efaCurrentAttempt + ' of ' + maxAttempts : 'Attempt ' + efaCurrentAttempt;
+        bodyEl.innerHTML = efaRenderStudentAssessmentHtml(assessment, false) +
+          '<div class="efa-retry-info">' + infoText + ' &middot; Passing: ' + (assessment.passingScorePct || 70) + '%</div>' +
+          '<button class="efa-submit-btn" onclick="efaSubmitAssessment(\'' + escapeHtml(hexId) + '\')">Submit Assessment</button>';
+      })
+      .withFailureHandler(function() {
+        var bodyEl = document.getElementById('efaAssessmentBody');
+        if (bodyEl) {
+          efaCurrentAttempt = 1;
+          bodyEl.innerHTML = efaRenderStudentAssessmentHtml(assessment, false) +
+            '<div class="efa-retry-info">Passing: ' + (assessment.passingScorePct || 70) + '%</div>' +
+            '<button class="efa-submit-btn" onclick="efaSubmitAssessment(\'' + escapeHtml(hexId) + '\')">Submit Assessment</button>';
+        }
+      })
+      .getAssessmentResponses(mapId, hexId);
+  }, 50);
+
+  return html;
+}
+
+function efaRenderStudentAssessmentHtml(assessment, isPreview) {
+  var questions = assessment.questions || [];
+  var html = '';
+
+  html += '<div class="efa-take-header">';
+  html += '<span class="efa-take-title">' + escapeHtml(assessment.title || 'Assessment') + '</span>';
+  html += '<span class="efa-take-info">' + questions.length + ' question' + (questions.length !== 1 ? 's' : '') + '</span>';
+  html += '</div>';
+
+  if (assessment.description) {
+    html += '<div style="font-size:13px;color:#64748b;margin-bottom:12px;">' + escapeHtml(assessment.description) + '</div>';
+  }
+
+  for (var i = 0; i < questions.length; i++) {
+    var q = questions[i];
+    html += '<div class="efa-take-question">';
+    html += '<div class="efa-take-q-number">Question ' + (i + 1) + '</div>';
+    html += '<div class="efa-take-q-prompt">' + escapeHtml(q.prompt || '') + '</div>';
+    if (q.points > 1) {
+      html += '<div class="efa-take-q-points">' + q.points + ' points</div>';
+    }
+
+    if (q.type === 'multiple_choice') {
+      html += efaRenderTakeMc(i, q, isPreview);
+    } else if (q.type === 'short_answer') {
+      html += efaRenderTakeSa(i, q, isPreview);
+    } else if (q.type === 'matching') {
+      html += efaRenderTakeMatch(i, q, isPreview);
+    } else if (q.type === 'ordering') {
+      html += efaRenderTakeOrder(i, q, isPreview);
+    }
+
+    html += '</div>';
+  }
+
+  return html;
+}
+
+function efaRenderTakeMc(index, question, isPreview) {
+  var options = question.options || [];
+  var html = '<div class="efa-take-mc-options">';
+  for (var i = 0; i < options.length; i++) {
+    var inputName = isPreview ? 'efaPreviewMc' + index : 'efaTakeMc' + index;
+    html += '<label class="efa-take-mc-option" onclick="if(!this.querySelector(\'input\').disabled)this.querySelector(\'input\').checked=true">';
+    html += '<input type="radio" class="efa-take-mc-radio" name="' + inputName + '" value="' + escapeHtml(options[i].id) + '"' + (isPreview ? ' disabled' : '') + '>';
+    html += '<span class="efa-take-mc-text">' + escapeHtml(options[i].text || '') + '</span>';
+    html += '</label>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function efaRenderTakeSa(index, question, isPreview) {
+  var inputId = isPreview ? 'efaPreviewSa' + index : 'efaTakeSa' + index;
+  return '<input type="text" class="efa-take-sa-input" id="' + inputId + '" placeholder="Type your answer..."' + (isPreview ? ' disabled' : '') + '>';
+}
+
+function efaRenderTakeMatch(index, question, isPreview) {
+  var pairs = question.pairs || [];
+  // Shuffle right side
+  var rightItems = [];
+  for (var i = 0; i < pairs.length; i++) {
+    rightItems.push(pairs[i].right);
+  }
+  if (!isPreview) {
+    rightItems = efaShuffleArray(rightItems.slice());
+  }
+
+  var html = '';
+  for (var j = 0; j < pairs.length; j++) {
+    var selectId = isPreview ? 'efaPreviewMatch' + index + '_' + j : 'efaTakeMatch' + index + '_' + j;
+    html += '<div class="efa-take-match-row">';
+    html += '<span class="efa-take-match-left">' + escapeHtml(pairs[j].left) + '</span>';
+    html += '<select class="efa-take-match-select" id="' + selectId + '"' + (isPreview ? ' disabled' : '') + '>';
+    html += '<option value="">-- Select --</option>';
+    for (var k = 0; k < rightItems.length; k++) {
+      html += '<option value="' + escapeHtml(rightItems[k]) + '">' + escapeHtml(rightItems[k]) + '</option>';
+    }
+    html += '</select>';
+    html += '</div>';
+  }
+  return html;
+}
+
+function efaRenderTakeOrder(index, question, isPreview) {
+  var items = question.items || [];
+  // Shuffle items for student
+  var shuffled = isPreview ? items.slice() : efaShuffleArray(items.slice());
+
+  // Store shuffle so we can collect answers
+  efaShuffleMap['order_' + index] = shuffled.slice();
+
+  var html = '<div id="efaOrderContainer' + index + '">';
+  for (var i = 0; i < shuffled.length; i++) {
+    html += '<div class="efa-take-order-item" id="efaOrdRow' + index + '_' + i + '">';
+    html += '<span class="efa-order-num">' + (i + 1) + '</span>';
+    html += '<span class="efa-take-order-text">' + escapeHtml(shuffled[i]) + '</span>';
+    if (!isPreview) {
+      html += '<div class="efa-take-order-btns">';
+      html += '<button class="efa-reorder-btn" onclick="efaMoveStudentOrderItem(' + index + ',' + i + ',-1)"' + (i === 0 ? ' disabled' : '') + '>&#9650;</button>';
+      html += '<button class="efa-reorder-btn" onclick="efaMoveStudentOrderItem(' + index + ',' + i + ',1)"' + (i === shuffled.length - 1 ? ' disabled' : '') + '>&#9660;</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function efaMoveStudentOrderItem(qIndex, itemIndex, direction) {
+  var arr = efaShuffleMap['order_' + qIndex];
+  if (!arr) return;
+  var newIndex = itemIndex + direction;
+  if (newIndex < 0 || newIndex >= arr.length) return;
+  var temp = arr[itemIndex];
+  arr[itemIndex] = arr[newIndex];
+  arr[newIndex] = temp;
+
+  // Re-render just this ordering container
+  var container = document.getElementById('efaOrderContainer' + qIndex);
+  if (!container) return;
+  var html = '';
+  for (var i = 0; i < arr.length; i++) {
+    html += '<div class="efa-take-order-item" id="efaOrdRow' + qIndex + '_' + i + '">';
+    html += '<span class="efa-order-num">' + (i + 1) + '</span>';
+    html += '<span class="efa-take-order-text">' + escapeHtml(arr[i]) + '</span>';
+    html += '<div class="efa-take-order-btns">';
+    html += '<button class="efa-reorder-btn" onclick="efaMoveStudentOrderItem(' + qIndex + ',' + i + ',-1)"' + (i === 0 ? ' disabled' : '') + '>&#9650;</button>';
+    html += '<button class="efa-reorder-btn" onclick="efaMoveStudentOrderItem(' + qIndex + ',' + i + ',1)"' + (i === arr.length - 1 ? ' disabled' : '') + '>&#9660;</button>';
+    html += '</div>';
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+// ============================================================================
+// STUDENT ASSESSMENT — SUBMISSION
+// ============================================================================
+
+function efaCollectStudentAnswers(assessment) {
+  var questions = assessment.questions || [];
+  var answers = [];
+
+  for (var i = 0; i < questions.length; i++) {
+    var q = questions[i];
+    var answer = null;
+
+    if (q.type === 'multiple_choice') {
+      var radios = document.querySelectorAll('input[name="efaTakeMc' + i + '"]');
+      for (var r = 0; r < radios.length; r++) {
+        if (radios[r].checked) { answer = radios[r].value; break; }
+      }
+    } else if (q.type === 'short_answer') {
+      var saEl = document.getElementById('efaTakeSa' + i);
+      answer = saEl ? saEl.value : '';
+    } else if (q.type === 'matching') {
+      var pairs = q.pairs || [];
+      answer = [];
+      for (var m = 0; m < pairs.length; m++) {
+        var selectEl = document.getElementById('efaTakeMatch' + i + '_' + m);
+        answer.push({ left: pairs[m].left, right: selectEl ? selectEl.value : '' });
+      }
+    } else if (q.type === 'ordering') {
+      answer = efaShuffleMap['order_' + i] ? efaShuffleMap['order_' + i].slice() : [];
+    }
+
+    answers.push({ questionId: q.questionId, answer: answer });
+  }
+
+  return answers;
+}
+
+function efaSubmitAssessment(hexId) {
+  if (!currentMap) return;
+
+  // Find hex and its assessment
+  var hex = null;
+  for (var i = 0; i < currentMap.hexes.length; i++) {
+    if (String(currentMap.hexes[i].id) === String(hexId)) {
+      hex = currentMap.hexes[i];
+      break;
+    }
+  }
+  if (!hex) return;
+
+  var assessment = null;
+  if (hex.assessmentJson) {
+    assessment = (typeof hex.assessmentJson === 'string') ? JSON.parse(hex.assessmentJson) : hex.assessmentJson;
+  }
+  if (!assessment) return;
+
+  var answers = efaCollectStudentAnswers(assessment);
+  var answersJson = JSON.stringify(answers);
+
+  // Disable submit button
+  var submitBtns = document.querySelectorAll('.efa-submit-btn');
+  for (var b = 0; b < submitBtns.length; b++) {
+    submitBtns[b].disabled = true;
+    submitBtns[b].textContent = 'Submitting...';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      efaRenderResults(result, assessment, hexId);
+
+      // Reload student progress if passed
+      if (result.passed) {
+        studentProgressData = {};
+        if (typeof loadStudentMapProgress === 'function') {
+          loadStudentMapProgress(function() {
+            if (typeof renderHexGridInternal === 'function') renderHexGridInternal();
+          });
+        }
+        if (result.unlockedHexes && result.unlockedHexes.length > 0) {
+          if (typeof showUnlockNotification === 'function') {
+            showUnlockNotification(result.unlockedHexes, 'completed');
+          }
+        }
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + err.message, 'error');
+      var btns = document.querySelectorAll('.efa-submit-btn');
+      for (var x = 0; x < btns.length; x++) {
+        btns[x].disabled = false;
+        btns[x].textContent = 'Submit Assessment';
+      }
+    })
+    .submitAssessment(currentMap.mapId, hexId, answersJson);
+}
+
+// ============================================================================
+// STUDENT ASSESSMENT — RESULTS DISPLAY
+// ============================================================================
+
+function efaRenderResults(result, assessment, hexId) {
+  var container = document.getElementById('efaAssessmentBody') || document.getElementById('efaTakeContainer');
+  if (!container) return;
+
+  var questions = assessment.questions || [];
+  var perQ = result.perQuestion || [];
+
+  var html = '<div class="efa-results-container">';
+
+  // Summary card
+  var summaryClass = result.passed ? 'passed' : 'failed';
+  html += '<div class="efa-results-summary ' + summaryClass + '">';
+  html += '<div class="efa-results-score">' + result.totalScore + '/' + result.maxScore + '</div>';
+  html += '<div class="efa-results-label ' + summaryClass + '">' + (result.passed ? 'Passed!' : 'Not Yet') + ' (' + Math.round(result.scorePct) + '%)</div>';
+
+  var attText = '';
+  if (result.attemptsRemaining === -1) {
+    attText = 'Attempt ' + result.attemptsUsed;
+  } else if (result.attemptsRemaining > 0) {
+    attText = 'Attempt ' + result.attemptsUsed + ' &middot; ' + result.attemptsRemaining + ' remaining';
+  } else {
+    attText = 'Attempt ' + result.attemptsUsed + ' &middot; No attempts remaining';
+  }
+  html += '<div class="efa-results-attempts">' + attText + '</div>';
+  html += '</div>';
+
+  // Per-question results
+  for (var i = 0; i < perQ.length; i++) {
+    var pq = perQ[i];
+    var qDef = questions[i] || {};
+    var isPartial = !pq.isCorrect && pq.pointsEarned > 0;
+    var resultClass = pq.isCorrect ? 'correct' : (isPartial ? 'partial' : 'incorrect');
+    var icon = pq.isCorrect ? '&#10004;' : (isPartial ? '&#9679;' : '&#10008;');
+
+    html += '<div class="efa-results-question ' + resultClass + '">';
+    html += '<div class="efa-results-q-header">';
+    html += '<span class="efa-results-q-icon">' + icon + '</span>';
+    html += '<span class="efa-results-q-prompt">' + escapeHtml(qDef.prompt || 'Question ' + (i + 1)) + '</span>';
+    html += '<span class="efa-results-q-score">' + pq.pointsEarned + '/' + pq.pointsPossible + '</span>';
+    html += '</div>';
+
+    if (!pq.isCorrect) {
+      html += '<div class="efa-results-q-detail">';
+      if (qDef.type === 'multiple_choice') {
+        // Show correct answer text
+        var correctText = '';
+        for (var c = 0; c < (qDef.options || []).length; c++) {
+          if (String(qDef.options[c].id) === String(pq.correctAnswer)) {
+            correctText = qDef.options[c].text;
+            break;
+          }
+        }
+        html += 'Correct answer: ' + escapeHtml(correctText);
+        // Show explanation if available
+        for (var e = 0; e < (qDef.options || []).length; e++) {
+          if (String(qDef.options[e].id) === String(pq.correctAnswer) && qDef.options[e].explanation) {
+            html += '</div><div class="efa-results-q-explain">' + escapeHtml(qDef.options[e].explanation);
+            break;
+          }
+        }
+      } else if (qDef.type === 'short_answer') {
+        html += 'Accepted: ' + escapeHtml(pq.correctAnswer || '');
+      } else if (qDef.type === 'matching' || qDef.type === 'ordering') {
+        html += isPartial ? 'Partially correct' : 'Incorrect order/matches';
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+
+  // Retry button
+  if (!result.passed && result.attemptsRemaining !== 0) {
+    html += '<button class="efa-retry-btn" onclick="efaRetryAssessment(\'' + escapeHtml(hexId) + '\')" style="width:100%;margin-top:12px;">Retry Assessment</button>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function efaRetryAssessment(hexId) {
+  if (!currentMap) return;
+  var hex = null;
+  for (var i = 0; i < currentMap.hexes.length; i++) {
+    if (String(currentMap.hexes[i].id) === String(hexId)) {
+      hex = currentMap.hexes[i];
+      break;
+    }
+  }
+  if (!hex) return;
+
+  var progress = studentProgressData ? studentProgressData[hexId] : null;
+  var container = document.getElementById('efaTakeContainer');
+  if (container) {
+    container.innerHTML = '';
+    container.innerHTML = efaRenderStudentAssessment(hex, progress);
+  }
+}
+
+// ============================================================================
+// TEACHER RESULTS VIEW
+// ============================================================================
+
+function efaLoadHexResults(mapId, hexId) {
+  var container = document.getElementById('efaResultsContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center;padding:16px;color:#94a3b8;">Loading results...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      container.innerHTML = efaRenderTeacherResults(data);
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = '<div style="color:#dc2626;font-size:13px;padding:8px;">Error loading results: ' + escapeHtml(err.message) + '</div>';
+    })
+    .getAssessmentResultsForHex(mapId, hexId);
+}
+
+function efaRenderTeacherResults(data) {
+  if (!data || data.totalStudents === 0) {
+    return '<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">No students have attempted this assessment yet.</div>';
+  }
+
+  var html = '<div class="efa-teacher-results">';
+
+  // Stats cards
+  html += '<div class="efa-stats-cards">';
+  html += '<div class="efa-stats-card"><div class="efa-stats-card-label">Students</div><div class="efa-stats-card-value">' + data.totalStudents + '</div></div>';
+  html += '<div class="efa-stats-card"><div class="efa-stats-card-label">Pass Rate</div><div class="efa-stats-card-value">' + data.passRate + '%</div></div>';
+  html += '<div class="efa-stats-card"><div class="efa-stats-card-label">Avg Score</div><div class="efa-stats-card-value">' + data.avgScore + '%</div></div>';
+  html += '</div>';
+
+  // Per-question analytics
+  if (data.questionAnalytics && data.questionAnalytics.length > 0) {
+    html += '<div class="efa-question-analytics">';
+    html += '<div class="efa-qa-title">Question Performance</div>';
+    for (var i = 0; i < data.questionAnalytics.length; i++) {
+      var qa = data.questionAnalytics[i];
+      var barClass = qa.correctRate >= 70 ? 'high' : (qa.correctRate >= 40 ? 'mid' : 'low');
+      html += '<div class="efa-qa-row">';
+      html += '<span class="efa-qa-label">Q' + (i + 1) + '</span>';
+      html += '<div class="efa-qa-bar-container"><div class="efa-qa-bar-fill ' + barClass + '" style="width:' + qa.correctRate + '%;"></div></div>';
+      html += '<span class="efa-qa-value">' + qa.correctRate + '%</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ============================================================================
+// HELPER: EDITOR PANEL INFO
+// ============================================================================
+
+function efaUpdateEditorInfo() {
+  var infoEl = document.getElementById('efaHexAssessmentInfo');
+  if (!infoEl || !currentMap || !currentMap.hexes) return;
+
+  var hex = null;
+  for (var i = 0; i < currentMap.hexes.length; i++) {
+    if (String(currentMap.hexes[i].id) === String(selectedHexId)) {
+      hex = currentMap.hexes[i];
+      break;
+    }
+  }
+
+  if (!hex || !hex.assessmentJson) {
+    infoEl.innerHTML = '';
+    return;
+  }
+
+  var assessment = (typeof hex.assessmentJson === 'string') ? JSON.parse(hex.assessmentJson) : hex.assessmentJson;
+  if (!assessment || !assessment.questions) {
+    infoEl.innerHTML = '';
+    return;
+  }
+
+  infoEl.innerHTML = '<div class="efa-editor-info"><span>' + assessment.questions.length + '</span> question' + (assessment.questions.length !== 1 ? 's' : '') + ' &middot; Pass: ' + (assessment.passingScorePct || 70) + '% &middot; ' + (assessment.maxAttempts || 'Unlimited') + ' attempt' + ((assessment.maxAttempts || 0) !== 1 ? 's' : '') + '</div>';
+}
+
+// ============================================================================
+// UTILITY
+// ============================================================================
+
+function efaShuffleArray(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var temp = a[i];
+    a[i] = a[j];
+    a[j] = temp;
+  }
+  return a;
+}
+</script>

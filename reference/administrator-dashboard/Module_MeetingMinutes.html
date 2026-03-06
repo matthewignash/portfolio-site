@@ -1,0 +1,982 @@
+<script>
+/**
+ * Module: Meeting Minutes
+ *
+ * Recording meeting minutes with action items that can be linked to
+ * Project Tasks or Kanban Cards.
+ */
+(function() {
+  'use strict';
+
+  // ═══════════════════════════════════════════════
+  // State
+  // ═══════════════════════════════════════════════
+
+  var state = {
+    meetings: [],
+    filteredMeetings: [],
+    stats: null,
+    currentMeeting: null,
+    filters: { meeting_type: '', status: '', search: '' },
+    view: 'list' // 'list' | 'detail'
+  };
+
+  var container;
+
+  // ═══════════════════════════════════════════════
+  // Helpers
+  // ═══════════════════════════════════════════════
+
+  var TYPE_LABELS = {
+    leadership_team: 'Leadership Team',
+    department: 'Department',
+    committee: 'Committee',
+    staff: 'Staff',
+    parent: 'Parent',
+    other: 'Other'
+  };
+
+  function formatMeetingType(type) {
+    return TYPE_LABELS[type] || type;
+  }
+
+  function formatTime(start, end) {
+    if (!start && !end) return '';
+    if (start && end) return start + ' – ' + end;
+    return start || end;
+  }
+
+  var ACTIVITY_ICONS = {
+    meeting_created: '📋',
+    meeting_updated: '✏️',
+    meeting_finalized: '✅',
+    meeting_archived: '📦',
+    action_item_created: '➕',
+    action_item_updated: '✏️',
+    action_item_completed: '✔️',
+    task_linked: '🔗'
+  };
+
+  function formatActivityDesc(entry) {
+    switch (entry.actionType) {
+      case 'meeting_created':
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> created the meeting';
+      case 'meeting_updated':
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> updated ' + (entry.fieldName || 'the meeting');
+      case 'meeting_finalized':
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> finalized the meeting';
+      case 'meeting_archived':
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> archived the meeting';
+      case 'action_item_created':
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> added action item: ' + ClientUtils.escapeHtml(entry.newValue || '');
+      case 'action_item_updated':
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> updated action item ' + (entry.fieldName || '');
+      case 'action_item_completed':
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> completed an action item';
+      case 'task_linked':
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> linked action item to ' + (entry.newValue === 'kanban_card' ? 'Kanban card' : 'Project task');
+      default:
+        return '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> ' + entry.actionType;
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  // Init & lifecycle
+  // ═══════════════════════════════════════════════
+
+  function init(c) {
+    container = c;
+    buildLayout();
+    loadListData();
+
+    return {
+      onActivate: function() {
+        if (state.view === 'list') {
+          loadListData();
+        }
+      }
+    };
+  }
+
+  function buildLayout() {
+    container.innerHTML =
+      '<div id="mm-list-view">' +
+        '<div class="module-header">' +
+          '<h2>Meeting Minutes</h2>' +
+          '<button class="btn btn--primary" id="mm-new-btn">+ New Meeting</button>' +
+        '</div>' +
+        '<div id="mm-stats"></div>' +
+        '<div id="mm-filters"></div>' +
+        '<div id="mm-list"></div>' +
+      '</div>' +
+      '<div id="mm-detail-view" style="display:none;"></div>';
+
+    document.getElementById('mm-new-btn').addEventListener('click', function() {
+      showMeetingModal(null);
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // Data loading
+  // ═══════════════════════════════════════════════
+
+  async function loadListData() {
+    try {
+      LoadingSpinner.show(container);
+      var results = await Promise.all([
+        ServerAPI.getMeetingStats(),
+        ServerAPI.getMeetingOverview(state.filters)
+      ]);
+      state.stats = results[0];
+      state.meetings = results[1];
+      state.filteredMeetings = state.meetings;
+      LoadingSpinner.hide(container);
+      renderStats();
+      renderFilters();
+      renderMeetingList();
+    } catch (e) {
+      LoadingSpinner.hide(container);
+      Toast.error('Failed to load meetings: ' + e.message);
+    }
+  }
+
+  async function loadMeetingDetail(meetingId) {
+    try {
+      state.view = 'detail';
+      document.getElementById('mm-list-view').style.display = 'none';
+      var detailView = document.getElementById('mm-detail-view');
+      detailView.style.display = 'block';
+      LoadingSpinner.show(detailView);
+
+      state.currentMeeting = await ServerAPI.getMeetingDetail(meetingId);
+      LoadingSpinner.hide(detailView);
+      renderDetailView();
+    } catch (e) {
+      LoadingSpinner.hide(document.getElementById('mm-detail-view'));
+      Toast.error('Failed to load meeting: ' + e.message);
+    }
+  }
+
+  function backToList() {
+    state.view = 'list';
+    state.currentMeeting = null;
+    document.getElementById('mm-detail-view').style.display = 'none';
+    document.getElementById('mm-list-view').style.display = 'block';
+    loadListData();
+  }
+
+  // ═══════════════════════════════════════════════
+  // Stats
+  // ═══════════════════════════════════════════════
+
+  function renderStats() {
+    var s = state.stats || {};
+    document.getElementById('mm-stats').innerHTML =
+      '<div class="mm-stats-grid">' +
+        '<div class="mm-stat-card"><div class="mm-stat-value">' + (s.totalMeetings || 0) + '</div><div class="mm-stat-label">Total Meetings</div></div>' +
+        '<div class="mm-stat-card"><div class="mm-stat-value">' + (s.thisMonth || 0) + '</div><div class="mm-stat-label">This Month</div></div>' +
+        '<div class="mm-stat-card"><div class="mm-stat-value">' + (s.pendingActionItems || 0) + '</div><div class="mm-stat-label">Pending Actions</div></div>' +
+        '<div class="mm-stat-card"><div class="mm-stat-value' + (s.overdueActionItems > 0 ? ' mm-stat-value--warn' : '') + '">' + (s.overdueActionItems || 0) + '</div><div class="mm-stat-label">Overdue Actions</div></div>' +
+      '</div>';
+  }
+
+  // ═══════════════════════════════════════════════
+  // Filters
+  // ═══════════════════════════════════════════════
+
+  function renderFilters() {
+    document.getElementById('mm-filters').innerHTML =
+      '<div class="mm-filter-bar">' +
+        '<div class="mm-filter-group">' +
+          '<label class="mm-filter-label">Type</label>' +
+          '<select id="mm-filter-type">' +
+            '<option value="">All Types</option>' +
+            '<option value="leadership_team">Leadership Team</option>' +
+            '<option value="department">Department</option>' +
+            '<option value="committee">Committee</option>' +
+            '<option value="staff">Staff</option>' +
+            '<option value="parent">Parent</option>' +
+            '<option value="other">Other</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="mm-filter-group">' +
+          '<label class="mm-filter-label">Status</label>' +
+          '<select id="mm-filter-status">' +
+            '<option value="">All Statuses</option>' +
+            '<option value="draft">Draft</option>' +
+            '<option value="finalized">Finalized</option>' +
+            '<option value="archived">Archived</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="mm-filter-group mm-filter-group--grow">' +
+          '<label class="mm-filter-label">Search</label>' +
+          '<input type="text" id="mm-filter-search" placeholder="Search meetings...">' +
+        '</div>' +
+      '</div>';
+
+    // Restore filter values
+    document.getElementById('mm-filter-type').value = state.filters.meeting_type;
+    document.getElementById('mm-filter-status').value = state.filters.status;
+    document.getElementById('mm-filter-search').value = state.filters.search;
+
+    document.getElementById('mm-filter-type').addEventListener('change', applyFilters);
+    document.getElementById('mm-filter-status').addEventListener('change', applyFilters);
+    document.getElementById('mm-filter-search').addEventListener('input', applyFilters);
+  }
+
+  function applyFilters() {
+    state.filters.meeting_type = document.getElementById('mm-filter-type').value;
+    state.filters.status = document.getElementById('mm-filter-status').value;
+    state.filters.search = document.getElementById('mm-filter-search').value;
+
+    var search = state.filters.search.toLowerCase();
+    state.filteredMeetings = state.meetings.filter(function(m) {
+      if (state.filters.meeting_type && m.meetingType !== state.filters.meeting_type) return false;
+      if (state.filters.status && m.status !== state.filters.status) return false;
+      if (search) {
+        if ((m.title || '').toLowerCase().indexOf(search) === -1 &&
+            (m.location || '').toLowerCase().indexOf(search) === -1) return false;
+      }
+      return true;
+    });
+
+    renderMeetingList();
+  }
+
+  // ═══════════════════════════════════════════════
+  // Meeting list
+  // ═══════════════════════════════════════════════
+
+  function renderMeetingList() {
+    var listEl = document.getElementById('mm-list');
+    var meetings = state.filteredMeetings;
+
+    if (meetings.length === 0) {
+      listEl.innerHTML =
+        '<div class="mm-empty-state">' +
+          '<div class="mm-empty-icon">📋</div>' +
+          '<div class="mm-empty-text">No meetings found</div>' +
+        '</div>';
+      return;
+    }
+
+    DataTable.render(listEl, {
+      columns: [
+        { key: 'title', label: 'Meeting', render: function(val, row) {
+          return '<strong>' + ClientUtils.escapeHtml(val) + '</strong>';
+        }},
+        { key: 'meetingType', label: 'Type', render: function(val) {
+          return '<span class="mm-type-badge mm-type--' + val + '">' + formatMeetingType(val) + '</span>';
+        }},
+        { key: 'meetingDate', label: 'Date', render: function(val) {
+          return ClientUtils.formatDate(val);
+        }},
+        { key: 'startTime', label: 'Time', render: function(val, row) {
+          return formatTime(row.startTime, row.endTime);
+        }},
+        { key: 'location', label: 'Location', render: function(val) {
+          return ClientUtils.escapeHtml(val || '—');
+        }},
+        { key: 'status', label: 'Status', render: function(val) {
+          return '<span class="badge mm-status--' + val + '">' + val + '</span>';
+        }},
+        { key: 'actionItemCount', label: 'Actions', render: function(val, row) {
+          var html = String(val);
+          if (row.pendingItemCount > 0) {
+            html += ' <span style="color:var(--text-muted);">(' + row.pendingItemCount + ' pending)</span>';
+          }
+          return html;
+        }}
+      ],
+      data: meetings,
+      onRowClick: function(row) {
+        loadMeetingDetail(row.id);
+      },
+      pageSize: 15,
+      sortable: true,
+      defaultSort: { key: 'meetingDate', direction: 'desc' }
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // Detail view
+  // ═══════════════════════════════════════════════
+
+  function renderDetailView() {
+    var m = state.currentMeeting;
+    if (!m) return;
+
+    var detailView = document.getElementById('mm-detail-view');
+    var html =
+      '<a class="mm-back-link" id="mm-back-btn">&larr; Back to meetings</a>' +
+
+      // Header
+      '<div class="mm-detail-header">' +
+        '<div class="mm-detail-title-row">' +
+          '<h2 class="mm-detail-title">' + ClientUtils.escapeHtml(m.title) + '</h2>' +
+          '<div class="mm-detail-actions">' +
+            (m.status === 'draft' ? '<button class="btn btn--success btn--sm" id="mm-finalize-btn">Finalize</button>' : '') +
+            (m.status === 'finalized' ? '<button class="btn btn--outline btn--sm" id="mm-archive-btn">Archive</button>' : '') +
+            '<button class="btn btn--outline btn--sm" id="mm-edit-btn">Edit</button>' +
+            '<button class="btn btn--danger btn--sm" id="mm-delete-btn">Delete</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="mm-detail-badges">' +
+          '<span class="mm-type-badge mm-type--' + m.meetingType + '">' + formatMeetingType(m.meetingType) + '</span>' +
+          '<span class="badge mm-status--' + m.status + '">' + m.status + '</span>' +
+        '</div>' +
+        '<div class="mm-detail-meta">' +
+          '<div class="mm-meta-item"><span class="mm-meta-label">Date</span><span class="mm-meta-value">' + ClientUtils.formatDate(m.meetingDate) + '</span></div>' +
+          '<div class="mm-meta-item"><span class="mm-meta-label">Time</span><span class="mm-meta-value">' + formatTime(m.startTime, m.endTime) + '</span></div>' +
+          '<div class="mm-meta-item"><span class="mm-meta-label">Location</span><span class="mm-meta-value">' + ClientUtils.escapeHtml(m.location || '—') + '</span></div>' +
+          '<div class="mm-meta-item"><span class="mm-meta-label">Organizer</span><span class="mm-meta-value">' + ClientUtils.escapeHtml(m.organizerName) + '</span></div>' +
+        '</div>' +
+      '</div>' +
+
+      // Attendees
+      '<div class="mm-section">' +
+        '<div class="mm-section-header"><h3 class="mm-section-title">Attendees (' + m.attendees.length + ')</h3></div>' +
+        renderAttendees(m.attendees) +
+      '</div>' +
+
+      // Agenda
+      '<div class="mm-section">' +
+        '<div class="mm-section-header"><h3 class="mm-section-title">Agenda</h3></div>' +
+        '<div class="mm-section-content">' + (m.agenda ? ClientUtils.escapeHtml(m.agenda) : '<span class="mm-section-empty">No agenda recorded</span>') + '</div>' +
+      '</div>' +
+
+      // Notes
+      '<div class="mm-section">' +
+        '<div class="mm-section-header"><h3 class="mm-section-title">Notes</h3></div>' +
+        '<div class="mm-section-content">' + (m.notes ? ClientUtils.escapeHtml(m.notes) : '<span class="mm-section-empty">No notes recorded</span>') + '</div>' +
+      '</div>' +
+
+      // Action items
+      '<div class="mm-section">' +
+        '<div class="mm-section-header">' +
+          '<h3 class="mm-section-title">Action Items (' + m.actionItems.length + ')</h3>' +
+          '<button class="btn btn--primary btn--sm" id="mm-add-action-btn">+ Add Action Item</button>' +
+        '</div>' +
+        '<div id="mm-action-items-container">' +
+          renderActionItems(m.actionItems) +
+        '</div>' +
+      '</div>' +
+
+      // Activity
+      '<div class="mm-section">' +
+        '<div class="mm-section-header"><h3 class="mm-section-title">Activity</h3></div>' +
+        renderActivityLog(m.activity) +
+      '</div>';
+
+    detailView.innerHTML = html;
+
+    // Event listeners
+    document.getElementById('mm-back-btn').addEventListener('click', backToList);
+    document.getElementById('mm-edit-btn').addEventListener('click', function() { showMeetingModal(m); });
+    document.getElementById('mm-delete-btn').addEventListener('click', function() { confirmDeleteMeeting(m.id); });
+    document.getElementById('mm-add-action-btn').addEventListener('click', function() { showActionItemModal(m.id, null); });
+
+    var finalizeBtn = document.getElementById('mm-finalize-btn');
+    if (finalizeBtn) {
+      finalizeBtn.addEventListener('click', function() { updateStatus(m.id, 'finalized'); });
+    }
+    var archiveBtn = document.getElementById('mm-archive-btn');
+    if (archiveBtn) {
+      archiveBtn.addEventListener('click', function() { updateStatus(m.id, 'archived'); });
+    }
+
+    attachActionItemListeners();
+  }
+
+  function renderAttendees(attendees) {
+    if (!attendees || attendees.length === 0) {
+      return '<div class="mm-section-empty">No attendees recorded</div>';
+    }
+    var html = '<div class="mm-attendees-list">';
+    attendees.forEach(function(a) {
+      html += '<div class="mm-attendee-chip">' +
+        '<span class="mm-attendee-avatar">' + ClientUtils.escapeHtml(a.initials) + '</span>' +
+        '<span>' + ClientUtils.escapeHtml(a.name) + '</span>' +
+      '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderActionItems(items) {
+    if (!items || items.length === 0) {
+      return '<div class="mm-empty-state"><div class="mm-empty-text">No action items yet</div></div>';
+    }
+    var html = '';
+    items.forEach(function(item) {
+      html += renderSingleActionItem(item);
+    });
+    return html;
+  }
+
+  function renderSingleActionItem(item) {
+    var html =
+      '<div class="mm-action-item" data-item-id="' + item.id + '">' +
+        '<div class="mm-action-item-header">' +
+          '<h4 class="mm-action-item-title">' + ClientUtils.escapeHtml(item.title) + '</h4>' +
+          '<div class="mm-action-item-badges">' +
+            '<span class="mm-priority--' + item.priority + '">' + item.priority + '</span>' +
+            '<span class="mm-item-status--' + item.status + '">' + item.status.replace(/_/g, ' ') + '</span>' +
+          '</div>' +
+        '</div>';
+
+    if (item.description) {
+      html += '<div class="mm-action-item-desc">' + ClientUtils.escapeHtml(item.description) + '</div>';
+    }
+
+    html += '<div class="mm-action-item-meta">';
+    if (item.assignedToName) {
+      html += '<span>👤 ' + ClientUtils.escapeHtml(item.assignedToName) + '</span>';
+    }
+    if (item.dueDate) {
+      html += '<span>📅 ' + ClientUtils.formatDate(item.dueDate) + '</span>';
+    }
+    html += '</div>';
+
+    html += '<div class="mm-action-item-footer">';
+
+    // Linked task indicator or link button
+    if (item.linkedTask) {
+      if (item.linkedTask.deleted) {
+        html += '<span class="mm-linked-task mm-linked-task--deleted">🔗 Linked task deleted</span>';
+      } else {
+        var label = item.linkedTask.type === 'project_task' ? 'Project Task' : 'Kanban Card';
+        html += '<span class="mm-linked-task">🔗 ' + label + ': ' + ClientUtils.escapeHtml(item.linkedTask.title || '') + '</span>';
+      }
+    } else {
+      html += '<button class="btn btn--outline btn--sm mm-link-btn" data-item-id="' + item.id + '">🔗 Create Task</button>';
+    }
+
+    html += '<div class="mm-action-item-actions">';
+    if (item.status !== 'completed') {
+      html += '<button class="btn btn--success btn--sm mm-complete-btn" data-item-id="' + item.id + '">✓ Complete</button>';
+    }
+    html += '<button class="btn btn--outline btn--sm mm-edit-item-btn" data-item-id="' + item.id + '">Edit</button>';
+    html += '<button class="btn btn--danger btn--sm mm-delete-item-btn" data-item-id="' + item.id + '">Delete</button>';
+    html += '</div></div></div>';
+
+    return html;
+  }
+
+  function renderActivityLog(entries) {
+    if (!entries || entries.length === 0) {
+      return '<div class="mm-section-empty">No activity yet</div>';
+    }
+    var html = '<div class="mm-activity-list">';
+    entries.forEach(function(e) {
+      html += '<div class="mm-activity-entry">' +
+        '<div class="mm-activity-icon">' + (ACTIVITY_ICONS[e.actionType] || '📌') + '</div>' +
+        '<div class="mm-activity-body">' +
+          '<div class="mm-activity-desc">' + formatActivityDesc(e) + '</div>' +
+          '<div class="mm-activity-time">' + ClientUtils.timeAgo(e.createdAt) + '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function attachActionItemListeners() {
+    // Link buttons
+    document.querySelectorAll('.mm-link-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var itemId = this.getAttribute('data-item-id');
+        var item = findActionItem(itemId);
+        if (item) showLinkTaskModal(item);
+      });
+    });
+
+    // Complete buttons
+    document.querySelectorAll('.mm-complete-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var itemId = this.getAttribute('data-item-id');
+        completeActionItem(itemId);
+      });
+    });
+
+    // Edit buttons
+    document.querySelectorAll('.mm-edit-item-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var itemId = this.getAttribute('data-item-id');
+        var item = findActionItem(itemId);
+        if (item) showActionItemModal(state.currentMeeting.id, item);
+      });
+    });
+
+    // Delete buttons
+    document.querySelectorAll('.mm-delete-item-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var itemId = this.getAttribute('data-item-id');
+        confirmDeleteActionItem(itemId);
+      });
+    });
+  }
+
+  function findActionItem(itemId) {
+    if (!state.currentMeeting) return null;
+    return state.currentMeeting.actionItems.find(function(ai) {
+      return ai.id === itemId;
+    }) || null;
+  }
+
+  // ═══════════════════════════════════════════════
+  // Meeting CRUD actions
+  // ═══════════════════════════════════════════════
+
+  function showMeetingModal(existing) {
+    var isEdit = !!existing;
+    var title = isEdit ? 'Edit Meeting' : 'New Meeting';
+
+    var body =
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label mm-form-label--required">Title</label>' +
+        '<input class="mm-form-input" id="mm-m-title" value="' + ClientUtils.escapeHtml((existing && existing.title) || '') + '">' +
+      '</div>' +
+      '<div class="mm-form-row">' +
+        '<div class="mm-form-group">' +
+          '<label class="mm-form-label mm-form-label--required">Type</label>' +
+          '<select class="mm-form-select" id="mm-m-type">' +
+            '<option value="leadership_team"' + (existing && existing.meetingType === 'leadership_team' ? ' selected' : '') + '>Leadership Team</option>' +
+            '<option value="department"' + (existing && existing.meetingType === 'department' ? ' selected' : '') + '>Department</option>' +
+            '<option value="committee"' + (existing && existing.meetingType === 'committee' ? ' selected' : '') + '>Committee</option>' +
+            '<option value="staff"' + (existing && existing.meetingType === 'staff' ? ' selected' : '') + '>Staff</option>' +
+            '<option value="parent"' + (existing && existing.meetingType === 'parent' ? ' selected' : '') + '>Parent</option>' +
+            '<option value="other"' + (existing && existing.meetingType === 'other' ? ' selected' : '') + '>Other</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="mm-form-group">' +
+          '<label class="mm-form-label mm-form-label--required">Date</label>' +
+          '<input type="date" class="mm-form-input" id="mm-m-date" value="' + ((existing && existing.meetingDate) || '') + '">' +
+        '</div>' +
+      '</div>' +
+      '<div class="mm-form-row">' +
+        '<div class="mm-form-group">' +
+          '<label class="mm-form-label">Start Time</label>' +
+          '<input type="time" class="mm-form-input" id="mm-m-start" value="' + ((existing && existing.startTime) || '') + '">' +
+        '</div>' +
+        '<div class="mm-form-group">' +
+          '<label class="mm-form-label">End Time</label>' +
+          '<input type="time" class="mm-form-input" id="mm-m-end" value="' + ((existing && existing.endTime) || '') + '">' +
+        '</div>' +
+      '</div>' +
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label">Location</label>' +
+        '<input class="mm-form-input" id="mm-m-location" value="' + ClientUtils.escapeHtml((existing && existing.location) || '') + '">' +
+      '</div>' +
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label">Attendees</label>' +
+        '<div id="mm-m-attendees-wrap"></div>' +
+      '</div>' +
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label">Agenda</label>' +
+        '<textarea class="mm-form-textarea" id="mm-m-agenda" rows="4">' + ClientUtils.escapeHtml((existing && existing.agenda) || '') + '</textarea>' +
+      '</div>' +
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label">Notes</label>' +
+        '<textarea class="mm-form-textarea" id="mm-m-notes" rows="6">' + ClientUtils.escapeHtml((existing && existing.notes) || '') + '</textarea>' +
+      '</div>';
+
+    Modal.open(title, body, [
+      { label: 'Cancel', className: 'btn btn--outline', onClick: function() { Modal.close(); } },
+      { label: isEdit ? 'Save' : 'Create', className: 'btn btn--primary', onClick: function() { saveMeeting(existing); } }
+    ]);
+
+    // Render StaffSelector for attendees
+    var existingIds = [];
+    if (existing && existing.attendees) {
+      existingIds = existing.attendees.map(function(a) { return a.id; });
+    }
+    StaffSelector.render(document.getElementById('mm-m-attendees-wrap'), {
+      selected: existingIds,
+      multi: true,
+      id: 'mm-m-attendees'
+    });
+  }
+
+  async function saveMeeting(existing) {
+    var titleVal = document.getElementById('mm-m-title').value.trim();
+    var typeVal = document.getElementById('mm-m-type').value;
+    var dateVal = document.getElementById('mm-m-date').value;
+
+    if (!titleVal || !typeVal || !dateVal) {
+      Toast.error('Title, type, and date are required');
+      return;
+    }
+
+    var attendeesSel = StaffSelector.getSelected('mm-m-attendees');
+    var attendeesCsv = (attendeesSel || []).join(',');
+
+    var data = {
+      title: titleVal,
+      meeting_type: typeVal,
+      meeting_date: dateVal,
+      start_time: document.getElementById('mm-m-start').value,
+      end_time: document.getElementById('mm-m-end').value,
+      location: document.getElementById('mm-m-location').value.trim(),
+      attendees_csv: attendeesCsv,
+      agenda: document.getElementById('mm-m-agenda').value,
+      notes: document.getElementById('mm-m-notes').value
+    };
+
+    Modal.close();
+
+    try {
+      if (existing) {
+        await ServerAPI.updateMeeting(existing.id, data);
+        Toast.success('Meeting updated');
+        loadMeetingDetail(existing.id);
+      } else {
+        var created = await ServerAPI.createMeeting(data);
+        Toast.success('Meeting created');
+        loadMeetingDetail(created.id);
+      }
+    } catch (e) {
+      Toast.error('Failed to save: ' + e.message);
+    }
+  }
+
+  async function confirmDeleteMeeting(meetingId) {
+    if (!confirm('Delete this meeting and all its action items? This cannot be undone.')) return;
+
+    try {
+      await ServerAPI.deleteMeeting(meetingId);
+      Toast.success('Meeting deleted');
+      backToList();
+    } catch (e) {
+      Toast.error('Failed to delete: ' + e.message);
+    }
+  }
+
+  async function updateStatus(meetingId, newStatus) {
+    var label = newStatus === 'finalized' ? 'finalize' : 'archive';
+    if (!confirm('Are you sure you want to ' + label + ' this meeting?')) return;
+
+    try {
+      await ServerAPI.updateMeetingStatus(meetingId, newStatus);
+      Toast.success('Meeting ' + newStatus);
+      loadMeetingDetail(meetingId);
+    } catch (e) {
+      Toast.error('Failed to update status: ' + e.message);
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  // Action item CRUD
+  // ═══════════════════════════════════════════════
+
+  function showActionItemModal(meetingId, existing) {
+    var isEdit = !!existing;
+    var title = isEdit ? 'Edit Action Item' : 'New Action Item';
+
+    var body =
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label mm-form-label--required">Title</label>' +
+        '<input class="mm-form-input" id="mm-ai-title" value="' + ClientUtils.escapeHtml((existing && existing.title) || '') + '">' +
+      '</div>' +
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label">Description</label>' +
+        '<textarea class="mm-form-textarea" id="mm-ai-desc" rows="3">' + ClientUtils.escapeHtml((existing && existing.description) || '') + '</textarea>' +
+      '</div>' +
+      '<div class="mm-form-row">' +
+        '<div class="mm-form-group">' +
+          '<label class="mm-form-label">Priority</label>' +
+          '<select class="mm-form-select" id="mm-ai-priority">' +
+            '<option value="low"' + (existing && existing.priority === 'low' ? ' selected' : '') + '>Low</option>' +
+            '<option value="medium"' + (!existing || existing.priority === 'medium' ? ' selected' : '') + '>Medium</option>' +
+            '<option value="high"' + (existing && existing.priority === 'high' ? ' selected' : '') + '>High</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="mm-form-group">' +
+          '<label class="mm-form-label">Status</label>' +
+          '<select class="mm-form-select" id="mm-ai-status">' +
+            '<option value="pending"' + (!existing || existing.status === 'pending' ? ' selected' : '') + '>Pending</option>' +
+            '<option value="in_progress"' + (existing && existing.status === 'in_progress' ? ' selected' : '') + '>In Progress</option>' +
+            '<option value="completed"' + (existing && existing.status === 'completed' ? ' selected' : '') + '>Completed</option>' +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label">Assigned To</label>' +
+        '<div id="mm-ai-assigned-wrap"></div>' +
+      '</div>' +
+      '<div class="mm-form-group">' +
+        '<label class="mm-form-label">Due Date</label>' +
+        '<input type="date" class="mm-form-input" id="mm-ai-due" value="' + ((existing && existing.dueDate) || '') + '">' +
+      '</div>';
+
+    Modal.open(title, body, [
+      { label: 'Cancel', className: 'btn btn--outline', onClick: function() { Modal.close(); } },
+      { label: isEdit ? 'Save' : 'Create', className: 'btn btn--primary', onClick: function() { saveActionItem(meetingId, existing); } }
+    ]);
+
+    // Render StaffSelector for assigned_to
+    StaffSelector.render(document.getElementById('mm-ai-assigned-wrap'), {
+      selected: existing && existing.assignedTo ? [existing.assignedTo] : [],
+      multi: false,
+      id: 'mm-ai-assigned'
+    });
+  }
+
+  async function saveActionItem(meetingId, existing) {
+    var titleVal = document.getElementById('mm-ai-title').value.trim();
+    if (!titleVal) {
+      Toast.error('Title is required');
+      return;
+    }
+
+    var assignedSel = StaffSelector.getSelected('mm-ai-assigned');
+    var data = {
+      meeting_id: meetingId,
+      title: titleVal,
+      description: document.getElementById('mm-ai-desc').value,
+      priority: document.getElementById('mm-ai-priority').value,
+      status: document.getElementById('mm-ai-status').value,
+      assigned_to: (assignedSel && assignedSel.length > 0) ? assignedSel[0] : '',
+      due_date: document.getElementById('mm-ai-due').value
+    };
+
+    Modal.close();
+
+    try {
+      if (existing) {
+        await ServerAPI.updateMeetingActionItem(existing.id, data);
+        Toast.success('Action item updated');
+      } else {
+        await ServerAPI.createMeetingActionItem(data);
+        Toast.success('Action item created');
+      }
+      loadMeetingDetail(meetingId);
+    } catch (e) {
+      Toast.error('Failed to save: ' + e.message);
+    }
+  }
+
+  async function completeActionItem(itemId) {
+    try {
+      await ServerAPI.updateMeetingActionItem(itemId, { status: 'completed' });
+      Toast.success('Action item completed');
+      loadMeetingDetail(state.currentMeeting.id);
+    } catch (e) {
+      Toast.error('Failed to complete: ' + e.message);
+    }
+  }
+
+  async function confirmDeleteActionItem(itemId) {
+    if (!confirm('Delete this action item?')) return;
+
+    try {
+      await ServerAPI.deleteMeetingActionItem(itemId);
+      Toast.success('Action item deleted');
+      loadMeetingDetail(state.currentMeeting.id);
+    } catch (e) {
+      Toast.error('Failed to delete: ' + e.message);
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  // Link to Task modal
+  // ═══════════════════════════════════════════════
+
+  function showLinkTaskModal(actionItem) {
+    var body =
+      '<p style="margin-bottom:var(--space-md);">Create a task from this action item and link it.</p>' +
+      '<div class="mm-task-type-btns">' +
+        '<button class="mm-task-type-btn" id="mm-link-proj-btn">📁 Project Task</button>' +
+        '<button class="mm-task-type-btn" id="mm-link-kanban-btn">📌 Kanban Card</button>' +
+      '</div>' +
+      '<div id="mm-link-destination" style="display:none;"></div>';
+
+    Modal.open('Create & Link Task', body, [
+      { label: 'Cancel', className: 'btn btn--outline', onClick: function() { Modal.close(); } },
+      { label: 'Create & Link', className: 'btn btn--primary', id: 'mm-link-submit', onClick: function() { submitLinkTask(actionItem); } }
+    ]);
+
+    // Disable submit until destination is selected
+    var submitBtn = document.getElementById('mm-link-submit');
+    if (submitBtn) submitBtn.disabled = true;
+
+    document.getElementById('mm-link-proj-btn').addEventListener('click', function() {
+      selectLinkType('project', actionItem);
+    });
+    document.getElementById('mm-link-kanban-btn').addEventListener('click', function() {
+      selectLinkType('kanban', actionItem);
+    });
+
+    window._mmLinkType = null;
+  }
+
+  async function selectLinkType(type, actionItem) {
+    window._mmLinkType = type;
+
+    // Toggle active
+    document.getElementById('mm-link-proj-btn').className = 'mm-task-type-btn' + (type === 'project' ? ' mm-task-type-btn--active' : '');
+    document.getElementById('mm-link-kanban-btn').className = 'mm-task-type-btn' + (type === 'kanban' ? ' mm-task-type-btn--active' : '');
+
+    var dest = document.getElementById('mm-link-destination');
+    dest.style.display = 'block';
+    dest.innerHTML = '<div style="text-align:center;padding:var(--space-md);color:var(--text-muted);">Loading...</div>';
+
+    try {
+      if (type === 'project') {
+        var projects = await ServerAPI.getProjectOverview({});
+        var projectList = projects.projects || projects;
+        if (!projectList || projectList.length === 0) {
+          dest.innerHTML = '<div class="mm-section-empty">No projects available</div>';
+          return;
+        }
+        dest.innerHTML =
+          '<div class="mm-destination-group">' +
+            '<label>Project</label>' +
+            '<select id="mm-link-project">' +
+              '<option value="">Select a project...</option>' +
+              projectList.map(function(p) {
+                return '<option value="' + p.id + '">' + ClientUtils.escapeHtml(p.title) + '</option>';
+              }).join('') +
+            '</select>' +
+          '</div>' +
+          '<div class="mm-destination-group" id="mm-link-phase-wrap" style="display:none;"></div>';
+
+        document.getElementById('mm-link-project').addEventListener('change', function() {
+          loadPhasesForLink(this.value);
+        });
+      } else {
+        var boards = await ServerAPI.getActiveBoards();
+        if (!boards || boards.length === 0) {
+          dest.innerHTML = '<div class="mm-section-empty">No Kanban boards available</div>';
+          return;
+        }
+        dest.innerHTML =
+          '<div class="mm-destination-group">' +
+            '<label>Board</label>' +
+            '<select id="mm-link-board">' +
+              '<option value="">Select a board...</option>' +
+              boards.map(function(b) {
+                return '<option value="' + b.id + '">' + ClientUtils.escapeHtml(b.name) + '</option>';
+              }).join('') +
+            '</select>' +
+          '</div>' +
+          '<div class="mm-destination-group" id="mm-link-col-wrap" style="display:none;"></div>';
+
+        document.getElementById('mm-link-board').addEventListener('change', function() {
+          loadColumnsForLink(this.value);
+        });
+      }
+    } catch (e) {
+      dest.innerHTML = '<div style="color:var(--danger);">Failed to load: ' + ClientUtils.escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  async function loadPhasesForLink(projectId) {
+    var wrap = document.getElementById('mm-link-phase-wrap');
+    if (!projectId) { wrap.style.display = 'none'; return; }
+
+    try {
+      var detail = await ServerAPI.getProjectDetail(projectId);
+      var phases = detail.phases || [];
+      if (phases.length === 0) {
+        wrap.innerHTML = '<div class="mm-section-empty">No phases in this project</div>';
+        wrap.style.display = 'block';
+        return;
+      }
+      wrap.innerHTML =
+        '<label>Phase</label>' +
+        '<select id="mm-link-phase">' +
+          '<option value="">Select a phase...</option>' +
+          phases.map(function(p) {
+            return '<option value="' + p.id + '">' + ClientUtils.escapeHtml(p.title) + '</option>';
+          }).join('') +
+        '</select>';
+      wrap.style.display = 'block';
+
+      // Enable submit when phase selected
+      document.getElementById('mm-link-phase').addEventListener('change', function() {
+        var submitBtn = document.getElementById('mm-link-submit');
+        if (submitBtn) submitBtn.disabled = !this.value;
+      });
+    } catch (e) {
+      wrap.innerHTML = '<div style="color:var(--danger);">Failed to load phases</div>';
+      wrap.style.display = 'block';
+    }
+  }
+
+  async function loadColumnsForLink(boardId) {
+    var wrap = document.getElementById('mm-link-col-wrap');
+    if (!boardId) { wrap.style.display = 'none'; return; }
+
+    try {
+      var boardData = await ServerAPI.getBoardData(boardId);
+      var columns = boardData.columns || [];
+      if (columns.length === 0) {
+        wrap.innerHTML = '<div class="mm-section-empty">No columns in this board</div>';
+        wrap.style.display = 'block';
+        return;
+      }
+      wrap.innerHTML =
+        '<label>Column</label>' +
+        '<select id="mm-link-column">' +
+          '<option value="">Select a column...</option>' +
+          columns.map(function(c) {
+            return '<option value="' + c.id + '">' + ClientUtils.escapeHtml(c.name) + '</option>';
+          }).join('') +
+        '</select>';
+      wrap.style.display = 'block';
+
+      // Enable submit when column selected
+      document.getElementById('mm-link-column').addEventListener('change', function() {
+        var submitBtn = document.getElementById('mm-link-submit');
+        if (submitBtn) submitBtn.disabled = !this.value;
+      });
+    } catch (e) {
+      wrap.innerHTML = '<div style="color:var(--danger);">Failed to load columns</div>';
+      wrap.style.display = 'block';
+    }
+  }
+
+  async function submitLinkTask(actionItem) {
+    var type = window._mmLinkType;
+    if (!type) { Toast.error('Select a task type'); return; }
+
+    try {
+      Modal.close();
+      LoadingSpinner.show(document.getElementById('mm-detail-view'));
+
+      if (type === 'project') {
+        var projectId = document.getElementById('mm-link-project').value;
+        var phaseId = document.getElementById('mm-link-phase').value;
+        if (!projectId || !phaseId) { Toast.error('Select a project and phase'); return; }
+        await ServerAPI.linkActionToProjectTask(actionItem.id, projectId, phaseId);
+        Toast.success('Project task created and linked');
+      } else {
+        var boardId = document.getElementById('mm-link-board').value;
+        var columnId = document.getElementById('mm-link-column').value;
+        if (!boardId || !columnId) { Toast.error('Select a board and column'); return; }
+        await ServerAPI.linkActionToKanbanCard(actionItem.id, boardId, columnId);
+        Toast.success('Kanban card created and linked');
+      }
+
+      loadMeetingDetail(state.currentMeeting.id);
+    } catch (e) {
+      LoadingSpinner.hide(document.getElementById('mm-detail-view'));
+      Toast.error('Failed to link: ' + e.message);
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  // Module registration
+  // ═══════════════════════════════════════════════
+
+  App.ModuleRegistry.meeting_minutes = {
+    init: init
+  };
+
+})();
+</script>

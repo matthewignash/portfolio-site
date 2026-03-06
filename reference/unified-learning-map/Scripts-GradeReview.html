@@ -1,0 +1,1352 @@
+<script>
+    // ================================================
+    // GRADE & REVIEW DASHBOARD (ES5, grv- prefix)
+    // ================================================
+
+    var GRV_SA_LABELS = { 1: 'Beginning', 2: 'Developing', 3: 'Proficient', 4: 'Extending' };
+    var GRV_TYPE_ICONS = { submission: '\u2705', lab: '\uD83E\uDDEA', assessment: '\uD83D\uDCDD', iteration: '\uD83D\uDD04' };
+    var GRV_TYPE_LABELS = { submission: 'Submission', lab: 'Lab Report', assessment: 'Assessment', iteration: 'Iteration' };
+
+    /**
+     * 1. grvLoadQueue — Entry point, called on first tab visit
+     */
+    function grvLoadQueue() {
+      var container = document.getElementById('gradeReviewContent');
+      if (!container) return;
+
+      if (!progressSelectedClassId || !progressSelectedMapId) {
+        container.innerHTML = '<div class="grv-detail-empty"><div class="icon">&#128221;</div><p>Select a class and map in Class Progress, then switch to Grade &amp; Review.</p></div>';
+        return;
+      }
+
+      container.innerHTML = '<div class="grv-detail-empty"><span class="loading-spinner"></span> Loading grading queue...</div>';
+
+      var expectedMapId = progressSelectedMapId;
+      var expectedClassId = progressSelectedClassId;
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (progressSelectedMapId !== expectedMapId || progressSelectedClassId !== expectedClassId) return;
+          grvQueueData = data;
+          grvSelectedIndex = null;
+          grvRender();
+          grvStartPolling();
+        })
+        .withFailureHandler(function(err) {
+          if (progressSelectedMapId !== expectedMapId) return;
+          container.innerHTML = '<div class="grv-detail-empty"><p style="color:#dc2626;">Error: ' + escapeHtml(err.message) + '</p></div>';
+        })
+        .getGradingQueue(progressSelectedClassId, progressSelectedMapId);
+    }
+
+    /**
+     * 2. grvRender — Main orchestrator
+     */
+    function grvRender() {
+      var container = document.getElementById('gradeReviewContent');
+      if (!container || !grvQueueData) return;
+
+      var html = '<div class="grv-container">';
+
+      // Left panel: summary + filter + last-updated + queue
+      html += '<div class="grv-queue-panel">';
+      html += grvRenderSummaryBar();
+      html += grvRenderFilterBar();
+      html += grvRenderLastUpdated();
+      html += '<div class="grv-queue-list" id="grvQueueList">';
+      html += grvRenderQueueListHtml();
+      html += '</div>';
+      html += '</div>';
+
+      // Right panel: detail
+      html += '<div class="grv-detail-panel" id="grvDetailPanel">';
+      if (grvSelectedIndex !== null && grvQueueData.queueItems[grvSelectedIndex]) {
+        html += grvRenderDetail(grvQueueData.queueItems[grvSelectedIndex]);
+      } else {
+        html += '<div class="grv-detail-empty"><div class="icon">&#128072;</div><p>Select an item from the queue to review.</p></div>';
+      }
+      html += '</div>';
+
+      html += '</div>';
+      container.innerHTML = html;
+
+      // Load feedback template chips after DOM is set
+      if (grvSelectedIndex !== null) qftLoadTemplates();
+    }
+
+    /**
+     * 3. grvRenderSummaryBar — Type count badges
+     */
+    function grvRenderSummaryBar() {
+      var s = grvQueueData.summary;
+      var html = '<div class="grv-summary-bar">';
+      html += '<span class="grv-summary-total">' + s.total + ' items</span>';
+      if (s.byType.submission > 0) html += '<span class="grv-summary-badge submission">' + s.byType.submission + ' Submissions</span>';
+      if (s.byType.lab > 0) html += '<span class="grv-summary-badge lab">' + s.byType.lab + ' Labs</span>';
+      if (s.byType.assessment > 0) html += '<span class="grv-summary-badge assessment">' + s.byType.assessment + ' Assessments</span>';
+      if (s.byType.iteration > 0) html += '<span class="grv-summary-badge iteration">' + s.byType.iteration + ' Iterations</span>';
+      // Action buttons (right-aligned)
+      html += '<span class="grv-summary-actions">';
+      html += '<button class="csv-export-btn" onclick="csvExportGradeReview()" title="Export as CSV" aria-label="Export as CSV">&#128229;</button>';
+      // Bulk approve: only for submission/iteration types, and only if requireTeacherApproval is on
+      if (appConfig.requireTeacherApproval) {
+        var approvable = grvCountApprovableItems();
+        if (approvable > 0) {
+          html += '<button class="grv-bulk-approve-btn' + (grvSaving ? ' disabled' : '') + '" onclick="grvBulkApprove()"' + (grvSaving ? ' disabled' : '') + '>';
+          html += '&#10003; Approve All (' + approvable + ')</button>';
+        }
+      }
+      html += '</span>';
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 4. grvRenderFilterBar — Filter chips
+     */
+    function grvRenderFilterBar() {
+      var filters = [
+        { key: 'all', label: 'All' },
+        { key: 'submission', label: 'Submissions' },
+        { key: 'lab', label: 'Labs' },
+        { key: 'assessment', label: 'Assessments' },
+        { key: 'iteration', label: 'Iterations' }
+      ];
+      var html = '<div class="grv-filter-bar">';
+      for (var i = 0; i < filters.length; i++) {
+        var f = filters[i];
+        var active = grvFilter === f.key ? ' active' : '';
+        html += '<button class="grv-filter-chip' + active + '" onclick="grvSetFilter(\'' + f.key + '\')">' + escapeHtml(f.label) + '</button>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 5. grvSetFilter — Change active filter
+     */
+    function grvSetFilter(type) {
+      grvFilter = type;
+      grvSelectedIndex = null;
+      grvRender();
+    }
+
+    /**
+     * 6. grvRenderQueueListHtml — Queue item list
+     */
+    function grvRenderQueueListHtml() {
+      if (!grvQueueData || !grvQueueData.queueItems) return '';
+
+      var items = grvQueueData.queueItems;
+      var filtered = [];
+      for (var i = 0; i < items.length; i++) {
+        if (grvFilter === 'all' || items[i].type === grvFilter) {
+          filtered.push({ item: items[i], origIndex: i });
+        }
+      }
+
+      if (filtered.length === 0) {
+        return '<div class="grv-queue-empty">No items match this filter.</div>';
+      }
+
+      var html = '';
+      for (var f = 0; f < filtered.length; f++) {
+        var item = filtered[f].item;
+        var idx = filtered[f].origIndex;
+        var selected = grvSelectedIndex === idx ? ' selected' : '';
+        var itemKey = item.type + '|' + item.studentEmail + '|' + String(item.hexId);
+        var isNew = '';
+        for (var ni = 0; ni < grvNewItemIds.length; ni++) {
+          if (grvNewItemIds[ni] === itemKey) { isNew = ' grv-queue-item-new'; break; }
+        }
+        html += '<div class="grv-queue-item' + selected + isNew + '" onclick="grvSelectItem(' + idx + ')">';
+        html += '<div class="grv-queue-item-header">';
+        html += '<span class="grv-queue-item-name">' + escapeHtml(item.studentName) + '</span>';
+        html += '<span class="grv-queue-item-date">' + grvFormatDate(item.date) + '</span>';
+        html += '</div>';
+        html += '<div class="grv-queue-item-meta">';
+        html += '<span class="grv-queue-item-hex">' + escapeHtml(item.hexLabel) + '</span>';
+        html += '<span class="grv-type-badge ' + item.type + '">' + (GRV_TYPE_ICONS[item.type] || '') + ' ' + (GRV_TYPE_LABELS[item.type] || item.type) + '</span>';
+        if (item.score !== null && item.maxScore !== null && item.maxScore > 0) {
+          var pct = Math.round((item.score / item.maxScore) * 100);
+          var passClass = pct >= 50 ? 'passed' : 'failed';
+          html += '<span class="grv-score-pill ' + passClass + '">' + pct + '%</span>';
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+      return html;
+    }
+
+    /**
+     * 7. grvSelectItem — Select a queue item
+     */
+    function grvSelectItem(index) {
+      grvSelectedIndex = index;
+      grvRender();
+    }
+
+    /**
+     * 8. grvRenderDetail — Dispatch to type-specific detail
+     */
+    function grvRenderDetail(item) {
+      var html = '<div class="grv-detail-header">';
+      html += '<div class="grv-detail-student-name">' + escapeHtml(item.studentName) + '</div>';
+      html += '<div class="grv-detail-hex-info">';
+      html += '<span>' + escapeHtml(item.hexLabel) + '</span>';
+      html += '<span class="grv-type-badge ' + item.type + '">' + (GRV_TYPE_ICONS[item.type] || '') + ' ' + (GRV_TYPE_LABELS[item.type] || item.type) + '</span>';
+      html += '<span style="color:#94a3b8;">' + grvFormatDate(item.date) + '</span>';
+      html += '</div>';
+      html += '</div>';
+
+      // Student pathway visualization (Story 3)
+      html += grvRenderPathway(item);
+
+      if (item.type === 'submission') {
+        html += grvRenderSubmissionDetail(item);
+      } else if (item.type === 'lab') {
+        html += grvRenderLabDetail(item);
+      } else if (item.type === 'assessment') {
+        html += grvRenderAssessmentDetail(item);
+      } else if (item.type === 'iteration') {
+        html += grvRenderIterationDetail(item);
+      }
+
+      return html;
+    }
+
+    /**
+     * 9. grvRenderSubmissionDetail — Progress submission with self-assessment
+     */
+    function grvRenderSubmissionDetail(item) {
+      var html = '';
+
+      // Score info
+      if (item.score !== null && item.maxScore !== null && item.maxScore > 0) {
+        html += '<div class="grv-detail-section">';
+        html += '<div class="grv-detail-section-title">Score</div>';
+        html += '<span style="font-size:20px; font-weight:700; color:#1e293b;">' + item.score + ' / ' + item.maxScore + '</span>';
+        html += ' <span style="font-size:14px; color:#64748b;">(' + Math.round((item.score / item.maxScore) * 100) + '%)</span>';
+        html += '</div>';
+      }
+
+      // Self-assessment
+      if (item.selfAssessRating) {
+        html += '<div class="grv-detail-section">';
+        html += '<div class="grv-detail-section-title">Student Self-Assessment</div>';
+        html += '<div class="grv-detail-sa-card">';
+        html += '<span class="grv-sa-rating-badge grv-sa-rating-' + item.selfAssessRating + '">' + (GRV_SA_LABELS[item.selfAssessRating] || item.selfAssessRating) + '</span>';
+        if (item.selfAssessNote) {
+          html += '<div class="grv-sa-text">' + escapeHtml(item.selfAssessNote) + '</div>';
+        }
+        if (item.selfAssessGoal) {
+          html += '<div class="grv-sa-label">Goal</div>';
+          html += '<div class="grv-sa-text">' + escapeHtml(item.selfAssessGoal) + '</div>';
+        }
+        // Evidence links
+        if (item.selfAssessEvidence && item.selfAssessEvidence.length > 0) {
+          html += '<div class="grv-sa-label">Evidence</div>';
+          html += '<div class="grv-evidence-list">';
+          for (var e = 0; e < item.selfAssessEvidence.length; e++) {
+            var ev = item.selfAssessEvidence[e];
+            if (ev.url) {
+              html += '<a href="' + escapeHtml(ev.url) + '" target="_blank" class="grv-evidence-link">' + escapeHtml(ev.label || 'Link ' + (e + 1)) + ' &#x2197;</a>';
+            }
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // Strategies used
+      if (item.strategiesUsed && item.strategiesUsed.length > 0) {
+        html += '<div class="grv-detail-section">';
+        html += '<div class="grv-detail-section-title">Strategies Used</div>';
+        html += '<div class="grv-detail-strategies">';
+        for (var s = 0; s < item.strategiesUsed.length; s++) {
+          html += '<span class="grv-strategy-chip">' + escapeHtml(item.strategiesUsed[s]) + '</span>';
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // Feedback + actions
+      html += grvRenderFeedbackArea();
+      html += '<div class="grv-action-bar">';
+      html += '<button class="grv-btn grv-btn-approve" onclick="grvApproveSubmission()" ' + (grvSaving ? 'disabled' : '') + '>Approve</button>';
+      html += '<button class="grv-btn grv-btn-revise" onclick="grvRequestRevision()" ' + (grvSaving ? 'disabled' : '') + '>Request Revision</button>';
+      html += '</div>';
+
+      return html;
+    }
+
+    /**
+     * 10. grvRenderLabDetail — Lab report submission
+     */
+    function grvRenderLabDetail(item) {
+      var html = '<div class="grv-detail-section">';
+      html += '<div class="grv-detail-section-title">Lab Report Submission</div>';
+      html += '<div style="font-size:13px; color:#334155;">';
+      if (item.revisionNumber > 0) {
+        html += '<strong>Revision:</strong> #' + item.revisionNumber + '<br>';
+      }
+      html += '<strong>Submitted:</strong> ' + grvFormatDate(item.date);
+      html += '</div>';
+      html += '</div>';
+
+      // Feedback + actions
+      html += grvRenderFeedbackArea();
+      html += '<div class="grv-action-bar">';
+      html += '<button class="grv-btn grv-btn-score" onclick="grvOpenLabScoring()" ' + (grvSaving ? 'disabled' : '') + '>Open Scoring</button>';
+      html += '<button class="grv-btn grv-btn-revise" onclick="grvReturnLab()" ' + (grvSaving ? 'disabled' : '') + '>Return for Revision</button>';
+      html += '</div>';
+
+      return html;
+    }
+
+    /**
+     * 11. grvRenderAssessmentDetail — Auto-graded assessment results
+     */
+    function grvRenderAssessmentDetail(item) {
+      var html = '<div class="grv-detail-section">';
+      html += '<div class="grv-detail-section-title">Assessment Results</div>';
+      html += '<div style="font-size:13px; color:#334155;">';
+      html += '<strong>Attempt:</strong> #' + (item.attemptNumber || 1) + '<br>';
+      if (item.scorePct !== null && item.scorePct !== undefined) {
+        html += '<strong>Score:</strong> ' + item.score + ' / ' + item.maxScore + ' (' + Math.round(item.scorePct) + '%)<br>';
+      }
+      if (item.passed !== null && item.passed !== undefined) {
+        var passLabel = item.passed ? '<span style="color:#10b981; font-weight:700;">Passed</span>' : '<span style="color:#f59e0b; font-weight:700;">Not Passed</span>';
+        html += '<strong>Result:</strong> ' + passLabel;
+      }
+      html += '</div>';
+      html += '</div>';
+
+      // Override score section
+      html += '<div class="grv-detail-section">';
+      html += '<div class="grv-detail-section-title">Override Score (Optional)</div>';
+      html += '<div class="grv-override-row">';
+      html += '<input type="number" class="grv-override-input" id="grvOverrideScore" placeholder="Score" min="0">';
+      html += '<span class="grv-override-label">/</span>';
+      html += '<input type="number" class="grv-override-input" id="grvOverrideMax" placeholder="Max" min="1">';
+      html += '<button class="grv-btn grv-btn-secondary" onclick="grvOverrideScore()" ' + (grvSaving ? 'disabled' : '') + '>Override</button>';
+      html += '</div>';
+      html += '</div>';
+
+      // Acknowledge button
+      html += '<div class="grv-action-bar">';
+      html += '<button class="grv-btn grv-btn-approve" onclick="grvAcknowledgeAssessment()" ' + (grvSaving ? 'disabled' : '') + '>Acknowledge &amp; Approve</button>';
+      html += '</div>';
+
+      return html;
+    }
+
+    /**
+     * 12. grvRenderIterationDetail — Checkpoint iteration
+     */
+    function grvRenderIterationDetail(item) {
+      var html = '<div class="grv-detail-section">';
+      html += '<div class="grv-detail-section-title">Iteration #' + (item.iterationNumber || 1) + '</div>';
+
+      // Reflection
+      if (item.reflectionNote) {
+        html += '<div class="grv-sa-label">Student Reflection</div>';
+        html += '<div class="grv-iteration-note">' + escapeHtml(item.reflectionNote) + '</div>';
+      }
+
+      // Evidence
+      if (item.evidence && item.evidence.length > 0) {
+        html += '<div class="grv-sa-label" style="margin-top:8px;">Evidence</div>';
+        html += '<div class="grv-evidence-list">';
+        for (var e = 0; e < item.evidence.length; e++) {
+          var ev = item.evidence[e];
+          if (ev.url) {
+            html += '<a href="' + escapeHtml(ev.url) + '" target="_blank" class="grv-evidence-link">' + escapeHtml(ev.label || 'Link ' + (e + 1)) + ' &#x2197;</a>';
+          }
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Score section (optional)
+      html += '<div class="grv-detail-section">';
+      html += '<div class="grv-detail-section-title">Score (Optional)</div>';
+      html += '<div class="grv-override-row">';
+      html += '<input type="number" class="grv-override-input" id="grvIterationScore" placeholder="Score" min="0" aria-label="Iteration score">';
+      html += '<span class="grv-override-label">/</span>';
+      html += '<input type="number" class="grv-override-input" id="grvIterationMaxScore" placeholder="Max" min="1" value="10" aria-label="Maximum score">';
+      html += '</div>';
+      html += '</div>';
+
+      // Feedback + actions
+      html += grvRenderFeedbackArea();
+      html += '<div class="grv-action-bar">';
+      html += '<button class="grv-btn grv-btn-approve" onclick="grvReviewIteration(\'approved\')" ' + (grvSaving ? 'disabled' : '') + '>Approve</button>';
+      html += '<button class="grv-btn grv-btn-revise" onclick="grvReviewIteration(\'revision_requested\')" ' + (grvSaving ? 'disabled' : '') + '>Request Revision</button>';
+      html += '</div>';
+
+      return html;
+    }
+
+    /**
+     * 13. grvRenderFeedbackArea — Shared textarea
+     */
+    function grvRenderFeedbackArea() {
+      var html = '<div class="grv-feedback-area">';
+      html += '<div class="grv-detail-section-title">Feedback (Optional)</div>';
+      html += '<div class="qft-chip-bar" id="qftChipBar"></div>';
+      html += '<textarea id="grvFeedbackText" maxlength="1000" placeholder="Add feedback for the student..." oninput="grvUpdateFeedbackChar()"></textarea>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html += '<div class="grv-feedback-char" id="grvFeedbackChar">0 / 1000</div>';
+      html += '<div class="qft-manage-link"><button type="button" onclick="qftOpenManager()" aria-label="Manage feedback templates">Manage templates</button></div>';
+      html += '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    function grvUpdateFeedbackChar() {
+      var ta = document.getElementById('grvFeedbackText');
+      var counter = document.getElementById('grvFeedbackChar');
+      if (ta && counter) {
+        counter.textContent = ta.value.length + ' / 1000';
+      }
+    }
+
+    /**
+     * 13b. grvFireAutoProgress — Fire-and-forget branch evaluation after approve
+     */
+    function grvFireAutoProgress(mapId, hexId, studentEmail) {
+      if (!mapId || !hexId || !studentEmail) return;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (!result || !result.unlockedHexes || result.unlockedHexes.length === 0) return;
+          var count = result.unlockedHexes.length;
+          var name = String(studentEmail).split('@')[0];
+          showToast('Unlocked ' + count + ' hex' + (count !== 1 ? 'es' : '') + ' for ' + escapeHtml(name), 'info');
+        })
+        .withFailureHandler(function() {
+          // Non-fatal — silent
+        })
+        .autoProgressStudent(mapId, hexId, studentEmail);
+    }
+
+    /**
+     * 14. grvApproveSubmission — Approve a progress submission
+     */
+    function grvApproveSubmission() {
+      var item = grvQueueData && grvQueueData.queueItems[grvSelectedIndex];
+      if (!item || grvSaving) return;
+      var capturedMapId = progressSelectedMapId;
+      var capturedHexId = item.hexId;
+      var capturedEmail = item.studentEmail;
+      grvSaving = true;
+      grvRender();
+
+      google.script.run
+        .withSuccessHandler(function() {
+          grvOnActionSuccess('Submission approved');
+          grvFireAutoProgress(capturedMapId, capturedHexId, capturedEmail);
+        })
+        .withFailureHandler(function(err) {
+          grvSaving = false;
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+          grvRender();
+        })
+        .approveSubmission(capturedMapId, capturedHexId, capturedEmail);
+    }
+
+    /**
+     * 15. grvRequestRevision — Send submission back for revision
+     */
+    function grvRequestRevision() {
+      var item = grvQueueData && grvQueueData.queueItems[grvSelectedIndex];
+      if (!item || grvSaving) return;
+      var feedback = (document.getElementById('grvFeedbackText') || {}).value || '';
+      feedback = feedback.trim();
+      grvSaving = true;
+      grvRender();
+
+      google.script.run
+        .withSuccessHandler(function() {
+          grvOnActionSuccess('Revision requested');
+        })
+        .withFailureHandler(function(err) {
+          grvSaving = false;
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+          grvRender();
+        })
+        .requestRevision(progressSelectedMapId, item.hexId, item.studentEmail, feedback);
+    }
+
+    /**
+     * 16. grvReturnLab — Return lab for revision
+     */
+    function grvReturnLab() {
+      var item = grvQueueData && grvQueueData.queueItems[grvSelectedIndex];
+      if (!item || !item.submissionId || grvSaving) return;
+      var feedback = (document.getElementById('grvFeedbackText') || {}).value || '';
+      feedback = feedback.trim();
+      grvSaving = true;
+      grvRender();
+
+      google.script.run
+        .withSuccessHandler(function() {
+          grvOnActionSuccess('Lab returned for revision');
+        })
+        .withFailureHandler(function(err) {
+          grvSaving = false;
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+          grvRender();
+        })
+        .returnLabReport(item.submissionId, feedback);
+    }
+
+    /**
+     * 16b. grvOpenLabScoring — Open existing lab scoring overlay
+     */
+    function grvOpenLabScoring() {
+      var item = grvQueueData && grvQueueData.queueItems[grvSelectedIndex];
+      if (!item || !item.assignmentId) return;
+      if (typeof labScoringOpen === 'function') {
+        labScoringOpen(item.assignmentId);
+      } else {
+        showToast('Lab scoring not available', 'error');
+      }
+    }
+
+    /**
+     * 17. grvReviewIteration — Approve or request revision on iteration
+     */
+    function grvReviewIteration(decision) {
+      var item = grvQueueData && grvQueueData.queueItems[grvSelectedIndex];
+      if (!item || !item.iterationId || grvSaving) return;
+      var feedback = (document.getElementById('grvFeedbackText') || {}).value || '';
+      feedback = feedback.trim();
+
+      // Read optional score inputs
+      var scoreEl = document.getElementById('grvIterationScore');
+      var maxEl = document.getElementById('grvIterationMaxScore');
+      var score, maxScore;
+      if (scoreEl && scoreEl.value !== '') {
+        score = parseFloat(scoreEl.value);
+        maxScore = (maxEl && maxEl.value !== '') ? parseFloat(maxEl.value) : 10;
+        if (isNaN(score) || isNaN(maxScore) || maxScore <= 0 || score < 0 || score > maxScore) {
+          showToast('Enter valid score and max values', 'error');
+          return;
+        }
+      }
+
+      var capturedMapId = progressSelectedMapId;
+      var capturedHexId = item.hexId;
+      var capturedEmail = item.studentEmail;
+      var isApproval = (decision === 'approved');
+      grvSaving = true;
+      grvRender();
+
+      google.script.run
+        .withSuccessHandler(function() {
+          var label = isApproval ? 'Iteration approved' : 'Revision requested';
+          grvOnActionSuccess(label);
+          if (isApproval) {
+            grvFireAutoProgress(capturedMapId, capturedHexId, capturedEmail);
+          }
+        })
+        .withFailureHandler(function(err) {
+          grvSaving = false;
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+          grvRender();
+        })
+        .reviewIteration(item.iterationId, decision, feedback, score, maxScore);
+    }
+
+    /**
+     * 18. grvOverrideScore — Override auto-graded assessment score
+     */
+    function grvOverrideScore() {
+      var item = grvQueueData && grvQueueData.queueItems[grvSelectedIndex];
+      if (!item || grvSaving) return;
+
+      var scoreEl = document.getElementById('grvOverrideScore');
+      var maxEl = document.getElementById('grvOverrideMax');
+      if (!scoreEl || !maxEl) return;
+
+      var score = parseFloat(scoreEl.value);
+      var maxScore = parseFloat(maxEl.value);
+      if (isNaN(score) || isNaN(maxScore) || maxScore <= 0) {
+        showToast('Enter valid score and max values', 'error');
+        return;
+      }
+      if (score < 0 || score > maxScore) {
+        showToast('Score must be between 0 and ' + maxScore, 'error');
+        return;
+      }
+
+      grvSaving = true;
+      grvRender();
+
+      google.script.run
+        .withSuccessHandler(function() {
+          grvSaving = false;
+          // Update local queue item score instead of removing
+          if (grvQueueData && grvQueueData.queueItems[grvSelectedIndex]) {
+            grvQueueData.queueItems[grvSelectedIndex].score = score;
+            grvQueueData.queueItems[grvSelectedIndex].maxScore = maxScore;
+            grvQueueData.queueItems[grvSelectedIndex].scorePct = Math.round((score / maxScore) * 100);
+          }
+          showToast('Score overridden', 'success');
+          grvRender();
+        })
+        .withFailureHandler(function(err) {
+          grvSaving = false;
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+          grvRender();
+        })
+        .overrideAssessmentScore(progressSelectedMapId, item.hexId, item.studentEmail, score, maxScore);
+    }
+
+    /**
+     * 18b. grvAcknowledgeAssessment — Approve auto-graded assessment via standard approve
+     */
+    function grvAcknowledgeAssessment() {
+      var item = grvQueueData && grvQueueData.queueItems[grvSelectedIndex];
+      if (!item || grvSaving) return;
+      var capturedMapId = progressSelectedMapId;
+      var capturedHexId = item.hexId;
+      var capturedEmail = item.studentEmail;
+      grvSaving = true;
+      grvRender();
+
+      google.script.run
+        .withSuccessHandler(function() {
+          grvOnActionSuccess('Assessment acknowledged');
+          grvFireAutoProgress(capturedMapId, capturedHexId, capturedEmail);
+        })
+        .withFailureHandler(function(err) {
+          grvSaving = false;
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+          grvRender();
+        })
+        .approveSubmission(capturedMapId, capturedHexId, capturedEmail,
+          item.score !== null ? item.score : undefined,
+          item.maxScore !== null ? item.maxScore : undefined);
+    }
+
+    // ================================================
+    // BULK APPROVE (Story 1)
+    // ================================================
+
+    /**
+     * Count items in the current filtered view that can be bulk-approved (submission or iteration).
+     */
+    function grvCountApprovableItems() {
+      if (!grvQueueData || !grvQueueData.queueItems) return 0;
+      var items = grvQueueData.queueItems;
+      var count = 0;
+      for (var i = 0; i < items.length; i++) {
+        if (grvFilter !== 'all' && items[i].type !== grvFilter) continue;
+        if (items[i].type === 'submission' || items[i].type === 'iteration') count++;
+      }
+      return count;
+    }
+
+    /**
+     * Bulk approve all visible submissions and iterations.
+     */
+    function grvBulkApprove() {
+      if (grvSaving || !grvQueueData) return;
+      var items = grvQueueData.queueItems;
+      var approvableItems = [];
+      for (var i = 0; i < items.length; i++) {
+        if (grvFilter !== 'all' && items[i].type !== grvFilter) continue;
+        if (items[i].type === 'submission' || items[i].type === 'iteration') {
+          approvableItems.push({
+            type: items[i].type,
+            hexId: items[i].hexId,
+            studentEmail: items[i].studentEmail,
+            iterationId: items[i].iterationId || null
+          });
+        }
+      }
+      if (approvableItems.length === 0) return;
+
+      var subCount = 0, iterCount = 0;
+      for (var j = 0; j < approvableItems.length; j++) {
+        if (approvableItems[j].type === 'submission') subCount++;
+        else iterCount++;
+      }
+      var msg = 'Approve ' + approvableItems.length + ' item' + (approvableItems.length !== 1 ? 's' : '') + '?';
+      if (subCount > 0 && iterCount > 0) msg = 'Approve ' + subCount + ' submission' + (subCount !== 1 ? 's' : '') + ' and ' + iterCount + ' iteration' + (iterCount !== 1 ? 's' : '') + '?';
+      if (!confirm(msg)) return;
+
+      grvSaving = true;
+      grvRender();
+      var expectedMapId = progressSelectedMapId;
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          grvSaving = false;
+          if (progressSelectedMapId !== expectedMapId) return;
+          // Remove approved items from local queue (reverse order to avoid index shifting)
+          if (result && result.approved > 0) {
+            var removeTypes = ['submission', 'iteration'];
+            for (var ri = grvQueueData.queueItems.length - 1; ri >= 0; ri--) {
+              var item = grvQueueData.queueItems[ri];
+              if (grvFilter !== 'all' && item.type !== grvFilter) continue;
+              if (removeTypes.indexOf(item.type) !== -1) {
+                grvQueueData.queueItems.splice(ri, 1);
+              }
+            }
+            grvRecomputeSummary();
+          }
+          grvSelectedIndex = null;
+          var toastMsg = result.approved + ' approved';
+          if (result.failed > 0) toastMsg += ', ' + result.failed + ' failed';
+          showToast(toastMsg, result.failed > 0 ? 'error' : 'success');
+          grvRender();
+        })
+        .withFailureHandler(function(err) {
+          grvSaving = false;
+          if (progressSelectedMapId !== expectedMapId) return;
+          showToast('Bulk approve failed: ' + escapeHtml(err.message), 'error');
+          grvRender();
+        })
+        .bulkApproveItems(progressSelectedMapId, approvableItems);
+    }
+
+    // ================================================
+    // CSV EXPORT (Story 4)
+    // ================================================
+
+    /**
+     * Export Grade & Review queue as CSV.
+     */
+    function csvExportGradeReview() {
+      if (!grvQueueData || !grvQueueData.queueItems || grvQueueData.queueItems.length === 0) {
+        showToast('No items to export', 'error');
+        return;
+      }
+      var headers = ['Student', 'Student Email', 'Hex', 'Type', 'Date', 'Score'];
+      var rows = [];
+      var items = grvQueueData.queueItems;
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        var scoreStr = '';
+        if (it.score !== null && it.score !== undefined && it.maxScore) {
+          scoreStr = it.score + '/' + it.maxScore;
+        }
+        rows.push([
+          it.studentName || it.studentEmail,
+          it.studentEmail,
+          it.hexLabel || it.hexId,
+          it.type,
+          it.date || '',
+          scoreStr
+        ]);
+      }
+      var mapTitle = currentMap ? (currentMap.title || 'map') : 'map';
+      csvExportData(headers, rows, 'grading-queue-' + mapTitle.replace(/[^a-zA-Z0-9]/g, '_') + '.csv');
+    }
+
+    // ================================================
+    // HELPERS
+    // ================================================
+
+    /**
+     * grvOnActionSuccess — Common success handler after any action
+     */
+    function grvOnActionSuccess(toastMsg) {
+      grvSaving = false;
+      showToast(toastMsg, 'success');
+
+      // Remove item from local queue
+      if (grvQueueData && grvSelectedIndex !== null) {
+        grvQueueData.queueItems.splice(grvSelectedIndex, 1);
+        grvRecomputeSummary();
+        grvSelectedIndex = null;
+      }
+      grvRender();
+    }
+
+    /**
+     * grvRecomputeSummary — Rebuild summary from local queue items
+     */
+    function grvRecomputeSummary() {
+      if (!grvQueueData) return;
+      var items = grvQueueData.queueItems;
+      var summary = { total: items.length, byType: { submission: 0, lab: 0, assessment: 0, iteration: 0 }, oldestPending: '' };
+      for (var i = 0; i < items.length; i++) {
+        summary.byType[items[i].type] = (summary.byType[items[i].type] || 0) + 1;
+      }
+      if (items.length > 0) {
+        summary.oldestPending = items[items.length - 1].date;
+      }
+      grvQueueData.summary = summary;
+    }
+
+    // ================================================
+    // AUTO-REFRESH POLLING (Story 2)
+    // ================================================
+
+    var GRV_POLL_INTERVAL = 60000; // 60 seconds
+
+    /**
+     * grvStartPolling — Begin auto-refresh cycle
+     */
+    function grvStartPolling() {
+      grvStopPolling();
+      grvNoChangeCount = 0;
+      grvLastRefreshTime = new Date();
+      grvScheduleNextPoll();
+      grvStartLastUpdatedTimer();
+    }
+
+    /**
+     * grvStopPolling — Stop auto-refresh cycle
+     */
+    function grvStopPolling() {
+      if (grvPollingTimer) { clearTimeout(grvPollingTimer); grvPollingTimer = null; }
+      if (grvLastUpdatedTimer) { clearInterval(grvLastUpdatedTimer); grvLastUpdatedTimer = null; }
+    }
+
+    /**
+     * grvScheduleNextPoll — setTimeout recursion (not setInterval)
+     * Called from inside grvPollRefresh success/failure handlers to ensure
+     * full 60s elapses between end of response and next request.
+     */
+    function grvScheduleNextPoll() {
+      if (grvPollingTimer) clearTimeout(grvPollingTimer);
+      var interval = GRV_POLL_INTERVAL; // base 60s
+      if (grvNoChangeCount > 10) { interval = 120000; }  // 120s after 10min idle
+      else if (grvNoChangeCount > 5) { interval = 90000; }  // 90s after 5min idle
+      grvPollingTimer = setTimeout(function() {
+        grvPollRefresh();
+      }, interval);
+    }
+
+    /**
+     * grvPollRefresh — Silent background refresh of grading queue
+     */
+    function grvPollRefresh() {
+      if (!progressSelectedClassId || !progressSelectedMapId) return;
+      if (grvSaving) return; // Don't refresh while action in flight
+
+      var expectedMapId = progressSelectedMapId;
+      var expectedClassId = progressSelectedClassId;
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (progressSelectedMapId !== expectedMapId || progressSelectedClassId !== expectedClassId) return;
+          if (!grvQueueData) { grvQueueData = data; grvRender(); return; }
+
+          // Build lookup of old item IDs
+          var oldIds = {};
+          for (var i = 0; i < grvQueueData.queueItems.length; i++) {
+            var oi = grvQueueData.queueItems[i];
+            oldIds[oi.type + '|' + oi.studentEmail + '|' + String(oi.hexId)] = true;
+          }
+
+          // Find new items
+          grvNewItemIds = [];
+          for (var j = 0; j < data.queueItems.length; j++) {
+            var ni = data.queueItems[j];
+            var key = ni.type + '|' + ni.studentEmail + '|' + String(ni.hexId);
+            if (!oldIds[key]) {
+              grvNewItemIds.push(key);
+            }
+          }
+
+          // Preserve selected item by matching ID
+          var selectedKey = null;
+          if (grvSelectedIndex !== null && grvQueueData.queueItems[grvSelectedIndex]) {
+            var sel = grvQueueData.queueItems[grvSelectedIndex];
+            selectedKey = sel.type + '|' + sel.studentEmail + '|' + String(sel.hexId);
+          }
+
+          grvQueueData = data;
+          grvLastRefreshTime = new Date();
+
+          // Restore selection
+          if (selectedKey) {
+            grvSelectedIndex = null;
+            for (var k = 0; k < data.queueItems.length; k++) {
+              var item = data.queueItems[k];
+              if ((item.type + '|' + item.studentEmail + '|' + String(item.hexId)) === selectedKey) {
+                grvSelectedIndex = k;
+                break;
+              }
+            }
+          }
+
+          grvRender();
+
+          // Track idle ticks for adaptive backoff
+          if (grvNewItemIds.length > 0) {
+            grvNoChangeCount = 0;
+            setTimeout(function() { grvNewItemIds = []; }, 3000);
+          } else {
+            grvNoChangeCount++;
+          }
+
+          // Schedule next poll after response completes (not before)
+          grvScheduleNextPoll();
+        })
+        .withFailureHandler(function() {
+          // Silent failure — don't disrupt the UI; schedule next poll so polling continues
+          grvScheduleNextPoll();
+        })
+        .getGradingQueue(progressSelectedClassId, progressSelectedMapId);
+    }
+
+    /**
+     * grvRenderLastUpdated — Timestamp display
+     */
+    function grvRenderLastUpdated() {
+      if (!grvLastRefreshTime) return '';
+      return '<div class="grv-last-updated" id="grvLastUpdated">Updated ' + grvFormatRelativeTime(grvLastRefreshTime) + '</div>';
+    }
+
+    function grvFormatRelativeTime(date) {
+      var diffSec = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+      if (diffSec < 5) return 'just now';
+      if (diffSec < 60) return diffSec + 's ago';
+      var diffMin = Math.floor(diffSec / 60);
+      return diffMin + 'm ago';
+    }
+
+    /**
+     * grvStartLastUpdatedTimer — Lightweight 15s interval to update timestamp text
+     */
+    function grvStartLastUpdatedTimer() {
+      if (grvLastUpdatedTimer) clearInterval(grvLastUpdatedTimer);
+      grvLastUpdatedTimer = setInterval(function() {
+        var el = document.getElementById('grvLastUpdated');
+        if (el && grvLastRefreshTime) {
+          el.textContent = 'Updated ' + grvFormatRelativeTime(grvLastRefreshTime);
+        }
+      }, 15000);
+    }
+
+    // ================================================
+    // STUDENT PATHWAY VISUALIZATION (Story 3)
+    // ================================================
+
+    /**
+     * grvRenderPathway — Render horizontal pathway flow for a queue item
+     */
+    function grvRenderPathway(item) {
+      // Need current map loaded and matching
+      if (!currentMap || !currentMap.hexes || !item || !item.hexId) return '';
+      if (String(currentMap.mapId) !== String(progressSelectedMapId)) return '';
+
+      var path = grvBuildStudentPath(String(item.hexId), item.studentEmail);
+      if (!path || path.length === 0) return '';
+
+      var html = '<div class="grv-pathway">';
+      for (var i = 0; i < path.length; i++) {
+        if (i > 0) {
+          var lineClass = 'grv-pathway-line';
+          // Line is "completed" if the PREVIOUS node was completed/mastered
+          var prevStatus = path[i - 1].status;
+          if (prevStatus === 'completed' || prevStatus === 'mastered') lineClass += ' completed';
+          html += '<div class="' + lineClass + '"></div>';
+        }
+        var node = path[i];
+        var circleClass = 'grv-pathway-circle';
+        if (node.isCurrent) circleClass += ' current';
+        else if (node.status === 'mastered') circleClass += ' mastered';
+        else if (node.status === 'completed') circleClass += ' completed';
+        else if (node.status === 'in_progress') circleClass += ' in_progress';
+        else circleClass += ' locked';
+
+        var iconChar = node.icon || '\u2B21';
+        var clickAttr = '';
+        // Allow clicking to navigate to queue items on other hexes
+        if (!node.isCurrent && node.queueIndex !== null && node.queueIndex !== undefined) {
+          clickAttr = ' onclick="grvSelectItem(' + node.queueIndex + ')"';
+        }
+
+        html += '<div class="grv-pathway-node"' + clickAttr + '>';
+        html += '<div class="' + circleClass + '">' + escapeHtml(iconChar) + '</div>';
+        html += '<div class="grv-pathway-label" title="' + escapeHtml(node.label) + '">' + escapeHtml(node.label) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * grvBuildStudentPath — Trace backward and forward from a hex through branches
+     */
+    function grvBuildStudentPath(hexId, studentEmail) {
+      if (!currentMap || !currentMap.hexes) return [];
+
+      // Build hex lookup and reverse adjacency (which hexes lead to X?)
+      var hexById = {};
+      var reverseAdj = {}; // hexId -> [parentHexIds]
+      var forwardAdj = {}; // hexId -> [childHexIds]
+      for (var h = 0; h < currentMap.hexes.length; h++) {
+        var hx = currentMap.hexes[h];
+        hexById[String(hx.id)] = hx;
+        if (!reverseAdj[String(hx.id)]) reverseAdj[String(hx.id)] = [];
+        if (!forwardAdj[String(hx.id)]) forwardAdj[String(hx.id)] = [];
+        var branches = hx.branches || [];
+        for (var b = 0; b < branches.length; b++) {
+          var nextIds = branches[b].nextHexIds || [];
+          for (var n = 0; n < nextIds.length; n++) {
+            var nid = String(nextIds[n]);
+            if (!reverseAdj[nid]) reverseAdj[nid] = [];
+            reverseAdj[nid].push(String(hx.id));
+            forwardAdj[String(hx.id)].push(nid);
+          }
+        }
+      }
+
+      // Build queue lookup for click navigation
+      var queueLookup = {};
+      if (grvQueueData && grvQueueData.queueItems) {
+        for (var q = 0; q < grvQueueData.queueItems.length; q++) {
+          queueLookup[String(grvQueueData.queueItems[q].hexId)] = q;
+        }
+      }
+
+      // Trace backward (unique, max 3 predecessors)
+      var backward = [];
+      var visited = {};
+      visited[hexId] = true;
+      var frontier = reverseAdj[hexId] || [];
+      var depth = 0;
+      while (frontier.length > 0 && depth < 3) {
+        var nextFrontier = [];
+        for (var f = 0; f < frontier.length; f++) {
+          var fid = frontier[f];
+          if (visited[fid]) continue;
+          visited[fid] = true;
+          backward.unshift(fid); // prepend
+          var parents = reverseAdj[fid] || [];
+          for (var p = 0; p < parents.length; p++) {
+            if (!visited[parents[p]]) nextFrontier.push(parents[p]);
+          }
+        }
+        frontier = nextFrontier;
+        depth++;
+      }
+
+      // Trace forward (max 3 successors)
+      var forward = [];
+      var children = forwardAdj[hexId] || [];
+      var fVisited = {};
+      fVisited[hexId] = true;
+      var fFrontier = children.slice();
+      var fDepth = 0;
+      while (fFrontier.length > 0 && fDepth < 3) {
+        var fNext = [];
+        for (var ff = 0; ff < fFrontier.length; ff++) {
+          var ffid = fFrontier[ff];
+          if (fVisited[ffid]) continue;
+          fVisited[ffid] = true;
+          forward.push(ffid);
+          var fChildren = forwardAdj[ffid] || [];
+          for (var fc = 0; fc < fChildren.length; fc++) {
+            if (!fVisited[fChildren[fc]]) fNext.push(fChildren[fc]);
+          }
+        }
+        fFrontier = fNext;
+        fDepth++;
+      }
+
+      // Build path array: backward + current + forward
+      var pathIds = backward.concat([hexId]).concat(forward);
+      var result = [];
+      for (var pi = 0; pi < pathIds.length; pi++) {
+        var pid = pathIds[pi];
+        var phex = hexById[pid];
+        if (!phex) continue;
+        var status = grvGetStudentHexStatus(pid, studentEmail);
+        result.push({
+          hexId: pid,
+          label: phex.label || 'Hex',
+          icon: phex.icon || '',
+          status: status,
+          isCurrent: pid === hexId,
+          queueIndex: queueLookup.hasOwnProperty(pid) ? queueLookup[pid] : null
+        });
+      }
+      return result;
+    }
+
+    /**
+     * grvGetStudentHexStatus — Lookup student's status for a hex
+     */
+    function grvGetStudentHexStatus(hexId, studentEmail) {
+      // Check phmDashboardData first (loaded for heatmap or progress tab)
+      var data = phmDashboardData || (typeof progressDashboardData !== 'undefined' ? progressDashboardData : null);
+      if (data && data.students) {
+        for (var i = 0; i < data.students.length; i++) {
+          if (data.students[i].email === studentEmail) {
+            var hp = data.students[i].hexProgress || {};
+            var prog = hp[String(hexId)];
+            return prog ? (prog.status || 'not_started') : 'not_started';
+          }
+        }
+      }
+      return 'unknown';
+    }
+
+    /**
+     * grvFormatDate — Relative date string
+     */
+    function grvFormatDate(dateStr) {
+      if (!dateStr) return '';
+      var date;
+      try { date = new Date(dateStr); } catch (e) { return ''; }
+      if (isNaN(date.getTime())) return '';
+
+      var now = new Date();
+      var diffMs = now.getTime() - date.getTime();
+      var diffMins = Math.floor(diffMs / 60000);
+      var diffHours = Math.floor(diffMs / 3600000);
+      var diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return diffMins + 'm ago';
+      if (diffHours < 24) return diffHours + 'h ago';
+      if (diffDays === 1) return 'yesterday';
+      if (diffDays < 7) return diffDays + 'd ago';
+      if (diffDays < 30) return Math.floor(diffDays / 7) + 'w ago';
+      return date.toLocaleDateString();
+    }
+
+    // ================================================
+    // QUICK FEEDBACK TEMPLATES (Story 3, qft- prefix)
+    // ================================================
+
+    /**
+     * Load feedback templates from backend (cached per session).
+     */
+    function qftLoadTemplates() {
+      var bar = document.getElementById('qftChipBar');
+      if (!bar) return;
+      if (qftTemplatesCache) { qftRenderChips(); return; }
+      bar.innerHTML = '<span style="font-size:12px;color:#94a3b8;">Loading templates...</span>';
+      var expectedMapId = progressSelectedMapId;
+      google.script.run
+        .withSuccessHandler(function(templates) {
+          if (progressSelectedMapId !== expectedMapId) return;
+          qftTemplatesCache = templates || [];
+          qftRenderChips();
+        })
+        .withFailureHandler(function() {
+          if (progressSelectedMapId !== expectedMapId) return;
+          var bar2 = document.getElementById('qftChipBar');
+          if (bar2) bar2.innerHTML = '';
+          qftTemplatesCache = [];
+        })
+        .getTeacherFeedbackTemplates(progressSelectedMapId || '');
+    }
+
+    /**
+     * Render template chips filtered by current item type.
+     */
+    function qftRenderChips() {
+      var bar = document.getElementById('qftChipBar');
+      if (!bar || !qftTemplatesCache) return;
+      var item = (grvQueueData && grvSelectedIndex !== null) ? grvQueueData.queueItems[grvSelectedIndex] : null;
+      var itemType = item ? item.type : '';
+
+      // Build filtered list of visible template indices
+      var visibleIndices = [];
+      for (var i = 0; i < qftTemplatesCache.length; i++) {
+        var t = qftTemplatesCache[i];
+        if (t.category !== 'general' && t.category !== itemType) continue;
+        visibleIndices.push(i);
+      }
+
+      var html = '';
+      for (var vi = 0; vi < visibleIndices.length; vi++) {
+        var idx = visibleIndices[vi];
+        var text = escapeHtml(qftTemplatesCache[idx].templateText);
+        var display = text.length > 35 ? text.substring(0, 35) + '...' : text;
+        html += '<button class="qft-chip" data-qft-idx="' + idx + '" title="' + text + '">' + display + '</button>';
+      }
+      if (!html) html = '<span style="font-size:12px;color:#94a3b8;">No templates for this type</span>';
+      bar.innerHTML = html;
+
+      // Attach event listeners (avoids inline onclick XSS risk)
+      var chips = bar.querySelectorAll('.qft-chip');
+      for (var ci = 0; ci < chips.length; ci++) {
+        (function(chip) {
+          chip.addEventListener('click', function() {
+            var cIdx = parseInt(chip.getAttribute('data-qft-idx'), 10);
+            if (qftTemplatesCache && qftTemplatesCache[cIdx]) {
+              qftInsertTemplate(qftTemplatesCache[cIdx].templateText);
+            }
+          });
+        })(chips[ci]);
+      }
+    }
+
+    /**
+     * Insert template text into the feedback textarea.
+     */
+    function qftInsertTemplate(text) {
+      var ta = document.getElementById('grvFeedbackText');
+      if (!ta) return;
+      if (ta.value && ta.value.trim()) {
+        ta.value = ta.value.replace(/\s+$/, '') + ' ' + text;
+      } else {
+        ta.value = text;
+      }
+      grvUpdateFeedbackChar();
+      ta.focus();
+    }
+
+    /**
+     * Open the template manager overlay.
+     */
+    function qftOpenManager() {
+      qftManagerOpen = true;
+      var overlay = document.createElement('div');
+      overlay.id = 'qftManagerOverlay';
+      overlay.className = 'qft-manager-overlay';
+      overlay.onclick = function(e) { if (e.target === overlay) qftCloseManager(); };
+      overlay.innerHTML = qftBuildManagerHtml();
+      document.body.appendChild(overlay);
+      qftAttachManagerListeners(overlay);
+    }
+
+    /**
+     * Close the template manager overlay and refresh chips.
+     */
+    function qftCloseManager() {
+      qftManagerOpen = false;
+      var overlay = document.getElementById('qftManagerOverlay');
+      if (overlay) overlay.parentNode.removeChild(overlay);
+      qftRenderChips();
+    }
+
+    /**
+     * Build the manager modal HTML.
+     */
+    function qftBuildManagerHtml() {
+      var html = '<div class="qft-manager-modal">';
+      html += '<div class="qft-manager-title">Manage Feedback Templates <button class="qft-manager-close" onclick="qftCloseManager()">&times;</button></div>';
+
+      if (qftTemplatesCache) {
+        for (var i = 0; i < qftTemplatesCache.length; i++) {
+          var t = qftTemplatesCache[i];
+          html += '<div class="qft-manager-item" data-idx="' + i + '">';
+          html += '<div class="qft-manager-item-text">' + escapeHtml(t.templateText);
+          if (t.isDefault) html += ' <span class="qft-manager-item-default">(Default)</span>';
+          html += '</div>';
+          if (!t.isDefault) {
+            html += '<select class="qft-manager-select" id="qftCat_' + i + '">';
+            var cats = ['general', 'submission', 'lab', 'assessment', 'iteration'];
+            for (var c = 0; c < cats.length; c++) {
+              html += '<option value="' + cats[c] + '"' + (t.category === cats[c] ? ' selected' : '') + '>' + cats[c] + '</option>';
+            }
+            html += '</select>';
+            html += '<button class="qft-manager-delete" data-qft-del-id="' + escapeHtml(t.templateId) + '" title="Delete" aria-label="Delete template">&times;</button>';
+          } else {
+            html += '<span style="font-size:11px;color:#94a3b8;padding:0 8px;">' + t.category + '</span>';
+          }
+          html += '</div>';
+        }
+      }
+
+      // Add new template
+      html += '<div class="qft-manager-add">';
+      html += '<input type="text" id="qftNewText" maxlength="200" placeholder="New template text...">';
+      html += '<select id="qftNewCat" class="qft-manager-select">';
+      var addCats = ['general', 'submission', 'lab', 'assessment', 'iteration'];
+      for (var ac = 0; ac < addCats.length; ac++) {
+        html += '<option value="' + addCats[ac] + '">' + addCats[ac] + '</option>';
+      }
+      html += '</select>';
+      html += '<button class="qft-manager-add-btn" onclick="qftAddTemplate()">Add</button>';
+      html += '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * Attach event listeners to manager delete buttons (avoids inline onclick XSS).
+     */
+    function qftAttachManagerListeners(container) {
+      var delBtns = container.querySelectorAll('.qft-manager-delete');
+      for (var di = 0; di < delBtns.length; di++) {
+        (function(btn) {
+          btn.addEventListener('click', function() {
+            var tid = btn.getAttribute('data-qft-del-id');
+            if (tid) qftDeleteTemplate(tid);
+          });
+        })(delBtns[di]);
+      }
+    }
+
+    /**
+     * Re-render manager contents and reattach listeners.
+     */
+    function qftRefreshManager() {
+      var overlay = document.getElementById('qftManagerOverlay');
+      if (overlay) {
+        overlay.innerHTML = qftBuildManagerHtml();
+        qftAttachManagerListeners(overlay);
+      }
+    }
+
+    /**
+     * Add a new custom template.
+     */
+    function qftAddTemplate() {
+      var textEl = document.getElementById('qftNewText');
+      var catEl = document.getElementById('qftNewCat');
+      if (!textEl || !textEl.value.trim()) { showToast('Enter template text', 'error'); return; }
+      var text = textEl.value.trim();
+      var cat = catEl ? catEl.value : 'general';
+      var expectedMapId = progressSelectedMapId;
+
+      google.script.run
+        .withSuccessHandler(function() {
+          // Reload cache and re-render manager
+          qftTemplatesCache = null;
+          google.script.run
+            .withSuccessHandler(function(templates) {
+              if (progressSelectedMapId !== expectedMapId) return;
+              qftTemplatesCache = templates || [];
+              qftRefreshManager();
+              showToast('Template added', 'success');
+            })
+            .withFailureHandler(function(err) {
+              showToast('Error reloading templates: ' + escapeHtml(err.message), 'error');
+            })
+            .getTeacherFeedbackTemplates(progressSelectedMapId || '');
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+        })
+        .saveTeacherFeedbackTemplate(null, text, cat, '');
+    }
+
+    /**
+     * Delete a custom template.
+     */
+    function qftDeleteTemplate(templateId) {
+      if (!confirm('Delete this template?')) return;
+      google.script.run
+        .withSuccessHandler(function() {
+          // Remove by templateId (safe against index drift)
+          if (qftTemplatesCache) {
+            qftTemplatesCache = qftTemplatesCache.filter(function(t) {
+              return t.templateId !== templateId;
+            });
+          }
+          qftRefreshManager();
+          showToast('Template deleted', 'success');
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+        })
+        .deleteTeacherFeedbackTemplate(templateId);
+    }
+</script>

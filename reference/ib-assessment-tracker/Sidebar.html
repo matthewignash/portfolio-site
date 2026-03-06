@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body{
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      width: 100%;
+      box-sizing: border-box;
+      overflow-x: hidden;
+    }
+    .tabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+    .tab{padding:8px 10px; border:1px solid #ddd; border-radius:10px; cursor:pointer; user-select:none;}
+    .tab.active{background:#1a4d2e; color:#fff; border-color:#1a4d2e;}
+    .panel{display:none;}
+    .panel.active{display:block;}
+    label{font-weight:700; display:block; margin-top:10px;}
+    select,input,button,textarea{width:100%; margin-top:6px;}
+    button{padding:10px; border-radius:10px; border:1px solid #ddd; cursor:pointer; background:#fff;}
+    button.primary{background:#1a4d2e; color:#fff; border-color:#1a4d2e;}
+    button.success{background:#059669; color:#fff; border-color:#059669;}
+    button.hl{background:#7c3aed; color:#fff; border-color:#7c3aed;}
+    button.sl{background:#0891b2; color:#fff; border-color:#0891b2;}
+    button:disabled{opacity:0.5; cursor:not-allowed;}
+    .row{display:flex; gap:8px;}
+    .row>div{flex:1;}
+    .muted{font-size:12px; opacity:0.85;}
+    .mini{font-size:12px;}
+    .qbox{border:1px solid #ddd; border-radius:12px; padding:10px; margin-top:12px;}
+    textarea.big{min-height:140px;}
+    textarea.rubricWide{min-height:150px;}
+    .mcqGrid{display:grid; grid-template-columns: repeat(5, 1fr); gap:6px; margin-top:10px;}
+    .mcqCell{border:1px solid #eee; border-radius:10px; padding:6px;}
+    .mcqCell .n{font-size:11px; opacity:0.8;}
+    .mcqCell input{margin-top:4px; text-transform:uppercase; text-align:center; font-weight:700;}
+    /* Progress bar */
+    .progress-container{background:#eee; border-radius:8px; height:20px; margin:10px 0; overflow:hidden;}
+    .progress-bar{background:#059669; height:100%; transition:width 0.3s; display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px;}
+    /* Report list */
+    .report-list{max-height:200px; overflow-y:auto; margin-top:10px;}
+    .report-item{padding:6px; border-bottom:1px solid #eee; font-size:12px;}
+    .report-item a{color:#1a73e8; text-decoration:none;}
+    .report-item.success{color:#059669;}
+    .report-item.error{color:#dc2626;}
+    /* Status badges */
+    .status{display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; margin-left:8px;}
+    .status.ready{background:#dcfce7; color:#166534;}
+    .status.pending{background:#fef3c7; color:#92400e;}
+    .status.error{background:#fee2e2; color:#991b1b;}
+    /* Level badges */
+    .level-badge{display:inline-block; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:700; margin-left:8px;}
+    .level-badge.hl{background:#ede9fe; color:#7c3aed;}
+    .level-badge.sl{background:#cffafe; color:#0891b2;}
+    /* IB styling */
+    h3.ib-header{color:#1a4d2e; border-bottom:2px solid #1a4d2e; padding-bottom:4px; margin:10px 0;}
+    /* HL-only indicator */
+    .hl-only{background:#ede9fe; color:#7c3aed; padding:1px 6px; border-radius:4px; font-size:10px; margin-left:4px;}
+  </style>
+</head>
+<body>
+
+  <div class="tabs">
+    <div class="tab active" data-panel="pSetup">Setup</div>
+    <div class="tab" data-panel="pBuilder">Builder</div>
+    <div class="tab" data-panel="pBands">Grade Boundaries</div>
+    <div class="tab" data-panel="pMark">Mark</div>
+    <div class="tab" data-panel="pReports">Reports</div>
+    <div class="tab" data-panel="pOverview">Overview</div>
+  </div>
+
+  <!-- SETUP -->
+  <div id="pSetup" class="panel active">
+    <label>Active Exam</label>
+    <select id="examSelect"></select>
+    <div id="currentLevelDisplay" class="muted"></div>
+    <button class="primary" onclick="setActiveExam()">Set as Active</button>
+
+    <div class="qbox">
+      <div><b>Create New Exam</b></div>
+      <label>exam_id (short, unique)</label>
+      <input id="new_exam_id" placeholder="IB_S1S2_Jan2026">
+      <label>exam_name</label>
+      <input id="new_exam_name" placeholder="Structure 1-2 Assessment">
+      <div class="row">
+        <div><label>course</label><input id="new_course" value="IB Chemistry"></div>
+        <div>
+          <label>Level</label>
+          <select id="new_level">
+            <option value="HL">HL (Higher Level)</option>
+            <option value="SL">SL (Standard Level)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div><label>term</label><input id="new_term" placeholder="Spring 2026"></div>
+        <div><label>class_section</label><input id="new_class" placeholder="IB Chem HL"></div>
+      </div>
+      <label>Papers included</label>
+      <input id="new_papers" value="1A,1B,2" placeholder="1A,1B,2">
+      <label>Topics covered (e.g., S1,S2,R1)</label>
+      <input id="new_topics" placeholder="S1,S2">
+      <button onclick="createExam()">Create Exam</button>
+    </div>
+  </div>
+
+  <!-- BUILDER -->
+  <div id="pBuilder" class="panel">
+    <label>Exam</label>
+    <select id="build_exam"></select>
+    <div id="buildLevelDisplay" class="muted"></div>
+
+    <h3 class="ib-header">Paper 1A (MCQ - No Calculator)</h3>
+
+    <div class="qbox">
+      <div><b>Step 1: Set Paper 1A count</b></div>
+      <label># of Paper 1A questions</label>
+      <input id="p1a_count" type="number" value="30">
+      <p class="muted">SL: ~30 questions | HL: ~40 questions</p>
+      <button class="primary" onclick="setPaper1ACount()">Create/resize Paper 1A</button>
+    </div>
+
+    <div class="qbox">
+      <div><b>Step 2: Tag + Key Entry</b></div>
+      <button onclick="loadPaper1ATable()">Load Paper 1A builder</button>
+      <div id="paper1ATableArea"></div>
+      <button class="primary" onclick="savePaper1ATable()">Save Paper 1A tags + key</button>
+      <p class="muted">IB topics: use format S1.1, S2.3, R1.2, etc. Check "HL" for HL-only questions.</p>
+    </div>
+
+    <h3 class="ib-header">Paper 1B (Calculator Section)</h3>
+
+    <div class="qbox">
+      <div><b>Paper 1B Builder</b></div>
+      <label>Question number</label>
+      <input id="p1b_num" placeholder="1">
+      <button onclick="addPaper1BRoot()">Add Paper 1B root</button>
+
+      <div class="row">
+        <div>
+          <label>Root question</label>
+          <select id="p1b_root"></select>
+        </div>
+        <div>
+          <label>Parent (for sub-parts)</label>
+          <select id="p1b_parent"></select>
+        </div>
+      </div>
+
+      <label>Token to add (a, b, i, ii, etc.)</label>
+      <input id="p1b_token" placeholder="a">
+      <div class="row">
+        <div>
+          <label>Max points</label>
+          <input id="p1b_pts" type="number" value="1">
+        </div>
+        <div>
+          <label>Scoring</label>
+          <select id="p1b_mode">
+            <option value="checklist">checklist</option>
+            <option value="manual">manual</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>AISC strand</label>
+          <select id="p1b_strand">
+            <option>KU</option>
+            <option>TT</option>
+            <option>C</option>
+          </select>
+        </div>
+        <div>
+          <label style="margin-top:28px;">
+            <input type="checkbox" id="p1b_hl_only" style="width:auto;"> HL Only
+          </label>
+        </div>
+      </div>
+      <label>IB topic (e.g., S1.1, R2.3)</label>
+      <input id="p1b_topic" placeholder="S1.1">
+      <button class="primary" onclick="addPaper1BPart()">Add Paper 1B part</button>
+
+      <div class="qbox">
+        <div class="mini"><b>Paper 1B Parts (edit tags)</b></div>
+        <button onclick="loadPaper1BParts()">Load parts</button>
+        <div id="paper1BPartsArea"></div>
+        <button class="primary" onclick="savePaper1BParts()">Save part edits</button>
+      </div>
+    </div>
+
+    <h3 class="ib-header">Paper 2 (Extended Response)</h3>
+
+    <div class="qbox">
+      <div><b>Paper 2 Builder</b></div>
+      <label>Question number</label>
+      <input id="p2_num" placeholder="1">
+      <button onclick="addPaper2Root()">Add Paper 2 root</button>
+
+      <div class="row">
+        <div>
+          <label>Root question</label>
+          <select id="p2_root"></select>
+        </div>
+        <div>
+          <label>Parent (for sub-parts)</label>
+          <select id="p2_parent"></select>
+        </div>
+      </div>
+
+      <label>Token to add (a, b, i, ii, etc.)</label>
+      <input id="p2_token" placeholder="a">
+      <div class="row">
+        <div>
+          <label>Max points</label>
+          <input id="p2_pts" type="number" value="1">
+        </div>
+        <div>
+          <label>Scoring</label>
+          <select id="p2_mode">
+            <option value="checklist">checklist</option>
+            <option value="manual">manual</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>AISC strand</label>
+          <select id="p2_strand">
+            <option>KU</option>
+            <option selected>TT</option>
+            <option>C</option>
+          </select>
+        </div>
+        <div>
+          <label style="margin-top:28px;">
+            <input type="checkbox" id="p2_hl_only" style="width:auto;"> HL Only
+          </label>
+        </div>
+      </div>
+      <label>IB topic (e.g., S1.1, R2.3)</label>
+      <input id="p2_topic" placeholder="R1.2">
+      <button class="primary" onclick="addPaper2Part()">Add Paper 2 part</button>
+
+      <div class="qbox">
+        <div class="mini"><b>Paper 2 Parts (edit tags)</b></div>
+        <button onclick="loadPaper2Parts()">Load parts</button>
+        <div id="paper2PartsArea"></div>
+        <button class="primary" onclick="savePaper2Parts()">Save part edits</button>
+      </div>
+    </div>
+
+    <h3 class="ib-header">Rubric Editor</h3>
+
+    <div class="qbox">
+      <div><b>Checklist Rubric</b></div>
+      <label>Checklist question qid</label>
+      <select id="rubric_qid"></select>
+      <button onclick="loadRubric()">Load checklist</button>
+      <div id="rubricEditor"></div>
+      <button onclick="addRubricRow()">Add checklist item</button>
+      <button class="primary" onclick="saveRubric()">Save checklist</button>
+    </div>
+  </div>
+
+  <!-- GRADE BOUNDARIES -->
+  <div id="pBands" class="panel">
+    <label>Exam</label>
+    <select id="bands_exam"></select>
+    <div id="bandsLevelDisplay" class="muted"></div>
+
+    <div class="row" style="margin-top:10px;">
+      <div><button onclick="loadBands()">Load grade boundaries</button></div>
+      <div><button class="sl" onclick="loadDefaultBandsSL()">SL Defaults</button></div>
+      <div><button class="hl" onclick="loadDefaultBandsHL()">HL Defaults</button></div>
+    </div>
+
+    <div id="bandsMeta" class="muted" style="margin-top:10px;"></div>
+    <button onclick="addBandRow()">Add row</button>
+    <div id="bandsEditor"></div>
+    <button class="primary" onclick="saveBands()">Save grade boundaries</button>
+    <p class="muted">Point ranges only. Inclusive: min <= points <= max.</p>
+    <p class="muted">IB uses 1-7 scale for overall, AISC 1-8 for strands. Boundaries differ for SL vs HL.</p>
+  </div>
+
+  <!-- MARK -->
+  <div id="pMark" class="panel">
+    <label>Exam</label>
+    <select id="mark_exam"></select>
+    <div id="markLevelDisplay" class="muted"></div>
+    <label>Class</label>
+    <select id="mark_class"></select>
+    <label>Student</label>
+    <select id="mark_student"></select>
+
+    <div class="qbox">
+      <div><b>Paper 1A Batch Entry (MCQ)</b></div>
+      <button class="primary" onclick="loadPaper1AGrid()">Load Paper 1A grid</button>
+      <label>Paste letters (optional)</label>
+      <textarea id="p1aPaste" class="big" placeholder="Paste something like: ABDCE... (A-E only, in order)"></textarea>
+      <button onclick="applyPaper1APaste()">Apply pasted letters</button>
+      <div id="paper1AGridArea"></div>
+      <button class="primary" onclick="savePaper1AGrid()">Save ALL Paper 1A answers</button>
+    </div>
+
+    <div class="qbox">
+      <div><b>Paper 1B Marking</b></div>
+      <button class="primary" onclick="loadPaper1BForMarking()">Load Paper 1B</button>
+      <div id="paper1BMarkArea"></div>
+    </div>
+
+    <div class="qbox">
+      <div><b>Paper 2 Marking</b></div>
+      <button class="primary" onclick="loadPaper2ForMarking()">Load Paper 2</button>
+      <div id="paper2MarkArea"></div>
+    </div>
+
+    <button onclick="recompute()">Recompute exam + class</button>
+  </div>
+
+  <!-- REPORTS -->
+  <div id="pReports" class="panel">
+    <label>Exam</label>
+    <select id="report_exam"></select>
+    <div id="reportLevelDisplay" class="muted"></div>
+
+    <label>Class</label>
+    <select id="report_class"></select>
+
+    <div class="qbox">
+      <div><b>Output Folder</b></div>
+      <div id="folderStatus" class="muted">No folder selected</div>
+      <button onclick="createReportFolder()">Create Folder for This Exam</button>
+      <p class="muted">Creates folder in: IB Chemistry Assessment Reports/[Exam Name]</p>
+    </div>
+
+    <div class="qbox">
+      <div><b>Generate Reports</b></div>
+      <div id="reportStudentCount" class="muted">Select exam and class above</div>
+
+      <div class="progress-container" id="reportProgress" style="display:none;">
+        <div class="progress-bar" id="reportProgressBar" style="width:0%">0%</div>
+      </div>
+
+      <button class="success" id="btnGenerateReports" onclick="generateAllReports()" disabled>
+        Generate All Reports
+      </button>
+
+      <div id="reportResults" style="display:none;">
+        <div class="muted" style="margin-top:10px;"><b>Generated Reports:</b></div>
+        <div class="report-list" id="reportList"></div>
+        <button onclick="openReportFolder()" style="margin-top:10px;">Open Folder in Drive</button>
+      </div>
+    </div>
+
+    <div class="qbox">
+      <div><b>Preview Single Report</b></div>
+      <label>Student</label>
+      <select id="preview_student"></select>
+      <button onclick="previewReportData()">Preview Data (Console)</button>
+    </div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div id="pOverview" class="panel">
+    <label>Exam</label>
+    <select id="ov_exam"></select>
+    <div id="ovLevelDisplay" class="muted"></div>
+    <label>Class (optional)</label>
+    <select id="ov_class"></select>
+    <button class="primary" onclick="refreshOverview()">Refresh overview</button>
+    <div id="overviewArea"></div>
+  </div>
+
+<script>
+/** -------------------------------
+ *  Tabs
+ *  ------------------------------*/
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    t.classList.add("active");
+    document.getElementById(t.dataset.panel).classList.add("active");
+  });
+});
+
+/** -------------------------------
+ *  State
+ *  ------------------------------*/
+let paper1ARows = [];
+let paper1BPartRows = [];
+let paper2PartRows = [];
+let rubricRows = [];
+let bandRows = [];
+let bandTotals = null;
+let currentLevel = "HL";
+
+// Grid state
+let paper1AQids = [];
+let paper1AInputs = [];
+
+// Report state
+let reportFolderId = null;
+let reportFolderUrl = null;
+let reportStudents = [];
+
+let _wired = false;
+
+function $(id){ return document.getElementById(id); }
+
+function setSelectOptions(selectEl, optionsHtml) {
+  if (!selectEl) return;
+  selectEl.innerHTML = optionsHtml;
+}
+
+function fillExamSelects(exams) {
+  const examSelectIds = ["examSelect","build_exam","bands_exam","mark_exam","ov_exam","report_exam"];
+  const html = (exams || []).map(e => `<option value="${e.exam_id}">${e.exam_name}</option>`).join("");
+  examSelectIds.forEach(id => setSelectOptions($(id), html));
+}
+
+function fillClassSelect(selectId, classes, includeAll) {
+  const sel = $(selectId);
+  if (!sel) return;
+  sel.innerHTML = "";
+  if (includeAll) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "(all)";
+    sel.appendChild(opt);
+  }
+  (classes || []).forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = c;
+    sel.appendChild(opt);
+  });
+}
+
+function updateLevelDisplay(examId, displayIds) {
+  if (!examId) return;
+  google.script.run
+    .withSuccessHandler(result => {
+      currentLevel = (result && result.level) ? result.level : "HL";
+      const badgeClass = currentLevel === "SL" ? "sl" : "hl";
+      const badgeHtml = `<span class="level-badge ${badgeClass}">${currentLevel}</span>`;
+      (displayIds || []).forEach(id => {
+        const el = $(id);
+        if (el) el.innerHTML = `Level: ${badgeHtml}`;
+      });
+    })
+    .withFailureHandler(err => {
+      // Don't block UI if level lookup fails
+      console.warn("api_getExamLevel failed:", err);
+    })
+    .api_getExamLevel(examId);
+}
+
+function wireEventListenersOnce() {
+  if (_wired) return;
+  _wired = true;
+
+  $("mark_class")?.addEventListener("change", refreshRosterMark);
+
+  $("build_exam")?.addEventListener("change", () => {
+    refreshPaperRoots();
+    updateLevelDisplay($("build_exam").value, ["buildLevelDisplay"]);
+  });
+
+  $("bands_exam")?.addEventListener("change", () => {
+    updateLevelDisplay($("bands_exam").value, ["bandsLevelDisplay"]);
+  });
+
+  $("mark_exam")?.addEventListener("change", () => {
+    updateLevelDisplay($("mark_exam").value, ["markLevelDisplay"]);
+  });
+
+  $("report_exam")?.addEventListener("change", () => {
+    reportFolderId = null;
+    reportFolderUrl = null;
+    updateFolderStatus();
+    refreshReportStudents();
+    updateLevelDisplay($("report_exam").value, ["reportLevelDisplay"]);
+  });
+
+  $("report_class")?.addEventListener("change", refreshReportStudents);
+
+  $("ov_exam")?.addEventListener("change", () => {
+    updateLevelDisplay($("ov_exam").value, ["ovLevelDisplay"]);
+  });
+
+  $("examSelect")?.addEventListener("change", () => {
+    updateLevelDisplay($("examSelect").value, ["currentLevelDisplay"]);
+  });
+}
+
+function init() {
+  wireEventListenersOnce();
+
+  google.script.run
+    .withSuccessHandler(data => {
+      const exams = data?.exams || [];
+      const classes = data?.classes || [];
+      const activeExamId = data?.active_exam_id || (exams[0]?.exam_id || "");
+
+      // Populate dropdowns
+      fillExamSelects(exams);
+      fillClassSelect("mark_class", classes, false);
+      fillClassSelect("report_class", classes, true);
+      fillClassSelect("ov_class", classes, true);
+
+      // Default selections
+      if (activeExamId) {
+        ["examSelect","build_exam","bands_exam","mark_exam","ov_exam","report_exam"].forEach(id => {
+          if ($(id)) $(id).value = activeExamId;
+        });
+      }
+
+      if (classes.length) {
+        if ($("mark_class") && !$("mark_class").value) $("mark_class").value = classes[0];
+        if ($("report_class") && ($("report_class").value === "")) {
+          // keep "(all)" default for reports unless you want first class
+        }
+        if ($("ov_class") && ($("ov_class").value === "")) {
+          // keep "(all)" default for overview unless you want first class
+        }
+      }
+
+      // Update level badges everywhere
+      updateLevelDisplay(activeExamId, [
+        "currentLevelDisplay",
+        "buildLevelDisplay",
+        "bandsLevelDisplay",
+        "markLevelDisplay",
+        "reportLevelDisplay",
+        "ovLevelDisplay"
+      ]);
+
+      // Initial data pulls
+      updateFolderStatus();
+      refreshPaperRoots();
+      refreshRosterMark();
+      refreshReportStudents();
+    })
+    .withFailureHandler(err => {
+      console.error("api_bootstrap failed:", err);
+      alert("Sidebar failed to load bootstrap data. Check Apps Script logs.\n\n" + (err?.message || err));
+    })
+    .api_bootstrap();
+}
+
+/** -------------------------------
+ *  Setup
+ *  ------------------------------*/
+function setActiveExam() {
+  const examId = $("examSelect").value;
+  if (!examId) return;
+
+  google.script.run
+    .withSuccessHandler(() => {
+      ["build_exam","bands_exam","mark_exam","ov_exam","report_exam"].forEach(id => {
+        if ($(id)) $(id).value = examId;
+      });
+      refreshPaperRoots();
+      refreshReportStudents();
+      updateLevelDisplay(examId, [
+        "currentLevelDisplay","buildLevelDisplay","bandsLevelDisplay",
+        "markLevelDisplay","reportLevelDisplay","ovLevelDisplay"
+      ]);
+      alert("Active exam updated");
+    })
+    .withFailureHandler(e => alert(e.message || e))
+    .api_setActiveExam(examId);
+}
+
+function createExam() {
+  const exam = {
+    exam_id: $("new_exam_id").value,
+    exam_name: $("new_exam_name").value,
+    course: $("new_course").value,
+    level: $("new_level").value,
+    term: $("new_term").value,
+    class_section: $("new_class").value,
+    papers_included: $("new_papers").value,
+    topics_covered: $("new_topics").value
+  };
+  google.script.run
+    .withSuccessHandler(() => {
+      alert("Exam created");
+      init(); // reload dropdowns
+    })
+    .withFailureHandler(e => alert(e.message || e))
+    .api_createExam(exam);
+}
+
+/** -------------------------------
+ *  Paper 1A
+ *  ------------------------------*/
+function setPaper1ACount() {
+  const examId = $("build_exam").value;
+  const count = parseInt($("p1a_count").value, 10) || 0;
+  google.script.run
+    .withSuccessHandler(() => {
+      alert("Paper 1A questions created/resized");
+      loadPaper1ATable();
+    })
+    .withFailureHandler(e => alert(e.message || e))
+    .api_setPaper1ACount({exam_id: examId, count});
+}
+
+function loadPaper1ATable() {
+  const examId = $("build_exam").value;
+  google.script.run.withSuccessHandler(rows => {
+    paper1ARows = rows || [];
+    const area = $("paper1ATableArea");
+    if (!paper1ARows.length) { area.innerHTML = "<p class='muted'>No Paper 1A questions</p>"; return; }
+
+    let html = `<table style="width:100%; font-size:11px; border-collapse:collapse; margin-top:10px;">
+      <tr><th>#</th><th>Key</th><th>Strand</th><th>Topic</th><th>HL</th></tr>`;
+    paper1ARows.forEach((r, i) => {
+      const hlChecked = r.hl_only ? "checked" : "";
+      html += `<tr>
+        <td>${r.number}</td>
+        <td><input id="p1a_key_${i}" value="${(r.correct_answer||"")}" style="width:35px; text-transform:uppercase;"></td>
+        <td><select id="p1a_strand_${i}" style="width:50px;">
+          <option ${r.strand==="KU"?"selected":""}>KU</option>
+          <option ${r.strand==="TT"?"selected":""}>TT</option>
+          <option ${r.strand==="C"?"selected":""}>C</option>
+        </select></td>
+        <td><input id="p1a_topic_${i}" value="${r.ib_topic_code||""}" placeholder="S1.1" style="width:60px;"></td>
+        <td><input type="checkbox" id="p1a_hl_${i}" ${hlChecked} style="width:auto;"></td>
+      </tr>`;
+    });
+    html += "</table>";
+    area.innerHTML = html;
+  }).api_getPaper1ATable(examId);
+}
+
+function savePaper1ATable() {
+  const examId = $("build_exam").value;
+  const rows = (paper1ARows || []).map((r, i) => ({
+    qid: r.qid,
+    correct_answer: ($(`p1a_key_${i}`).value || "").toUpperCase(),
+    strand: $(`p1a_strand_${i}`).value,
+    ib_topic_code: ($(`p1a_topic_${i}`).value || "").trim(),
+    hl_only: $(`p1a_hl_${i}`).checked
+  }));
+  google.script.run
+    .withSuccessHandler(() => alert("Paper 1A saved"))
+    .withFailureHandler(e => alert(e.message || e))
+    .api_savePaper1ATable({exam_id: examId, rows});
+}
+
+/** -------------------------------
+ *  Paper roots (1B, 2) + Checklist QIDs
+ *  ------------------------------*/
+function refreshPaperRoots() {
+  const examId = $("build_exam").value;
+  if (!examId) return;
+
+  // Paper 1B roots
+  google.script.run.withSuccessHandler(roots => {
+    const rootSel = $("p1b_root");
+    const parentSel = $("p1b_parent");
+    rootSel.innerHTML = "";
+    parentSel.innerHTML = "";
+    (roots || []).forEach(r => {
+      let opt = document.createElement("option");
+      opt.value = r.qid; opt.textContent = r.qid;
+      rootSel.appendChild(opt);
+
+      opt = document.createElement("option");
+      opt.value = r.qid; opt.textContent = r.qid;
+      parentSel.appendChild(opt);
+    });
+
+    google.script.run.withSuccessHandler(parts => {
+      (parts || []).forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.qid; opt.textContent = p.label || p.qid;
+        parentSel.appendChild(opt);
+      });
+    }).api_getPaperParts(examId, "1B");
+  }).api_listPaperRoots(examId, "1B");
+
+  // Paper 2 roots
+  google.script.run.withSuccessHandler(roots => {
+    const rootSel = $("p2_root");
+    const parentSel = $("p2_parent");
+    rootSel.innerHTML = "";
+    parentSel.innerHTML = "";
+    (roots || []).forEach(r => {
+      let opt = document.createElement("option");
+      opt.value = r.qid; opt.textContent = r.qid;
+      rootSel.appendChild(opt);
+
+      opt = document.createElement("option");
+      opt.value = r.qid; opt.textContent = r.qid;
+      parentSel.appendChild(opt);
+    });
+
+    google.script.run.withSuccessHandler(parts => {
+      (parts || []).forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.qid; opt.textContent = p.label || p.qid;
+        parentSel.appendChild(opt);
+      });
+    }).api_getPaperParts(examId, "2");
+  }).api_listPaperRoots(examId, "2");
+
+  refreshChecklistQids();
+}
+
+function addPaper1BRoot() {
+  const examId = $("build_exam").value;
+  const num = $("p1b_num").value;
+  google.script.run.withSuccessHandler(refreshPaperRoots)
+    .withFailureHandler(e => alert(e.message || e))
+    .api_addPaperRoot({exam_id: examId, paper: "1B", number: num});
+}
+
+function addPaper1BPart() {
+  const examId = $("build_exam").value;
+  google.script.run.withSuccessHandler(refreshPaperRoots)
+    .withFailureHandler(e => alert(e.message || e))
+    .api_addPaperPart({
+      exam_id: examId,
+      paper: "1B",
+      parent_qid: $("p1b_parent").value,
+      token: $("p1b_token").value,
+      max_points: parseInt($("p1b_pts").value, 10) || 1,
+      scoring_mode: $("p1b_mode").value,
+      strand: $("p1b_strand").value,
+      ib_topic_code: $("p1b_topic").value,
+      hl_only: $("p1b_hl_only").checked
+    });
+}
+
+function loadPaper1BParts() {
+  const examId = $("build_exam").value;
+  google.script.run.withSuccessHandler(parts => {
+    paper1BPartRows = parts || [];
+    const area = $("paper1BPartsArea");
+    if (!paper1BPartRows.length) { area.innerHTML = "<p class='muted'>No Paper 1B parts</p>"; return; }
+
+    let html = `<table style="width:100%; font-size:11px; border-collapse:collapse;">
+      <tr><th>QID</th><th>Pts</th><th>Strand</th><th>Topic</th><th>HL</th></tr>`;
+    paper1BPartRows.forEach((p, i) => {
+      const hlChecked = p.hl_only ? "checked" : "";
+      const hlBadge = p.hl_only ? '<span class="hl-only">HL</span>' : '';
+      html += `<tr>
+        <td>${p.label || p.qid}${hlBadge}</td>
+        <td>${p.max_points}</td>
+        <td><select id="p1b_s_${i}" style="width:50px;">
+          <option ${p.strand==="KU"?"selected":""}>KU</option>
+          <option ${p.strand==="TT"?"selected":""}>TT</option>
+          <option ${p.strand==="C"?"selected":""}>C</option>
+        </select></td>
+        <td><input id="p1b_t_${i}" value="${p.ib_topic_code||""}" style="width:50px;"></td>
+        <td><input type="checkbox" id="p1b_hl_${i}" ${hlChecked} style="width:auto;"></td>
+      </tr>`;
+    });
+    html += "</table>";
+    area.innerHTML = html;
+  }).api_getPaperParts(examId, "1B");
+}
+
+function savePaper1BParts() {
+  const examId = $("build_exam").value;
+  const rows = (paper1BPartRows || []).map((p, i) => ({
+    qid: p.qid,
+    strand: $(`p1b_s_${i}`).value,
+    ib_topic_code: ($(`p1b_t_${i}`).value || "").trim(),
+    hl_only: $(`p1b_hl_${i}`).checked
+  }));
+  google.script.run
+    .withSuccessHandler(() => alert("Paper 1B saved"))
+    .withFailureHandler(e => alert(e.message || e))
+    .api_savePaperParts({exam_id: examId, rows});
+}
+
+function addPaper2Root() {
+  const examId = $("build_exam").value;
+  const num = $("p2_num").value;
+  google.script.run.withSuccessHandler(refreshPaperRoots)
+    .withFailureHandler(e => alert(e.message || e))
+    .api_addPaperRoot({exam_id: examId, paper: "2", number: num});
+}
+
+function addPaper2Part() {
+  const examId = $("build_exam").value;
+  google.script.run.withSuccessHandler(refreshPaperRoots)
+    .withFailureHandler(e => alert(e.message || e))
+    .api_addPaperPart({
+      exam_id: examId,
+      paper: "2",
+      parent_qid: $("p2_parent").value,
+      token: $("p2_token").value,
+      max_points: parseInt($("p2_pts").value, 10) || 1,
+      scoring_mode: $("p2_mode").value,
+      strand: $("p2_strand").value,
+      ib_topic_code: $("p2_topic").value,
+      hl_only: $("p2_hl_only").checked
+    });
+}
+
+function loadPaper2Parts() {
+  const examId = $("build_exam").value;
+  google.script.run.withSuccessHandler(parts => {
+    paper2PartRows = parts || [];
+    const area = $("paper2PartsArea");
+    if (!paper2PartRows.length) { area.innerHTML = "<p class='muted'>No Paper 2 parts</p>"; return; }
+
+    let html = `<table style="width:100%; font-size:11px; border-collapse:collapse;">
+      <tr><th>QID</th><th>Pts</th><th>Strand</th><th>Topic</th><th>HL</th></tr>`;
+    paper2PartRows.forEach((p, i) => {
+      const hlChecked = p.hl_only ? "checked" : "";
+      const hlBadge = p.hl_only ? '<span class="hl-only">HL</span>' : '';
+      html += `<tr>
+        <td>${p.label || p.qid}${hlBadge}</td>
+        <td>${p.max_points}</td>
+        <td><select id="p2_s_${i}" style="width:50px;">
+          <option ${p.strand==="KU"?"selected":""}>KU</option>
+          <option ${p.strand==="TT"?"selected":""}>TT</option>
+          <option ${p.strand==="C"?"selected":""}>C</option>
+        </select></td>
+        <td><input id="p2_t_${i}" value="${p.ib_topic_code||""}" style="width:50px;"></td>
+        <td><input type="checkbox" id="p2_hl_${i}" ${hlChecked} style="width:auto;"></td>
+      </tr>`;
+    });
+    html += "</table>";
+    area.innerHTML = html;
+  }).api_getPaperParts(examId, "2");
+}
+
+function savePaper2Parts() {
+  const examId = $("build_exam").value;
+  const rows = (paper2PartRows || []).map((p, i) => ({
+    qid: p.qid,
+    strand: $(`p2_s_${i}`).value,
+    ib_topic_code: ($(`p2_t_${i}`).value || "").trim(),
+    hl_only: $(`p2_hl_${i}`).checked
+  }));
+  google.script.run
+    .withSuccessHandler(() => alert("Paper 2 saved"))
+    .withFailureHandler(e => alert(e.message || e))
+    .api_savePaperParts({exam_id: examId, rows});
+}
+
+/** -------------------------------
+ *  Rubrics
+ *  ------------------------------*/
+function refreshChecklistQids() {
+  const examId = $("build_exam").value;
+  google.script.run.withSuccessHandler(qids => {
+    const sel = $("rubric_qid");
+    sel.innerHTML = "";
+    (qids || []).forEach(q => {
+      const opt = document.createElement("option");
+      opt.value = q.qid;
+      opt.textContent = `${q.label} (${q.max_points}pts)`;
+      sel.appendChild(opt);
+    });
+  }).api_getChecklistQids(examId);
+}
+
+function loadRubric() {
+  const examId = $("build_exam").value;
+  const qid = $("rubric_qid").value;
+  google.script.run.withSuccessHandler(items => {
+    rubricRows = items || [];
+    renderRubricEditor();
+  }).api_getRubricItems(examId, qid);
+}
+
+function renderRubricEditor() {
+  const area = $("rubricEditor");
+  if (!rubricRows.length) { area.innerHTML = "<p class='muted'>No rubric items. Add some below.</p>"; return; }
+
+  let html = `<table style="width:100%; font-size:11px; margin-top:8px;">
+    <tr><th>ID</th><th>Pts</th><th>Criteria</th><th></th></tr>`;
+  rubricRows.forEach((r, i) => {
+    html += `<tr>
+      <td><input id="rub_id_${i}" value="${r.item_id}" style="width:60px;"></td>
+      <td><input id="rub_pts_${i}" type="number" value="${r.points}" style="width:40px;"></td>
+      <td><input id="rub_txt_${i}" value="${r.criteria_text}" style="width:100%;"></td>
+      <td><button onclick="removeRubricRow(${i})" style="width:auto;">x</button></td>
+    </tr>`;
+  });
+  html += "</table>";
+  area.innerHTML = html;
+}
+
+function addRubricRow() {
+  const qid = $("rubric_qid").value;
+  const nextNum = rubricRows.length + 1;
+  rubricRows.push({ item_id: `${qid}_${nextNum}`, points: 1, criteria_text: "" });
+  renderRubricEditor();
+}
+
+function removeRubricRow(idx) {
+  rubricRows.splice(idx, 1);
+  renderRubricEditor();
+}
+
+function saveRubric() {
+  const examId = $("build_exam").value;
+  const qid = $("rubric_qid").value;
+  const items = rubricRows.map((r, i) => ({
+    item_id: $(`rub_id_${i}`).value,
+    points: parseFloat($(`rub_pts_${i}`).value) || 0,
+    criteria_text: $(`rub_txt_${i}`).value
+  }));
+  google.script.run
+    .withSuccessHandler(() => alert("Rubric saved"))
+    .withFailureHandler(e => alert(e.message || e))
+    .api_replaceRubricItems({exam_id: examId, qid, items});
+}
+
+/** -------------------------------
+ *  Grade Bands
+ *  ------------------------------*/
+function loadBands() {
+  const examId = $("bands_exam").value;
+  google.script.run.withSuccessHandler(totals => {
+    bandTotals = totals;
+    $("bandsMeta").textContent =
+      `Total: ${totals.overall_possible} | KU: ${totals.ku_possible} | TT: ${totals.tt_possible} | C: ${totals.c_possible} | 1A: ${totals.paper_1a_possible || 0} | 1B: ${totals.paper_1b_possible || 0} | P2: ${totals.paper_2_possible || 0}`;
+  }).api_getExamTotals(examId);
+
+  google.script.run.withSuccessHandler(rows => {
+    bandRows = rows || [];
+    renderBandsEditor();
+  }).api_getGradeBands(examId);
+}
+
+// (Defaults unchanged)
+function loadDefaultBandsSL() {
+  bandRows = [
+    {level:"SL", scale:"IB_1_7", strand:"OVERALL", band:"7", min_points:64, max_points:999},
+    {level:"SL", scale:"IB_1_7", strand:"OVERALL", band:"6", min_points:54, max_points:63},
+    {level:"SL", scale:"IB_1_7", strand:"OVERALL", band:"5", min_points:45, max_points:53},
+    {level:"SL", scale:"IB_1_7", strand:"OVERALL", band:"4", min_points:35, max_points:44},
+    {level:"SL", scale:"IB_1_7", strand:"OVERALL", band:"3", min_points:26, max_points:34},
+    {level:"SL", scale:"IB_1_7", strand:"OVERALL", band:"2", min_points:16, max_points:25},
+    {level:"SL", scale:"IB_1_7", strand:"OVERALL", band:"1", min_points:0, max_points:15},
+    {level:"SL", scale:"AISC_1_8", strand:"KU", band:"8", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"KU", band:"7", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"KU", band:"6", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"KU", band:"5", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"KU", band:"4", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"KU", band:"3", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"KU", band:"2", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"KU", band:"1", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"TT", band:"8", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"TT", band:"7", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"TT", band:"6", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"TT", band:"5", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"TT", band:"4", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"TT", band:"3", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"TT", band:"2", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"TT", band:"1", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"C", band:"8", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"C", band:"7", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"C", band:"6", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"C", band:"5", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"C", band:"4", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"C", band:"3", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"C", band:"2", min_points:0, max_points:0},
+    {level:"SL", scale:"AISC_1_8", strand:"C", band:"1", min_points:0, max_points:0},
+  ];
+  renderBandsEditor();
+}
+
+function loadDefaultBandsHL() {
+  bandRows = [
+    {level:"HL", scale:"IB_1_7", strand:"OVERALL", band:"7", min_points:76, max_points:999},
+    {level:"HL", scale:"IB_1_7", strand:"OVERALL", band:"6", min_points:64, max_points:75},
+    {level:"HL", scale:"IB_1_7", strand:"OVERALL", band:"5", min_points:52, max_points:63},
+    {level:"HL", scale:"IB_1_7", strand:"OVERALL", band:"4", min_points:40, max_points:51},
+    {level:"HL", scale:"IB_1_7", strand:"OVERALL", band:"3", min_points:28, max_points:39},
+    {level:"HL", scale:"IB_1_7", strand:"OVERALL", band:"2", min_points:16, max_points:27},
+    {level:"HL", scale:"IB_1_7", strand:"OVERALL", band:"1", min_points:0, max_points:15},
+    {level:"HL", scale:"AISC_1_8", strand:"KU", band:"8", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"KU", band:"7", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"KU", band:"6", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"KU", band:"5", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"KU", band:"4", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"KU", band:"3", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"KU", band:"2", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"KU", band:"1", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"TT", band:"8", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"TT", band:"7", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"TT", band:"6", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"TT", band:"5", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"TT", band:"4", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"TT", band:"3", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"TT", band:"2", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"TT", band:"1", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"C", band:"8", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"C", band:"7", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"C", band:"6", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"C", band:"5", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"C", band:"4", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"C", band:"3", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"C", band:"2", min_points:0, max_points:0},
+    {level:"HL", scale:"AISC_1_8", strand:"C", band:"1", min_points:0, max_points:0},
+  ];
+  renderBandsEditor();
+}
+
+function renderBandsEditor() {
+  const area = $("bandsEditor");
+  let html = `<table style="width:100%; font-size:10px; margin-top:8px; border-collapse:collapse;">
+    <tr><th>Level</th><th>Scale</th><th>Strand</th><th>Band</th><th>Min</th><th>Max</th><th></th></tr>`;
+  (bandRows || []).forEach((r, i) => {
+    html += `<tr>
+      <td><select id="b_lv_${i}" style="width:45px;">
+        <option ${(r.level||"")===""?"selected":""}></option>
+        <option ${r.level==="SL"?"selected":""}>SL</option>
+        <option ${r.level==="HL"?"selected":""}>HL</option>
+      </select></td>
+      <td><select id="b_sc_${i}" style="width:70px;">
+        <option ${r.scale==="IB_1_7"?"selected":""}>IB_1_7</option>
+        <option ${r.scale==="AISC_1_8"?"selected":""}>AISC_1_8</option>
+      </select></td>
+      <td><select id="b_st_${i}" style="width:65px;">
+        <option ${r.strand==="OVERALL"?"selected":""}>OVERALL</option>
+        <option ${r.strand==="KU"?"selected":""}>KU</option>
+        <option ${r.strand==="TT"?"selected":""}>TT</option>
+        <option ${r.strand==="C"?"selected":""}>C</option>
+      </select></td>
+      <td><input id="b_bn_${i}" value="${r.band}" style="width:25px;"></td>
+      <td><input id="b_min_${i}" type="number" value="${r.min_points}" style="width:45px;"></td>
+      <td><input id="b_max_${i}" type="number" value="${r.max_points}" style="width:45px;"></td>
+      <td><button onclick="removeBandRow(${i})" style="width:auto;">x</button></td>
+    </tr>`;
+  });
+  html += "</table>";
+  area.innerHTML = html;
+}
+
+function addBandRow() {
+  bandRows.push({level:"", scale:"AISC_1_8", strand:"KU", band:"", min_points:0, max_points:0});
+  renderBandsEditor();
+}
+
+function removeBandRow(idx) {
+  bandRows.splice(idx, 1);
+  renderBandsEditor();
+}
+
+function saveBands() {
+  const examId = $("bands_exam").value;
+  const rows = bandRows.map((r, i) => ({
+    level: $(`b_lv_${i}`).value,
+    scale: $(`b_sc_${i}`).value,
+    strand: $(`b_st_${i}`).value,
+    band: $(`b_bn_${i}`).value,
+    min_points: parseFloat($(`b_min_${i}`).value) || 0,
+    max_points: parseFloat($(`b_max_${i}`).value) || 0
+  }));
+  google.script.run
+    .withSuccessHandler(() => alert("Bands saved & scores recomputed"))
+    .withFailureHandler(e => alert(e.message || e))
+    .api_saveGradeBands({exam_id: examId, rows});
+}
+
+/** -------------------------------
+ *  Marking - Roster
+ *  ------------------------------*/
+function refreshRosterMark() {
+  const cls = $("mark_class").value;
+  if (!cls) return;
+  google.script.run.withSuccessHandler(students => {
+    const sel = $("mark_student");
+    sel.innerHTML = "";
+    (students || []).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.student_key;
+      opt.textContent = `${s.last_name}, ${s.first_name}`;
+      sel.appendChild(opt);
+    });
+  }).api_getRosterByClass(cls);
+}
+
+/** -------------------------------
+ *  Marking - Paper 1A Grid
+ *  ------------------------------*/
+function loadPaper1AGrid() {
+  const examId = $("mark_exam").value;
+  const sk = $("mark_student").value;
+  if (!examId || !sk) return;
+
+  google.script.run.withSuccessHandler(qs => {
+    const questions = qs || [];
+    paper1AQids = questions.map(q => q.qid);
+
+    google.script.run.withSuccessHandler(existing => {
+      const area = $("paper1AGridArea");
+      let html = '<div class="mcqGrid">';
+      paper1AInputs = [];
+
+      questions.forEach((q, i) => {
+        const val = (existing && existing[q.qid]) ? existing[q.qid] : "";
+        const hlBadge = q.hl_only ? '<span class="hl-only">HL</span>' : '';
+        html += `<div class="mcqCell">
+          <div class="n">${q.number}${hlBadge}</div>
+          <input id="p1a_ans_${i}" maxlength="1" value="${val}">
+        </div>`;
+        paper1AInputs.push(`p1a_ans_${i}`);
+      });
+
+      html += '</div>';
+      area.innerHTML = html;
+    }).api_getStudentPaper1AChoices(examId, sk);
+
+  }).api_getPaper1ATable(examId);
+}
+
+function applyPaper1APaste() {
+  const raw = $("p1aPaste").value.toUpperCase().replace(/[^A-E]/g, "");
+  const letters = raw.split("");
+  letters.forEach((ch, i) => {
+    if (i < paper1AInputs.length) {
+      $(paper1AInputs[i]).value = ch;
+    }
+  });
+}
+
+function savePaper1AGrid() {
+  const examId = $("mark_exam").value;
+  const sk = $("mark_student").value;
+  if (!examId || !sk) return;
+
+  const answers = {};
+  paper1AQids.forEach((qid, i) => {
+    answers[qid] = ($(paper1AInputs[i]).value || "").toUpperCase();
+  });
+
+  google.script.run.withSuccessHandler(r => {
+    alert(`Saved ${r.saved} Paper 1A answers`);
+  }).withFailureHandler(e => alert(e.message || e))
+    .api_savePaper1ABatch({exam_id: examId, student_key: sk, answers});
+}
+
+/** -------------------------------
+ *  Marking - Paper 1B / Paper 2
+ *  ------------------------------*/
+function loadPaper1BForMarking() { loadPaperForMarking("1B", "paper1BMarkArea"); }
+function loadPaper2ForMarking() { loadPaperForMarking("2", "paper2MarkArea"); }
+
+function loadPaperForMarking(paper, areaId) {
+  const examId = $("mark_exam").value;
+  const sk = $("mark_student").value;
+  if (!examId || !sk) return;
+
+  google.script.run.withSuccessHandler(qs => {
+    const questions = qs || [];
+    const area = $(areaId);
+
+    if (!questions.length) {
+      area.innerHTML = `<p class='muted'>No Paper ${paper} questions</p>`;
+      return;
+    }
+
+    let html = "";
+    questions.forEach((q, idx) => {
+      const hlBadge = q.hl_only ? '<span class="hl-only">HL Only</span>' : '';
+      html += `<div class="qbox" id="${paper}_q_${idx}">
+        <div><b>${q.label}</b> ${hlBadge} (${q.max_points} pts) - ${q.strand}</div>
+        <div class="muted">Topic: ${q.ib_topic_code || "N/A"}</div>`;
+
+      if (q.scoring_mode === "checklist" && q.rubric_items && q.rubric_items.length > 0) {
+        html += `<div style="margin-top:8px;">`;
+        q.rubric_items.forEach(item => {
+          html += `<label style="font-weight:normal; display:block;">
+            <input type="checkbox" class="chk_${paper}_${idx}" value="${item.item_id}">
+            ${item.criteria_text} (${item.points} pts)
+          </label>`;
+        });
+        html += `</div>`;
+      } else {
+        html += `<label>Points awarded</label>
+          <input type="number" id="pts_${paper}_${idx}" min="0" max="${q.max_points}" style="width:80px;">`;
+      }
+
+      html += `<button onclick="savePaperResponse('${paper}', ${idx}, '${q.qid}', '${q.scoring_mode}')" style="margin-top:8px;">Save</button>
+        <span id="status_${paper}_${idx}" class="status"></span>
+      </div>`;
+    });
+
+    area.innerHTML = html;
+
+    // Load existing responses
+    questions.forEach((q, idx) => {
+      google.script.run.withSuccessHandler(resp => {
+        if (!resp) return;
+        if (q.scoring_mode === "checklist") {
+          let picked = [];
+          try { picked = JSON.parse(resp.detail_json || "[]"); } catch(e) {}
+          document.querySelectorAll(`.chk_${paper}_${idx}`).forEach(chk => {
+            if (picked.includes(chk.value)) chk.checked = true;
+          });
+        } else {
+          const pts = resp.points_awarded;
+          if (pts !== "" && pts !== null && pts !== undefined) {
+            $(`pts_${paper}_${idx}`).value = pts;
+          }
+        }
+      }).api_getExistingResponse(examId, sk, q.qid);
+    });
+
+  }).api_getPaperQuestionRenderModel(examId, paper);
+}
+
+function savePaperResponse(paper, idx, qid, scoringMode) {
+  const examId = $("mark_exam").value;
+  const sk = $("mark_student").value;
+
+  let payload = { exam_id: examId, student_key: sk, qid: qid, paper: paper };
+
+  if (scoringMode === "checklist") {
+    const checked = [];
+    document.querySelectorAll(`.chk_${paper}_${idx}:checked`).forEach(chk => checked.push(chk.value));
+    payload.detail_json = JSON.stringify(checked);
+    payload.points_awarded = "";
+  } else {
+    payload.points_awarded = $(`pts_${paper}_${idx}`).value;
+    payload.detail_json = "";
+  }
+
+  google.script.run.withSuccessHandler(() => {
+    const statusEl = $(`status_${paper}_${idx}`);
+    statusEl.textContent = "Saved";
+    statusEl.className = "status ready";
+    setTimeout(() => { statusEl.textContent = ""; statusEl.className = "status"; }, 2000);
+  }).withFailureHandler(e => alert(e.message || e))
+    .api_saveResponse(payload);
+}
+
+function recompute() {
+  const examId = $("mark_exam").value;
+  const cls = $("mark_class").value;
+  google.script.run.withSuccessHandler(() => alert("Recompute complete"))
+    .withFailureHandler(e => alert(e.message || e))
+    .api_recomputeExam(examId, cls);
+}
+
+/** -------------------------------
+ *  Reports
+ *  ------------------------------*/
+function updateFolderStatus() {
+  const el = $("folderStatus");
+  if (reportFolderId) {
+    const link = reportFolderUrl ? ` - <a href="${reportFolderUrl}" target="_blank">Open</a>` : "";
+    el.innerHTML = `<span class="status ready">Ready</span> Folder created${link}`;
+  } else {
+    el.textContent = "No folder selected";
+  }
+  updateGenerateButton();
+}
+
+function createReportFolder() {
+  const examId = $("report_exam").value;
+  const examName = $("report_exam").selectedOptions[0]?.textContent || examId;
+
+  google.script.run.withSuccessHandler(folder => {
+    reportFolderId = folder.id;
+    reportFolderUrl = folder.url;
+    updateFolderStatus();
+    alert(`Folder created: ${folder.name}`);
+  }).withFailureHandler(e => alert(e.message || e))
+    .api_createExamReportFolder(examId, examName);
+}
+
+function refreshReportStudents() {
+  const examId = $("report_exam").value;
+  const cls = $("report_class").value; // "" means all
+
+  google.script.run.withSuccessHandler(students => {
+    reportStudents = students || [];
+    $("reportStudentCount").textContent = `${reportStudents.length} students found`;
+
+    const sel = $("preview_student");
+    sel.innerHTML = "";
+    reportStudents.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.student_key;
+      opt.textContent = `${s.last_name}, ${s.first_name}`;
+      sel.appendChild(opt);
+    });
+
+    updateGenerateButton();
+  }).withFailureHandler(e => alert(e.message || e))
+    .api_getStudentsForReports(examId, cls);
+}
+
+function updateGenerateButton() {
+  const btn = $("btnGenerateReports");
+  btn.disabled = !reportFolderId || reportStudents.length === 0;
+}
+
+function generateAllReports() {
+  if (!reportFolderId || !reportStudents.length) return;
+
+  const examId = $("report_exam").value;
+  const progressContainer = $("reportProgress");
+  const progressBar = $("reportProgressBar");
+  const resultsDiv = $("reportResults");
+  const listDiv = $("reportList");
+
+  progressContainer.style.display = "block";
+  resultsDiv.style.display = "none";
+  listDiv.innerHTML = "";
+
+  let completed = 0;
+  const total = reportStudents.length;
+
+  function processNext(index) {
+    if (index >= total) {
+      progressBar.style.width = "100%";
+      progressBar.textContent = "Complete!";
+      resultsDiv.style.display = "block";
+      return;
+    }
+
+    const student = reportStudents[index];
+
+    google.script.run
+      .withSuccessHandler(result => {
+        completed++;
+        const pct = Math.round((completed / total) * 100);
+        progressBar.style.width = pct + "%";
+        progressBar.textContent = `${completed}/${total}`;
+
+        const item = document.createElement("div");
+        item.className = "report-item success";
+        item.innerHTML = `Done: ${student.last_name}, ${student.first_name} - <a href="${result.url}" target="_blank">Open</a>`;
+        listDiv.appendChild(item);
+
+        processNext(index + 1);
+      })
+      .withFailureHandler(err => {
+        completed++;
+        const pct = Math.round((completed / total) * 100);
+        progressBar.style.width = pct + "%";
+        progressBar.textContent = `${completed}/${total}`;
+
+        const item = document.createElement("div");
+        item.className = "report-item error";
+        item.textContent = `Error: ${student.last_name}, ${student.first_name} - ${err.message || err}`;
+        listDiv.appendChild(item);
+
+        processNext(index + 1);
+      })
+      .api_generateStudentReport(examId, student.student_key, reportFolderId);
+  }
+
+  processNext(0);
+}
+
+function openReportFolder() {
+  if (reportFolderUrl) window.open(reportFolderUrl, "_blank");
+}
+
+function previewReportData() {
+  const examId = $("report_exam").value;
+  const sk = $("preview_student").value;
+  google.script.run.withSuccessHandler(data => {
+    console.log("Report Data:", data);
+    alert("Check browser console (F12) for report data preview");
+  }).withFailureHandler(e => alert(e.message || e))
+    .api_getStudentReportData(examId, sk);
+}
+
+/** -------------------------------
+ *  Overview
+ *  ------------------------------*/
+function refreshOverview() {
+  const examId = $("ov_exam").value;
+  const cls = $("ov_class").value; // "" means all
+
+  google.script.run.withSuccessHandler(dist => {
+    const area = $("overviewArea");
+    const level = dist?.level || "";
+    const levelBadge = level ? `<span class="level-badge ${level.toLowerCase()}">${level}</span>` : "";
+
+    let html = `<p><b>Students:</b> ${dist.n || 0} ${levelBadge}</p>`;
+
+    html += `<h4>IB Grade Distribution</h4><table style="width:100%; font-size:12px;">`;
+    for (let b = 7; b >= 1; b--) {
+      const count = dist.ib?.[b] || dist.overall?.[b] || 0;
+      html += `<tr><td>Grade ${b}</td><td>${count}</td></tr>`;
+    }
+    html += `</table>`;
+
+    ["KU", "TT", "C"].forEach(strand => {
+      html += `<h4>${strand} Band Distribution</h4><table style="width:100%; font-size:12px;">`;
+      for (let b = 8; b >= 1; b--) {
+        const count = dist[strand.toLowerCase()]?.[b] || 0;
+        html += `<tr><td>Band ${b}</td><td>${count}</td></tr>`;
+      }
+      html += `</table>`;
+    });
+
+    area.innerHTML = html;
+  }).withFailureHandler(e => alert(e.message || e))
+    .api_getBandDistributions(examId, cls);
+}
+
+/** -------------------------------
+ *  Kickoff
+ *  ------------------------------*/
+init();
+</script>
+
+</body>
+</html>

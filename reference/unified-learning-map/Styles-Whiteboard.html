@@ -1,0 +1,340 @@
+<style>
+    /* ============================================================================
+       WHITEBOARD DRAWING TOOL — Styles-Whiteboard.html
+       CSS prefix: wb-
+       ============================================================================ */
+
+    /* Teacher overlay */
+    .wb-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.6);
+      z-index: 265;
+      align-items: center;
+      justify-content: center;
+    }
+    .wb-overlay.active {
+      display: flex;
+    }
+    .wb-overlay-modal {
+      background: #ffffff;
+      border-radius: 12px;
+      max-width: 95vw;
+      max-height: 95vh;
+      width: 95vw;
+      height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .wb-overlay-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+    .wb-overlay-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    .wb-overlay-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #64748b;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .wb-overlay-close:hover { color: #1e293b; background: #f1f5f9; }
+    .wb-overlay-close:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+    .wb-overlay-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .wb-overlay-footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+
+    /* Toolbar */
+    .wb-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .wb-toolbar-group {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .wb-toolbar-sep {
+      width: 1px;
+      height: 24px;
+      background: #cbd5e1;
+      margin: 0 4px;
+    }
+    .wb-tool-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      color: #475569;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .wb-tool-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+    .wb-tool-btn.wb-tool-active {
+      background: #ccfbf1;
+      border-color: #0d9488;
+      color: #0d9488;
+      box-shadow: 0 0 0 1px #0d9488;
+    }
+    .wb-tool-btn:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+    .wb-tool-btn:disabled, .wb-tool-btn[aria-disabled="true"] {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    /* Color palette */
+    .wb-color-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .wb-color-btn:hover { border-color: #94a3b8; }
+    .wb-color-btn.wb-color-active {
+      border-color: #1e293b;
+      box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px #1e293b;
+    }
+    .wb-color-btn:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+    .wb-color-custom {
+      width: 28px;
+      height: 28px;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .wb-color-custom:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+
+    /* Width selector */
+    .wb-width-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .wb-width-btn:hover { background: #f1f5f9; }
+    .wb-width-btn:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+    .wb-width-dot {
+      border-radius: 50%;
+      background: currentColor;
+      display: block;
+    }
+
+    /* Canvas area */
+    .wb-canvas-container {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      background: #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+    }
+    .wb-canvas-container canvas {
+      max-width: 100%;
+      max-height: 100%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      cursor: crosshair;
+    }
+
+    /* Hex editor section */
+    .wb-config-section {
+      padding: 8px 0;
+    }
+    .wb-config-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+    .wb-config-field {
+      margin-bottom: 10px;
+    }
+    .wb-checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #334155;
+      cursor: pointer;
+    }
+    .wb-folder-status {
+      margin-top: 4px;
+      font-size: 12px;
+    }
+    .wb-folder-ok { color: #059669; font-weight: 500; }
+    .wb-folder-error { color: #dc2626; font-weight: 500; }
+    .wb-test-btn {
+      margin-top: 6px;
+      font-size: 12px;
+      padding: 4px 10px;
+    }
+    .wb-test-btn:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+    .wb-template-preview {
+      max-width: 200px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+    .wb-template-preview img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .wb-template-empty {
+      font-size: 12px;
+      color: #94a3b8;
+      font-style: italic;
+      padding: 8px;
+      text-align: center;
+    }
+    .wb-open-canvas-btn {
+      font-size: 13px;
+    }
+    .wb-open-canvas-btn:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+
+    /* Student canvas */
+    .wb-student-canvas-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .wb-student-toolbar .wb-toolbar {
+      font-size: 13px;
+    }
+    .wb-attach-canvas-wrap {
+      max-height: 350px;
+    }
+    .wb-save-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .wb-save-bar .btn:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+
+    /* Hex badge */
+    .wb-hex-badge {
+      background: #fef9c3;
+      color: #ca8a04;
+    }
+
+    /* Text input overlay on canvas */
+    .wb-text-input:focus-visible {
+      outline: 3px solid #0d9488;
+      outline-offset: 1px;
+    }
+
+    /* ============================================================================
+       RESPONSIVE
+       ============================================================================ */
+
+    @media (max-width: 640px) {
+      .wb-overlay-modal {
+        max-width: 100%;
+        max-height: 100%;
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+      }
+      .wb-toolbar {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+      }
+      .wb-tool-btn {
+        min-width: 44px;
+        min-height: 44px;
+        flex-shrink: 0;
+      }
+      .wb-color-btn {
+        min-width: 32px;
+        min-height: 32px;
+      }
+      .wb-width-btn {
+        min-width: 44px;
+        min-height: 44px;
+      }
+      .wb-save-bar {
+        flex-direction: column;
+        width: 100%;
+      }
+      .wb-save-bar .btn {
+        width: 100%;
+      }
+      .wb-attach-canvas-wrap {
+        max-height: 250px;
+      }
+    }
+
+    @media (hover: none) {
+      .wb-tool-btn {
+        min-width: 44px;
+        min-height: 44px;
+      }
+      .wb-color-btn {
+        min-width: 32px;
+        min-height: 32px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .wb-tool-btn,
+      .wb-color-btn {
+        transition: none;
+      }
+    }
+</style>

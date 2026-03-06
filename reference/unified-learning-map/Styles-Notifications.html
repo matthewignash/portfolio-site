@@ -1,0 +1,223 @@
+<style>
+/* ================================================
+   STUDENT NOTIFICATIONS & GUIDANCE (sng- prefix)
+   ================================================ */
+
+/* Sub-feature 1: Prerequisite guidance popup */
+.sng-prereq-popup {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  z-index: 500;
+  max-width: 400px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  animation: sng-slideUp 0.3s ease-out;
+}
+
+.sng-prereq-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sng-prereq-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sng-prereq-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sng-prereq-item:last-child {
+  border-bottom: none;
+}
+
+.sng-prereq-status {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sng-prereq-status.locked { background: #475569; }
+.sng-prereq-status.not_started { background: #94a3b8; }
+.sng-prereq-status.in_progress { background: #3b82f6; }
+.sng-prereq-status.completed { background: #10b981; }
+.sng-prereq-status.mastered { background: #059669; }
+
+.sng-prereq-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.6);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.sng-prereq-close:hover { color: white; }
+
+.sng-prereq-dismiss-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sng-prereq-dismiss-btn:hover { background: rgba(255,255,255,0.25); }
+
+/* Sub-feature 2: Feedback callout in student hex modal */
+.sng-feedback-callout {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.sng-feedback-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 6px;
+}
+
+.sng-feedback-text {
+  font-size: 14px;
+  color: #78350f;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.sng-feedback-date {
+  font-size: 11px;
+  color: #b45309;
+  margin-top: 6px;
+}
+
+/* Sub-feature 2b: Revision badge on hex */
+.sng-revision-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  background: #f59e0b;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: white;
+  z-index: 7;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* Sub-feature 3: Recommended hex glow + badge */
+.sng-recommended {
+  animation: sng-pulse 2s ease-in-out infinite;
+}
+
+.sng-recommended-badge {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #667eea;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+  z-index: 7;
+  box-shadow: 0 2px 6px rgba(102,126,234,0.4);
+}
+
+/* Sub-feature 4: Enhanced unlock notification */
+.sng-unlock-notification {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 16px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  z-index: 1000;
+  opacity: 0;
+  transition: all 0.4s ease-out;
+  max-width: 420px;
+  box-shadow: 0 8px 24px rgba(16,185,129,0.4);
+}
+
+.sng-unlock-notification.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.sng-unlock-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sng-unlock-hex-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sng-unlock-hex-item {
+  padding: 4px 0;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Animations */
+@keyframes sng-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(102,126,234,0.3)); }
+  50% { filter: drop-shadow(0 0 12px rgba(102,126,234,0.7)); }
+}
+
+@keyframes sng-slideUp {
+  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+</style>

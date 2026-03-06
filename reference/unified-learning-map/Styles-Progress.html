@@ -1,0 +1,157 @@
+<style>
+    /* ================================================
+       PROGRESS DASHBOARD TAB STYLES
+       All classes prefixed pgd- (progress dashboard)
+       ================================================ */
+
+    /* Let view/active handle display — no ID selector overrides */
+    .view.active#progressView { flex-direction: column; }
+
+    /* Two-panel layout (mirrors .ubd-planner-layout) */
+    .pgd-layout { display: flex; flex: 1; overflow: hidden; }
+    .pgd-browser { flex: 1; overflow-y: auto; }
+    .pgd-detail-panel { width: 480px; background: white; border-left: 1px solid #e2e8f0; display: none; flex-direction: column; flex-shrink: 0; overflow: hidden; }
+    .pgd-detail-panel.active { display: flex; }
+
+    /* Detail panel header */
+    .pgd-detail-header { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; }
+    .pgd-detail-header h3 { font-size: 16px; font-weight: 600; color: #1a202c; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .pgd-detail-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+    /* Selector bar (class + map dropdowns) */
+    .pgd-selector-bar { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
+    .pgd-selector-group { display: flex; flex-direction: column; gap: 4px; }
+    .pgd-selector-group label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px; }
+    .pgd-selector-group select { width: 220px; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-family: inherit; background: white; }
+    .pgd-selector-group select:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+
+    /* Overview cards row */
+    .pgd-overview-cards { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .pgd-overview-card { flex: 1; min-width: 140px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; text-align: center; transition: box-shadow 0.2s; }
+    .pgd-overview-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .pgd-overview-value { font-size: 28px; font-weight: 700; color: #1e293b; line-height: 1.2; }
+    .pgd-overview-label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+    .pgd-overview-card.highlight { border-color: #f59e0b; background: #fffbeb; }
+    .pgd-overview-card.highlight .pgd-overview-value { color: #b45309; }
+
+    /* Section titles */
+    .pgd-section-title { font-size: 14px; font-weight: 600; color: #1e293b; margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+    .pgd-section-title:first-child { margin-top: 0; }
+
+    /* Student completion grid (teacher view) */
+    .pgd-grid-container { overflow-x: auto; margin-bottom: 24px; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .pgd-grid { border-collapse: collapse; width: 100%; font-size: 12px; }
+    .pgd-grid thead th { position: sticky; top: 0; background: #f8fafc; font-weight: 600; color: #475569; padding: 8px 6px; border-bottom: 2px solid #e2e8f0; text-align: center; white-space: nowrap; font-size: 11px; z-index: 2; }
+    .pgd-grid thead th.pgd-student-col { text-align: left; min-width: 140px; position: sticky; left: 0; z-index: 3; background: #f8fafc; }
+    .pgd-grid thead th.pgd-hex-col { max-width: 60px; overflow: hidden; text-overflow: ellipsis; writing-mode: vertical-lr; text-orientation: mixed; height: 70px; padding: 6px 4px; }
+    .pgd-grid tbody tr { cursor: pointer; transition: background 0.1s; }
+    .pgd-grid tbody tr:hover { background: #f0f7ff; }
+    .pgd-grid tbody tr.selected { background: #eff6ff; }
+    .pgd-grid tbody td { padding: 6px; text-align: center; border-bottom: 1px solid #f1f5f9; }
+    .pgd-grid tbody td.pgd-student-cell { text-align: left; font-weight: 500; color: #1e293b; padding-left: 10px; position: sticky; left: 0; background: white; z-index: 1; }
+    .pgd-grid tbody tr:hover td.pgd-student-cell { background: #f0f7ff; }
+    .pgd-grid tbody tr.selected td.pgd-student-cell { background: #eff6ff; }
+
+    /* Grid cell status colors */
+    .pgd-cell { width: 32px; height: 28px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; }
+    .pgd-cell.not_started { background: #f1f5f9; color: #94a3b8; }
+    .pgd-cell.in_progress { background: #dbeafe; color: #2563eb; }
+    .pgd-cell.completed { background: #d1fae5; color: #059669; }
+    .pgd-cell.mastered { background: #a7f3d0; color: #047857; }
+    .pgd-cell.pending { background: #fef3c7; color: #b45309; }
+
+    /* Pending approvals */
+    .pgd-approval-list { margin-bottom: 24px; }
+    .pgd-approval-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; margin-bottom: 8px; }
+    .pgd-approval-info { flex: 1; }
+    .pgd-approval-student { font-size: 13px; font-weight: 600; color: #1e293b; }
+    .pgd-approval-hex { font-size: 12px; color: #64748b; }
+    .pgd-approval-score { font-size: 12px; font-weight: 600; color: #b45309; }
+    .pgd-approval-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* Score distribution histogram (pure CSS) */
+    .pgd-histogram { display: flex; align-items: flex-end; gap: 6px; height: 100px; padding: 0 4px; margin-bottom: 4px; }
+    .pgd-histogram-bar { flex: 1; border-radius: 4px 4px 0 0; transition: height 0.3s; min-width: 20px; position: relative; }
+    .pgd-histogram-bar-fill { width: 100%; border-radius: 4px 4px 0 0; background: #667eea; position: absolute; bottom: 0; transition: height 0.3s; }
+    .pgd-histogram-bar-count { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 600; color: #475569; }
+    .pgd-histogram-labels { display: flex; gap: 6px; padding: 0 4px; }
+    .pgd-histogram-label { flex: 1; text-align: center; font-size: 10px; color: #64748b; min-width: 20px; }
+
+    /* SBAR strand bars */
+    .pgd-sbar-section { margin-bottom: 16px; }
+    .pgd-sbar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .pgd-sbar-label { width: 30px; font-size: 12px; font-weight: 700; color: #475569; text-align: right; flex-shrink: 0; }
+    .pgd-sbar-bar-container { flex: 1; height: 12px; background: #f1f5f9; border-radius: 6px; overflow: hidden; }
+    .pgd-sbar-bar-fill { height: 100%; border-radius: 6px; transition: width 0.3s; }
+    .pgd-sbar-bar-fill.ku { background: #3b82f6; }
+    .pgd-sbar-bar-fill.tt { background: #10b981; }
+    .pgd-sbar-bar-fill.c  { background: #f59e0b; }
+    .pgd-sbar-value { width: 40px; font-size: 12px; font-weight: 600; color: #1e293b; flex-shrink: 0; }
+
+    /* Student map cards (student view) */
+    .pgd-map-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 16px; transition: box-shadow 0.2s; cursor: pointer; }
+    .pgd-map-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .pgd-map-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .pgd-map-card-title { font-size: 16px; font-weight: 600; color: #1e293b; }
+    .pgd-map-card-pct { font-size: 20px; font-weight: 700; color: #667eea; }
+
+    /* Multi-segment status bar */
+    .pgd-status-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 8px; background: #f1f5f9; }
+    .pgd-status-segment { transition: width 0.3s; }
+    .pgd-status-segment.mastered { background: #047857; }
+    .pgd-status-segment.completed { background: #10b981; }
+    .pgd-status-segment.in_progress { background: #3b82f6; }
+    .pgd-status-segment.not_started { background: #e2e8f0; }
+
+    /* Status legend */
+    .pgd-status-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: #64748b; }
+    .pgd-status-legend-item { display: flex; align-items: center; gap: 4px; }
+    .pgd-status-legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+    .pgd-status-legend-dot.mastered { background: #047857; }
+    .pgd-status-legend-dot.completed { background: #10b981; }
+    .pgd-status-legend-dot.in_progress { background: #3b82f6; }
+    .pgd-status-legend-dot.not_started { background: #e2e8f0; }
+
+    /* Recent activity */
+    .pgd-activity-list { margin-bottom: 16px; }
+    .pgd-activity-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    .pgd-activity-item:last-child { border-bottom: none; }
+    .pgd-activity-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .pgd-activity-status-dot.completed { background: #10b981; }
+    .pgd-activity-status-dot.mastered { background: #047857; }
+    .pgd-activity-label { flex: 1; color: #1e293b; }
+    .pgd-activity-date { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+
+    /* Student detail panel - hex list */
+    .pgd-hex-list { margin-bottom: 16px; }
+    .pgd-hex-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 6px; }
+    .pgd-hex-item-label { flex: 1; font-size: 13px; font-weight: 500; color: #1e293b; }
+    .pgd-hex-item-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; }
+    .pgd-hex-item-status.not_started { background: #f1f5f9; color: #94a3b8; }
+    .pgd-hex-item-status.in_progress { background: #dbeafe; color: #2563eb; }
+    .pgd-hex-item-status.completed { background: #d1fae5; color: #059669; }
+    .pgd-hex-item-status.mastered { background: #a7f3d0; color: #047857; }
+    .pgd-hex-item-score { font-size: 12px; font-weight: 600; color: #475569; }
+
+    /* Map card detail (expanded inline) */
+    .pgd-map-detail { padding: 16px 0; border-top: 1px solid #e2e8f0; margin-top: 12px; display: none; }
+    .pgd-map-detail.active { display: block; }
+
+    /* Empty state */
+    .pgd-empty { text-align: center; padding: 40px 20px; color: #94a3b8; }
+    .pgd-empty .icon { font-size: 36px; margin-bottom: 12px; }
+    .pgd-empty p { font-size: 14px; margin-bottom: 8px; }
+
+    /* Feedback input (for request revision) */
+    .pgd-feedback-input { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; font-family: inherit; margin-top: 6px; display: none; }
+    .pgd-feedback-input.active { display: block; }
+
+    /* Responsive: stack panels on narrow screens */
+    @media (max-width: 900px) {
+      .pgd-layout { flex-direction: column; }
+      .pgd-detail-panel { width: 100%; border-left: none; border-top: 1px solid #e2e8f0; max-height: 60vh; }
+      .pgd-browser { max-height: 40vh; }
+      .pgd-selector-group select { width: 100%; }
+      .pgd-overview-card { min-width: 100px; }
+    }
+</style>

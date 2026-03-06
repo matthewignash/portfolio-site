@@ -1,0 +1,135 @@
+<style>
+/* ================================================
+   PORTFOLIO INSIGHTS — Teacher Analytics (pia-)
+   ================================================ */
+
+.pia-dashboard {
+  padding: 16px;
+}
+
+/* Summary Cards */
+.pia-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.pia-summary-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.pia-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+.pia-card-label {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 4px;
+}
+.pia-adoption-green { color: #059669; }
+.pia-adoption-amber { color: #d97706; }
+.pia-adoption-red { color: #dc2626; }
+
+/* Student List */
+.pia-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pia-student-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.pia-student-row:hover {
+  border-color: #0d9488;
+}
+.pia-student-row:focus-visible {
+  outline: 3px solid #14b8a6;
+  outline-offset: 1px;
+}
+.pia-student-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+}
+.pia-student-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.pia-student-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.pia-badge-items {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.pia-badge-highlights {
+  background: #fffbeb;
+  color: #d97706;
+}
+.pia-badge-date {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* Expandable Detail */
+.pia-student-detail {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 12px 14px;
+  margin-top: -8px;
+}
+.pia-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+.pia-detail-item:last-child {
+  border-bottom: none;
+}
+.pia-detail-star {
+  color: #fbbf24;
+}
+.pia-detail-map {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+/* Empty / Section */
+.pia-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+.pia-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+</style>

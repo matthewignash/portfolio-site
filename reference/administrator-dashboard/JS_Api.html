@@ -1,0 +1,1081 @@
+<script>
+/**
+ * ServerAPI — Promise wrapper for google.script.run
+ *
+ * Converts callback-based google.script.run into clean async/await calls.
+ * All server functions return { success, data?, error?, code? }.
+ * This wrapper unwraps that and throws on failure.
+ */
+
+var ServerAPI = (function() {
+
+  /**
+   * Calls a server-side function by name and returns a Promise.
+   * @param {string} functionName - Name of the top-level server function (e.g., 'apiGetCurrentUser')
+   * @param {...*} args - Arguments to pass to the server function
+   * @returns {Promise<*>} Resolves with the data property, rejects with error message
+   */
+  function call(functionName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+
+    return new Promise(function(resolve, reject) {
+      var runner = google.script.run
+        .withSuccessHandler(function(response) {
+          if (response && response.success === false) {
+            reject(new Error(response.error || 'Unknown server error'));
+          } else if (response && response.hasOwnProperty('data')) {
+            resolve(response.data);
+          } else {
+            // For functions that don't use the apiWrap_ pattern
+            resolve(response);
+          }
+        })
+        .withFailureHandler(function(error) {
+          reject(new Error(error.message || 'Server call failed'));
+        });
+
+      // Call the function with its arguments
+      runner[functionName].apply(runner, args);
+    });
+  }
+
+  // ─── Convenience methods ───
+
+  function getCurrentUser() {
+    return call('apiGetCurrentUser');
+  }
+
+  function getConfig() {
+    return call('apiGetConfig');
+  }
+
+  function getRecords(tableName, filters) {
+    return call('apiGetRecords', tableName, filters);
+  }
+
+  function getRecordById(tableName, id) {
+    return call('apiGetRecordById', tableName, id);
+  }
+
+  function createRecord(tableName, data) {
+    return call('apiCreateRecord', tableName, data);
+  }
+
+  function updateRecord(tableName, id, updates) {
+    return call('apiUpdateRecord', tableName, id, updates);
+  }
+
+  function deleteRecord(tableName, id) {
+    return call('apiDeleteRecord', tableName, id);
+  }
+
+  function query(tableName, options) {
+    return call('apiQuery', tableName, options);
+  }
+
+  function getActiveStaff() {
+    return call('apiGetActiveStaff');
+  }
+
+  function getStaffByRole(role) {
+    return call('apiGetStaffByRole', role);
+  }
+
+  // Observation shortcuts
+  function createObservation(data) {
+    return call('apiCreateObservation', data);
+  }
+
+  function getObservationDashboard(filters) {
+    return call('apiGetObservationDashboard', filters);
+  }
+
+  function getDropInData(dayOfWeek, period) {
+    return call('apiGetDropInData', dayOfWeek, period);
+  }
+
+  function getTeacherObservations(teacherId) {
+    return call('apiGetTeacherObservations', teacherId);
+  }
+
+  function scheduleObservation(data) {
+    return call('apiScheduleObservation', data);
+  }
+
+  function getObservationSchedule(filters) {
+    return call('apiGetObservationSchedule', filters);
+  }
+
+  function getTeacherHistory(teacherId) {
+    return call('apiGetTeacherHistory', teacherId);
+  }
+
+  // Kanban shortcuts
+  function getActiveBoards() {
+    return call('apiGetActiveBoards');
+  }
+
+  function getBoardData(boardId) {
+    return call('apiGetBoardData', boardId);
+  }
+
+  function createBoard(data) {
+    return call('apiCreateBoard', data);
+  }
+
+  function archiveBoard(boardId) {
+    return call('apiArchiveBoard', boardId);
+  }
+
+  function createColumn(data) {
+    return call('apiCreateColumn', data);
+  }
+
+  function updateColumn(columnId, updates) {
+    return call('apiUpdateColumn', columnId, updates);
+  }
+
+  function deleteColumn(columnId) {
+    return call('apiDeleteColumn', columnId);
+  }
+
+  function createCard(data) {
+    return call('apiCreateCard', data);
+  }
+
+  function updateCard(cardId, updates) {
+    return call('apiUpdateCard', cardId, updates);
+  }
+
+  function deleteCard(cardId) {
+    return call('apiDeleteCard', cardId);
+  }
+
+  function moveCard(cardId, columnId, position) {
+    return call('apiMoveCard', cardId, columnId, position);
+  }
+
+  function getCardComments(cardId) {
+    return call('apiGetCardComments', cardId);
+  }
+
+  function createComment(cardId, content) {
+    return call('apiCreateComment', cardId, content);
+  }
+
+  // Kanban Checklists
+  function getCardChecklists(cardId) {
+    return call('apiGetCardChecklists', cardId);
+  }
+
+  function createChecklistItem(cardId, text) {
+    return call('apiCreateChecklistItem', cardId, text);
+  }
+
+  function updateChecklistItem(itemId, updates) {
+    return call('apiUpdateChecklistItem', itemId, updates);
+  }
+
+  function deleteChecklistItem(itemId) {
+    return call('apiDeleteChecklistItem', itemId);
+  }
+
+  function reorderChecklistItems(cardId, orderedIds) {
+    return call('apiReorderChecklistItems', cardId, orderedIds);
+  }
+
+  // Kanban Activity
+  function getCardActivity(cardId) {
+    return call('apiGetCardActivity', cardId);
+  }
+
+  function getBoardActivity(boardId, limit) {
+    return call('apiGetBoardActivity', boardId, limit);
+  }
+
+  // Kanban Analytics
+  function getKanbanAnalytics(boardId) {
+    return call('apiGetKanbanAnalytics', boardId);
+  }
+
+  // Kanban Bulk Operations
+  function kanbanBulkMove(cardIds, targetColumnId) {
+    return call('apiKanbanBulkMove', cardIds, targetColumnId);
+  }
+
+  function kanbanBulkUpdatePriority(cardIds, priority) {
+    return call('apiKanbanBulkUpdatePriority', cardIds, priority);
+  }
+
+  function kanbanBulkDelete(cardIds) {
+    return call('apiKanbanBulkDelete', cardIds);
+  }
+
+  // PGP Standards shortcuts
+  function getPgpStandards() {
+    return call('apiGetPgpStandards');
+  }
+
+  function createPgpStandard(data) {
+    return call('apiCreatePgpStandard', data);
+  }
+
+  function updatePgpStandard(standardId, updates) {
+    return call('apiUpdatePgpStandard', standardId, updates);
+  }
+
+  function deletePgpStandard(standardId) {
+    return call('apiDeletePgpStandard', standardId);
+  }
+
+  function reorderPgpStandards(orderList) {
+    return call('apiReorderPgpStandards', orderList);
+  }
+
+  // Growth Plans shortcuts
+  function getGrowthPlanOverview(filters) {
+    return call('apiGetGrowthPlanOverview', filters);
+  }
+
+  function getGrowthPlanDetail(planId) {
+    return call('apiGetGrowthPlanDetail', planId);
+  }
+
+  function getMyGrowthPlan() {
+    return call('apiGetMyGrowthPlan');
+  }
+
+  function createGrowthPlan(data) {
+    return call('apiCreateGrowthPlan', data);
+  }
+
+  function updateGrowthPlan(planId, updates) {
+    return call('apiUpdateGrowthPlan', planId, updates);
+  }
+
+  function deleteGrowthPlan(planId) {
+    return call('apiDeleteGrowthPlan', planId);
+  }
+
+  // Standard Selections shortcuts
+  function selectStandards(data) {
+    return call('apiSelectStandards', data);
+  }
+
+  function updateStandardSelection(selectionId, updates) {
+    return call('apiUpdateStandardSelection', selectionId, updates);
+  }
+
+  // Cycle History shortcuts
+  function getStandardsAtAGlance(staffId) {
+    return call('apiGetStandardsAtAGlance', staffId);
+  }
+
+  function getCycleHistory(staffId) {
+    return call('apiGetCycleHistory', staffId);
+  }
+
+  // Growth Meetings shortcuts
+  function createGrowthMeeting(data) {
+    return call('apiCreateGrowthMeeting', data);
+  }
+
+  function updateGrowthMeeting(meetingId, updates) {
+    return call('apiUpdateGrowthMeeting', meetingId, updates);
+  }
+
+  // Growth Plan Signatures
+  function signGrowthPlan(planId, signatureType) {
+    return call('apiSignGrowthPlan', planId, signatureType);
+  }
+
+  // DDO: ITC Maps
+  function createITCMap(data) {
+    return call('apiCreateITCMap', data);
+  }
+  function updateITCMap(mapId, updates) {
+    return call('apiUpdateITCMap', mapId, updates);
+  }
+  function getITCMap(selectionId) {
+    return call('apiGetITCMap', selectionId);
+  }
+
+  // DDO: Developmental Wall
+  function getDevelopmentalWall() {
+    return call('apiGetDevelopmentalWall');
+  }
+
+  // DDO: Coaching Triads
+  function getCoachingGroups() {
+    return call('apiGetCoachingGroups');
+  }
+  function createCoachingGroup(data) {
+    return call('apiCreateCoachingGroup', data);
+  }
+  function addGroupMember(groupId, staffId, role) {
+    return call('apiAddGroupMember', groupId, staffId, role);
+  }
+  function removeGroupMember(groupId, staffId) {
+    return call('apiRemoveGroupMember', groupId, staffId);
+  }
+  function getMyCoachingGroup() {
+    return call('apiGetMyCoachingGroup');
+  }
+  function getCoachingMeetings(groupId) {
+    return call('apiGetCoachingMeetings', groupId);
+  }
+  function createCoachingMeeting(data) {
+    return call('apiCreateCoachingMeeting', data);
+  }
+
+  // Projects shortcuts
+  function getProjectOverview(filters) {
+    return call('apiGetProjectOverview', filters);
+  }
+
+  function getProjectDetail(projectId) {
+    return call('apiGetProjectDetail', projectId);
+  }
+
+  function createProject(data) {
+    return call('apiCreateProject', data);
+  }
+
+  function updateProject(projectId, updates) {
+    return call('apiUpdateProject', projectId, updates);
+  }
+
+  function deleteProject(projectId) {
+    return call('apiDeleteProject', projectId);
+  }
+
+  function createProjectPhase(data) {
+    return call('apiCreateProjectPhase', data);
+  }
+
+  function updateProjectPhase(phaseId, updates) {
+    return call('apiUpdateProjectPhase', phaseId, updates);
+  }
+
+  function deleteProjectPhase(phaseId) {
+    return call('apiDeleteProjectPhase', phaseId);
+  }
+
+  function createProjectTask(data) {
+    return call('apiCreateProjectTask', data);
+  }
+
+  function updateProjectTask(taskId, updates) {
+    return call('apiUpdateProjectTask', taskId, updates);
+  }
+
+  function deleteProjectTask(taskId) {
+    return call('apiDeleteProjectTask', taskId);
+  }
+
+  function getProjectTimeline(projectId) {
+    return call('apiGetProjectTimeline', projectId);
+  }
+
+  // Project Risk, Activity, Comments, Workload shortcuts
+
+  function getProjectRisks(projectId) {
+    return call('apiGetProjectRisks', projectId);
+  }
+
+  function createProjectRisk(data) {
+    return call('apiCreateProjectRisk', data);
+  }
+
+  function updateProjectRisk(riskId, updates) {
+    return call('apiUpdateProjectRisk', riskId, updates);
+  }
+
+  function deleteProjectRisk(riskId) {
+    return call('apiDeleteProjectRisk', riskId);
+  }
+
+  function getRiskHeatMap(projectId) {
+    return call('apiGetRiskHeatMap', projectId);
+  }
+
+  function getTaskActivity(taskId) {
+    return call('apiGetTaskActivity', taskId);
+  }
+
+  function getProjectActivity(projectId, limit) {
+    return call('apiGetProjectActivity', projectId, limit);
+  }
+
+  function createProjectComment(taskId, projectId, content) {
+    return call('apiCreateProjectComment', taskId, projectId, content);
+  }
+
+  function getTaskComments(taskId) {
+    return call('apiGetTaskComments', taskId);
+  }
+
+  function getResourceWorkload() {
+    return call('apiGetResourceWorkload');
+  }
+
+  // Change Management shortcuts
+  function getChangeMgmtOverview(filters) {
+    return call('apiGetChangeMgmtOverview', filters);
+  }
+
+  function getInitiativeDetail(initiativeId) {
+    return call('apiGetInitiativeDetail', initiativeId);
+  }
+
+  function createInitiative(data) {
+    return call('apiCreateInitiative', data);
+  }
+
+  function updateInitiative(initiativeId, updates) {
+    return call('apiUpdateInitiative', initiativeId, updates);
+  }
+
+  function deleteInitiative(initiativeId) {
+    return call('apiDeleteInitiative', initiativeId);
+  }
+
+  function createKnosterAssessment(data) {
+    return call('apiCreateKnosterAssessment', data);
+  }
+
+  function getAssessmentHistory(initiativeId) {
+    return call('apiGetAssessmentHistory', initiativeId);
+  }
+
+  function updateLippittPhase(phaseId, updates) {
+    return call('apiUpdateLippittPhase', phaseId, updates);
+  }
+
+  function addStakeholder(data) {
+    return call('apiAddStakeholder', data);
+  }
+
+  function updateStakeholder(stakeholderId, updates) {
+    return call('apiUpdateStakeholder', stakeholderId, updates);
+  }
+
+  function removeStakeholder(stakeholderId) {
+    return call('apiRemoveStakeholder', stakeholderId);
+  }
+
+  function getInitiativeComparison() {
+    return call('apiGetInitiativeComparison');
+  }
+
+  function getChangeMgmtConfig() {
+    return call('apiGetChangeMgmtConfig');
+  }
+
+  // ── CM Communications & Analytics ──
+
+  function getCommunications(initiativeId) {
+    return call('apiGetCommunications', initiativeId);
+  }
+
+  function createCommunication(data) {
+    return call('apiCreateCommunication', data);
+  }
+
+  function updateCommunication(communicationId, updates) {
+    return call('apiUpdateCommunication', communicationId, updates);
+  }
+
+  function deleteCommunication(communicationId) {
+    return call('apiDeleteCommunication', communicationId);
+  }
+
+  function getCommunicationTemplate(messageType, initiativeId) {
+    return call('apiGetCommunicationTemplate', messageType, initiativeId);
+  }
+
+  function getReadinessTrends(initiativeId) {
+    return call('apiGetReadinessTrends', initiativeId);
+  }
+
+  function getReadinessHeatMap() {
+    return call('apiGetReadinessHeatMap');
+  }
+
+  function getInitiativeTimeline(initiativeId) {
+    return call('apiGetInitiativeTimeline', initiativeId);
+  }
+
+  // ── Accreditation ──
+
+  function getAccreditationOverview(filters) {
+    return call('apiGetAccreditationOverview', filters);
+  }
+
+  function getFrameworkDetail(frameworkId) {
+    return call('apiGetFrameworkDetail', frameworkId);
+  }
+
+  function createFramework(data) {
+    return call('apiCreateFramework', data);
+  }
+
+  function updateFramework(frameworkId, updates) {
+    return call('apiUpdateFramework', frameworkId, updates);
+  }
+
+  function deleteFramework(frameworkId) {
+    return call('apiDeleteFramework', frameworkId);
+  }
+
+  function createStandard(data) {
+    return call('apiCreateStandard', data);
+  }
+
+  function updateStandard(standardId, updates) {
+    return call('apiUpdateStandard', standardId, updates);
+  }
+
+  function deleteStandard(standardId) {
+    return call('apiDeleteStandard', standardId);
+  }
+
+  function reorderStandards(standardIds) {
+    return call('apiReorderStandards', standardIds);
+  }
+
+  function getStandardDetail(standardId) {
+    return call('apiGetStandardDetail', standardId);
+  }
+
+  function createEvidence(data) {
+    return call('apiCreateEvidence', data);
+  }
+
+  function updateEvidence(evidenceId, updates) {
+    return call('apiUpdateEvidence', evidenceId, updates);
+  }
+
+  function deleteEvidence(evidenceId) {
+    return call('apiDeleteEvidence', evidenceId);
+  }
+
+  function reviewEvidence(evidenceId, data) {
+    return call('apiReviewEvidence', evidenceId, data);
+  }
+
+  function saveNarrative(data) {
+    return call('apiSaveNarrative', data);
+  }
+
+  function updateNarrativeStatus(narrativeId, status) {
+    return call('apiUpdateNarrativeStatus', narrativeId, status);
+  }
+
+  function exportStandardDoc(standardId) {
+    return call('apiExportStandardDoc', standardId);
+  }
+
+  function exportDomainDoc(frameworkId, domain) {
+    return call('apiExportDomainDoc', frameworkId, domain);
+  }
+
+  function exportSelfStudy(frameworkId) {
+    return call('apiExportSelfStudy', frameworkId);
+  }
+
+  function exportToPdf(docId) {
+    return call('apiExportToPdf', docId);
+  }
+
+  function createEvidenceBinder(frameworkId) {
+    return call('apiCreateEvidenceBinder', frameworkId);
+  }
+
+  function getVisitReadiness(frameworkId) {
+    return call('apiGetVisitReadiness', frameworkId);
+  }
+
+  // ─── Reporting (Phase 7) ───
+
+  function getExecutiveSummary() {
+    return call('apiGetExecutiveSummary');
+  }
+
+  function getReportingModuleDetail(moduleKey) {
+    return call('apiGetReportingModuleDetail', moduleKey);
+  }
+
+  function getPrintSnapshot() {
+    return call('apiGetPrintSnapshot');
+  }
+
+  function getLeadershipInvestmentReport(supervisorId) {
+    return call('apiGetLeadershipInvestmentReport', supervisorId);
+  }
+
+  // ─── Meeting Minutes ───
+
+  function getMeetingOverview(filters) {
+    return call('apiGetMeetingOverview', filters);
+  }
+
+  function getMeetingDetail(meetingId) {
+    return call('apiGetMeetingDetail', meetingId);
+  }
+
+  function createMeeting(data) {
+    return call('apiCreateMeeting', data);
+  }
+
+  function updateMeeting(meetingId, updates) {
+    return call('apiUpdateMeeting', meetingId, updates);
+  }
+
+  function deleteMeeting(meetingId) {
+    return call('apiDeleteMeeting', meetingId);
+  }
+
+  function updateMeetingStatus(meetingId, newStatus) {
+    return call('apiUpdateMeetingStatus', meetingId, newStatus);
+  }
+
+  function getMeetingActionItems(meetingId) {
+    return call('apiGetMeetingActionItems', meetingId);
+  }
+
+  function createMeetingActionItem(data) {
+    return call('apiCreateMeetingActionItem', data);
+  }
+
+  function updateMeetingActionItem(itemId, updates) {
+    return call('apiUpdateMeetingActionItem', itemId, updates);
+  }
+
+  function deleteMeetingActionItem(itemId) {
+    return call('apiDeleteMeetingActionItem', itemId);
+  }
+
+  function reorderMeetingActionItems(meetingId, itemIds) {
+    return call('apiReorderMeetingActionItems', meetingId, itemIds);
+  }
+
+  function linkActionToProjectTask(itemId, projectId, phaseId) {
+    return call('apiLinkActionToProjectTask', itemId, projectId, phaseId);
+  }
+
+  function linkActionToKanbanCard(itemId, boardId, columnId) {
+    return call('apiLinkActionToKanbanCard', itemId, boardId, columnId);
+  }
+
+  function getMeetingActivity(meetingId, limit) {
+    return call('apiGetMeetingActivity', meetingId, limit);
+  }
+
+  function getMeetingStats() {
+    return call('apiGetMeetingStats');
+  }
+
+  // ── PD Tracking ──
+
+  function getPDOverview(filters) {
+    return call('apiGetPDOverview', filters);
+  }
+  function getPDOfferingDetail(offeringId) {
+    return call('apiGetPDOfferingDetail', offeringId);
+  }
+  function createPDOffering(data) {
+    return call('apiCreatePDOffering', data);
+  }
+  function updatePDOffering(offeringId, updates) {
+    return call('apiUpdatePDOffering', offeringId, updates);
+  }
+  function deletePDOffering(offeringId) {
+    return call('apiDeletePDOffering', offeringId);
+  }
+  function updatePDOfferingStatus(offeringId, status) {
+    return call('apiUpdatePDOfferingStatus', offeringId, status);
+  }
+  function registerForPD(offeringId) {
+    return call('apiRegisterForPD', offeringId);
+  }
+  function cancelPDRegistration(registrationId) {
+    return call('apiCancelPDRegistration', registrationId);
+  }
+  function markPDAttendance(offeringId, staffIds) {
+    return call('apiMarkPDAttendance', offeringId, staffIds);
+  }
+  function getMyPDRegistrations() {
+    return call('apiGetMyPDRegistrations');
+  }
+  function addPDReflection(data) {
+    return call('apiAddPDReflection', data);
+  }
+  function updatePDReflection(reflectionId, updates) {
+    return call('apiUpdatePDReflection', reflectionId, updates);
+  }
+  function linkReflectionToStandard(reflectionId, selectionId) {
+    return call('apiLinkReflectionToStandard', reflectionId, selectionId);
+  }
+  function getPDActivity(offeringId, limit) {
+    return call('apiGetPDActivity', offeringId, limit);
+  }
+  function getPDStats() {
+    return call('apiGetPDStats');
+  }
+  function getStaffPDSummary(staffId) {
+    return call('apiGetStaffPDSummary', staffId);
+  }
+  function getRecommendedPD(standardId) {
+    return call('apiGetRecommendedPD', standardId);
+  }
+  function getMyPDSummary() {
+    return call('apiGetMyPDSummary');
+  }
+
+  // ── Staff Feedback & 360 Reviews ──
+
+  function getFeedbackCycles(filters) {
+    return call('apiGetFeedbackCycles', filters);
+  }
+  function getFeedbackCycleDetail(cycleId) {
+    return call('apiGetFeedbackCycleDetail', cycleId);
+  }
+  function createFeedbackCycle(data) {
+    return call('apiCreateFeedbackCycle', data);
+  }
+  function updateFeedbackCycle(cycleId, updates) {
+    return call('apiUpdateFeedbackCycle', cycleId, updates);
+  }
+  function updateFeedbackCycleStatus(cycleId, status) {
+    return call('apiUpdateFeedbackCycleStatus', cycleId, status);
+  }
+  function addFeedbackQuestion(cycleId, data) {
+    return call('apiAddFeedbackQuestion', cycleId, data);
+  }
+  function updateFeedbackQuestion(questionId, updates) {
+    return call('apiUpdateFeedbackQuestion', questionId, updates);
+  }
+  function deleteFeedbackQuestion(questionId) {
+    return call('apiDeleteFeedbackQuestion', questionId);
+  }
+  function createFeedbackAssignment(data) {
+    return call('apiCreateFeedbackAssignment', data);
+  }
+  function bulkAssignFeedback(cycleId, recipientIds, config) {
+    return call('apiBulkAssignFeedback', cycleId, recipientIds, config);
+  }
+  function declineFeedbackAssignment(assignmentId) {
+    return call('apiDeclineFeedbackAssignment', assignmentId);
+  }
+  function submitFeedbackResponse(assignmentId, answers) {
+    return call('apiSubmitFeedbackResponse', assignmentId, answers);
+  }
+  function saveFeedbackDraft(assignmentId, answers) {
+    return call('apiSaveFeedbackDraft', assignmentId, answers);
+  }
+  function generateFeedbackSummary(cycleId, recipientId) {
+    return call('apiGenerateFeedbackSummary', cycleId, recipientId);
+  }
+  function generateAllFeedbackSummaries(cycleId) {
+    return call('apiGenerateAllFeedbackSummaries', cycleId);
+  }
+  function shareFeedbackSummary(summaryId) {
+    return call('apiShareFeedbackSummary', summaryId);
+  }
+  function getMyFeedbackAssignments() {
+    return call('apiGetMyFeedbackAssignments');
+  }
+  function getFeedbackAssignmentDetail(assignmentId) {
+    return call('apiGetFeedbackAssignmentDetail', assignmentId);
+  }
+  function linkFeedbackToStandard(summaryId, selectionId) {
+    return call('apiLinkFeedbackToStandard', summaryId, selectionId);
+  }
+  function getFeedbackStats() {
+    return call('apiGetFeedbackStats');
+  }
+  function getFeedbackActivity(cycleId, limit) {
+    return call('apiGetFeedbackActivity', cycleId, limit);
+  }
+
+  // ── Staff Wellness & Workload ──
+  function submitWellnessCheckin(data) {
+    return call('apiSubmitWellnessCheckin', data);
+  }
+  function getMyWellnessCheckins(limit) {
+    return call('apiGetMyWellnessCheckins', limit);
+  }
+  function getMyWellnessTrend(weeks) {
+    return call('apiGetMyWellnessTrend', weeks);
+  }
+  function getMyLatestCheckin() {
+    return call('apiGetMyLatestCheckin');
+  }
+  function getMyWorkload() {
+    return call('apiGetMyWorkload');
+  }
+  function getStaffWorkload(staffId) {
+    return call('apiGetStaffWorkload', staffId);
+  }
+  function getWellnessAdminDashboard() {
+    return call('apiGetWellnessAdminDashboard');
+  }
+  function getAllStaffWorkloads() {
+    return call('apiGetAllStaffWorkloads');
+  }
+  function getDepartmentWellness() {
+    return call('apiGetDepartmentWellness');
+  }
+  function getAnonymizedWellnessTrends(filters) {
+    return call('apiGetAnonymizedWellnessTrends', filters);
+  }
+  function getWellnessAlerts() {
+    return call('apiGetWellnessAlerts');
+  }
+  function acknowledgeWellnessAlert(alertId) {
+    return call('apiAcknowledgeWellnessAlert', alertId);
+  }
+  function resolveWellnessAlert(alertId) {
+    return call('apiResolveWellnessAlert', alertId);
+  }
+  function runBurnoutScan() {
+    return call('apiRunBurnoutScan');
+  }
+  function getWellnessConfig() {
+    return call('apiGetWellnessConfig');
+  }
+  function updateWellnessConfig(key, value) {
+    return call('apiUpdateWellnessConfig', key, value);
+  }
+  function getWellnessActivity(limit) {
+    return call('apiGetWellnessActivity', limit);
+  }
+  function getWellnessStats() {
+    return call('apiGetWellnessStats');
+  }
+
+  return {
+    call: call,
+    getCurrentUser: getCurrentUser,
+    getConfig: getConfig,
+    getRecords: getRecords,
+    getRecordById: getRecordById,
+    createRecord: createRecord,
+    updateRecord: updateRecord,
+    deleteRecord: deleteRecord,
+    query: query,
+    getActiveStaff: getActiveStaff,
+    getStaffByRole: getStaffByRole,
+    createObservation: createObservation,
+    getObservationDashboard: getObservationDashboard,
+    getDropInData: getDropInData,
+    getTeacherObservations: getTeacherObservations,
+    scheduleObservation: scheduleObservation,
+    getObservationSchedule: getObservationSchedule,
+    getTeacherHistory: getTeacherHistory,
+    getActiveBoards: getActiveBoards,
+    getBoardData: getBoardData,
+    createBoard: createBoard,
+    archiveBoard: archiveBoard,
+    createColumn: createColumn,
+    updateColumn: updateColumn,
+    deleteColumn: deleteColumn,
+    createCard: createCard,
+    updateCard: updateCard,
+    deleteCard: deleteCard,
+    moveCard: moveCard,
+    getCardComments: getCardComments,
+    createComment: createComment,
+    getCardChecklists: getCardChecklists,
+    createChecklistItem: createChecklistItem,
+    updateChecklistItem: updateChecklistItem,
+    deleteChecklistItem: deleteChecklistItem,
+    reorderChecklistItems: reorderChecklistItems,
+    getCardActivity: getCardActivity,
+    getBoardActivity: getBoardActivity,
+    getKanbanAnalytics: getKanbanAnalytics,
+    kanbanBulkMove: kanbanBulkMove,
+    kanbanBulkUpdatePriority: kanbanBulkUpdatePriority,
+    kanbanBulkDelete: kanbanBulkDelete,
+    getPgpStandards: getPgpStandards,
+    createPgpStandard: createPgpStandard,
+    updatePgpStandard: updatePgpStandard,
+    deletePgpStandard: deletePgpStandard,
+    reorderPgpStandards: reorderPgpStandards,
+    getGrowthPlanOverview: getGrowthPlanOverview,
+    getGrowthPlanDetail: getGrowthPlanDetail,
+    getMyGrowthPlan: getMyGrowthPlan,
+    createGrowthPlan: createGrowthPlan,
+    updateGrowthPlan: updateGrowthPlan,
+    deleteGrowthPlan: deleteGrowthPlan,
+    selectStandards: selectStandards,
+    updateStandardSelection: updateStandardSelection,
+    getStandardsAtAGlance: getStandardsAtAGlance,
+    getCycleHistory: getCycleHistory,
+    createGrowthMeeting: createGrowthMeeting,
+    updateGrowthMeeting: updateGrowthMeeting,
+    signGrowthPlan: signGrowthPlan,
+    // DDO: ITC Maps
+    createITCMap: createITCMap,
+    updateITCMap: updateITCMap,
+    getITCMap: getITCMap,
+    // DDO: Developmental Wall
+    getDevelopmentalWall: getDevelopmentalWall,
+    // DDO: Coaching Triads
+    getCoachingGroups: getCoachingGroups,
+    createCoachingGroup: createCoachingGroup,
+    addGroupMember: addGroupMember,
+    removeGroupMember: removeGroupMember,
+    getMyCoachingGroup: getMyCoachingGroup,
+    getCoachingMeetings: getCoachingMeetings,
+    createCoachingMeeting: createCoachingMeeting,
+    getProjectOverview: getProjectOverview,
+    getProjectDetail: getProjectDetail,
+    createProject: createProject,
+    updateProject: updateProject,
+    deleteProject: deleteProject,
+    createProjectPhase: createProjectPhase,
+    updateProjectPhase: updateProjectPhase,
+    deleteProjectPhase: deleteProjectPhase,
+    createProjectTask: createProjectTask,
+    updateProjectTask: updateProjectTask,
+    deleteProjectTask: deleteProjectTask,
+    getProjectTimeline: getProjectTimeline,
+    getProjectRisks: getProjectRisks,
+    createProjectRisk: createProjectRisk,
+    updateProjectRisk: updateProjectRisk,
+    deleteProjectRisk: deleteProjectRisk,
+    getRiskHeatMap: getRiskHeatMap,
+    getTaskActivity: getTaskActivity,
+    getProjectActivity: getProjectActivity,
+    createProjectComment: createProjectComment,
+    getTaskComments: getTaskComments,
+    getResourceWorkload: getResourceWorkload,
+    getChangeMgmtOverview: getChangeMgmtOverview,
+    getInitiativeDetail: getInitiativeDetail,
+    createInitiative: createInitiative,
+    updateInitiative: updateInitiative,
+    deleteInitiative: deleteInitiative,
+    createKnosterAssessment: createKnosterAssessment,
+    getAssessmentHistory: getAssessmentHistory,
+    updateLippittPhase: updateLippittPhase,
+    addStakeholder: addStakeholder,
+    updateStakeholder: updateStakeholder,
+    removeStakeholder: removeStakeholder,
+    getInitiativeComparison: getInitiativeComparison,
+    getChangeMgmtConfig: getChangeMgmtConfig,
+    getCommunications: getCommunications,
+    createCommunication: createCommunication,
+    updateCommunication: updateCommunication,
+    deleteCommunication: deleteCommunication,
+    getCommunicationTemplate: getCommunicationTemplate,
+    getReadinessTrends: getReadinessTrends,
+    getReadinessHeatMap: getReadinessHeatMap,
+    getInitiativeTimeline: getInitiativeTimeline,
+    getAccreditationOverview: getAccreditationOverview,
+    getFrameworkDetail: getFrameworkDetail,
+    createFramework: createFramework,
+    updateFramework: updateFramework,
+    deleteFramework: deleteFramework,
+    createStandard: createStandard,
+    updateStandard: updateStandard,
+    deleteStandard: deleteStandard,
+    reorderStandards: reorderStandards,
+    getStandardDetail: getStandardDetail,
+    createEvidence: createEvidence,
+    updateEvidence: updateEvidence,
+    deleteEvidence: deleteEvidence,
+    reviewEvidence: reviewEvidence,
+    saveNarrative: saveNarrative,
+    updateNarrativeStatus: updateNarrativeStatus,
+    exportStandardDoc: exportStandardDoc,
+    exportDomainDoc: exportDomainDoc,
+    exportSelfStudy: exportSelfStudy,
+    exportToPdf: exportToPdf,
+    createEvidenceBinder: createEvidenceBinder,
+    getVisitReadiness: getVisitReadiness,
+    getExecutiveSummary: getExecutiveSummary,
+    getReportingModuleDetail: getReportingModuleDetail,
+    getPrintSnapshot: getPrintSnapshot,
+    getLeadershipInvestmentReport: getLeadershipInvestmentReport,
+    getMeetingOverview: getMeetingOverview,
+    getMeetingDetail: getMeetingDetail,
+    createMeeting: createMeeting,
+    updateMeeting: updateMeeting,
+    deleteMeeting: deleteMeeting,
+    updateMeetingStatus: updateMeetingStatus,
+    getMeetingActionItems: getMeetingActionItems,
+    createMeetingActionItem: createMeetingActionItem,
+    updateMeetingActionItem: updateMeetingActionItem,
+    deleteMeetingActionItem: deleteMeetingActionItem,
+    reorderMeetingActionItems: reorderMeetingActionItems,
+    linkActionToProjectTask: linkActionToProjectTask,
+    linkActionToKanbanCard: linkActionToKanbanCard,
+    getMeetingActivity: getMeetingActivity,
+    getMeetingStats: getMeetingStats,
+    getPDOverview: getPDOverview,
+    getPDOfferingDetail: getPDOfferingDetail,
+    createPDOffering: createPDOffering,
+    updatePDOffering: updatePDOffering,
+    deletePDOffering: deletePDOffering,
+    updatePDOfferingStatus: updatePDOfferingStatus,
+    registerForPD: registerForPD,
+    cancelPDRegistration: cancelPDRegistration,
+    markPDAttendance: markPDAttendance,
+    getMyPDRegistrations: getMyPDRegistrations,
+    addPDReflection: addPDReflection,
+    updatePDReflection: updatePDReflection,
+    linkReflectionToStandard: linkReflectionToStandard,
+    getPDActivity: getPDActivity,
+    getPDStats: getPDStats,
+    getStaffPDSummary: getStaffPDSummary,
+    getRecommendedPD: getRecommendedPD,
+    getMyPDSummary: getMyPDSummary,
+
+    // Staff Feedback & 360 Reviews
+    getFeedbackCycles: getFeedbackCycles,
+    getFeedbackCycleDetail: getFeedbackCycleDetail,
+    createFeedbackCycle: createFeedbackCycle,
+    updateFeedbackCycle: updateFeedbackCycle,
+    updateFeedbackCycleStatus: updateFeedbackCycleStatus,
+    addFeedbackQuestion: addFeedbackQuestion,
+    updateFeedbackQuestion: updateFeedbackQuestion,
+    deleteFeedbackQuestion: deleteFeedbackQuestion,
+    createFeedbackAssignment: createFeedbackAssignment,
+    bulkAssignFeedback: bulkAssignFeedback,
+    declineFeedbackAssignment: declineFeedbackAssignment,
+    submitFeedbackResponse: submitFeedbackResponse,
+    saveFeedbackDraft: saveFeedbackDraft,
+    generateFeedbackSummary: generateFeedbackSummary,
+    generateAllFeedbackSummaries: generateAllFeedbackSummaries,
+    shareFeedbackSummary: shareFeedbackSummary,
+    getMyFeedbackAssignments: getMyFeedbackAssignments,
+    getFeedbackAssignmentDetail: getFeedbackAssignmentDetail,
+    linkFeedbackToStandard: linkFeedbackToStandard,
+    getFeedbackStats: getFeedbackStats,
+    getFeedbackActivity: getFeedbackActivity,
+
+    // Staff Wellness & Workload
+    submitWellnessCheckin: submitWellnessCheckin,
+    getMyWellnessCheckins: getMyWellnessCheckins,
+    getMyWellnessTrend: getMyWellnessTrend,
+    getMyLatestCheckin: getMyLatestCheckin,
+    getMyWorkload: getMyWorkload,
+    getStaffWorkload: getStaffWorkload,
+    getWellnessAdminDashboard: getWellnessAdminDashboard,
+    getAllStaffWorkloads: getAllStaffWorkloads,
+    getDepartmentWellness: getDepartmentWellness,
+    getAnonymizedWellnessTrends: getAnonymizedWellnessTrends,
+    getWellnessAlerts: getWellnessAlerts,
+    acknowledgeWellnessAlert: acknowledgeWellnessAlert,
+    resolveWellnessAlert: resolveWellnessAlert,
+    runBurnoutScan: runBurnoutScan,
+    getWellnessConfig: getWellnessConfig,
+    updateWellnessConfig: updateWellnessConfig,
+    getWellnessActivity: getWellnessActivity,
+    getWellnessStats: getWellnessStats
+  };
+
+})();
+</script>

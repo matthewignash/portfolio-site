@@ -1,0 +1,139 @@
+<script>
+    // ================================================
+    // TEACHER PORTFOLIO INSIGHTS (ES5, pia- prefix)
+    // ================================================
+
+    console.log('=== Scripts-PortfolioInsights.html loaded ===');
+
+    function piaLoadDashboard() {
+      if (!progressSelectedClassId) {
+        var container = document.getElementById('portfolioInsightsContainer');
+        if (container) container.innerHTML = '<div class="pia-empty">Select a class to view portfolio insights.</div>';
+        return;
+      }
+
+      var container = document.getElementById('portfolioInsightsContainer');
+      if (container) {
+        container.innerHTML = '<div class="pf-loading"><span class="loading-spinner"></span> Loading portfolio insights...</div>';
+      }
+
+      var expectedClass = progressSelectedClassId;
+      var expectedMap = progressSelectedMapId || '';
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          // Stale-response guard
+          if (String(progressSelectedClassId) !== String(expectedClass)) return;
+          piaComputedData = data;
+          piaRenderDashboard(data);
+        })
+        .withFailureHandler(function(err) {
+          if (String(progressSelectedClassId) !== String(expectedClass)) return;
+          var container = document.getElementById('portfolioInsightsContainer');
+          if (container) {
+            container.innerHTML = '<div class="pia-empty">Error loading insights: ' + escapeHtml(err.message) + '</div>';
+          }
+        })
+        .getClassPortfolioInsights(progressSelectedClassId, expectedMap);
+    }
+
+    function piaRenderDashboard(data) {
+      if (!data) return;
+
+      var html = '<div class="pia-dashboard">';
+
+      // Summary cards
+      html += piaRenderSummaryCards(data);
+
+      // Student list
+      html += '<div class="pia-section-title">Student Portfolio Activity</div>';
+      html += piaRenderStudentList(data.students || []);
+
+      html += '</div>';
+
+      var container = document.getElementById('portfolioInsightsContainer');
+      if (container) container.innerHTML = html;
+    }
+
+    function piaRenderSummaryCards(data) {
+      var adoptionColor = 'pia-adoption-red';
+      if (data.adoptionRate >= 70) adoptionColor = 'pia-adoption-green';
+      else if (data.adoptionRate >= 40) adoptionColor = 'pia-adoption-amber';
+
+      var topHexLabel = data.topCuratedHex ? escapeHtml(data.topCuratedHex.label) : 'None yet';
+      var topHexCount = data.topCuratedHex ? ' (' + data.topCuratedHex.count + ')' : '';
+
+      var html = '<div class="pia-summary-cards">';
+
+      // Adoption Rate
+      html += '<div class="pia-summary-card">';
+      html += '<div class="pia-card-value ' + adoptionColor + '">' + data.adoptionRate + '%</div>';
+      html += '<div class="pia-card-label">Adoption Rate</div>';
+      html += '</div>';
+
+      // Avg Items
+      html += '<div class="pia-summary-card">';
+      html += '<div class="pia-card-value">' + data.avgItemsPerStudent + '</div>';
+      html += '<div class="pia-card-label">Avg Items / Student</div>';
+      html += '</div>';
+
+      // Most Curated
+      html += '<div class="pia-summary-card">';
+      html += '<div class="pia-card-value" style="font-size:16px;">' + topHexLabel + topHexCount + '</div>';
+      html += '<div class="pia-card-label">Most Curated Hex</div>';
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    function piaRenderStudentList(students) {
+      if (!students || students.length === 0) {
+        return '<div class="pia-empty">No students in this class yet.</div>';
+      }
+
+      var html = '<div class="pia-student-list">';
+      for (var i = 0; i < students.length; i++) {
+        var s = students[i];
+        var dateStr = s.lastCuratedAt ? s.lastCuratedAt.split('T')[0] : 'Never';
+
+        html += '<div class="pia-student-row" onclick="piaToggleStudentDetail(\'' + escapeHtml(s.email) + '\')" aria-label="Expand ' + escapeHtml(s.name) + '">';
+        html += '<div class="pia-student-name">' + escapeHtml(s.name) + '</div>';
+        html += '<div class="pia-student-meta">';
+        html += '<span class="pia-student-badge pia-badge-items">' + s.itemCount + ' items</span>';
+        if (s.highlightCount > 0) {
+          html += '<span class="pia-student-badge pia-badge-highlights">\u2B50 ' + s.highlightCount + '</span>';
+        }
+        html += '<span class="pia-student-badge pia-badge-date">' + dateStr + '</span>';
+        html += '</div>';
+        html += '</div>';
+
+        // Expandable detail (hidden by default)
+        var isExpanded = piaExpandedStudents && piaExpandedStudents[s.email];
+        if (isExpanded && s.items && s.items.length > 0) {
+          html += '<div class="pia-student-detail">';
+          for (var j = 0; j < s.items.length; j++) {
+            var item = s.items[j];
+            html += '<div class="pia-detail-item">';
+            if (item.isHighlight) {
+              html += '<span class="pia-detail-star">\u2B50</span>';
+            }
+            html += '<span>' + escapeHtml(item.hexLabel) + '</span>';
+            html += '<span class="pia-detail-map">' + escapeHtml(item.mapTitle) + '</span>';
+            html += '</div>';
+          }
+          html += '</div>';
+        } else if (isExpanded) {
+          html += '<div class="pia-student-detail"><div class="pia-empty" style="padding:12px;">No portfolio items yet.</div></div>';
+        }
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function piaToggleStudentDetail(email) {
+      if (!piaExpandedStudents) piaExpandedStudents = {};
+      piaExpandedStudents[email] = !piaExpandedStudents[email];
+      if (piaComputedData) piaRenderDashboard(piaComputedData);
+    }
+</script>

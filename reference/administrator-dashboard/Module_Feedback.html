@@ -1,0 +1,1392 @@
+<script>
+/**
+ * Module_Feedback.html — Staff Feedback & 360 Reviews
+ *
+ * Registers as App.ModuleRegistry.feedback.
+ * Mixed-access: all users see My Feedback + Give Feedback; admins also see Cycles + Reports.
+ *
+ * Views: Cycles (admin), Cycle Detail (admin), My Feedback, Give Feedback, Feedback Form, Reports.
+ */
+
+App.ModuleRegistry.feedback = {
+
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      isAdmin: App.getUser() && App.getUser().isAdmin,
+      cycles: [],
+      stats: null,
+      currentCycle: null,
+      myAssignments: [],
+      filters: { status: '', type: '', search: '' },
+      view: 'cycles',
+      detailTab: 'questions'
+    };
+
+    // ── DOM Refs ──
+    var subNav, viewContainer;
+
+    // ── Label maps ──
+    var TYPE_LABELS = { '360': '360 Review', peer: 'Peer', supervisor: 'Supervisor', self: 'Self-Assessment' };
+    var ROLE_LABELS = { self: 'Self', peer: 'Peer', supervisor: 'Supervisor' };
+
+    var ACTIVITY_ICONS = {
+      cycle_created: '\uD83D\uDCDD', cycle_updated: '\u270F\uFE0F',
+      cycle_opened: '\uD83D\uDE80', cycle_closed: '\uD83D\uDD12',
+      cycle_archived: '\uD83D\uDCE6', assigned: '\u2795',
+      bulk_assigned: '\uD83D\uDC65', declined: '\u274C',
+      response_submitted: '\u2705', summary_generated: '\uD83D\uDCCA',
+      summary_shared: '\uD83D\uDD17', evidence_linked: '\uD83C\uDF31'
+    };
+
+    // ── Build Layout ──
+    function buildLayout() {
+      container.innerHTML = '';
+      subNav = ClientUtils.el('nav', { className: 'sub-nav' });
+      viewContainer = ClientUtils.el('div', { className: 'relative' });
+      container.appendChild(subNav);
+      container.appendChild(viewContainer);
+    }
+
+    function buildSubNav(active) {
+      subNav.innerHTML = '';
+      var tabs = [];
+      if (state.isAdmin) {
+        tabs.push({ key: 'cycles', label: 'Feedback Cycles' });
+        tabs.push({ key: 'fb_reports', label: 'Feedback Reports' });
+      } else {
+        tabs.push({ key: 'my_feedback', label: 'My Feedback' });
+        tabs.push({ key: 'give_feedback', label: 'Give Feedback' });
+      }
+      tabs.forEach(function(t) {
+        var btn = ClientUtils.el('button', {
+          className: 'sub-nav__btn' + (active === t.key ? ' sub-nav__btn--active' : ''),
+          textContent: t.label
+        });
+        btn.addEventListener('click', function() { switchView(t.key); });
+        subNav.appendChild(btn);
+      });
+    }
+
+    function switchView(key) {
+      state.view = key;
+      buildSubNav(key);
+      if (key === 'cycles') loadCycles();
+      else if (key === 'fb_reports') loadReports();
+      else if (key === 'my_feedback') loadMyFeedback();
+      else if (key === 'give_feedback') loadGiveFeedback();
+    }
+
+    // ═══════════════════════════════════════════════
+    // Helpers
+    // ═══════════════════════════════════════════════
+
+    function esc(s) { return ClientUtils.escapeHtml(s || ''); }
+
+    function typeBadge(type) {
+      return '<span class="fb-type-badge fb-type--' + esc(type) + '">' + esc(TYPE_LABELS[type] || type) + '</span>';
+    }
+
+    function statusBadge(status) {
+      return '<span class="badge fb-status--' + esc(status) + '">' + esc(status) + '</span>';
+    }
+
+    function asgnBadge(status) {
+      return '<span class="badge fb-asgn--' + esc(status) + '">' + esc(status.replace('_', ' ')) + '</span>';
+    }
+
+    function roleBadge(role) {
+      return '<span class="fb-role-badge fb-role--' + esc(role) + '">' + esc(ROLE_LABELS[role] || role) + '</span>';
+    }
+
+    function ratingStars(val, max) {
+      max = max || 5;
+      var html = '<span class="fb-rating-stars">';
+      var rounded = Math.round(val);
+      for (var i = 1; i <= max; i++) {
+        html += '<span class="' + (i <= rounded ? 'fb-star--filled' : 'fb-star--empty') + '">\u2605</span>';
+      }
+      html += '</span>';
+      return html;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '\u2014';
+      return ClientUtils.formatDate ? ClientUtils.formatDate(iso) : iso.substring(0, 10);
+    }
+
+    // ═══════════════════════════════════════════════
+    // ADMIN: Cycles List
+    // ═══════════════════════════════════════════════
+
+    async function loadCycles() {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        var [cycleData, statsData] = await Promise.all([
+          ServerAPI.getFeedbackCycles(state.filters),
+          ServerAPI.getFeedbackStats()
+        ]);
+        state.cycles = cycleData.cycles || [];
+        state.stats = statsData;
+        renderCyclesView();
+      } catch (e) {
+        viewContainer.innerHTML = '<div class="alert alert--error">' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderCyclesView() {
+      var html = '';
+
+      // Stats
+      if (state.stats) {
+        var s = state.stats;
+        html += '<div class="fb-stats-grid">';
+        html += '<div class="fb-stat-card"><div class="fb-stat-value">' + s.totalCycles + '</div><div class="fb-stat-label">Total Cycles</div></div>';
+        html += '<div class="fb-stat-card"><div class="fb-stat-value">' + s.openCycles + '</div><div class="fb-stat-label">Open</div></div>';
+        html += '<div class="fb-stat-card"><div class="fb-stat-value">' + s.completionRate + '%</div><div class="fb-stat-label">Completion Rate</div></div>';
+        html += '<div class="fb-stat-card"><div class="fb-stat-value">' + (s.avgRating || '\u2014') + '</div><div class="fb-stat-label">Avg Rating</div></div>';
+        html += '</div>';
+      }
+
+      // Filters
+      html += '<div class="fb-filter-bar">';
+      html += '<select id="fb-filter-status"><option value="">All Statuses</option>';
+      ['draft','open','closed','archived'].forEach(function(st) {
+        html += '<option value="' + st + '"' + (state.filters.status === st ? ' selected' : '') + '>' + st.charAt(0).toUpperCase() + st.slice(1) + '</option>';
+      });
+      html += '</select>';
+      html += '<select id="fb-filter-type"><option value="">All Types</option>';
+      ['360','peer','supervisor','self'].forEach(function(t) {
+        html += '<option value="' + t + '"' + (state.filters.type === t ? ' selected' : '') + '>' + esc(TYPE_LABELS[t] || t) + '</option>';
+      });
+      html += '</select>';
+      html += '<input type="text" id="fb-filter-search" placeholder="Search cycles..." value="' + esc(state.filters.search) + '">';
+      html += '<button class="btn btn--primary btn--sm" id="fb-new-cycle-btn">+ New Cycle</button>';
+      html += '</div>';
+
+      // Cycle cards
+      if (state.cycles.length === 0) {
+        html += '<div class="fb-empty"><div class="fb-empty-icon">\uD83D\uDD04</div><p>No feedback cycles found</p></div>';
+      } else {
+        html += '<div class="fb-cycle-grid">';
+        state.cycles.forEach(function(cy) {
+          html += renderCycleCard(cy);
+        });
+        html += '</div>';
+      }
+
+      viewContainer.innerHTML = html;
+
+      // Events
+      viewContainer.querySelector('#fb-filter-status').addEventListener('change', function() {
+        state.filters.status = this.value; loadCycles();
+      });
+      viewContainer.querySelector('#fb-filter-type').addEventListener('change', function() {
+        state.filters.type = this.value; loadCycles();
+      });
+      var searchEl = viewContainer.querySelector('#fb-filter-search');
+      var debounce;
+      searchEl.addEventListener('input', function() {
+        clearTimeout(debounce);
+        var val = searchEl.value;
+        debounce = setTimeout(function() { state.filters.search = val; loadCycles(); }, 300);
+      });
+      viewContainer.querySelector('#fb-new-cycle-btn').addEventListener('click', showCycleModal);
+
+      viewContainer.querySelectorAll('[data-cycle-id]').forEach(function(el) {
+        el.addEventListener('click', function() { loadCycleDetail(el.dataset.cycleId); });
+      });
+    }
+
+    function renderCycleCard(cy) {
+      var completion = cy.completionRate || 0;
+      return '<div class="fb-cycle-card" data-cycle-id="' + esc(cy.id) + '">' +
+        '<div class="fb-cycle-header"><h3>' + typeBadge(cy.feedback_type) + ' ' + esc(cy.cycle_name) + '</h3>' +
+        statusBadge(cy.status) + '</div>' +
+        '<div class="fb-cycle-body">' +
+          '<p>' + esc(cy.description || 'No description') + '</p>' +
+          '<div class="fb-cycle-meta">' +
+            '<span>\uD83D\uDCC5 ' + formatDate(cy.open_date) + ' \u2013 ' + formatDate(cy.close_date) + '</span>' +
+            '<span>\uD83D\uDC64 ' + esc(cy.creator_name) + '</span>' +
+          '</div>' +
+          '<div class="fb-completion-bar"><div class="fb-completion-fill" style="width:' + completion + '%"></div></div>' +
+          '<div class="fb-completion-text">' + cy.submittedCount + '/' + cy.totalAssignments + ' submitted (' + completion + '%)</div>' +
+        '</div>' +
+        '<div class="fb-cycle-footer">' +
+          '<span>Min responses: ' + (cy.min_responses || 3) + '</span>' +
+          '<span>' + (cy.allow_anonymous ? '\uD83D\uDD12 Anonymous' : '\uD83D\uDC41 Named') + '</span>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // ═══════════════════════════════════════════════
+    // Cycle Create/Edit Modal
+    // ═══════════════════════════════════════════════
+
+    function showCycleModal(existing) {
+      var isEdit = existing && existing.id;
+      var title = isEdit ? 'Edit Feedback Cycle' : 'New Feedback Cycle';
+
+      var body = '<div class="fb-form-group"><label>Cycle Name *</label>' +
+        '<input type="text" id="fb-m-name" value="' + esc(isEdit ? existing.cycle_name : '') + '"></div>';
+      body += '<div class="fb-form-row">';
+      body += '<div class="fb-form-group"><label>Type *</label><select id="fb-m-type">';
+      ['360','peer','supervisor','self'].forEach(function(t) {
+        body += '<option value="' + t + '"' + (isEdit && existing.feedback_type === t ? ' selected' : '') + '>' + esc(TYPE_LABELS[t]) + '</option>';
+      });
+      body += '</select></div>';
+      body += '<div class="fb-form-group"><label>Academic Year</label><input type="text" id="fb-m-year" value="' + esc(isEdit ? existing.academic_year : '2024-2025') + '"></div>';
+      body += '</div>';
+      body += '<div class="fb-form-group"><label>Description</label>' +
+        '<textarea id="fb-m-desc">' + esc(isEdit ? existing.description : '') + '</textarea></div>';
+      body += '<div class="fb-form-row-3">';
+      body += '<div class="fb-form-group"><label>Open Date</label><input type="date" id="fb-m-open" value="' + (isEdit && existing.open_date ? existing.open_date.substring(0, 10) : '') + '"></div>';
+      body += '<div class="fb-form-group"><label>Close Date</label><input type="date" id="fb-m-close" value="' + (isEdit && existing.close_date ? existing.close_date.substring(0, 10) : '') + '"></div>';
+      body += '<div class="fb-form-group"><label>Min Responses</label><input type="number" id="fb-m-min" min="1" max="20" value="' + (isEdit ? existing.min_responses || 3 : 3) + '"></div>';
+      body += '</div>';
+      body += '<div class="fb-form-group"><label><input type="checkbox" id="fb-m-anon"' + (isEdit && existing.allow_anonymous ? ' checked' : '') + '> Allow anonymous responses</label></div>';
+
+      Modal.open({
+        title: title,
+        body: body,
+        confirmText: isEdit ? 'Save Changes' : 'Create Cycle',
+        onConfirm: async function() {
+          var data = {
+            cycle_name: document.getElementById('fb-m-name').value.trim(),
+            feedback_type: document.getElementById('fb-m-type').value,
+            academic_year: document.getElementById('fb-m-year').value.trim(),
+            description: document.getElementById('fb-m-desc').value.trim(),
+            open_date: document.getElementById('fb-m-open').value || '',
+            close_date: document.getElementById('fb-m-close').value || '',
+            min_responses: document.getElementById('fb-m-min').value || '3',
+            allow_anonymous: document.getElementById('fb-m-anon').checked
+          };
+          if (!data.cycle_name) { Toast.error('Cycle name is required'); return; }
+          try {
+            if (isEdit) {
+              await ServerAPI.updateFeedbackCycle(existing.id, data);
+              Toast.success('Cycle updated');
+              loadCycleDetail(existing.id);
+            } else {
+              var created = await ServerAPI.createFeedbackCycle(data);
+              Toast.success('Cycle created');
+              loadCycleDetail(created.id);
+            }
+            Modal.close();
+          } catch (e) { Toast.error(e.message); }
+        }
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // ADMIN: Cycle Detail
+    // ═══════════════════════════════════════════════
+
+    async function loadCycleDetail(cycleId) {
+      state.view = 'cycle_detail';
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        state.currentCycle = await ServerAPI.getFeedbackCycleDetail(cycleId);
+        renderCycleDetail();
+      } catch (e) {
+        viewContainer.innerHTML = '<div class="alert alert--error">' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderCycleDetail() {
+      var cy = state.currentCycle;
+      var html = '';
+
+      // Back link
+      html += '<a href="#" class="btn btn--ghost btn--sm" id="fb-back-btn">\u2190 Back to Cycles</a>';
+
+      // Header
+      html += '<div class="fb-detail-header">';
+      html += '<h2>' + typeBadge(cy.feedback_type) + ' ' + esc(cy.cycle_name) + ' ' + statusBadge(cy.status) + '</h2>';
+      if (cy.description) html += '<p style="color:var(--text-muted);font-size:0.9rem;margin:4px 0 0">' + esc(cy.description) + '</p>';
+      html += '</div>';
+
+      // Meta grid
+      html += '<div class="fb-detail-meta">';
+      html += '<div class="fb-detail-meta-item"><strong>Type</strong>' + esc(TYPE_LABELS[cy.feedback_type] || cy.feedback_type) + '</div>';
+      html += '<div class="fb-detail-meta-item"><strong>Open Date</strong>' + formatDate(cy.open_date) + '</div>';
+      html += '<div class="fb-detail-meta-item"><strong>Close Date</strong>' + formatDate(cy.close_date) + '</div>';
+      html += '<div class="fb-detail-meta-item"><strong>Min Responses</strong>' + (cy.min_responses || 3) + '</div>';
+      html += '<div class="fb-detail-meta-item"><strong>Anonymous</strong>' + (cy.allow_anonymous ? 'Yes' : 'No') + '</div>';
+      html += '<div class="fb-detail-meta-item"><strong>Created By</strong>' + esc(cy.creator_name) + '</div>';
+      html += '</div>';
+
+      // Action buttons
+      if (state.isAdmin) {
+        html += '<div class="fb-detail-actions">';
+        if (cy.status === 'draft') {
+          html += '<button class="btn btn--primary btn--sm" id="fb-open-btn">Open Cycle</button>';
+          html += '<button class="btn btn--ghost btn--sm" id="fb-edit-btn">Edit</button>';
+        } else if (cy.status === 'open') {
+          html += '<button class="btn btn--warning btn--sm" id="fb-close-btn">Close Cycle</button>';
+        } else if (cy.status === 'closed') {
+          html += '<button class="btn btn--ghost btn--sm" id="fb-archive-btn">Archive</button>';
+        }
+        html += '</div>';
+      }
+
+      // Tabs
+      var tabs = ['questions', 'assignments', 'summaries'];
+      if (state.isAdmin) tabs.push('activity');
+      html += '<div class="fb-detail-tabs">';
+      tabs.forEach(function(t) {
+        html += '<div class="fb-detail-tab' + (state.detailTab === t ? ' fb-detail-tab--active' : '') +
+          '" data-tab="' + t + '">' + t.charAt(0).toUpperCase() + t.slice(1) + '</div>';
+      });
+      html += '</div>';
+
+      // Tab content
+      html += '<div id="fb-tab-content"></div>';
+
+      viewContainer.innerHTML = html;
+
+      // Events
+      viewContainer.querySelector('#fb-back-btn').addEventListener('click', function(e) {
+        e.preventDefault();
+        state.detailTab = 'questions';
+        if (state.isAdmin) switchView('cycles');
+        else switchView('my_feedback');
+      });
+
+      if (document.getElementById('fb-open-btn')) {
+        document.getElementById('fb-open-btn').addEventListener('click', async function() {
+          try { await ServerAPI.updateFeedbackCycleStatus(cy.id, 'open'); Toast.success('Cycle opened'); loadCycleDetail(cy.id); } catch(e) { Toast.error(e.message); }
+        });
+      }
+      if (document.getElementById('fb-close-btn')) {
+        document.getElementById('fb-close-btn').addEventListener('click', async function() {
+          try { await ServerAPI.updateFeedbackCycleStatus(cy.id, 'closed'); Toast.success('Cycle closed'); loadCycleDetail(cy.id); } catch(e) { Toast.error(e.message); }
+        });
+      }
+      if (document.getElementById('fb-archive-btn')) {
+        document.getElementById('fb-archive-btn').addEventListener('click', async function() {
+          try { await ServerAPI.updateFeedbackCycleStatus(cy.id, 'archived'); Toast.success('Cycle archived'); loadCycleDetail(cy.id); } catch(e) { Toast.error(e.message); }
+        });
+      }
+      if (document.getElementById('fb-edit-btn')) {
+        document.getElementById('fb-edit-btn').addEventListener('click', function() { showCycleModal(cy); });
+      }
+
+      viewContainer.querySelectorAll('.fb-detail-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          state.detailTab = tab.dataset.tab;
+          renderCycleDetail();
+        });
+      });
+
+      // Render active tab
+      var tabEl = document.getElementById('fb-tab-content');
+      if (state.detailTab === 'questions') renderQuestionsTab(tabEl, cy);
+      else if (state.detailTab === 'assignments') renderAssignmentsTab(tabEl, cy);
+      else if (state.detailTab === 'summaries') renderSummariesTab(tabEl, cy);
+      else if (state.detailTab === 'activity') renderActivityTab(tabEl, cy);
+    }
+
+    // ── Questions Tab ──
+    function renderQuestionsTab(el, cy) {
+      var html = '';
+      if (cy.status === 'draft' && state.isAdmin) {
+        html += '<button class="btn btn--primary btn--sm" id="fb-add-q" style="margin-bottom:12px">+ Add Question</button>';
+      }
+      if (!cy.questions || cy.questions.length === 0) {
+        html += '<div class="fb-empty"><p>No questions yet</p></div>';
+      } else {
+        html += '<div class="fb-question-list">';
+        cy.questions.forEach(function(q, i) {
+          html += '<div class="fb-question-item">';
+          html += '<div class="fb-question-num">' + (i + 1) + '</div>';
+          html += '<div class="fb-question-content">';
+          html += '<p>' + esc(q.question_text) + '</p>';
+          html += '<span class="fb-question-type-badge">' + esc(q.question_type) + '</span>';
+          if (q.is_required === 'true') html += '<span class="fb-question-required">Required</span>';
+          html += '</div>';
+          if (cy.status === 'draft' && state.isAdmin) {
+            html += '<div class="fb-question-actions">';
+            html += '<button class="btn btn--ghost btn--xs" data-edit-q="' + esc(q.id) + '">Edit</button>';
+            html += '<button class="btn btn--danger btn--xs" data-del-q="' + esc(q.id) + '">Delete</button>';
+            html += '</div>';
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+      el.innerHTML = html;
+
+      if (document.getElementById('fb-add-q')) {
+        document.getElementById('fb-add-q').addEventListener('click', function() { showQuestionModal(cy.id); });
+      }
+      el.querySelectorAll('[data-edit-q]').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var qId = btn.dataset.editQ;
+          var q = cy.questions.find(function(x) { return x.id === qId; });
+          showQuestionModal(cy.id, q);
+        });
+      });
+      el.querySelectorAll('[data-del-q]').forEach(function(btn) {
+        btn.addEventListener('click', async function(e) {
+          e.stopPropagation();
+          if (!confirm('Delete this question?')) return;
+          try { await ServerAPI.deleteFeedbackQuestion(btn.dataset.delQ); Toast.success('Question deleted'); loadCycleDetail(cy.id); } catch(e) { Toast.error(e.message); }
+        });
+      });
+    }
+
+    function showQuestionModal(cycleId, existing) {
+      var isEdit = existing && existing.id;
+      var body = '<div class="fb-form-group"><label>Question Text *</label>' +
+        '<textarea id="fb-q-text">' + esc(isEdit ? existing.question_text : '') + '</textarea></div>';
+      body += '<div class="fb-form-row">';
+      body += '<div class="fb-form-group"><label>Type *</label><select id="fb-q-type">';
+      ['rating','text','both'].forEach(function(t) {
+        body += '<option value="' + t + '"' + (isEdit && existing.question_type === t ? ' selected' : '') + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>';
+      });
+      body += '</select></div>';
+      body += '<div class="fb-form-group"><label><input type="checkbox" id="fb-q-req"' + (isEdit && existing.is_required === 'true' ? ' checked' : ' checked') + '> Required</label></div>';
+      body += '</div>';
+
+      Modal.open({
+        title: isEdit ? 'Edit Question' : 'Add Question',
+        body: body,
+        confirmText: isEdit ? 'Save' : 'Add',
+        onConfirm: async function() {
+          var data = {
+            question_text: document.getElementById('fb-q-text').value.trim(),
+            question_type: document.getElementById('fb-q-type').value,
+            is_required: document.getElementById('fb-q-req').checked
+          };
+          if (!data.question_text) { Toast.error('Question text is required'); return; }
+          try {
+            if (isEdit) { await ServerAPI.updateFeedbackQuestion(existing.id, data); }
+            else { await ServerAPI.addFeedbackQuestion(cycleId, data); }
+            Toast.success(isEdit ? 'Question updated' : 'Question added');
+            Modal.close();
+            loadCycleDetail(cycleId);
+          } catch (e) { Toast.error(e.message); }
+        }
+      });
+    }
+
+    // ── Assignments Tab ──
+    function renderAssignmentsTab(el, cy) {
+      var html = '';
+      if (state.isAdmin && (cy.status === 'draft' || cy.status === 'open')) {
+        html += '<div style="margin-bottom:12px;display:flex;gap:8px">';
+        html += '<button class="btn btn--primary btn--sm" id="fb-bulk-assign">Bulk Assign</button>';
+        html += '<button class="btn btn--ghost btn--sm" id="fb-add-assign">+ Add Assignment</button>';
+        html += '</div>';
+      }
+
+      if (!cy.assignments || cy.assignments.length === 0) {
+        html += '<div class="fb-empty"><p>No assignments yet</p></div>';
+      } else {
+        // Group by recipient
+        var byRecipient = {};
+        cy.assignments.forEach(function(a) {
+          if (!byRecipient[a.recipient_id]) byRecipient[a.recipient_id] = { name: a.recipient_name, assignments: [] };
+          byRecipient[a.recipient_id].assignments.push(a);
+        });
+
+        html += '<div style="display:flex;flex-direction:column;gap:12px">';
+        Object.keys(byRecipient).forEach(function(recipId) {
+          var group = byRecipient[recipId];
+          html += '<div class="card" style="padding:14px">';
+          html += '<h4 style="margin:0 0 10px">\uD83D\uDC64 ' + esc(group.name) + ' <span style="font-weight:400;font-size:0.8rem;color:var(--text-muted)">(' + group.assignments.length + ' responders)</span></h4>';
+          group.assignments.forEach(function(a) {
+            html += '<div class="fb-responder-info" style="padding:4px 0;border-bottom:1px solid #f3f4f6">';
+            html += esc(a.responder_name) + ' ' + roleBadge(a.responder_role) + ' ' + asgnBadge(a.status);
+            if (a.is_anonymous) html += ' <span class="fb-anonymous-badge">\uD83D\uDD12 Anon</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      el.innerHTML = html;
+
+      if (document.getElementById('fb-bulk-assign')) {
+        document.getElementById('fb-bulk-assign').addEventListener('click', function() { showBulkAssignModal(cy.id); });
+      }
+      if (document.getElementById('fb-add-assign')) {
+        document.getElementById('fb-add-assign').addEventListener('click', function() { showSingleAssignModal(cy.id); });
+      }
+    }
+
+    function showBulkAssignModal(cycleId) {
+      var body = '<div class="fb-bulk-assign-form">';
+      body += '<div class="fb-form-group"><label>Select Recipients</label>';
+      body += '<div id="fb-bulk-staff"></div></div>';
+      body += '<div class="fb-form-group"><label>Auto-assign</label>';
+      body += '<div class="fb-bulk-assign-option"><input type="checkbox" id="fb-bulk-self" checked> <span>Self-assessment</span></div>';
+      body += '<div class="fb-bulk-assign-option"><input type="checkbox" id="fb-bulk-peers" checked> <span>Peers (same department)</span></div>';
+      body += '<div class="fb-bulk-assign-option"><input type="checkbox" id="fb-bulk-sup" checked> <span>Supervisor (admin staff)</span></div>';
+      body += '</div></div>';
+
+      Modal.open({
+        title: 'Bulk Assign Feedback',
+        body: body,
+        size: 'lg',
+        confirmText: 'Assign',
+        onConfirm: async function() {
+          var selected = StaffSelector.getSelected('fb-bulk-staff');
+          if (!selected || selected.length === 0) { Toast.error('Select at least one recipient'); return; }
+          var config = {
+            includeSelf: document.getElementById('fb-bulk-self').checked,
+            includePeers: document.getElementById('fb-bulk-peers').checked,
+            includeSupervisor: document.getElementById('fb-bulk-sup').checked
+          };
+          try {
+            var result = await ServerAPI.bulkAssignFeedback(cycleId, selected, config);
+            Toast.success(result.created + ' assignments created');
+            Modal.close();
+            loadCycleDetail(cycleId);
+          } catch (e) { Toast.error(e.message); }
+        }
+      });
+
+      setTimeout(function() {
+        StaffSelector.render('fb-bulk-staff', { multi: true });
+      }, 100);
+    }
+
+    function showSingleAssignModal(cycleId) {
+      var body = '<div class="fb-form-group"><label>Recipient</label><div id="fb-asgn-recipient"></div></div>';
+      body += '<div class="fb-form-group"><label>Responder</label><div id="fb-asgn-responder"></div></div>';
+      body += '<div class="fb-form-row">';
+      body += '<div class="fb-form-group"><label>Role</label><select id="fb-asgn-role">';
+      ['peer','supervisor','self'].forEach(function(r) {
+        body += '<option value="' + r + '">' + esc(ROLE_LABELS[r]) + '</option>';
+      });
+      body += '</select></div>';
+      body += '<div class="fb-form-group"><label><input type="checkbox" id="fb-asgn-anon"> Anonymous</label></div>';
+      body += '</div>';
+
+      Modal.open({
+        title: 'Add Assignment',
+        body: body,
+        confirmText: 'Add',
+        onConfirm: async function() {
+          var recipient = StaffSelector.getSelected('fb-asgn-recipient');
+          var responder = StaffSelector.getSelected('fb-asgn-responder');
+          if (!recipient || !responder) { Toast.error('Select both recipient and responder'); return; }
+          try {
+            await ServerAPI.createFeedbackAssignment({
+              cycle_id: cycleId,
+              recipient_id: Array.isArray(recipient) ? recipient[0] : recipient,
+              responder_id: Array.isArray(responder) ? responder[0] : responder,
+              responder_role: document.getElementById('fb-asgn-role').value,
+              is_anonymous: document.getElementById('fb-asgn-anon').checked
+            });
+            Toast.success('Assignment created');
+            Modal.close();
+            loadCycleDetail(cycleId);
+          } catch (e) { Toast.error(e.message); }
+        }
+      });
+
+      setTimeout(function() {
+        StaffSelector.render('fb-asgn-recipient', { multi: false });
+        StaffSelector.render('fb-asgn-responder', { multi: false });
+      }, 100);
+    }
+
+    // ── Summaries Tab ──
+    function renderSummariesTab(el, cy) {
+      var html = '';
+      if (state.isAdmin && (cy.status === 'closed' || cy.status === 'archived')) {
+        html += '<button class="btn btn--primary btn--sm" id="fb-gen-all" style="margin-bottom:12px">Generate All Summaries</button>';
+      }
+
+      if (!cy.summaries || cy.summaries.length === 0) {
+        html += '<div class="fb-empty"><p>No summaries generated yet</p></div>';
+      } else {
+        cy.summaries.forEach(function(sum) {
+          html += '<div class="fb-summary-card" data-summary-id="' + esc(sum.id) + '">';
+          html += '<div class="fb-summary-header">';
+          html += '<h4>' + esc(sum.recipient_name) + '</h4>';
+          html += '<div class="fb-summary-score"><span class="fb-avg-rating">' + sum.avg_rating.toFixed(1) + '</span> ' + ratingStars(sum.avg_rating) + '</div>';
+          html += '</div>';
+          html += '<div class="fb-summary-meta">';
+          html += '<span>' + sum.response_count + ' responses</span>';
+          html += '<span class="fb-threshold-badge ' + (sum.threshold_met ? 'fb-threshold--met' : 'fb-threshold--not-met') + '">' +
+            (sum.threshold_met ? '\u2705 Threshold met' : '\u26A0 Below threshold') + '</span>';
+          html += '<span>' + (sum.shared_with_recipient ? '\uD83D\uDD17 Shared' : '\uD83D\uDD12 Not shared') + '</span>';
+          if (sum.multiplierProfile) html += '<span>\uD83C\uDF1F Multiplier Profile</span>';
+          html += '</div>';
+          if (state.isAdmin && sum.threshold_met && !sum.shared_with_recipient) {
+            html += '<button class="btn btn--primary btn--xs" data-share-id="' + esc(sum.id) + '" style="margin-top:8px">Share with Recipient</button>';
+          }
+          if (state.isAdmin && sum.threshold_met) {
+            html += '<button class="btn btn--ghost btn--xs" data-view-profile="' + esc(sum.id) + '" style="margin-top:8px;margin-left:4px">View Profile</button>';
+          }
+          html += '</div>';
+        });
+      }
+
+      el.innerHTML = html;
+
+      if (document.getElementById('fb-gen-all')) {
+        document.getElementById('fb-gen-all').addEventListener('click', async function() {
+          try {
+            var result = await ServerAPI.generateAllFeedbackSummaries(cy.id);
+            Toast.success(result.generated + ' summaries generated');
+            loadCycleDetail(cy.id);
+          } catch (e) { Toast.error(e.message); }
+        });
+      }
+
+      el.querySelectorAll('[data-share-id]').forEach(function(btn) {
+        btn.addEventListener('click', async function(e) {
+          e.stopPropagation();
+          try { await ServerAPI.shareFeedbackSummary(btn.dataset.shareId); Toast.success('Summary shared'); loadCycleDetail(cy.id); } catch(err) { Toast.error(err.message); }
+        });
+      });
+
+      el.querySelectorAll('[data-view-profile]').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var sumId = btn.dataset.viewProfile;
+          var sum = cy.summaries.find(function(s) { return s.id === sumId; });
+          if (sum) showMultiplierProfileModal(sum);
+        });
+      });
+    }
+
+    function showMultiplierProfileModal(summary) {
+      var body = '<div id="fb-profile-chart-wrap" style="max-width:400px;margin:0 auto"></div>';
+      body += '<div id="fb-profile-breakdown"></div>';
+
+      Modal.open({
+        title: '\uD83C\uDF1F Multiplier Profile — ' + esc(summary.recipient_name),
+        body: body,
+        size: 'lg',
+        confirmText: '',
+        cancelText: 'Close'
+      });
+
+      setTimeout(function() {
+        var profile = summary.multiplierProfile;
+        if (!profile) {
+          document.getElementById('fb-profile-breakdown').innerHTML = '<p class="text-muted">No multiplier profile data available.</p>';
+          return;
+        }
+
+        var MULTIPLIER_LABELS = {
+          talent_finder: 'Talent Finder', liberator: 'Liberator',
+          challenger: 'Challenger', debate_maker: 'Debate Maker', investor: 'Investor'
+        };
+        var DIMINISHER_LABELS = {
+          diminisher_idea_guy: 'Idea Guy', diminisher_always_on: 'Always On',
+          diminisher_rescuer: 'Rescuer', diminisher_pace_setter: 'Pace Setter',
+          diminisher_rapid_responder: 'Rapid Responder', diminisher_optimist: 'Optimist',
+          diminisher_protector: 'Protector', diminisher_strategist: 'Strategist'
+        };
+
+        var multiplierKeys = [];
+        var diminisherKeys = [];
+        var tags = Object.keys(profile);
+
+        tags.forEach(function(tag) {
+          if (tag.indexOf('diminisher_') === 0) diminisherKeys.push(tag);
+          else multiplierKeys.push(tag);
+        });
+
+        // Radar chart for multiplier disciplines
+        if (multiplierKeys.length > 0) {
+          var chartWrap = document.getElementById('fb-profile-chart-wrap');
+          var canvas = document.createElement('canvas');
+          chartWrap.appendChild(canvas);
+
+          var labels = multiplierKeys.map(function(k) { return MULTIPLIER_LABELS[k] || k.replace(/_/g, ' '); });
+          var values = multiplierKeys.map(function(k) { return profile[k].avg; });
+
+          new Chart(canvas, {
+            type: 'radar',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: 'Multiplier Profile',
+                data: values,
+                backgroundColor: 'rgba(124, 58, 237, 0.15)',
+                borderColor: 'rgba(124, 58, 237, 0.8)',
+                borderWidth: 2,
+                pointBackgroundColor: 'rgba(124, 58, 237, 1)',
+                pointRadius: 4
+              }]
+            },
+            options: {
+              responsive: true,
+              scales: {
+                r: {
+                  beginAtZero: true, max: 5,
+                  ticks: { stepSize: 1, backdropColor: 'transparent' },
+                  pointLabels: { font: { size: 12, weight: 'bold' } }
+                }
+              },
+              plugins: { legend: { display: false } }
+            }
+          });
+        }
+
+        // Breakdown table
+        var bdHtml = '';
+        if (multiplierKeys.length > 0) {
+          bdHtml += '<h4 style="margin:16px 0 8px">Multiplier Disciplines</h4>';
+          bdHtml += '<div class="fb-profile-breakdown-list">';
+          multiplierKeys.forEach(function(k) {
+            var d = profile[k];
+            var pct = (d.avg / 5) * 100;
+            bdHtml += '<div class="fb-profile-row">';
+            bdHtml += '<span class="fb-profile-label">' + esc(MULTIPLIER_LABELS[k] || k) + '</span>';
+            bdHtml += '<div class="fb-profile-bar"><div class="fb-profile-bar__fill fb-profile-bar--multiplier" style="width:' + pct + '%"></div></div>';
+            bdHtml += '<span class="fb-profile-value">' + d.avg + '/5</span>';
+            bdHtml += '<span class="fb-profile-count text-sm text-muted">(' + d.count + ')</span>';
+            bdHtml += '</div>';
+          });
+          bdHtml += '</div>';
+        }
+
+        // Diminisher awareness bars
+        if (diminisherKeys.length > 0) {
+          bdHtml += '<h4 style="margin:16px 0 8px">Diminisher Awareness</h4>';
+          bdHtml += '<p class="text-sm text-muted" style="margin-bottom:8px">Higher scores indicate greater self-awareness of accidental diminisher patterns.</p>';
+          bdHtml += '<div class="fb-profile-breakdown-list">';
+          diminisherKeys.forEach(function(k) {
+            var d = profile[k];
+            var pct = (d.avg / 5) * 100;
+            bdHtml += '<div class="fb-profile-row">';
+            bdHtml += '<span class="fb-profile-label">' + esc(DIMINISHER_LABELS[k] || k.replace('diminisher_', '').replace(/_/g, ' ')) + '</span>';
+            bdHtml += '<div class="fb-profile-bar"><div class="fb-profile-bar__fill fb-profile-bar--diminisher" style="width:' + pct + '%"></div></div>';
+            bdHtml += '<span class="fb-profile-value">' + d.avg + '/5</span>';
+            bdHtml += '<span class="fb-profile-count text-sm text-muted">(' + d.count + ')</span>';
+            bdHtml += '</div>';
+          });
+          bdHtml += '</div>';
+        }
+
+        document.getElementById('fb-profile-breakdown').innerHTML = bdHtml;
+      }, 100);
+    }
+
+    // ── Activity Tab ──
+    function renderActivityTab(el, cy) {
+      if (!cy.activity || cy.activity.length === 0) {
+        el.innerHTML = '<div class="fb-empty"><p>No activity yet</p></div>';
+        return;
+      }
+      var html = '<div class="fb-activity-list">';
+      cy.activity.forEach(function(a) {
+        var icon = ACTIVITY_ICONS[a.action_type] || '\uD83D\uDD39';
+        html += '<div class="fb-activity-item">';
+        html += '<div class="fb-activity-avatar">' + esc(a.user_initials) + '</div>';
+        html += '<div class="fb-activity-content">';
+        html += '<strong>' + esc(a.user_name) + '</strong> ' + icon + ' ' + esc(a.action_type.replace(/_/g, ' '));
+        if (a.new_value) html += ': ' + esc(a.new_value);
+        html += '<div class="fb-activity-time">' + ClientUtils.timeAgo(a.created_at) + '</div>';
+        html += '</div></div>';
+      });
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    // ═══════════════════════════════════════════════
+    // TEACHER: My Feedback (received summaries)
+    // ═══════════════════════════════════════════════
+
+    async function loadMyFeedback() {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        var cycleData = await ServerAPI.getFeedbackCycles({});
+        var cycles = cycleData.cycles || [];
+        // Filter to only closed/archived cycles that have shared summaries for this user
+        // We get cycle detail for each to check for shared summaries
+        var sharedSummaries = [];
+        for (var i = 0; i < cycles.length; i++) {
+          if (cycles[i].status === 'closed' || cycles[i].status === 'archived') {
+            try {
+              var detail = await ServerAPI.getFeedbackCycleDetail(cycles[i].id);
+              var userId = App.getUser().id;
+              if (detail.summaries) {
+                detail.summaries.forEach(function(s) {
+                  if (s.recipient_id === userId && s.shared_with_recipient) {
+                    s.cycle_name = detail.cycle_name;
+                    s.feedback_type = detail.feedback_type;
+                    s.close_date = detail.close_date;
+                    s.questions = detail.questions;
+                    sharedSummaries.push(s);
+                  }
+                });
+              }
+            } catch (e) { /* skip cycles we can't access */ }
+          }
+        }
+        renderMyFeedback(sharedSummaries);
+      } catch (e) {
+        viewContainer.innerHTML = '<div class="alert alert--error">' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderMyFeedback(summaries) {
+      var html = '';
+      if (summaries.length === 0) {
+        html += '<div class="fb-empty"><div class="fb-empty-icon">\uD83D\uDCEC</div><p>No feedback summaries shared with you yet</p></div>';
+      } else {
+        summaries.forEach(function(sum) {
+          html += '<div class="fb-summary-card" data-view-summary="' + esc(sum.id) + '" data-cycle-id="' + esc(sum.cycle_id) + '">';
+          html += '<div class="fb-summary-header">';
+          html += '<h4>' + typeBadge(sum.feedback_type) + ' ' + esc(sum.cycle_name) + '</h4>';
+          html += '<div class="fb-summary-score"><span class="fb-avg-rating">' + sum.avg_rating.toFixed(1) + '</span> ' + ratingStars(sum.avg_rating) + '</div>';
+          html += '</div>';
+          html += '<div class="fb-summary-meta">';
+          html += '<span>' + sum.response_count + ' responses</span>';
+          html += '<span>Shared ' + formatDate(sum.shared_at) + '</span>';
+          if (sum.linked_selection_id) html += '<span>\uD83C\uDF31 Linked to Growth Plan</span>';
+          html += '</div></div>';
+        });
+      }
+      viewContainer.innerHTML = html;
+
+      viewContainer.querySelectorAll('[data-view-summary]').forEach(function(card) {
+        card.addEventListener('click', function() {
+          loadSummaryDetail(card.dataset.viewSummary, card.dataset.cycleId);
+        });
+      });
+    }
+
+    async function loadSummaryDetail(summaryId, cycleId) {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        var detail = await ServerAPI.getFeedbackCycleDetail(cycleId);
+        var summary = detail.summaries.find(function(s) { return s.id === summaryId; });
+        if (!summary) throw new Error('Summary not found');
+        summary.cycle_name = detail.cycle_name;
+        summary.feedback_type = detail.feedback_type;
+        summary.questions = detail.questions;
+
+        // Get anonymized responses for this recipient
+        var userId = App.getUser().id;
+        var allAssignments = detail.assignments.filter(function(a) { return a.recipient_id === userId && a.status === 'submitted'; });
+
+        renderSummaryDetail(summary, allAssignments, detail);
+      } catch (e) {
+        viewContainer.innerHTML = '<div class="alert alert--error">' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderSummaryDetail(summary, assignments, cycleDetail) {
+      var html = '';
+      html += '<a href="#" class="btn btn--ghost btn--sm" id="fb-back-my">\u2190 Back</a>';
+      html += '<div class="fb-detail-header">';
+      html += '<h2>' + typeBadge(summary.feedback_type) + ' ' + esc(summary.cycle_name) + '</h2>';
+      html += '<div class="fb-summary-score" style="margin-top:8px"><span class="fb-avg-rating" style="font-size:2rem">' + summary.avg_rating.toFixed(1) + '</span> ' + ratingStars(summary.avg_rating) + ' <span style="color:var(--text-muted);font-size:0.85rem">(' + summary.response_count + ' responses)</span></div>';
+      html += '</div>';
+
+      // Question breakdown (per-question average ratings)
+      if (summary.questions && summary.questions.length > 0) {
+        html += '<h3 style="margin:20px 0 10px">Rating Breakdown</h3>';
+        html += '<div class="fb-question-breakdown">';
+        summary.questions.forEach(function(q) {
+          if (q.question_type === 'rating' || q.question_type === 'both') {
+            // We don't have per-question averages from the API in this view,
+            // so show the question text. Admin can see full data.
+            html += '<div class="fb-question-breakdown-item">';
+            html += '<div class="fb-breakdown-label">' + esc(q.question_text) + '</div>';
+            html += '</div>';
+          }
+        });
+        html += '</div>';
+      }
+
+      // Multiplier profile chart (if available)
+      if (summary.multiplierProfile) {
+        html += '<div style="margin-top:20px">';
+        html += '<h3 style="margin:0 0 10px">\uD83C\uDF1F Multiplier Profile</h3>';
+        html += '<div style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start" id="fb-my-profile-wrap">';
+        html += '<div><canvas id="fb-my-radar"></canvas></div>';
+        html += '<div id="fb-my-profile-bars"></div>';
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // Link to growth plan
+      if (!summary.linked_selection_id) {
+        html += '<button class="btn btn--primary btn--sm" id="fb-link-standard" style="margin-top:16px">\uD83C\uDF31 Link to Growth Plan Standard</button>';
+      } else {
+        html += '<p style="margin-top:16px;font-size:0.85rem;color:var(--text-muted)">\u2705 Linked to Growth Plan standard</p>';
+      }
+
+      viewContainer.innerHTML = html;
+
+      viewContainer.querySelector('#fb-back-my').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (state.isAdmin) switchView('cycles');
+        else switchView('my_feedback');
+      });
+
+      if (document.getElementById('fb-link-standard')) {
+        document.getElementById('fb-link-standard').addEventListener('click', function() {
+          showLinkToStandardModal(summary.id);
+        });
+      }
+
+      // Render multiplier profile chart for teacher view
+      if (summary.multiplierProfile && document.getElementById('fb-my-radar')) {
+        renderMyMultiplierProfile(summary.multiplierProfile);
+      }
+    }
+
+    function renderMyMultiplierProfile(profile) {
+      var MULTIPLIER_LABELS = {
+        talent_finder: 'Talent Finder', liberator: 'Liberator',
+        challenger: 'Challenger', debate_maker: 'Debate Maker', investor: 'Investor'
+      };
+      var DIMINISHER_LABELS = {
+        diminisher_idea_guy: 'Idea Guy', diminisher_always_on: 'Always On',
+        diminisher_rescuer: 'Rescuer', diminisher_pace_setter: 'Pace Setter',
+        diminisher_rapid_responder: 'Rapid Responder', diminisher_optimist: 'Optimist',
+        diminisher_protector: 'Protector', diminisher_strategist: 'Strategist'
+      };
+
+      var tags = Object.keys(profile);
+      var multiplierKeys = [];
+      var diminisherKeys = [];
+      tags.forEach(function(tag) {
+        if (tag.indexOf('diminisher_') === 0) diminisherKeys.push(tag);
+        else multiplierKeys.push(tag);
+      });
+
+      // Radar chart
+      if (multiplierKeys.length > 0) {
+        var canvas = document.getElementById('fb-my-radar');
+        var labels = multiplierKeys.map(function(k) { return MULTIPLIER_LABELS[k] || k.replace(/_/g, ' '); });
+        var values = multiplierKeys.map(function(k) { return profile[k].avg; });
+
+        new Chart(canvas, {
+          type: 'radar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Multiplier Profile',
+              data: values,
+              backgroundColor: 'rgba(124, 58, 237, 0.15)',
+              borderColor: 'rgba(124, 58, 237, 0.8)',
+              borderWidth: 2,
+              pointBackgroundColor: 'rgba(124, 58, 237, 1)',
+              pointRadius: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              r: {
+                beginAtZero: true, max: 5,
+                ticks: { stepSize: 1, backdropColor: 'transparent' },
+                pointLabels: { font: { size: 12, weight: 'bold' } }
+              }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+
+      // Bars
+      var barsEl = document.getElementById('fb-my-profile-bars');
+      if (!barsEl) return;
+
+      var bdHtml = '';
+      if (multiplierKeys.length > 0) {
+        bdHtml += '<div class="fb-profile-breakdown-list">';
+        multiplierKeys.forEach(function(k) {
+          var d = profile[k];
+          var pct = (d.avg / 5) * 100;
+          bdHtml += '<div class="fb-profile-row">';
+          bdHtml += '<span class="fb-profile-label">' + esc(MULTIPLIER_LABELS[k] || k) + '</span>';
+          bdHtml += '<div class="fb-profile-bar"><div class="fb-profile-bar__fill fb-profile-bar--multiplier" style="width:' + pct + '%"></div></div>';
+          bdHtml += '<span class="fb-profile-value">' + d.avg + '/5</span>';
+          bdHtml += '</div>';
+        });
+        bdHtml += '</div>';
+      }
+
+      if (diminisherKeys.length > 0) {
+        bdHtml += '<h4 style="margin:12px 0 8px">Diminisher Awareness</h4>';
+        bdHtml += '<div class="fb-profile-breakdown-list">';
+        diminisherKeys.forEach(function(k) {
+          var d = profile[k];
+          var pct = (d.avg / 5) * 100;
+          bdHtml += '<div class="fb-profile-row">';
+          bdHtml += '<span class="fb-profile-label">' + esc(DIMINISHER_LABELS[k] || k.replace('diminisher_', '').replace(/_/g, ' ')) + '</span>';
+          bdHtml += '<div class="fb-profile-bar"><div class="fb-profile-bar__fill fb-profile-bar--diminisher" style="width:' + pct + '%"></div></div>';
+          bdHtml += '<span class="fb-profile-value">' + d.avg + '/5</span>';
+          bdHtml += '</div>';
+        });
+        bdHtml += '</div>';
+      }
+
+      barsEl.innerHTML = bdHtml;
+    }
+
+    async function showLinkToStandardModal(summaryId) {
+      Modal.open({ title: 'Link to Growth Plan Standard', body: '<div id="fb-std-list"><p style="text-align:center">Loading standards...</p></div>', confirmText: '', cancelText: 'Close' });
+      try {
+        var plan = await ServerAPI.call('apiGetMyGrowthPlan');
+        if (!plan || !plan.selections || plan.selections.length === 0) {
+          document.getElementById('fb-std-list').innerHTML = '<p>No active growth plan standards found.</p>';
+          return;
+        }
+        var html = '<div class="fb-standard-selector">';
+        plan.selections.forEach(function(sel) {
+          html += '<div class="fb-standard-option" data-sel-id="' + esc(sel.id) + '">';
+          html += '<h4>' + esc(sel.standard_code || 'Standard') + '</h4>';
+          html += '<p>' + esc(sel.standard_description || sel.initial_goal || '') + '</p>';
+          html += '</div>';
+        });
+        html += '</div>';
+        document.getElementById('fb-std-list').innerHTML = html;
+
+        document.querySelectorAll('.fb-standard-option').forEach(function(opt) {
+          opt.addEventListener('click', async function() {
+            try {
+              await ServerAPI.linkFeedbackToStandard(summaryId, opt.dataset.selId);
+              Toast.success('Feedback linked to growth plan');
+              Modal.close();
+              if (state.isAdmin) loadCycleDetail(state.currentCycle.id);
+              else loadMyFeedback();
+            } catch (e) { Toast.error(e.message); }
+          });
+        });
+      } catch (e) {
+        document.getElementById('fb-std-list').innerHTML = '<p>' + esc(e.message) + '</p>';
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // TEACHER: Give Feedback (pending assignments)
+    // ═══════════════════════════════════════════════
+
+    async function loadGiveFeedback() {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        state.myAssignments = await ServerAPI.getMyFeedbackAssignments();
+        renderGiveFeedback();
+      } catch (e) {
+        viewContainer.innerHTML = '<div class="alert alert--error">' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderGiveFeedback() {
+      var html = '';
+      var pending = state.myAssignments.filter(function(a) { return a.status === 'pending' || a.status === 'in_progress'; });
+      var submitted = state.myAssignments.filter(function(a) { return a.status === 'submitted'; });
+
+      if (pending.length === 0 && submitted.length === 0) {
+        html += '<div class="fb-empty"><div class="fb-empty-icon">\u2705</div><p>No feedback assignments</p></div>';
+      } else {
+        if (pending.length > 0) {
+          html += '<h3 style="margin:0 0 12px">Pending (' + pending.length + ')</h3>';
+          pending.forEach(function(a) {
+            html += renderAssignmentCard(a, true);
+          });
+        }
+        if (submitted.length > 0) {
+          html += '<h3 style="margin:20px 0 12px">Submitted (' + submitted.length + ')</h3>';
+          submitted.forEach(function(a) {
+            html += renderAssignmentCard(a, false);
+          });
+        }
+      }
+
+      viewContainer.innerHTML = html;
+
+      viewContainer.querySelectorAll('[data-open-form]').forEach(function(card) {
+        card.addEventListener('click', function() { loadFeedbackForm(card.dataset.openForm); });
+      });
+    }
+
+    function renderAssignmentCard(a, clickable) {
+      var html = '<div class="fb-assignment-card"' + (clickable ? ' data-open-form="' + esc(a.id) + '" style="cursor:pointer"' : '') + '>';
+      html += '<div class="fb-assignment-header">';
+      html += '<h4>' + esc(a.cycle_name) + '</h4>';
+      html += asgnBadge(a.status);
+      html += '</div>';
+      html += '<div class="fb-responder-info">';
+      html += roleBadge(a.responder_role);
+      html += ' <span>Feedback for: <strong>' + esc(a.recipient_name) + '</strong></span>';
+      if (a.close_date) html += ' <span style="color:var(--text-muted)">Due: ' + formatDate(a.close_date) + '</span>';
+      html += '</div>';
+      if (a.status === 'pending' || a.status === 'in_progress') {
+        html += '<div style="margin-top:8px"><button class="btn btn--primary btn--xs" data-open-form="' + esc(a.id) + '">' + (a.status === 'in_progress' ? 'Continue' : 'Start') + '</button>';
+        html += ' <button class="btn btn--danger btn--xs" data-decline="' + esc(a.id) + '">Decline</button></div>';
+      }
+      html += '</div>';
+
+      // Wire decline buttons after render
+      setTimeout(function() {
+        var declineBtn = document.querySelector('[data-decline="' + a.id + '"]');
+        if (declineBtn) {
+          declineBtn.addEventListener('click', async function(e) {
+            e.stopPropagation();
+            if (!confirm('Decline this feedback assignment?')) return;
+            try { await ServerAPI.declineFeedbackAssignment(a.id); Toast.success('Assignment declined'); loadGiveFeedback(); } catch(err) { Toast.error(err.message); }
+          });
+        }
+      }, 50);
+
+      return html;
+    }
+
+    // ═══════════════════════════════════════════════
+    // Feedback Form
+    // ═══════════════════════════════════════════════
+
+    async function loadFeedbackForm(assignmentId) {
+      state.view = 'feedback_form';
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        var detail = await ServerAPI.getFeedbackAssignmentDetail(assignmentId);
+        renderFeedbackForm(detail);
+      } catch (e) {
+        viewContainer.innerHTML = '<div class="alert alert--error">' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderFeedbackForm(detail) {
+      var html = '';
+      html += '<a href="#" class="btn btn--ghost btn--sm" id="fb-back-form">\u2190 Back</a>';
+      html += '<div class="fb-detail-header">';
+      html += '<h2>' + esc(detail.cycle_name) + '</h2>';
+      html += '<p style="color:var(--text-muted);font-size:0.9rem">' + roleBadge(detail.responder_role) + ' feedback for <strong>' + esc(detail.recipient_name) + '</strong></p>';
+      html += '</div>';
+
+      if (detail.status === 'submitted') {
+        html += '<div class="alert alert--info">This feedback has already been submitted.</div>';
+      }
+
+      html += '<div class="fb-form">';
+      (detail.questions || []).forEach(function(q) {
+        var draft = detail.drafts[q.id] || {};
+        html += '<div class="fb-form-question">';
+        html += '<p class="fb-form-question-text">' + esc(q.question_text);
+        if (q.is_required === 'true') html += ' <span style="color:#DC2626">*</span>';
+        html += '</p>';
+
+        if (q.question_type === 'rating' || q.question_type === 'both') {
+          html += '<div class="fb-form-rating" id="fb-rating-' + q.id + '">';
+          html += RatingScale.render('fb-r-' + q.id, {
+            value: draft.rating ? parseInt(draft.rating, 10) : 0,
+            max: 5,
+            disabled: detail.status === 'submitted'
+          });
+          html += '</div>';
+        }
+
+        if (q.question_type === 'text' || q.question_type === 'both') {
+          html += '<textarea class="fb-form-textarea" data-q-id="' + q.id + '" placeholder="Enter your response..."' +
+            (detail.status === 'submitted' ? ' disabled' : '') + '>' + esc(draft.response_text || '') + '</textarea>';
+        }
+        html += '</div>';
+      });
+
+      if (detail.status !== 'submitted') {
+        html += '<div class="fb-form-actions">';
+        html += '<button class="btn btn--ghost" id="fb-save-draft">Save Draft</button>';
+        html += '<button class="btn btn--primary" id="fb-submit-form">Submit Feedback</button>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      viewContainer.innerHTML = html;
+
+      // Events
+      viewContainer.querySelector('#fb-back-form').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (state.isAdmin) switchView('cycles');
+        else switchView('give_feedback');
+      });
+
+      if (document.getElementById('fb-save-draft')) {
+        document.getElementById('fb-save-draft').addEventListener('click', async function() {
+          var answers = collectAnswers(detail.questions);
+          try {
+            await ServerAPI.saveFeedbackDraft(detail.id, answers);
+            Toast.success('Draft saved');
+          } catch (e) { Toast.error(e.message); }
+        });
+      }
+
+      if (document.getElementById('fb-submit-form')) {
+        document.getElementById('fb-submit-form').addEventListener('click', async function() {
+          if (!confirm('Submit this feedback? You cannot edit after submission.')) return;
+          var answers = collectAnswers(detail.questions);
+          try {
+            await ServerAPI.submitFeedbackResponse(detail.id, answers);
+            Toast.success('Feedback submitted!');
+            if (state.isAdmin) switchView('cycles');
+            else switchView('give_feedback');
+          } catch (e) { Toast.error(e.message); }
+        });
+      }
+
+      // Auto-save draft on blur
+      viewContainer.querySelectorAll('.fb-form-textarea').forEach(function(ta) {
+        ta.addEventListener('blur', async function() {
+          if (detail.status === 'submitted') return;
+          var answers = collectAnswers(detail.questions);
+          try { await ServerAPI.saveFeedbackDraft(detail.id, answers); } catch(e) { /* silent */ }
+        });
+      });
+    }
+
+    function collectAnswers(questions) {
+      var answers = [];
+      questions.forEach(function(q) {
+        var answer = { question_id: q.id };
+        // Get rating
+        var ratingVal = RatingScale.getValue ? RatingScale.getValue('fb-r-' + q.id) : 0;
+        if (!ratingVal) {
+          // Fallback: check for selected rating input
+          var ratingEl = viewContainer.querySelector('#fb-r-' + q.id + ' .rating-selected, [name="fb-r-' + q.id + '"]:checked');
+          ratingVal = ratingEl ? parseInt(ratingEl.value || ratingEl.dataset.value, 10) : 0;
+        }
+        answer.rating = ratingVal || '';
+
+        // Get text
+        var textEl = viewContainer.querySelector('textarea[data-q-id="' + q.id + '"]');
+        answer.response_text = textEl ? textEl.value.trim() : '';
+
+        answers.push(answer);
+      });
+      return answers;
+    }
+
+    // ═══════════════════════════════════════════════
+    // ADMIN: Feedback Reports
+    // ═══════════════════════════════════════════════
+
+    async function loadReports() {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        var [statsData, cycleData] = await Promise.all([
+          ServerAPI.getFeedbackStats(),
+          ServerAPI.getFeedbackCycles({})
+        ]);
+        renderReports(statsData, cycleData.cycles || []);
+      } catch (e) {
+        viewContainer.innerHTML = '<div class="alert alert--error">' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderReports(stats, cycles) {
+      var html = '';
+
+      // Stats cards
+      html += '<div class="fb-stats-grid">';
+      html += '<div class="fb-stat-card"><div class="fb-stat-value">' + stats.totalAssignments + '</div><div class="fb-stat-label">Total Assignments</div></div>';
+      html += '<div class="fb-stat-card"><div class="fb-stat-value">' + stats.completionRate + '%</div><div class="fb-stat-label">Completion Rate</div></div>';
+      html += '<div class="fb-stat-card"><div class="fb-stat-value">' + stats.submittedCount + '</div><div class="fb-stat-label">Submitted</div></div>';
+      html += '<div class="fb-stat-card"><div class="fb-stat-value">' + (stats.avgRating || '\u2014') + '</div><div class="fb-stat-label">Avg Rating</div></div>';
+      html += '</div>';
+
+      // Charts
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
+
+      // Completion by cycle
+      html += '<div class="fb-chart-container"><h3>Completion by Cycle</h3><canvas id="fb-chart-completion" class="fb-chart-canvas"></canvas></div>';
+
+      // Distribution by type
+      html += '<div class="fb-chart-container"><h3>Cycles by Type</h3><canvas id="fb-chart-types" class="fb-chart-canvas"></canvas></div>';
+
+      html += '</div>';
+
+      // All cycles table
+      html += '<div class="card" style="padding:18px;margin-top:16px">';
+      html += '<h3 style="margin:0 0 12px">All Cycles</h3>';
+      html += '<div id="fb-cycles-table"></div>';
+      html += '</div>';
+
+      viewContainer.innerHTML = html;
+
+      // Chart: Completion by cycle
+      var completionCycles = cycles.filter(function(c) { return c.totalAssignments > 0; }).slice(0, 10);
+      if (completionCycles.length > 0) {
+        new Chart(document.getElementById('fb-chart-completion'), {
+          type: 'bar',
+          data: {
+            labels: completionCycles.map(function(c) { return c.cycle_name; }),
+            datasets: [{
+              label: 'Completion %',
+              data: completionCycles.map(function(c) { return c.completionRate; }),
+              backgroundColor: '#3B82F6'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true, max: 100 } },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+
+      // Chart: Types doughnut
+      var typeLabels = Object.keys(stats.byCycleType || {});
+      var typeValues = typeLabels.map(function(k) { return stats.byCycleType[k]; });
+      if (typeLabels.length > 0) {
+        new Chart(document.getElementById('fb-chart-types'), {
+          type: 'doughnut',
+          data: {
+            labels: typeLabels.map(function(t) { return TYPE_LABELS[t] || t; }),
+            datasets: [{
+              data: typeValues,
+              backgroundColor: ['#7C3AED', '#3B82F6', '#0F766E', '#059669', '#F59E0B']
+            }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+
+      // DataTable
+      DataTable.render('fb-cycles-table', {
+        columns: [
+          { key: 'cycle_name', label: 'Cycle' },
+          { key: 'feedback_type', label: 'Type', render: function(v) { return TYPE_LABELS[v] || v; } },
+          { key: 'status', label: 'Status', render: function(v) { return statusBadge(v); } },
+          { key: 'totalAssignments', label: 'Assignments' },
+          { key: 'submittedCount', label: 'Submitted' },
+          { key: 'completionRate', label: 'Completion', render: function(v) { return v + '%'; } }
+        ],
+        rows: cycles,
+        pageSize: 10
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // Module entry points
+    // ═══════════════════════════════════════════════
+
+    buildLayout();
+    var defaultView = state.isAdmin ? 'cycles' : 'give_feedback';
+    buildSubNav(defaultView);
+
+    return {
+      onActivate: function() {
+        switchView(state.view || defaultView);
+      }
+    };
+  }
+};
+</script>

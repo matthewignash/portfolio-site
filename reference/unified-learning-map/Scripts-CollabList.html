@@ -1,0 +1,996 @@
+<script>
+// ============================================================================
+// COLLABSPACE — BOARD LIST — colab- prefix
+// Board list, filter chips, create flow, card rendering
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+// Board type icons & labels
+var COLAB_TYPE_MAP = {
+  discussion: { icon: '\uD83D\uDCAC', label: 'Discussion' },
+  brainstorm: { icon: '\uD83D\uDCA1', label: 'Brainstorm' },
+  labgroup:   { icon: '\u2697\uFE0F', label: 'Lab Group' },
+  project:    { icon: '\uD83D\uDCCB', label: 'Project' },
+  freeform:   { icon: '\u270F\uFE0F', label: 'Freeform' }
+};
+
+var COLAB_LAYOUT_MAP = {
+  wall:    { icon: '\uD83E\uDDF1', label: 'Wall' },
+  stream:  { icon: '\u2B07\uFE0F', label: 'Stream' },
+  columns: { icon: '\uD83D\uDCCA', label: 'Columns' }
+};
+
+var _colabCreateOpen = false;
+var _colabSelectedTemplate = '';
+var _colabSelectedLayout = 'wall';
+var _colabClassFilter = '';
+
+
+// ================================================
+// LIFECYCLE — Load Boards
+// ================================================
+
+function colabLoadBoards() {
+  var container = document.getElementById('colabBoardListContainer');
+  if (!container) return;
+
+  if (!colabBoardsLoaded) {
+    container.innerHTML = '<div class="colab-loading"><span class="loading-spinner"></span> Loading boards...</div>';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(boards) {
+      colabBoardsData = boards || [];
+      colabBoardsLoaded = true;
+      colabRenderBoardList();
+    })
+    .withFailureHandler(function(err) {
+      colabBoardsLoaded = true;
+      var c = document.getElementById('colabBoardListContainer');
+      if (c) {
+        c.innerHTML = '<div class="colab-empty"><div class="colab-empty-icon">&#9888;&#65039;</div>'
+          + '<div class="colab-empty-title">Error loading boards</div>'
+          + '<div class="colab-empty-text">' + escapeHtml(err.message) + '</div></div>';
+      }
+    })
+    .getBoards({});
+}
+
+
+// ================================================
+// RENDERING — Board List
+// ================================================
+
+function colabRenderBoardList() {
+  var container = document.getElementById('colabBoardListContainer');
+  if (!container) return;
+
+  var html = '';
+
+  // Header
+  html += '<div class="colab-header">';
+  html += '<div class="colab-header-title">\uD83D\uDCCC CollabSpace</div>';
+  html += '<div class="colab-header-actions">';
+
+  // Class filter dropdown (teachers only)
+  if (userData && userData.canEdit) {
+    html += '<div class="colab-class-selector">';
+    html += '<span class="colab-class-label">Class:</span>';
+    html += '<select class="colab-form-select" style="width:auto;min-width:140px;" onchange="colabOnClassFilter(this.value)">';
+    html += '<option value="">All Classes</option>';
+    if (classesData && classesData.length) {
+      for (var ci = 0; ci < classesData.length; ci++) {
+        var cls = classesData[ci];
+        var selCls = (String(cls.classId) === String(_colabClassFilter)) ? ' selected' : '';
+        html += '<option value="' + escapeHtml(String(cls.classId)) + '"' + selCls + '>' + escapeHtml(cls.className) + '</option>';
+      }
+    }
+    html += '</select>';
+    html += '</div>';
+
+    html += '<button class="btn btn-success" onclick="colabToggleCreateForm()">'
+      + (_colabCreateOpen ? 'Cancel' : '+ New Board') + '</button>';
+  }
+
+  html += '</div></div>';
+
+  // Create form (collapsible)
+  if (_colabCreateOpen && userData && userData.canEdit) {
+    html += colabRenderCreateForm_();
+  }
+
+  // Filter chips
+  html += '<div class="colab-filter-bar">';
+  var filters = [
+    { key: 'all', label: 'All' },
+    { key: 'discussion', label: '\uD83D\uDCAC Discussion' },
+    { key: 'brainstorm', label: '\uD83D\uDCA1 Brainstorm' },
+    { key: 'labgroup', label: '\u2697\uFE0F Lab Group' },
+    { key: 'project', label: '\uD83D\uDCCB Project' }
+  ];
+  for (var fi = 0; fi < filters.length; fi++) {
+    var f = filters[fi];
+    var active = (colabBoardFilter === f.key) ? ' active' : '';
+    html += '<button class="colab-filter-chip' + active + '" onclick="colabSetFilter(\'' + f.key + '\')">'
+      + f.label + '</button>';
+  }
+  html += '</div>';
+
+  // Filter boards
+  var filtered = colabFilterBoards_();
+
+  // Board count
+  html += '<div class="colab-board-count">' + filtered.length + ' board'
+    + (filtered.length !== 1 ? 's' : '') + '</div>';
+
+  // Board grid or empty state
+  if (filtered.length === 0) {
+    html += '<div class="colab-empty">';
+    html += '<div class="colab-empty-icon">\uD83D\uDCCC</div>';
+    html += '<div class="colab-empty-title">No boards yet</div>';
+    if (userData && userData.canEdit) {
+      html += '<div class="colab-empty-text">Create a new board to get started with collaboration.</div>';
+    } else {
+      html += '<div class="colab-empty-text">Your teacher hasn\'t created any boards yet.</div>';
+    }
+    html += '</div>';
+  } else {
+    html += '<div class="colab-board-grid">';
+    for (var bi = 0; bi < filtered.length; bi++) {
+      html += colabRenderBoardCard_(filtered[bi]);
+    }
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+
+// ================================================
+// RENDERING — Board Card
+// ================================================
+
+function colabRenderBoardCard_(board) {
+  var typeInfo = COLAB_TYPE_MAP[board.boardType] || COLAB_TYPE_MAP.freeform;
+  var layoutInfo = COLAB_LAYOUT_MAP[board.layoutMode] || COLAB_LAYOUT_MAP.wall;
+  var boardId = escapeHtml(String(board.boardId));
+
+  var html = '<div class="colab-board-card" data-type="' + escapeHtml(board.boardType)
+    + '" onclick="colabOpenBoard(\'' + boardId + '\')">';
+
+  // Actions (teacher only)
+  if (userData && userData.canEdit) {
+    var canEditBoard = (board.memberRole === 'owner' || board.memberRole === 'moderator');
+    html += '<div class="colab-card-actions">';
+    if (canEditBoard) {
+      html += '<button class="colab-card-action-btn" onclick="event.stopPropagation();colabOpenSettings(\'' + boardId + '\')" title="Settings" aria-label="Board settings" aria-haspopup="dialog">&#9881;&#65039;</button>';
+    }
+    html += '<button class="colab-card-action-btn" onclick="event.stopPropagation();colabDuplicateBoard(\'' + boardId + '\')" title="Duplicate">&#128203;</button>';
+    if (board.isArchived === true || board.isArchived === 'true') {
+      html += '<button class="colab-card-action-btn" onclick="event.stopPropagation();colabUnarchiveBoard(\'' + boardId + '\')" title="Unarchive">&#128194;</button>';
+    } else {
+      html += '<button class="colab-card-action-btn" onclick="event.stopPropagation();colabArchiveBoard(\'' + boardId + '\')" title="Archive">&#128451;</button>';
+    }
+    html += '<button class="colab-card-action-btn danger" onclick="event.stopPropagation();colabDeleteBoard(\'' + boardId + '\')" title="Delete">&#128465;</button>';
+    html += '</div>';
+  }
+
+  // Archived badge
+  if (board.isArchived === true || board.isArchived === 'true') {
+    html += '<div class="colab-card-archived">Archived</div>';
+  }
+
+  // Header: icon + title
+  html += '<div class="colab-card-header">';
+  html += '<div class="colab-card-icon">' + typeInfo.icon + '</div>';
+  html += '<div class="colab-card-title">' + escapeHtml(board.title || 'Untitled Board') + '</div>';
+  html += '</div>';
+
+  // Description
+  if (board.description) {
+    html += '<div class="colab-card-desc">' + escapeHtml(board.description) + '</div>';
+  }
+
+  // Meta row
+  html += '<div class="colab-card-meta">';
+  html += '<span class="colab-type-badge ' + escapeHtml(board.boardType) + '">' + typeInfo.label + '</span>';
+  html += '<span class="colab-layout-badge">' + layoutInfo.icon + ' ' + layoutInfo.label + '</span>';
+
+  // Stats
+  if (board.postCount !== undefined) {
+    html += '<span class="colab-stat-badge"><span class="colab-stat-icon">&#128172;</span> ' + board.postCount + '</span>';
+  }
+  if (board.memberCount !== undefined) {
+    html += '<span class="colab-stat-badge"><span class="colab-stat-icon">&#128101;</span> ' + board.memberCount + '</span>';
+  }
+
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+
+// ================================================
+// RENDERING — Create Form
+// ================================================
+
+function colabRenderCreateForm_() {
+  var html = '<div class="colab-create-form">';
+  html += '<div class="colab-create-form-title">Create a New Board</div>';
+
+  // Template picker
+  html += '<div class="colab-form-label" style="margin-bottom:8px;">Choose a template</div>';
+  html += '<div class="colab-template-grid">';
+
+  var templates = [
+    { key: 'discussion', icon: '\uD83D\uDCAC', name: 'Discussion', hint: 'Stream, 5 posts max' },
+    { key: 'brainstorm', icon: '\uD83D\uDCA1', name: 'Brainstorm Wall', hint: 'Wall, anonymous' },
+    { key: 'labgroup', icon: '\u2697\uFE0F', name: 'Lab Group', hint: 'Columns, approval req.' },
+    { key: 'project', icon: '\uD83D\uDCCB', name: 'Project Tracker', hint: 'Kanban columns' },
+    { key: 'exitticket', icon: '\uD83C\uDFAB', name: 'Exit Ticket', hint: 'Stream, 1 post' },
+    { key: 'custom', icon: '\u2699\uFE0F', name: 'Custom Board', hint: 'Configure your own' }
+  ];
+
+  for (var ti = 0; ti < templates.length; ti++) {
+    var tpl = templates[ti];
+    var tplActive = (_colabSelectedTemplate === tpl.key) ? ' active' : '';
+    html += '<div class="colab-template-card' + tplActive + '" onclick="colabSelectTemplate(\'' + tpl.key + '\')">';
+    html += '<div class="colab-template-icon">' + tpl.icon + '</div>';
+    html += '<div class="colab-template-name">' + tpl.name + '</div>';
+    html += '<div class="colab-template-hint">' + tpl.hint + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Custom fields (visible when template selected or custom)
+  html += '<div class="colab-form-group">';
+  html += '<label class="colab-form-label">Board Title *</label>';
+  html += '<input type="text" class="colab-form-input" id="colabCreateTitle" placeholder="Give your board a name..." maxlength="200">';
+  html += '</div>';
+
+  html += '<div class="colab-form-row">';
+  // Class selector
+  html += '<div class="colab-form-group">';
+  html += '<label class="colab-form-label">Class</label>';
+  html += '<select class="colab-form-select" id="colabCreateClass">';
+  html += '<option value="">-- No Class --</option>';
+  if (classesData && classesData.length) {
+    for (var cci = 0; cci < classesData.length; cci++) {
+      var cc = classesData[cci];
+      html += '<option value="' + escapeHtml(String(cc.classId)) + '">' + escapeHtml(cc.className) + '</option>';
+    }
+  }
+  html += '</select>';
+  html += '</div>';
+
+  // Board type (for custom)
+  html += '<div class="colab-form-group">';
+  html += '<label class="colab-form-label">Board Type</label>';
+  html += '<select class="colab-form-select" id="colabCreateType" onchange="colabOnTypeChange()">';
+  html += '<option value="discussion">Discussion</option>';
+  html += '<option value="brainstorm">Brainstorm</option>';
+  html += '<option value="labgroup">Lab Group</option>';
+  html += '<option value="project">Project</option>';
+  html += '<option value="freeform">Freeform</option>';
+  html += '</select>';
+  html += '</div>';
+  html += '</div>';
+
+  // Layout chips
+  html += '<div class="colab-form-group">';
+  html += '<label class="colab-form-label">Layout</label>';
+  html += '<div class="colab-layout-chips">';
+  var layouts = [
+    { key: 'wall', icon: '\uD83E\uDDF1', label: 'Wall' },
+    { key: 'stream', icon: '\u2B07\uFE0F', label: 'Stream' },
+    { key: 'columns', icon: '\uD83D\uDCCA', label: 'Columns' }
+  ];
+  for (var li = 0; li < layouts.length; li++) {
+    var lay = layouts[li];
+    var layActive = (_colabSelectedLayout === lay.key) ? ' active' : '';
+    html += '<button class="colab-layout-chip' + layActive + '" onclick="colabSelectLayout(\'' + lay.key + '\')">'
+      + lay.icon + ' ' + lay.label + '</button>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  // Description
+  html += '<div class="colab-form-group">';
+  html += '<label class="colab-form-label">Description</label>';
+  html += '<textarea class="colab-form-textarea" id="colabCreateDesc" placeholder="What is this board for?" maxlength="500" rows="2"></textarea>';
+  html += '</div>';
+
+  // Footer
+  html += '<div class="colab-form-footer">';
+  html += '<button class="btn btn-outline" onclick="colabToggleCreateForm()">Cancel</button>';
+  html += '<button class="btn btn-success" onclick="colabCreateBoard()">Create Board</button>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+
+// ================================================
+// FILTERING
+// ================================================
+
+function colabFilterBoards_() {
+  var filtered = [];
+  for (var i = 0; i < colabBoardsData.length; i++) {
+    var b = colabBoardsData[i];
+
+    // Class filter
+    if (_colabClassFilter && String(b.classId) !== String(_colabClassFilter)) {
+      continue;
+    }
+
+    // Type filter
+    if (colabBoardFilter !== 'all' && b.boardType !== colabBoardFilter) {
+      continue;
+    }
+
+    filtered.push(b);
+  }
+
+  // Sort: non-archived first, then by updatedAt descending
+  filtered.sort(function(a, b) {
+    var aArch = (a.isArchived === true || a.isArchived === 'true') ? 1 : 0;
+    var bArch = (b.isArchived === true || b.isArchived === 'true') ? 1 : 0;
+    if (aArch !== bArch) return aArch - bArch;
+
+    var aDate = a.updatedAt || a.createdAt || '';
+    var bDate = b.updatedAt || b.createdAt || '';
+    return bDate > aDate ? 1 : (bDate < aDate ? -1 : 0);
+  });
+
+  return filtered;
+}
+
+function colabSetFilter(filter) {
+  colabBoardFilter = filter;
+  colabRenderBoardList();
+}
+
+function colabOnClassFilter(classId) {
+  _colabClassFilter = classId || '';
+  colabRenderBoardList();
+}
+
+
+// ================================================
+// TEMPLATE / LAYOUT SELECTION
+// ================================================
+
+function colabSelectTemplate(key) {
+  _colabSelectedTemplate = key;
+
+  // Auto-populate type & layout based on template
+  var typeMap = {
+    discussion: { type: 'discussion', layout: 'stream' },
+    brainstorm: { type: 'brainstorm', layout: 'wall' },
+    labgroup:   { type: 'labgroup', layout: 'columns' },
+    project:    { type: 'project', layout: 'columns' },
+    exitticket: { type: 'discussion', layout: 'stream' },
+    custom:     { type: 'freeform', layout: 'wall' }
+  };
+
+  if (typeMap[key]) {
+    _colabSelectedLayout = typeMap[key].layout;
+  }
+
+  colabRenderBoardList();
+}
+
+function colabSelectLayout(layout) {
+  _colabSelectedLayout = layout;
+  colabRenderBoardList();
+}
+
+function colabOnTypeChange() {
+  // No-op for now; type dropdown is informational for custom boards
+}
+
+
+// ================================================
+// CREATE BOARD
+// ================================================
+
+function colabToggleCreateForm() {
+  _colabCreateOpen = !_colabCreateOpen;
+  if (_colabCreateOpen) {
+    _colabSelectedTemplate = '';
+    _colabSelectedLayout = 'wall';
+  }
+  colabRenderBoardList();
+}
+
+function colabCreateBoard() {
+  var title = (document.getElementById('colabCreateTitle') || {}).value || '';
+  title = title.trim();
+  if (!title) {
+    showToast('Please enter a board title.', 'error');
+    return;
+  }
+
+  var classId = (document.getElementById('colabCreateClass') || {}).value || '';
+  var boardType = (document.getElementById('colabCreateType') || {}).value || 'freeform';
+  var desc = (document.getElementById('colabCreateDesc') || {}).value || '';
+
+  // If a pre-built template is selected, use createBoardFromTemplate
+  if (_colabSelectedTemplate && _colabSelectedTemplate !== 'custom') {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        showToast('Board created!', 'success');
+        _colabCreateOpen = false;
+        colabBoardsLoaded = false;
+        colabLoadBoards();
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error: ' + escapeHtml(err.message), 'error');
+      })
+      .createBoardFromTemplate(_colabSelectedTemplate, classId || null, null, null);
+    return;
+  }
+
+  // Custom board
+  var boardData = {
+    title: title,
+    description: desc,
+    boardType: boardType,
+    layoutMode: _colabSelectedLayout,
+    classId: classId || ''
+  };
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showToast('Board created!', 'success');
+      _colabCreateOpen = false;
+      colabBoardsLoaded = false;
+      colabLoadBoards();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .createBoard(boardData);
+}
+
+
+// ================================================
+// BOARD ACTIONS
+// ================================================
+
+// colabOpenBoard() moved to Scripts-CollabBoard.html (board view lifecycle)
+
+function colabArchiveBoard(boardId) {
+  if (!confirm('Archive this board? It will be hidden from the main view.')) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Board archived.', 'success');
+      colabBoardsLoaded = false;
+      colabLoadBoards();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .archiveBoard(boardId);
+}
+
+function colabUnarchiveBoard(boardId) {
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Board restored.', 'success');
+      colabBoardsLoaded = false;
+      colabLoadBoards();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .updateBoard(boardId, { isArchived: false });
+}
+
+function colabDeleteBoard(boardId) {
+  if (!confirm('Permanently delete this board and all its posts? This cannot be undone.')) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Board deleted.', 'success');
+      colabBoardsLoaded = false;
+      colabLoadBoards();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .deleteBoard(boardId);
+}
+
+function colabDuplicateBoard(boardId) {
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Board duplicated!', 'success');
+      colabBoardsLoaded = false;
+      colabLoadBoards();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .duplicateBoard(boardId);
+}
+
+
+// ================================================
+// BOARD SETTINGS MODAL
+// ================================================
+
+var colabSettingsOverlayEl = null;
+
+function colabOpenSettings(boardId) {
+  if (!boardId) return;
+  var board = null;
+  for (var i = 0; i < colabBoardsData.length; i++) {
+    if (String(colabBoardsData[i].boardId) === String(boardId)) {
+      board = colabBoardsData[i];
+      break;
+    }
+  }
+  if (!board) {
+    showToast('Board not found.', 'error');
+    return;
+  }
+
+  // Shallow copy for editing
+  var copy = {};
+  for (var k in board) {
+    if (board.hasOwnProperty(k)) copy[k] = board[k];
+  }
+
+  colabSettingsData = { boardId: String(boardId), board: copy, source: 'list' };
+  colabSettingsSaving = false;
+  colabSettingsTriggerEl = document.activeElement;
+  colabSettingsOpen = true;
+
+  // Init columns if columns layout
+  colabInitSettingsColumns(copy);
+
+  colabRenderSettingsModal();
+}
+
+
+function colabRenderSettingsModal() {
+  if (!colabSettingsData) return;
+  var board = colabSettingsData.board;
+
+  // Get or create overlay
+  if (!colabSettingsOverlayEl) {
+    colabSettingsOverlayEl = document.createElement('div');
+    colabSettingsOverlayEl.className = 'colab-settings-overlay';
+    colabSettingsOverlayEl.setAttribute('role', 'dialog');
+    colabSettingsOverlayEl.setAttribute('aria-modal', 'true');
+    colabSettingsOverlayEl.setAttribute('aria-label', 'Board settings');
+    colabSettingsOverlayEl.onclick = function(e) {
+      if (e.target === colabSettingsOverlayEl) colabCloseSettings();
+    };
+    colabSettingsOverlayEl.onkeydown = function(e) {
+      if (e.key === 'Tab' && typeof a11yTrapFocus === 'function') {
+        a11yTrapFocus(colabSettingsOverlayEl, e);
+      }
+    };
+    document.body.appendChild(colabSettingsOverlayEl);
+  }
+
+  // Update aria-label with board title for screen readers
+  colabSettingsOverlayEl.setAttribute('aria-label', 'Settings: ' + (board.title || 'Board'));
+
+  var html = '<div class="colab-settings-modal">';
+
+  // Header
+  html += '<div class="colab-settings-header">';
+  html += '<div class="colab-settings-title">Board Settings</div>';
+  html += '<button class="colab-settings-close" onclick="colabCloseSettings()" aria-label="Close settings">&times;</button>';
+  html += '</div>';
+
+  // Body
+  html += '<div class="colab-settings-body">';
+
+  // Title
+  html += '<div class="colab-settings-group">';
+  html += '<label class="colab-settings-label" for="colabSettingsTitle">Title *</label>';
+  html += '<input type="text" class="colab-settings-input" id="colabSettingsTitle" maxlength="200" value="' + escapeHtml(board.title || '') + '">';
+  html += '</div>';
+
+  // Description
+  html += '<div class="colab-settings-group">';
+  html += '<label class="colab-settings-label" for="colabSettingsDesc">Description</label>';
+  html += '<textarea class="colab-settings-textarea" id="colabSettingsDesc" maxlength="500" rows="2">' + escapeHtml(board.description || '') + '</textarea>';
+  html += '</div>';
+
+  // Layout chips
+  html += '<div class="colab-settings-group">';
+  html += '<div class="colab-settings-label">Layout</div>';
+  html += '<div class="colab-settings-chips" role="radiogroup" aria-label="Layout mode">';
+  var layouts = [
+    { key: 'wall', icon: '\uD83E\uDDF1', label: 'Wall' },
+    { key: 'stream', icon: '\u2B07\uFE0F', label: 'Stream' },
+    { key: 'columns', icon: '\uD83D\uDCCA', label: 'Columns' }
+  ];
+  for (var li = 0; li < layouts.length; li++) {
+    var lay = layouts[li];
+    var isActive = (board.layoutMode === lay.key);
+    html += '<button type="button" class="colab-settings-chip' + (isActive ? ' active' : '') + '" '
+      + 'role="radio" aria-checked="' + isActive + '" '
+      + 'onclick="colabSelectSettingsLayout(\'' + lay.key + '\')">'
+      + lay.icon + ' ' + lay.label + '</button>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  // Column management (visible only for columns layout)
+  if (board.layoutMode === 'columns') {
+    html += colabRenderSettingsColumnsSection_();
+  }
+
+  // Post Approval chips
+  html += '<div class="colab-settings-group">';
+  html += '<div class="colab-settings-label">Post Approval</div>';
+  html += '<div class="colab-settings-chips" role="radiogroup" aria-label="Post approval mode">';
+  var approvals = [
+    { key: 'none', label: 'None' },
+    { key: 'required', label: 'Required' }
+  ];
+  for (var ai = 0; ai < approvals.length; ai++) {
+    var appr = approvals[ai];
+    var apprActive = ((board.postApproval || 'none') === appr.key);
+    html += '<button type="button" class="colab-settings-chip' + (apprActive ? ' active' : '') + '" '
+      + 'role="radio" aria-checked="' + apprActive + '" '
+      + 'onclick="colabSelectSettingsApproval(\'' + appr.key + '\')">'
+      + appr.label + '</button>';
+  }
+  html += '</div>';
+  html += '<div class="colab-settings-hint">When required, moderators must approve posts before they appear.</div>';
+  html += '</div>';
+
+  // Max Posts Per Student
+  html += '<div class="colab-settings-group">';
+  html += '<label class="colab-settings-label" for="colabSettingsMaxPosts">Max Posts Per Student</label>';
+  html += '<input type="number" class="colab-settings-input" id="colabSettingsMaxPosts" min="0" max="100" value="' + (parseInt(board.maxPostsPerStudent, 10) || 0) + '">';
+  html += '<div class="colab-settings-hint">0 = unlimited</div>';
+  html += '</div>';
+
+  // Allow Anonymous
+  html += '<div class="colab-settings-group">';
+  html += '<label class="colab-settings-check">';
+  html += '<input type="checkbox" id="colabSettingsAnon"' + (board.allowAnonymous ? ' checked' : '') + '>';
+  html += ' Allow anonymous posting';
+  html += '</label>';
+  html += '</div>';
+
+  html += '</div>'; // end body
+
+  // Footer
+  html += '<div class="colab-settings-footer">';
+  html += '<button type="button" class="colab-settings-cancel" onclick="colabCloseSettings()">Cancel</button>';
+  html += '<button type="button" class="colab-settings-save" onclick="colabSaveSettings()"'
+    + (colabSettingsSaving ? ' disabled aria-disabled="true"' : '') + '>'
+    + (colabSettingsSaving ? 'Saving...' : 'Save') + '</button>';
+  html += '</div>';
+
+  html += '</div>'; // end modal
+
+  colabSettingsOverlayEl.innerHTML = html;
+  colabSettingsOverlayEl.style.display = 'flex';
+
+  // Focus close button after render
+  setTimeout(function() {
+    var closeBtn = colabSettingsOverlayEl.querySelector('.colab-settings-close');
+    if (closeBtn) closeBtn.focus();
+  }, 50);
+}
+
+
+function colabCloseSettings() {
+  colabSettingsOpen = false;
+  colabSettingsData = null;
+  colabSettingsSaving = false;
+  colabSettingsColumns = [];
+
+  if (colabSettingsOverlayEl) {
+    colabSettingsOverlayEl.style.display = 'none';
+  }
+
+  // Return focus to trigger
+  if (colabSettingsTriggerEl && colabSettingsTriggerEl.focus) {
+    try { colabSettingsTriggerEl.focus(); } catch (e) { /* ignore */ }
+  }
+  colabSettingsTriggerEl = null;
+}
+
+
+// Capture in-progress form values before full re-render
+function colabCaptureSettingsFields_() {
+  if (!colabSettingsData) return;
+  var b = colabSettingsData.board;
+  var titleEl = document.getElementById('colabSettingsTitle');
+  var descEl = document.getElementById('colabSettingsDesc');
+  var maxPostsEl = document.getElementById('colabSettingsMaxPosts');
+  var anonEl = document.getElementById('colabSettingsAnon');
+  if (titleEl) b.title = titleEl.value;
+  if (descEl) b.description = descEl.value;
+  if (maxPostsEl) b.maxPostsPerStudent = parseInt(maxPostsEl.value, 10) || 0;
+  if (anonEl) b.allowAnonymous = anonEl.checked;
+  // Capture columns from DOM if currently visible
+  if (b.layoutMode === 'columns') {
+    var cols = colabCollectSettingsColumnsFromDom_();
+    if (cols.length > 0) colabSettingsColumns = cols;
+  }
+}
+
+function colabSelectSettingsLayout(layout) {
+  if (!colabSettingsData) return;
+  colabCaptureSettingsFields_();
+  colabSettingsData.board.layoutMode = layout;
+  if (layout === 'columns') {
+    colabInitSettingsColumns(colabSettingsData.board);
+  }
+  colabRenderSettingsModal();
+}
+
+
+function colabSelectSettingsApproval(value) {
+  if (!colabSettingsData) return;
+  colabCaptureSettingsFields_();
+  colabSettingsData.board.postApproval = value;
+  colabRenderSettingsModal();
+}
+
+
+function colabSaveSettings() {
+  if (colabSettingsSaving || !colabSettingsData) return;
+
+  // Read DOM values
+  var titleEl = document.getElementById('colabSettingsTitle');
+  var descEl = document.getElementById('colabSettingsDesc');
+  var maxPostsEl = document.getElementById('colabSettingsMaxPosts');
+  var anonEl = document.getElementById('colabSettingsAnon');
+
+  var title = (titleEl ? titleEl.value : '').trim();
+  if (!title) {
+    showToast('Title is required.', 'error');
+    if (titleEl) titleEl.focus();
+    return;
+  }
+
+  var desc = (descEl ? descEl.value : '').trim();
+  var maxPosts = parseInt(maxPostsEl ? maxPostsEl.value : '0', 10) || 0;
+  if (maxPosts < 0) maxPosts = 0;
+  var allowAnon = anonEl ? anonEl.checked : false;
+  var layoutMode = colabSettingsData.board.layoutMode || 'wall';
+  var postApproval = colabSettingsData.board.postApproval || 'none';
+
+  // Find original board for diff
+  var origBoard = null;
+  for (var i = 0; i < colabBoardsData.length; i++) {
+    if (String(colabBoardsData[i].boardId) === colabSettingsData.boardId) {
+      origBoard = colabBoardsData[i];
+      break;
+    }
+  }
+
+  // Build updates (only changed fields)
+  var updates = {};
+  if (title !== (origBoard ? origBoard.title : '')) updates.title = title;
+  if (desc !== (origBoard ? origBoard.description || '' : '')) updates.description = desc;
+  if (layoutMode !== (origBoard ? origBoard.layoutMode : '')) updates.layoutMode = layoutMode;
+  if (postApproval !== (origBoard ? origBoard.postApproval || 'none' : 'none')) updates.postApproval = postApproval;
+  if (maxPosts !== (origBoard ? origBoard.maxPostsPerStudent || 0 : 0)) updates.maxPostsPerStudent = maxPosts;
+  if (allowAnon !== (origBoard ? origBoard.allowAnonymous : false)) updates.allowAnonymous = allowAnon;
+
+  // Include columns if layout is columns
+  if (layoutMode === 'columns') {
+    var newCols = colabCollectSettingsColumns();
+    if (newCols.length > 0) {
+      updates.defaultColumnsJson = JSON.stringify(newCols);
+    }
+  }
+
+  // Check if anything changed
+  var hasChanges = false;
+  for (var uk in updates) {
+    if (updates.hasOwnProperty(uk)) { hasChanges = true; break; }
+  }
+  if (!hasChanges) {
+    showToast('No changes to save.', 'info');
+    colabCloseSettings();
+    return;
+  }
+
+  colabSettingsSaving = true;
+  colabRenderSettingsModal();
+
+  var expectedBoardId = colabSettingsData.boardId;
+  var settingsSource = colabSettingsData.source;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (!colabSettingsOpen || !colabSettingsData || String(colabSettingsData.boardId) !== String(expectedBoardId)) return;
+
+      // Optimistic update — merge into colabBoardsData
+      for (var bi = 0; bi < colabBoardsData.length; bi++) {
+        if (String(colabBoardsData[bi].boardId) === expectedBoardId) {
+          for (var upk in updates) {
+            if (updates.hasOwnProperty(upk)) {
+              colabBoardsData[bi][upk] = updates[upk];
+            }
+          }
+          break;
+        }
+      }
+
+      // If opened from board view, also update live data
+      if (settingsSource === 'boardView' && colabBoardViewData && colabBoardViewData.board) {
+        for (var bvk in updates) {
+          if (updates.hasOwnProperty(bvk)) {
+            colabBoardViewData.board[bvk] = updates[bvk];
+          }
+        }
+      }
+
+      showToast('Settings saved.', 'success');
+      colabCloseSettings();
+
+      // Re-render appropriate view
+      if (settingsSource === 'boardView' && typeof colabRenderBoardView === 'function') {
+        colabRenderBoardView();
+      } else {
+        colabRenderBoardList();
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (!colabSettingsOpen || !colabSettingsData || String(colabSettingsData.boardId) !== String(expectedBoardId)) return;
+      colabSettingsSaving = false;
+      colabRenderSettingsModal();
+      showToast('Error: ' + escapeHtml(typeof friendlyError === 'function' ? friendlyError(err) : err.message), 'error');
+    })
+    .updateBoard(expectedBoardId, updates);
+}
+
+
+// ================================================
+// COLUMN MANAGEMENT (within settings modal)
+// ================================================
+
+function colabInitSettingsColumns(board) {
+  colabSettingsColumns = [];
+
+  // Priority 1: persisted columns
+  if (board.defaultColumnsJson) {
+    try {
+      var parsed = JSON.parse(board.defaultColumnsJson);
+      if (parsed && parsed.length) {
+        colabSettingsColumns = parsed.slice();
+        return;
+      }
+    } catch (e) { /* fall through */ }
+  }
+
+  // Priority 2: template defaults
+  if (typeof COLAB_BOARD_COLUMNS !== 'undefined') {
+    var boardType = board.boardType || '';
+    if (COLAB_BOARD_COLUMNS[boardType]) {
+      colabSettingsColumns = COLAB_BOARD_COLUMNS[boardType].slice();
+      return;
+    }
+  }
+
+  // Fallback
+  colabSettingsColumns = ['Uncategorized'];
+}
+
+
+function colabRenderSettingsColumnsSection_() {
+  var html = '<div class="colab-settings-columns">';
+  html += '<div class="colab-settings-col-title">Manage Columns</div>';
+  html += '<div class="colab-settings-hint" style="margin-bottom:8px;">Renaming a column does not move existing posts.</div>';
+
+  for (var ci = 0; ci < colabSettingsColumns.length; ci++) {
+    html += '<div class="colab-settings-col-row">';
+    html += '<input type="text" class="colab-settings-col-input" data-col-index="' + ci + '" '
+      + 'value="' + escapeHtml(colabSettingsColumns[ci]) + '" maxlength="100" '
+      + 'aria-label="Column ' + (ci + 1) + ' name">';
+
+    // Move up
+    if (ci > 0) {
+      html += '<button type="button" class="colab-settings-col-btn" onclick="colabMoveSettingsColumn(' + ci + ',-1)" '
+        + 'aria-label="Move column up" title="Move up">&uarr;</button>';
+    } else {
+      html += '<button type="button" class="colab-settings-col-btn" disabled aria-hidden="true">&uarr;</button>';
+    }
+
+    // Move down
+    if (ci < colabSettingsColumns.length - 1) {
+      html += '<button type="button" class="colab-settings-col-btn" onclick="colabMoveSettingsColumn(' + ci + ',1)" '
+        + 'aria-label="Move column down" title="Move down">&darr;</button>';
+    } else {
+      html += '<button type="button" class="colab-settings-col-btn" disabled aria-hidden="true">&darr;</button>';
+    }
+
+    // Remove (min 1)
+    if (colabSettingsColumns.length > 1) {
+      html += '<button type="button" class="colab-settings-col-btn danger" onclick="colabRemoveSettingsColumn(' + ci + ')" '
+        + 'aria-label="Remove column" title="Remove">&times;</button>';
+    } else {
+      html += '<button type="button" class="colab-settings-col-btn" disabled aria-hidden="true">&times;</button>';
+    }
+
+    html += '</div>';
+  }
+
+  // Add column button
+  if (colabSettingsColumns.length < 20) {
+    html += '<button type="button" class="colab-settings-col-add" onclick="colabAddSettingsColumn()">+ Add Column</button>';
+  } else {
+    html += '<div class="colab-settings-hint">Maximum 20 columns reached.</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+
+function colabCollectSettingsColumnsFromDom_() {
+  var inputs = colabSettingsOverlayEl ? colabSettingsOverlayEl.querySelectorAll('.colab-settings-col-input') : [];
+  var arr = [];
+  for (var i = 0; i < inputs.length; i++) {
+    var val = inputs[i].value.trim();
+    if (val) arr.push(val);
+  }
+  return arr;
+}
+
+
+function colabAddSettingsColumn() {
+  // Collect current input values first
+  var current = colabCollectSettingsColumnsFromDom_();
+  if (current.length > 0) colabSettingsColumns = current;
+  if (colabSettingsColumns.length >= 20) return;
+  colabSettingsColumns.push('New Column');
+  colabRenderSettingsModal();
+}
+
+
+function colabRemoveSettingsColumn(index) {
+  var current = colabCollectSettingsColumnsFromDom_();
+  if (current.length > 0) colabSettingsColumns = current;
+  if (colabSettingsColumns.length <= 1) return;
+  colabSettingsColumns.splice(index, 1);
+  colabRenderSettingsModal();
+}
+
+
+function colabMoveSettingsColumn(index, direction) {
+  var current = colabCollectSettingsColumnsFromDom_();
+  if (current.length > 0) colabSettingsColumns = current;
+  var newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= colabSettingsColumns.length) return;
+  var temp = colabSettingsColumns[index];
+  colabSettingsColumns[index] = colabSettingsColumns[newIndex];
+  colabSettingsColumns[newIndex] = temp;
+  colabRenderSettingsModal();
+}
+
+
+function colabCollectSettingsColumns() {
+  var inputs = colabSettingsOverlayEl ? colabSettingsOverlayEl.querySelectorAll('.colab-settings-col-input') : [];
+  var arr = [];
+  for (var i = 0; i < inputs.length; i++) {
+    var val = inputs[i].value.trim();
+    if (val) arr.push(val);
+  }
+  if (arr.length === 0 && colabSettingsColumns.length > 0) {
+    return colabSettingsColumns.slice();
+  }
+  return arr;
+}
+
+
+</script>

@@ -1,0 +1,435 @@
+<script>
+// ============================================================================
+// TEACHER REMINDERS — trm- prefix
+// Personal followup/reminder list in Progress tab (8th sub-tab)
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+var _trmOrderDebounce = null;
+
+// ================================================
+// LIFECYCLE
+// ================================================
+
+function trmLoadReminders() {
+  var container = document.getElementById('myRemindersContainer');
+  if (container && !trmRemindersData.length) {
+    container.innerHTML = '<div class="loading"><span class="loading-spinner"></span> Loading reminders...</div>';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(reminders) {
+      trmRemindersData = reminders || [];
+      trmRenderContainer();
+    })
+    .withFailureHandler(function(err) {
+      var c = document.getElementById('myRemindersContainer');
+      if (c) {
+        c.innerHTML = '<div class="trm-empty"><div class="trm-empty-icon">&#9888;&#65039;</div><div class="trm-empty-title">Error loading reminders</div><div class="trm-empty-text">' + escapeHtml(err.message) + '</div></div>';
+      }
+    })
+    .getTeacherReminders();
+}
+
+// ================================================
+// RENDERING
+// ================================================
+
+function trmRenderContainer() {
+  var container = document.getElementById('myRemindersContainer');
+  if (!container) return;
+
+  var html = '<div class="trm-container">';
+  html += trmRenderStats();
+  html += trmRenderFilterBar();
+  html += trmRenderAddBar();
+  html += '<div id="trmList">';
+  html += trmRenderList();
+  html += '</div>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function trmRenderStats() {
+  var active = 0, done = 0, overdue = 0;
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (var i = 0; i < trmRemindersData.length; i++) {
+    var r = trmRemindersData[i];
+    if (r.isCompleted) {
+      done++;
+    } else {
+      active++;
+      if (r.dueDate) {
+        var due = new Date(r.dueDate + 'T00:00:00');
+        if (due < today) overdue++;
+      }
+    }
+  }
+
+  var html = '<div class="trm-stats">';
+  html += '<span class="trm-stat-badge trm-active">' + active + ' active</span>';
+  html += '<span class="trm-stat-badge trm-done">' + done + ' completed</span>';
+  if (overdue > 0) {
+    html += '<span class="trm-stat-badge trm-overdue-stat">' + overdue + ' overdue</span>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function trmRenderFilterBar() {
+  var filters = [
+    { key: 'all', label: 'All' },
+    { key: 'active', label: 'Active' },
+    { key: 'completed', label: 'Completed' },
+    { key: 'overdue', label: 'Overdue' }
+  ];
+
+  var html = '<div class="trm-filter-bar">';
+  for (var i = 0; i < filters.length; i++) {
+    var f = filters[i];
+    var isActive = trmFilter === f.key;
+    html += '<button class="trm-filter-chip' + (isActive ? ' active' : '') + '" onclick="trmSetFilter(\'' + f.key + '\')">' + f.label + '</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function trmRenderAddBar() {
+  var html = '<div class="trm-add-bar">';
+
+  // Title field
+  html += '<div class="trm-add-field trm-title-field">';
+  html += '<span class="trm-add-label">Reminder</span>';
+  html += '<input type="text" class="trm-add-input" id="trmAddTitle" placeholder="What do you need to follow up on?" maxlength="300" onkeydown="trmHandleKeydown(event)">';
+  html += '</div>';
+
+  // Due date
+  html += '<div class="trm-add-field">';
+  html += '<span class="trm-add-label">Due Date</span>';
+  html += '<input type="date" class="trm-add-date" id="trmAddDate">';
+  html += '</div>';
+
+  // Map link
+  html += '<div class="trm-add-field">';
+  html += '<span class="trm-add-label">Map (optional)</span>';
+  html += '<select class="trm-add-select" id="trmAddMap">';
+  html += '<option value="">None</option>';
+  if (typeof mapsData !== 'undefined') {
+    for (var i = 0; i < mapsData.length; i++) {
+      html += '<option value="' + escapeHtml(mapsData[i].mapId) + '">' + escapeHtml(mapsData[i].title) + '</option>';
+    }
+  }
+  html += '</select>';
+  html += '</div>';
+
+  // Add button
+  html += '<button class="trm-add-btn" id="trmAddBtn" onclick="trmAddReminder()">Add</button>';
+
+  html += '</div>';
+  return html;
+}
+
+function trmRenderList() {
+  var filtered = trmFilterReminders();
+
+  if (filtered.length === 0) {
+    if (trmRemindersData.length === 0) {
+      return '<div class="trm-empty"><div class="trm-empty-icon">&#128203;</div><div class="trm-empty-title">No reminders yet</div><div class="trm-empty-text">Add one above to start tracking your follow-ups.</div></div>';
+    }
+    return '<div class="trm-empty"><div class="trm-empty-icon">&#128269;</div><div class="trm-empty-title">No matching reminders</div><div class="trm-empty-text">Try a different filter.</div></div>';
+  }
+
+  // Separate incomplete and completed
+  var incomplete = [];
+  var completed = [];
+  for (var i = 0; i < filtered.length; i++) {
+    if (filtered[i].isCompleted) {
+      completed.push(filtered[i]);
+    } else {
+      incomplete.push(filtered[i]);
+    }
+  }
+  var ordered = incomplete.concat(completed);
+
+  var html = '<div class="trm-list">';
+  for (var j = 0; j < ordered.length; j++) {
+    var r = ordered[j];
+    var isComp = r.isCompleted;
+
+    html += '<div class="trm-item' + (isComp ? ' trm-completed' : '') + '">';
+
+    // Checkbox
+    html += '<div class="trm-checkbox' + (isComp ? ' trm-checked' : '') + '" role="checkbox" tabindex="0" aria-checked="' + (isComp ? 'true' : 'false') + '" onclick="trmToggleComplete(\'' + r.reminderId + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();trmToggleComplete(\'' + r.reminderId + '\');}">';
+    if (isComp) html += '&#10003;';
+    html += '</div>';
+
+    // Body
+    html += '<div class="trm-item-body">';
+    html += '<div class="trm-item-title">' + escapeHtml(r.title) + '</div>';
+
+    // Meta badges
+    var hasMeta = r.dueDate || r.relatedMapId || r.relatedStudentEmail;
+    if (hasMeta) {
+      html += '<div class="trm-item-meta">';
+      if (r.dueDate) {
+        html += trmFormatDueBadge(r.dueDate, isComp);
+      }
+      if (r.relatedMapId) {
+        var mapName = trmGetMapName(r.relatedMapId);
+        html += '<span class="trm-meta-badge trm-meta-map" onclick="trmNavigateToMap(\'' + escapeHtml(r.relatedMapId) + '\')" title="Open map">&#128506; ' + escapeHtml(mapName) + '</span>';
+      }
+      if (r.relatedStudentEmail) {
+        html += '<span class="trm-meta-badge trm-meta-student" title="' + escapeHtml(r.relatedStudentEmail) + '">&#128100; ' + escapeHtml(r.relatedStudentEmail.split('@')[0]) + '</span>';
+      }
+      html += '</div>';
+    }
+
+    html += '</div>'; // body
+
+    // Actions
+    html += '<div class="trm-item-actions">';
+    if (!isComp) {
+      var incIdx = -1;
+      for (var k = 0; k < incomplete.length; k++) {
+        if (incomplete[k].reminderId === r.reminderId) { incIdx = k; break; }
+      }
+      if (incIdx > 0) {
+        html += '<button class="trm-action-btn" onclick="trmMoveUp(\'' + r.reminderId + '\')" title="Move up">&#9650;</button>';
+      }
+      if (incIdx >= 0 && incIdx < incomplete.length - 1) {
+        html += '<button class="trm-action-btn" onclick="trmMoveDown(\'' + r.reminderId + '\')" title="Move down">&#9660;</button>';
+      }
+    }
+    html += '<button class="trm-action-btn trm-delete" onclick="trmDeleteReminder(\'' + r.reminderId + '\')" title="Delete">&times;</button>';
+    html += '</div>';
+
+    html += '</div>'; // item
+  }
+  html += '</div>';
+
+  return html;
+}
+
+function trmFilterReminders() {
+  if (trmFilter === 'all') return trmRemindersData.slice();
+
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var result = [];
+
+  for (var i = 0; i < trmRemindersData.length; i++) {
+    var r = trmRemindersData[i];
+    if (trmFilter === 'active' && !r.isCompleted) {
+      result.push(r);
+    } else if (trmFilter === 'completed' && r.isCompleted) {
+      result.push(r);
+    } else if (trmFilter === 'overdue' && !r.isCompleted && r.dueDate) {
+      var due = new Date(r.dueDate + 'T00:00:00');
+      if (due < today) result.push(r);
+    }
+  }
+  return result;
+}
+
+function trmFormatDueBadge(dueDate, isCompleted) {
+  if (!dueDate) return '';
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var due = new Date(dueDate + 'T00:00:00');
+  var diff = Math.floor((due - today) / 86400000);
+
+  var label = '';
+  var cls = 'trm-meta-badge trm-meta-date';
+
+  if (diff < 0 && !isCompleted) {
+    label = 'Overdue (' + Math.abs(diff) + 'd)';
+    cls += ' trm-overdue';
+  } else if (diff === 0) {
+    label = 'Due today';
+    cls += ' trm-due-today';
+  } else if (diff === 1) {
+    label = 'Tomorrow';
+  } else if (diff > 1 && diff <= 7) {
+    label = 'In ' + diff + ' days';
+  } else {
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    label = months[due.getMonth()] + ' ' + due.getDate();
+  }
+
+  return '<span class="' + cls + '">&#128197; ' + label + '</span>';
+}
+
+function trmGetMapName(mapId) {
+  if (typeof mapsData !== 'undefined') {
+    for (var i = 0; i < mapsData.length; i++) {
+      if (String(mapsData[i].mapId) === String(mapId)) return mapsData[i].title;
+    }
+  }
+  return 'Map';
+}
+
+// ================================================
+// INTERACTIONS
+// ================================================
+
+function trmHandleKeydown(e) {
+  if (e.key === 'Enter' || e.keyCode === 13) {
+    e.preventDefault();
+    trmAddReminder();
+  }
+}
+
+function trmSetFilter(filter) {
+  trmFilter = filter;
+  trmRenderContainer();
+}
+
+function trmAddReminder() {
+  var titleInput = document.getElementById('trmAddTitle');
+  var dateInput = document.getElementById('trmAddDate');
+  var mapSelect = document.getElementById('trmAddMap');
+  var btn = document.getElementById('trmAddBtn');
+
+  if (!titleInput) return;
+  var title = titleInput.value.trim();
+  if (!title) {
+    titleInput.focus();
+    return;
+  }
+
+  var data = {
+    title: title,
+    dueDate: dateInput ? dateInput.value : '',
+    relatedMapId: mapSelect ? mapSelect.value : ''
+  };
+
+  trmSaving = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+
+  google.script.run
+    .withSuccessHandler(function(reminder) {
+      trmSaving = false;
+      trmRemindersData.push(reminder);
+      trmRenderContainer();
+    })
+    .withFailureHandler(function(err) {
+      trmSaving = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
+      showToast('Error: ' + err.message, 'error');
+    })
+    .createTeacherReminder(data);
+}
+
+function trmToggleComplete(reminderId) {
+  var reminder = null;
+  for (var i = 0; i < trmRemindersData.length; i++) {
+    if (trmRemindersData[i].reminderId === reminderId) {
+      reminder = trmRemindersData[i];
+      break;
+    }
+  }
+  if (!reminder) return;
+
+  var newState = !reminder.isCompleted;
+
+  // Optimistic update
+  reminder.isCompleted = newState;
+  trmRenderContainer();
+
+  google.script.run
+    .withSuccessHandler(function() { /* success */ })
+    .withFailureHandler(function(err) {
+      reminder.isCompleted = !newState;
+      trmRenderContainer();
+      showToast('Error: ' + err.message, 'error');
+    })
+    .updateTeacherReminder(reminderId, { isCompleted: newState });
+}
+
+function trmDeleteReminder(reminderId) {
+  if (!confirm('Delete this reminder?')) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      for (var i = 0; i < trmRemindersData.length; i++) {
+        if (trmRemindersData[i].reminderId === reminderId) {
+          trmRemindersData.splice(i, 1);
+          break;
+        }
+      }
+      trmRenderContainer();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    })
+    .deleteTeacherReminder(reminderId);
+}
+
+function trmMoveUp(reminderId) {
+  var incomplete = [];
+  for (var i = 0; i < trmRemindersData.length; i++) {
+    if (!trmRemindersData[i].isCompleted) incomplete.push(trmRemindersData[i]);
+  }
+
+  var idx = -1;
+  for (var j = 0; j < incomplete.length; j++) {
+    if (incomplete[j].reminderId === reminderId) { idx = j; break; }
+  }
+  if (idx <= 0) return;
+
+  var temp = incomplete[idx].sortOrder;
+  incomplete[idx].sortOrder = incomplete[idx - 1].sortOrder;
+  incomplete[idx - 1].sortOrder = temp;
+
+  trmRenderContainer();
+  trmDebounceSaveOrder();
+}
+
+function trmMoveDown(reminderId) {
+  var incomplete = [];
+  for (var i = 0; i < trmRemindersData.length; i++) {
+    if (!trmRemindersData[i].isCompleted) incomplete.push(trmRemindersData[i]);
+  }
+
+  var idx = -1;
+  for (var j = 0; j < incomplete.length; j++) {
+    if (incomplete[j].reminderId === reminderId) { idx = j; break; }
+  }
+  if (idx < 0 || idx >= incomplete.length - 1) return;
+
+  var temp = incomplete[idx].sortOrder;
+  incomplete[idx].sortOrder = incomplete[idx + 1].sortOrder;
+  incomplete[idx + 1].sortOrder = temp;
+
+  trmRenderContainer();
+  trmDebounceSaveOrder();
+}
+
+function trmDebounceSaveOrder() {
+  if (_trmOrderDebounce) clearTimeout(_trmOrderDebounce);
+  _trmOrderDebounce = setTimeout(function() {
+    var orderData = [];
+    for (var i = 0; i < trmRemindersData.length; i++) {
+      orderData.push({ reminderId: trmRemindersData[i].reminderId, sortOrder: trmRemindersData[i].sortOrder });
+    }
+    google.script.run
+      .withSuccessHandler(function() { /* saved */ })
+      .withFailureHandler(function(err) { console.error('Save reminder order failed:', err); })
+      .saveTeacherReminderOrder(orderData);
+  }, 500);
+}
+
+function trmNavigateToMap(mapId) {
+  // Switch to builder tab and load the map
+  if (typeof switchTab === 'function') {
+    var mapTab = document.querySelector('[data-view="builder"]');
+    if (mapTab) switchTab(mapTab);
+  }
+  if (typeof openMap === 'function') {
+    openMap(mapId);
+  }
+}
+</script>

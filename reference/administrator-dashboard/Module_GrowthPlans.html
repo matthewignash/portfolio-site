@@ -1,0 +1,1748 @@
+<script>
+/**
+ * Growth Plans Module — Standards-Based Professional Growth Plan (PGP)
+ *
+ * Registers as App.ModuleRegistry.growth_plans.
+ * Admin views: Overview table, Standards Admin, Plan Detail, Create Plan, Select Standards
+ * Teacher views: My Plan (direct to own plan detail)
+ *
+ * Uses the 9-standard AISC PGP framework with 4-year rotation cycle,
+ * mandatory Wellbeing standard, and 5 structured per-standard fields.
+ */
+
+App.ModuleRegistry.growth_plans = {
+
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      isAdmin: App.getUser() && App.getUser().isAdmin,
+      overviewData: null,
+      currentPlanId: null,
+      planDetail: null,
+      standards: [],
+      filters: { department: '', status: '', division: '' }
+    };
+
+    // ── DOM Refs ──
+    var subNav, viewContainer;
+
+    // ── Build Layout ──
+    function buildLayout() {
+      container.innerHTML = '';
+      subNav = ClientUtils.el('nav', { className: 'sub-nav' });
+      viewContainer = ClientUtils.el('div', { className: 'relative' });
+      container.appendChild(subNav);
+      container.appendChild(viewContainer);
+    }
+
+    function buildSubNav(active) {
+      subNav.innerHTML = '';
+      var tabs = [];
+      if (state.isAdmin) {
+        tabs.push({ key: 'overview', label: 'Overview' });
+        tabs.push({ key: 'standards', label: 'Standards Admin' });
+        tabs.push({ key: 'dev_wall', label: 'Dev Wall' });
+        tabs.push({ key: 'coaching_admin', label: 'Coaching Triads' });
+      } else {
+        tabs.push({ key: 'my_plan', label: 'My Plan' });
+        tabs.push({ key: 'dev_wall', label: 'Dev Wall' });
+        tabs.push({ key: 'my_triad', label: 'My Triad' });
+      }
+      tabs.forEach(function(t) {
+        var btn = ClientUtils.el('button', {
+          className: 'sub-nav__item' + (active === t.key ? ' sub-nav__item--active' : ''),
+          onClick: function() { switchView(t.key); }
+        }, [t.label]);
+        subNav.appendChild(btn);
+      });
+    }
+
+    function switchView(view) {
+      viewContainer.innerHTML = '';
+      switch (view) {
+        case 'overview':       loadOverview(); break;
+        case 'standards':      loadStandardsAdmin(); break;
+        case 'my_plan':        loadMyPlan(); break;
+        case 'plan_detail':    loadPlanDetail(state.currentPlanId); break;
+        case 'dev_wall':       loadDevelopmentalWall(); break;
+        case 'coaching_admin': loadCoachingAdmin(); break;
+        case 'my_triad':       loadMyTriad(); break;
+        default:               loadOverview();
+      }
+      buildSubNav(view);
+    }
+
+    // ════════════════════════════════════════════
+    // Overview (Admin)
+    // ════════════════════════════════════════════
+
+    function loadOverview() {
+      viewContainer.innerHTML = '<div class="loading-spinner"></div>';
+      ServerAPI.getGrowthPlanOverview(state.filters).then(function(data) {
+        state.overviewData = data;
+        renderOverview();
+      }).catch(function(err) {
+        viewContainer.innerHTML = '<div class="card"><p class="text-muted">Error loading overview: ' + (err.message || err) + '</p></div>';
+      });
+    }
+
+    function renderOverview() {
+      viewContainer.innerHTML = '';
+      var data = state.overviewData;
+      if (!data) return;
+
+      var stats = data.stats || {};
+
+      // Stats Grid
+      var statsGrid = ClientUtils.el('div', { className: 'stats-grid stats-grid--4' });
+      var statItems = [
+        { label: 'Total Plans', value: stats.total || 0, cls: '' },
+        { label: 'Active', value: (stats.active || 0) + (stats.mid_year_review || 0) + (stats.final_review || 0), cls: 'text-primary' },
+        { label: 'Completed', value: stats.completed || 0, cls: 'text-success' },
+        { label: 'Overdue Check-ins', value: stats.overdueCheckins || 0, cls: stats.overdueCheckins > 0 ? 'text-danger' : '' }
+      ];
+      statItems.forEach(function(s) {
+        var card = ClientUtils.el('div', { className: 'stat-card' }, [
+          ClientUtils.el('div', { className: 'stat-card__value ' + s.cls }, [String(s.value)]),
+          ClientUtils.el('div', { className: 'stat-card__label' }, [s.label])
+        ]);
+        statsGrid.appendChild(card);
+      });
+      viewContainer.appendChild(statsGrid);
+
+      // Toolbar with filters and create button
+      var toolbar = ClientUtils.el('div', { className: 'toolbar' });
+
+      // Division filter
+      var divisionFilter = ClientUtils.el('select', {
+        className: 'form-control form-control-sm',
+        onChange: function(e) { state.filters.division = e.target.value; loadOverview(); }
+      });
+      divisionFilter.innerHTML = '<option value="">All Divisions</option><option value="Elementary">Elementary</option><option value="Middle School">Middle School</option><option value="High School">High School</option>';
+      divisionFilter.value = state.filters.division || '';
+
+      // Status filter
+      var statusFilter = ClientUtils.el('select', {
+        className: 'form-control form-control-sm',
+        onChange: function(e) { state.filters.status = e.target.value; loadOverview(); }
+      });
+      statusFilter.innerHTML = '<option value="">All Statuses</option><option value="draft">Draft</option><option value="active">Active</option><option value="mid_year_review">Mid-Year Review</option><option value="final_review">Final Review</option><option value="completed">Completed</option>';
+      statusFilter.value = state.filters.status || '';
+
+      var createBtn = ClientUtils.el('button', {
+        className: 'btn btn-primary btn-sm',
+        onClick: openCreatePlanModal
+      }, ['+ New Plan']);
+
+      toolbar.appendChild(divisionFilter);
+      toolbar.appendChild(statusFilter);
+      toolbar.appendChild(ClientUtils.el('div', { style: 'flex:1' }));
+      toolbar.appendChild(createBtn);
+      viewContainer.appendChild(toolbar);
+
+      // Plans DataTable
+      var tableContainer = ClientUtils.el('div', { className: 'card' });
+      viewContainer.appendChild(tableContainer);
+
+      var plans = data.plans || [];
+      DataTable.render(tableContainer, {
+        columns: [
+          { key: 'staffName', label: 'Staff Member', sortable: true },
+          { key: 'division', label: 'Division', sortable: true },
+          { key: 'department', label: 'Dept', sortable: true },
+          { key: 'status', label: 'Status', sortable: true, render: function(val) {
+            return '<span class="badge badge--' + badgeClass(val) + '">' + formatStatus(val) + '</span>';
+          }},
+          { key: 'standardCount', label: 'Standards', sortable: true },
+          { key: 'supervisorName', label: 'Supervisor', sortable: true },
+          { key: 'isOverdue', label: '', render: function(val) {
+            return val ? '<span class="badge badge--danger" title="Check-in overdue">Overdue</span>' : '';
+          }},
+          { key: 'hasFacultySig', label: 'Signed', render: function(val, row) {
+            var f = val ? 'F' : '';
+            var s = row.hasSupervisorSig ? 'S' : '';
+            var sig = [f, s].filter(Boolean).join('/');
+            return sig ? '<span class="text-success text-sm">' + sig + '</span>' : '<span class="text-muted text-sm">-</span>';
+          }}
+        ],
+        data: plans,
+        pageSize: 15,
+        onRowClick: function(row) {
+          state.currentPlanId = row.id;
+          switchView('plan_detail');
+        }
+      });
+    }
+
+    // ════════════════════════════════════════════
+    // Standards Admin (Admin)
+    // ════════════════════════════════════════════
+
+    function loadStandardsAdmin() {
+      viewContainer.innerHTML = '<div class="loading-spinner"></div>';
+      ServerAPI.getPgpStandards().then(function(standards) {
+        state.standards = standards;
+        renderStandardsAdmin();
+      }).catch(function(err) {
+        viewContainer.innerHTML = '<div class="card"><p class="text-muted">Error loading standards: ' + (err.message || err) + '</p></div>';
+      });
+    }
+
+    function renderStandardsAdmin() {
+      viewContainer.innerHTML = '';
+
+      var header = ClientUtils.el('div', { className: 'toolbar' }, [
+        ClientUtils.el('h3', { className: 'text-lg font-semibold' }, ['PGP Standards Library']),
+        ClientUtils.el('div', { style: 'flex:1' }),
+        ClientUtils.el('button', { className: 'btn btn-primary btn-sm', onClick: function() { openStandardModal(); } }, ['+ Add Standard'])
+      ]);
+      viewContainer.appendChild(header);
+
+      var listCard = ClientUtils.el('div', { className: 'card' });
+      viewContainer.appendChild(listCard);
+
+      if (state.standards.length === 0) {
+        listCard.innerHTML = '<p class="text-muted p-md">No standards configured. Add standards to get started.</p>';
+        return;
+      }
+
+      state.standards.forEach(function(std) {
+        var row = ClientUtils.el('div', { className: 'gp-std-admin__row' }, [
+          ClientUtils.el('div', {
+            className: 'gp-std-admin__number' + (std.isMandatory ? ' gp-accordion__std-number--mandatory' : '')
+          }, [String(std.standardNumber)]),
+          ClientUtils.el('div', { className: 'gp-std-admin__name' }, [
+            std.shortName,
+            std.isMandatory ? ClientUtils.el('span', { className: 'badge badge--warning', style: 'margin-left:8px;font-size:10px' }, ['Mandatory']) : ''
+          ].filter(Boolean)),
+          ClientUtils.el('div', { className: 'gp-std-admin__actions' }, [
+            ClientUtils.el('button', { className: 'btn btn-ghost btn-sm', onClick: function() { openStandardModal(std); } }, ['Edit']),
+            !std.isMandatory ? ClientUtils.el('button', { className: 'btn btn-ghost btn-sm text-danger', onClick: function() { deleteStandard(std); } }, ['Remove']) : null
+          ].filter(Boolean))
+        ]);
+        listCard.appendChild(row);
+      });
+    }
+
+    function openStandardModal(existing) {
+      var isEdit = !!existing;
+      var body = ClientUtils.el('div', { className: 'form-stack' });
+
+      var numInput = ClientUtils.el('input', { type: 'number', className: 'form-control', placeholder: 'Standard #', value: existing ? existing.standardNumber : '' });
+      var nameInput = ClientUtils.el('input', { type: 'text', className: 'form-control', placeholder: 'Short Name', value: existing ? existing.shortName : '' });
+      var hashInput = ClientUtils.el('input', { type: 'text', className: 'form-control', placeholder: '#Hashtag', value: existing ? existing.hashtag : '' });
+      var descInput = ClientUtils.el('textarea', { className: 'form-control', rows: 3, placeholder: 'Description', value: existing ? existing.description : '' });
+      // Using innerHTML assignment for textarea value
+      if (existing && existing.description) descInput.value = existing.description;
+      var mandCheck = ClientUtils.el('label', { className: 'form-check', style: 'display:flex;align-items:center;gap:8px' });
+      var mandInput = ClientUtils.el('input', { type: 'checkbox', checked: existing ? existing.isMandatory : false });
+      mandCheck.appendChild(mandInput);
+      mandCheck.appendChild(document.createTextNode(' Mandatory (required every year)'));
+
+      body.appendChild(formGroup('Standard Number', numInput));
+      body.appendChild(formGroup('Short Name', nameInput));
+      body.appendChild(formGroup('Hashtag', hashInput));
+      body.appendChild(formGroup('Description', descInput));
+      body.appendChild(mandCheck);
+
+      Modal.open(isEdit ? 'Edit Standard' : 'Add Standard', body, [
+        {
+          label: isEdit ? 'Save' : 'Create',
+          className: 'btn-primary',
+          onClick: function() {
+            var payload = {
+              standard_number: parseInt(numInput.value) || 0,
+              short_name: nameInput.value.trim(),
+              hashtag: hashInput.value.trim(),
+              description: descInput.value.trim(),
+              is_mandatory: mandInput.checked
+            };
+            if (!payload.short_name) return alert('Short name is required.');
+
+            var promise = isEdit
+              ? ServerAPI.updatePgpStandard(existing.id, payload)
+              : ServerAPI.createPgpStandard(payload);
+
+            promise.then(function() {
+              Modal.close();
+              loadStandardsAdmin();
+            }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+          }
+        },
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+      ]);
+    }
+
+    function deleteStandard(std) {
+      if (!confirm('Remove standard "' + std.shortName + '"? This will deactivate it.')) return;
+      ServerAPI.deletePgpStandard(std.id).then(function() {
+        loadStandardsAdmin();
+      }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+    }
+
+    // ════════════════════════════════════════════
+    // My Plan (Non-Admin)
+    // ════════════════════════════════════════════
+
+    function loadMyPlan() {
+      viewContainer.innerHTML = '<div class="loading-spinner"></div>';
+      ServerAPI.getMyGrowthPlan().then(function(data) {
+        if (!data || !data.plan) {
+          viewContainer.innerHTML = '<div class="card"><p class="text-muted p-md">No growth plan found for the current academic year. Please contact your administrator.</p></div>';
+          return;
+        }
+        state.currentPlanId = data.plan.id;
+        state.planDetail = data;
+        renderPlanDetail();
+      }).catch(function(err) {
+        viewContainer.innerHTML = '<div class="card"><p class="text-muted">Error loading your plan: ' + (err.message || err) + '</p></div>';
+      });
+    }
+
+    // ════════════════════════════════════════════
+    // Plan Detail (Shared — Admin + Teacher)
+    // ════════════════════════════════════════════
+
+    function loadPlanDetail(planId) {
+      viewContainer.innerHTML = '<div class="loading-spinner"></div>';
+      ServerAPI.getGrowthPlanDetail(planId).then(function(data) {
+        state.planDetail = data;
+        renderPlanDetail();
+      }).catch(function(err) {
+        viewContainer.innerHTML = '<div class="card"><p class="text-muted">Error loading plan: ' + (err.message || err) + '</p></div>';
+      });
+    }
+
+    function renderPlanDetail() {
+      viewContainer.innerHTML = '';
+      var detail = state.planDetail;
+      if (!detail || !detail.plan) return;
+      var plan = detail.plan;
+      var user = App.getUser();
+      var canEdit = state.isAdmin || user.id === plan.staffId;
+
+      // Back button (admin only)
+      if (state.isAdmin) {
+        viewContainer.appendChild(ClientUtils.el('button', {
+          className: 'gp-header__back',
+          onClick: function() { switchView('overview'); }
+        }, ['\u2190 Back to Overview']));
+      }
+
+      // Header Card
+      var initials = (detail.staffName || '?').split(' ').map(function(n) { return n.charAt(0); }).join('').toUpperCase();
+      var headerCard = ClientUtils.el('div', { className: 'card' }, [
+        ClientUtils.el('div', { className: 'gp-header' }, [
+          ClientUtils.el('div', { className: 'gp-header__info' }, [
+            ClientUtils.el('div', { className: 'gp-header__avatar' }, [initials]),
+            ClientUtils.el('div', {}, [
+              ClientUtils.el('div', { className: 'gp-header__name' }, [detail.staffName || 'Unknown']),
+              ClientUtils.el('div', { className: 'gp-header__dept' }, [
+                [detail.staffDepartment, plan.division].filter(Boolean).join(' \u2022 ')
+              ])
+            ])
+          ]),
+          ClientUtils.el('div', { className: 'gp-header__meta' }, [
+            ClientUtils.el('span', { className: 'badge badge--' + badgeClass(plan.status) }, [formatStatus(plan.status)]),
+            plan.yearsAtSchool ? ClientUtils.el('span', { className: 'text-sm text-muted' }, ['Year ' + plan.yearsAtSchool + ' at school']) : null,
+            ClientUtils.el('span', { className: 'text-sm text-muted' }, [plan.academicYear || '']),
+            ClientUtils.el('span', { className: 'text-sm text-muted' }, ['Supervisor: ' + (detail.supervisorName || 'N/A')])
+          ].filter(Boolean))
+        ])
+      ]);
+      viewContainer.appendChild(headerCard);
+
+      // Admin controls: status change + select standards
+      if (state.isAdmin) {
+        var controls = ClientUtils.el('div', { className: 'toolbar', style: 'margin-bottom:var(--space-md)' });
+
+        var statusSelect = ClientUtils.el('select', {
+          className: 'form-control form-control-sm',
+          onChange: function(e) {
+            ServerAPI.updateGrowthPlan(plan.id, { status: e.target.value }).then(function() {
+              loadPlanDetail(plan.id);
+            }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+          }
+        });
+        statusSelect.innerHTML = '<option value="draft">Draft</option><option value="active">Active</option><option value="mid_year_review">Mid-Year Review</option><option value="final_review">Final Review</option><option value="completed">Completed</option>';
+        statusSelect.value = plan.status;
+
+        var selectStdsBtn = ClientUtils.el('button', {
+          className: 'btn btn-secondary btn-sm',
+          onClick: function() { openSelectStandardsModal(plan); }
+        }, ['Select Standards']);
+
+        controls.appendChild(ClientUtils.el('label', { className: 'text-sm text-muted', style: 'margin-right:8px' }, ['Status:']));
+        controls.appendChild(statusSelect);
+        controls.appendChild(ClientUtils.el('div', { style: 'flex:1' }));
+        controls.appendChild(selectStdsBtn);
+        viewContainer.appendChild(controls);
+      }
+
+      // Growing Edge Card (DDO)
+      renderGrowingEdgeCard(plan, canEdit);
+
+      // Signature Card
+      renderSignatureCard(plan, canEdit);
+
+      // Standards at a Glance (load async)
+      var glanceContainer = ClientUtils.el('div', { className: 'card', style: 'margin-bottom:var(--space-lg)' });
+      glanceContainer.innerHTML = '<div class="p-md"><strong>Standards at a Glance</strong><div class="loading-spinner" style="margin-top:8px"></div></div>';
+      viewContainer.appendChild(glanceContainer);
+      loadGlanceMatrix(plan.staffId, glanceContainer);
+
+      // Selected Standards (accordion)
+      var selectionsHeading = ClientUtils.el('h3', { className: 'text-lg font-semibold', style: 'margin-bottom:var(--space-md)' }, ['Selected Standards']);
+      viewContainer.appendChild(selectionsHeading);
+
+      var selections = detail.selections || [];
+      if (selections.length === 0) {
+        viewContainer.appendChild(ClientUtils.el('div', { className: 'card' }, [
+          ClientUtils.el('p', { className: 'text-muted p-md' }, [
+            state.isAdmin ? 'No standards selected yet. Use "Select Standards" to choose standards for this plan.' : 'No standards selected yet. Please contact your supervisor.'
+          ])
+        ]));
+      } else {
+        selections.forEach(function(sel) {
+          renderStandardAccordion(sel, canEdit, plan);
+        });
+      }
+
+      // Meetings Section
+      renderMeetingsSection(detail.meetings || [], plan, canEdit);
+    }
+
+    // ── Growing Edge Card (DDO) ──
+    function renderGrowingEdgeCard(plan, canEdit) {
+      var card = ClientUtils.el('div', { className: 'growing-edge-card' });
+      card.appendChild(ClientUtils.el('div', { className: 'growing-edge-card__title' }, [
+        '\uD83C\uDF31', 'My Growing Edge'
+      ]));
+
+      if (canEdit) {
+        var textarea = ClientUtils.el('textarea', {
+          className: 'gp-section__textarea',
+          rows: 3,
+          placeholder: 'What is your primary developmental edge right now? What personal limitation are you stretching beyond?'
+        });
+        textarea.value = plan.growingEdgeSummary || '';
+        var edgeSaveTimer = null;
+        textarea.addEventListener('input', function() {
+          clearTimeout(edgeSaveTimer);
+          var val = textarea.value;
+          edgeSaveTimer = setTimeout(function() {
+            ServerAPI.updateGrowthPlan(plan.id, { growing_edge_summary: val }).catch(function(err) {
+              console.log('Auto-save growing edge error:', err);
+            });
+          }, 1500);
+        });
+        card.appendChild(textarea);
+
+        // Visibility selector
+        var visRow = ClientUtils.el('div', { className: 'growing-edge-card__visibility' });
+        visRow.appendChild(ClientUtils.el('label', {}, ['Visibility:']));
+        var visSelect = ClientUtils.el('select', {
+          onChange: function(e) {
+            ServerAPI.updateGrowthPlan(plan.id, { growing_edge_visibility: e.target.value }).catch(function(err) {
+              console.log('Visibility save error:', err);
+            });
+          }
+        });
+        visSelect.innerHTML = '<option value="private">Private (only me)</option><option value="team">Team (my department)</option><option value="public">Public (Dev Wall)</option>';
+        visSelect.value = plan.growingEdgeVisibility || 'private';
+        visRow.appendChild(visSelect);
+        card.appendChild(visRow);
+      } else {
+        card.appendChild(ClientUtils.el('div', { className: 'gp-section__text' }, [
+          plan.growingEdgeSummary || 'No growing edge set yet.'
+        ]));
+      }
+
+      viewContainer.appendChild(card);
+    }
+
+    // ── Signature Card ──
+    function renderSignatureCard(plan, canEdit) {
+      var card = ClientUtils.el('div', { className: 'gp-signature-card' });
+      var user = App.getUser();
+
+      // Faculty Signature
+      var facSig = ClientUtils.el('div', { className: 'gp-signature' });
+      facSig.appendChild(ClientUtils.el('div', { className: 'gp-signature__label' }, ['Faculty Signature']));
+      if (plan.facultySignedDate) {
+        facSig.appendChild(ClientUtils.el('div', { className: 'gp-signature__value gp-signature__value--signed' }, [
+          'Signed ' + ClientUtils.formatDate(plan.facultySignedDate)
+        ]));
+      } else {
+        facSig.appendChild(ClientUtils.el('div', { className: 'gp-signature__value gp-signature__value--pending' }, ['Not yet signed']));
+        if (canEdit && (user.id === plan.staffId || state.isAdmin)) {
+          facSig.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm btn-secondary gp-signature__btn',
+            onClick: function() { signPlan(plan.id, 'faculty'); }
+          }, ['Sign as Faculty']));
+        }
+      }
+      card.appendChild(facSig);
+
+      // Supervisor Signature
+      var supSig = ClientUtils.el('div', { className: 'gp-signature' });
+      supSig.appendChild(ClientUtils.el('div', { className: 'gp-signature__label' }, ['Supervisor Signature']));
+      if (plan.supervisorSignedDate) {
+        supSig.appendChild(ClientUtils.el('div', { className: 'gp-signature__value gp-signature__value--signed' }, [
+          'Signed ' + ClientUtils.formatDate(plan.supervisorSignedDate)
+        ]));
+      } else {
+        supSig.appendChild(ClientUtils.el('div', { className: 'gp-signature__value gp-signature__value--pending' }, ['Not yet signed']));
+        if (state.isAdmin) {
+          supSig.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm btn-secondary gp-signature__btn',
+            onClick: function() { signPlan(plan.id, 'supervisor'); }
+          }, ['Sign as Supervisor']));
+        }
+      }
+      card.appendChild(supSig);
+
+      viewContainer.appendChild(card);
+    }
+
+    function signPlan(planId, type) {
+      if (!confirm('Sign this plan as ' + type + '? This action is recorded with a timestamp.')) return;
+      ServerAPI.signGrowthPlan(planId, type).then(function() {
+        loadPlanDetail(planId);
+      }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+    }
+
+    // ── Standards at a Glance Matrix ──
+    function loadGlanceMatrix(staffId, container) {
+      ServerAPI.getStandardsAtAGlance(staffId).then(function(glance) {
+        renderGlanceMatrix(glance, container);
+      }).catch(function(err) {
+        container.innerHTML = '<p class="text-muted p-md">Could not load cycle history.</p>';
+      });
+    }
+
+    function renderGlanceMatrix(glance, container) {
+      container.innerHTML = '';
+      var heading = ClientUtils.el('div', { className: 'p-md', style: 'padding-bottom:0' }, [
+        ClientUtils.el('strong', {}, ['Standards at a Glance'])
+      ]);
+      container.appendChild(heading);
+
+      var standards = glance.standards || [];
+      var history = glance.history || {};
+      var years = Object.keys(history).sort();
+
+      if (years.length === 0 && standards.length === 0) {
+        container.appendChild(ClientUtils.el('p', { className: 'text-muted p-md' }, ['No cycle history available.']));
+        return;
+      }
+
+      var wrapper = ClientUtils.el('div', { className: 'gp-glance' });
+      var table = ClientUtils.el('table', { className: 'gp-glance__table' });
+
+      // Header row
+      var thead = ClientUtils.el('thead');
+      var headerRow = ClientUtils.el('tr');
+      headerRow.appendChild(ClientUtils.el('th', {}, ['Standard']));
+      years.forEach(function(y) {
+        var yearData = history[y];
+        var cycleLabel = 'Y' + (yearData.yearInCycle || '?');
+        headerRow.appendChild(ClientUtils.el('th', {}, [y + ' (' + cycleLabel + ')']));
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      // Body rows
+      var tbody = ClientUtils.el('tbody');
+      standards.forEach(function(std) {
+        var row = ClientUtils.el('tr');
+        var nameCell = ClientUtils.el('td', {}, [
+          std.standardNumber + '. ' + std.shortName + (std.isMandatory ? ' *' : '')
+        ]);
+        row.appendChild(nameCell);
+
+        years.forEach(function(y) {
+          var yearData = history[y];
+          var stdIds = yearData.standardIds || [];
+          var cell = ClientUtils.el('td');
+          if (stdIds.indexOf(std.id) !== -1) {
+            var dotClass = 'gp-glance__dot';
+            if (std.isMandatory) dotClass += ' gp-glance__dot--mandatory';
+            cell.appendChild(ClientUtils.el('span', { className: dotClass }));
+          }
+          row.appendChild(cell);
+        });
+
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      wrapper.appendChild(table);
+      container.appendChild(wrapper);
+    }
+
+    // ── Standard Accordion ──
+    function renderStandardAccordion(sel, canEdit, plan) {
+      var accordion = ClientUtils.el('div', { className: 'gp-accordion' });
+
+      var numClass = 'gp-accordion__std-number' + (sel.isMandatory ? ' gp-accordion__std-number--mandatory' : '');
+      var statusBadge = ClientUtils.el('span', { className: 'badge badge--' + selectionBadgeClass(sel.status) }, [formatSelectionStatus(sel.status)]);
+
+      var trigger = ClientUtils.el('button', {
+        className: 'gp-accordion__trigger',
+        'aria-expanded': 'false'
+      }, [
+        ClientUtils.el('span', { className: numClass }, [String(sel.standardNumber)]),
+        ClientUtils.el('span', {}, [sel.shortName]),
+        sel.hashtag ? ClientUtils.el('span', { className: 'gp-accordion__hashtag' }, [sel.hashtag]) : null,
+        statusBadge,
+        ClientUtils.el('span', { className: 'gp-accordion__chevron' }, ['\u25BC'])
+      ].filter(Boolean));
+
+      var panel = ClientUtils.el('div', { className: 'gp-accordion__panel' });
+
+      trigger.addEventListener('click', function() {
+        var expanded = trigger.getAttribute('aria-expanded') === 'true';
+        trigger.setAttribute('aria-expanded', String(!expanded));
+        panel.className = 'gp-accordion__panel' + (!expanded ? ' gp-accordion__panel--open' : '');
+      });
+
+      // 5 PGP field sections
+      var fields = [
+        { key: 'initialGoal', label: 'Initial Goal', dbKey: 'initial_goal' },
+        { key: 'successCriteria', label: 'Success Criteria', dbKey: 'success_criteria' },
+        { key: 'evidencePlanned', label: 'Evidence to Collect', dbKey: 'evidence_planned' },
+        { key: 'reflection', label: 'Reflection & Evidence', dbKey: 'reflection' },
+        { key: 'evidenceLinked', label: 'Evidence Linked', dbKey: 'evidence_linked' }
+      ];
+
+      fields.forEach(function(f) {
+        var section = ClientUtils.el('div', { className: 'gp-section' });
+        section.appendChild(ClientUtils.el('div', { className: 'gp-section__label' }, [f.label]));
+
+        if (canEdit) {
+          var textarea = ClientUtils.el('textarea', {
+            className: 'gp-section__textarea',
+            rows: 3,
+            placeholder: 'Enter ' + f.label.toLowerCase() + '...'
+          });
+          textarea.value = sel[f.key] || '';
+          var saveTimer = null;
+          textarea.addEventListener('input', function() {
+            clearTimeout(saveTimer);
+            var val = textarea.value;
+            var updates = {};
+            updates[f.dbKey] = val;
+            saveTimer = setTimeout(function() {
+              ServerAPI.updateStandardSelection(sel.id, updates).catch(function(err) {
+                console.log('Auto-save error:', err);
+              });
+            }, 1500);
+          });
+          section.appendChild(textarea);
+        } else {
+          section.appendChild(ClientUtils.el('div', { className: 'gp-section__text' }, [sel[f.key] || '\u2014']));
+        }
+
+        panel.appendChild(section);
+      });
+
+      // ── Growing Edge (per-standard, DDO) ──
+      var geSection = ClientUtils.el('div', { className: 'gp-section gp-section--growing-edge' });
+      geSection.appendChild(ClientUtils.el('div', { className: 'gp-section__label' }, [
+        '\uD83C\uDF31 Growing Edge \u2014 What personal limitation are you stretching beyond?'
+      ]));
+      if (canEdit) {
+        var geTextarea = ClientUtils.el('textarea', {
+          className: 'gp-section__textarea',
+          rows: 2,
+          placeholder: 'What personal limitation are you stretching beyond in this standard?'
+        });
+        geTextarea.value = sel.growingEdge || '';
+        var geSaveTimer = null;
+        geTextarea.addEventListener('input', function() {
+          clearTimeout(geSaveTimer);
+          var val = geTextarea.value;
+          geSaveTimer = setTimeout(function() {
+            ServerAPI.updateStandardSelection(sel.id, { growing_edge: val }).catch(function(err) {
+              console.log('Auto-save growing edge error:', err);
+            });
+          }, 1500);
+        });
+        geSection.appendChild(geTextarea);
+      } else {
+        geSection.appendChild(ClientUtils.el('div', { className: 'gp-section__text' }, [sel.growingEdge || '\u2014']));
+      }
+      panel.appendChild(geSection);
+
+      // ── Stretch Challenge (supervisor-set, DDO) ──
+      var scSection = ClientUtils.el('div', { className: 'gp-section gp-section--stretch' });
+      scSection.appendChild(ClientUtils.el('div', { className: 'gp-section__label' }, [
+        '\uD83D\uDD25 Stretch Challenge'
+      ]));
+      if (state.isAdmin) {
+        var scTextarea = ClientUtils.el('textarea', {
+          className: 'gp-section__textarea',
+          rows: 2,
+          placeholder: 'Set a stretch challenge for this staff member (supervisor only)...'
+        });
+        scTextarea.value = sel.stretchChallenge || '';
+        var scSaveTimer = null;
+        scTextarea.addEventListener('input', function() {
+          clearTimeout(scSaveTimer);
+          var val = scTextarea.value;
+          scSaveTimer = setTimeout(function() {
+            ServerAPI.updateStandardSelection(sel.id, { stretch_challenge: val }).catch(function(err) {
+              console.log('Auto-save stretch challenge error:', err);
+            });
+          }, 1500);
+        });
+        scSection.appendChild(scTextarea);
+      } else {
+        if (sel.stretchChallenge) {
+          scSection.appendChild(ClientUtils.el('div', { className: 'gp-section__text' }, [sel.stretchChallenge]));
+          if (sel.stretchChallengeSetBy) {
+            scSection.appendChild(ClientUtils.el('div', { className: 'stretch-set-by' }, [
+              'Set by supervisor'
+            ]));
+          }
+        } else {
+          scSection.appendChild(ClientUtils.el('div', { className: 'gp-section__text text-muted' }, [
+            'No stretch challenge set yet.'
+          ]));
+        }
+      }
+      panel.appendChild(scSection);
+
+      // ── Immunity to Change Map (DDO) ──
+      renderITCMap(sel, canEdit, panel);
+
+      // Supervisor Comments (special section)
+      var supSection = ClientUtils.el('div', { className: 'gp-section gp-section--supervisor' });
+      supSection.appendChild(ClientUtils.el('div', { className: 'gp-section__label' }, ['Supervisor Comments']));
+
+      if (state.isAdmin) {
+        var supTextarea = ClientUtils.el('textarea', {
+          className: 'gp-section__textarea',
+          rows: 3,
+          placeholder: 'Enter supervisor comments...'
+        });
+        supTextarea.value = sel.supervisorComments || '';
+        var supSaveTimer = null;
+        supTextarea.addEventListener('input', function() {
+          clearTimeout(supSaveTimer);
+          var val = supTextarea.value;
+          supSaveTimer = setTimeout(function() {
+            ServerAPI.updateStandardSelection(sel.id, { supervisor_comments: val }).catch(function(err) {
+              console.log('Auto-save error:', err);
+            });
+          }, 1500);
+        });
+        supSection.appendChild(supTextarea);
+      } else {
+        supSection.appendChild(ClientUtils.el('div', { className: 'gp-section__text' }, [sel.supervisorComments || '\u2014']));
+      }
+      panel.appendChild(supSection);
+
+      // Related PD section (lazy-loaded on first expand)
+      var pdSection = ClientUtils.el('div', { className: 'gp-section', style: 'border-top:1px solid var(--border);padding-top:var(--space-md);margin-top:var(--space-md)' });
+      pdSection.appendChild(ClientUtils.el('div', { className: 'gp-section__label', style: 'display:flex;align-items:center;gap:6px' }, [
+        '\uD83D\uDCDA Related Professional Development'
+      ]));
+      var pdContent = ClientUtils.el('div', { style: 'color:var(--text-muted);font-size:var(--text-sm)' }, ['Click to load...']);
+      pdSection.appendChild(pdContent);
+      var pdLoaded = false;
+
+      trigger.addEventListener('click', function() {
+        if (pdLoaded) return;
+        pdLoaded = true;
+        pdContent.textContent = 'Loading PD offerings...';
+        ServerAPI.getRecommendedPD(sel.standardId).then(function(offerings) {
+          pdContent.innerHTML = '';
+          if (!offerings || offerings.length === 0) {
+            pdContent.textContent = 'No PD offerings linked to this standard.';
+            return;
+          }
+          offerings.forEach(function(pd) {
+            var catLabels = { workshop:'Workshop', course:'Course', conference:'Conference', webinar:'Webinar', coaching:'Coaching', book_study:'Book Study', other:'Other' };
+            var pdCard = ClientUtils.el('div', {
+              style: 'display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:var(--space-xs);cursor:pointer',
+              onClick: function() {
+                // Switch to PD module and open this offering
+                App.switchTab('pd');
+              }
+            });
+            pdCard.appendChild(ClientUtils.el('span', {
+              className: 'pd-category-badge pd-cat--' + pd.category
+            }, [catLabels[pd.category] || pd.category]));
+            pdCard.appendChild(ClientUtils.el('span', { style: 'font-weight:600;flex:1' }, [pd.title]));
+            pdCard.appendChild(ClientUtils.el('span', { style: 'color:var(--text-muted);font-size:11px' }, [
+              ClientUtils.formatDate(pd.sessionDate)
+            ]));
+            if (pd.creditHours) {
+              pdCard.appendChild(ClientUtils.el('span', { style: 'color:var(--text-muted);font-size:11px' }, [pd.creditHours + 'h']));
+            }
+            pdContent.appendChild(pdCard);
+          });
+        }).catch(function(err) {
+          pdContent.textContent = 'Failed to load PD offerings.';
+        });
+      });
+      panel.appendChild(pdSection);
+
+      // 360 Feedback Evidence section (shows linked feedback summaries)
+      var fbSection = ClientUtils.el('div', { className: 'gp-section', style: 'border-top:1px solid var(--border);padding-top:var(--space-md);margin-top:var(--space-md)' });
+      fbSection.appendChild(ClientUtils.el('div', { className: 'gp-section__label', style: 'display:flex;align-items:center;gap:6px' }, [
+        '\uD83D\uDD04 360 Feedback Evidence'
+      ]));
+      var fbContent = ClientUtils.el('div', { style: 'color:var(--text-muted);font-size:var(--text-sm)' });
+      fbSection.appendChild(fbContent);
+      // Check if evidence_linked contains any [360: ...] entries
+      var evidenceText = sel.evidence_linked || '';
+      var fb360Matches = evidenceText.match(/\[360:[^\]]+\]/g);
+      if (fb360Matches && fb360Matches.length > 0) {
+        fb360Matches.forEach(function(match) {
+          var fbCard = ClientUtils.el('div', {
+            style: 'display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:var(--space-xs);background:#F5F3FF'
+          });
+          fbCard.appendChild(ClientUtils.el('span', { style: 'font-size:1.1rem' }, ['\uD83D\uDD04']));
+          fbCard.appendChild(ClientUtils.el('span', { style: 'font-size:0.85rem;flex:1' }, [match]));
+          fbCard.appendChild(ClientUtils.el('span', {
+            style: 'font-size:0.7rem;color:#059669;font-weight:600'
+          }, ['\u2705 Linked']));
+          fbContent.appendChild(fbCard);
+        });
+      } else {
+        var fbLink = ClientUtils.el('a', {
+          href: '#',
+          style: 'font-size:0.8rem;color:var(--primary)',
+          textContent: 'Link feedback from 360 Feedback module \u2192',
+          onClick: function(e) {
+            e.preventDefault();
+            App.switchTab('feedback');
+          }
+        });
+        fbContent.appendChild(ClientUtils.el('span', {}, ['No feedback linked. ']));
+        fbContent.appendChild(fbLink);
+      }
+      panel.appendChild(fbSection);
+
+      // Wellness Insights section (shows latest wellness + workload summary)
+      var wlSection = ClientUtils.el('div', { className: 'gp-section', style: 'border-top:1px solid var(--border);padding-top:var(--space-md);margin-top:var(--space-md)' });
+      wlSection.appendChild(ClientUtils.el('div', { className: 'gp-section__label', style: 'display:flex;align-items:center;gap:6px' }, [
+        '\uD83D\uDC9A Wellness Insights'
+      ]));
+      var wlContent = ClientUtils.el('div', { style: 'color:var(--text-muted);font-size:var(--text-sm)' });
+      wlSection.appendChild(wlContent);
+      // Load wellness data for this staff member
+      (function(wlCont, planStaffId) {
+        ServerAPI.call('apiGetStaffWorkload', planStaffId).then(function(resp) {
+          var wlData = resp;
+          var wellnessRow = ClientUtils.el('div', {
+            style: 'display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm);border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)'
+          });
+          var lvl = wlData.level || 'green';
+          var lvlColor = lvl === 'red' ? '#dc2626' : (lvl === 'amber' ? '#d97706' : '#16a34a');
+          wellnessRow.innerHTML =
+            '<span style="font-size:1.2rem;font-weight:700;color:' + lvlColor + '">' + wlData.compositeScore + '</span>' +
+            '<span style="font-size:0.85rem;flex:1">Workload Score (' + lvl.toUpperCase() + ')</span>' +
+            '<a href="#" style="font-size:0.8rem;color:var(--primary)" onclick="event.preventDefault();App.switchTab(\'wellness\')">View details \u2192</a>';
+          wlCont.appendChild(wellnessRow);
+        }).catch(function() {
+          wlCont.innerHTML = '<span style="font-size:0.8rem;">Wellness data unavailable</span>';
+        });
+      })(wlContent, plan.staff_id || plan.staffId);
+      panel.appendChild(wlSection);
+
+      // Selection status update (admin)
+      if (state.isAdmin) {
+        var statusRow = ClientUtils.el('div', { style: 'margin-top:var(--space-md);display:flex;align-items:center;gap:8px' });
+        statusRow.appendChild(ClientUtils.el('label', { className: 'text-sm text-muted' }, ['Status:']));
+        var selStatusSelect = ClientUtils.el('select', {
+          className: 'form-control form-control-sm',
+          style: 'width:auto',
+          onChange: function(e) {
+            ServerAPI.updateStandardSelection(sel.id, { status: e.target.value }).catch(function(err) {
+              alert('Error: ' + (err.message || err));
+            });
+          }
+        });
+        selStatusSelect.innerHTML = '<option value="not_started">Not Started</option><option value="in_progress">In Progress</option><option value="completed">Completed</option>';
+        selStatusSelect.value = sel.status || 'not_started';
+        statusRow.appendChild(selStatusSelect);
+        panel.appendChild(statusRow);
+      }
+
+      accordion.appendChild(trigger);
+      accordion.appendChild(panel);
+      viewContainer.appendChild(accordion);
+    }
+
+    // ── Meetings Section ──
+    function renderMeetingsSection(meetings, plan, canEdit) {
+      var heading = ClientUtils.el('div', { className: 'toolbar', style: 'margin-top:var(--space-xl);margin-bottom:var(--space-md)' }, [
+        ClientUtils.el('h3', { className: 'text-lg font-semibold' }, ['Meetings']),
+        ClientUtils.el('div', { style: 'flex:1' }),
+        canEdit ? ClientUtils.el('button', {
+          className: 'btn btn-sm btn-secondary',
+          onClick: function() { openMeetingModal(plan); }
+        }, ['+ Log Meeting']) : null
+      ].filter(Boolean));
+      viewContainer.appendChild(heading);
+
+      if (meetings.length === 0) {
+        viewContainer.appendChild(ClientUtils.el('div', { className: 'card' }, [
+          ClientUtils.el('p', { className: 'text-muted p-md' }, ['No meetings recorded yet.'])
+        ]));
+        return;
+      }
+
+      meetings.forEach(function(m) {
+        var meetCard = ClientUtils.el('div', { className: 'gp-meeting' });
+        meetCard.appendChild(ClientUtils.el('div', { className: 'gp-meeting__header' }, [
+          ClientUtils.el('span', { className: 'gp-meeting__date' }, [ClientUtils.formatDate(m.meetingDate)]),
+          ClientUtils.el('span', { className: 'badge badge--' + meetingBadge(m.meetingType) }, [formatMeetingType(m.meetingType)])
+        ]));
+
+        if (m.notes) {
+          meetCard.appendChild(ClientUtils.el('div', { className: 'gp-meeting__notes' }, [m.notes]));
+        }
+        if (m.actionItems) {
+          meetCard.appendChild(ClientUtils.el('div', { className: 'gp-meeting__actions-label' }, ['Action Items']));
+          meetCard.appendChild(ClientUtils.el('div', { className: 'gp-meeting__actions-list' }, [m.actionItems]));
+        }
+        if (m.nextMeetingDate) {
+          meetCard.appendChild(ClientUtils.el('div', { className: 'gp-meeting__next' }, ['Next meeting: ' + ClientUtils.formatDate(m.nextMeetingDate)]));
+        }
+
+        var footer = ClientUtils.el('div', { className: 'gp-meeting__footer' }, [
+          ClientUtils.el('span', {}, ['Attendees: ' + (m.attendees || []).join(', ')]),
+          canEdit ? ClientUtils.el('button', {
+            className: 'btn btn-ghost btn-sm',
+            onClick: function() { openMeetingModal(plan, m); }
+          }, ['Edit']) : null
+        ].filter(Boolean));
+        meetCard.appendChild(footer);
+
+        viewContainer.appendChild(meetCard);
+      });
+    }
+
+    // ════════════════════════════════════════════
+    // ITC Map (Immunity to Change)
+    // ════════════════════════════════════════════
+
+    function renderITCMap(sel, canEdit, panel) {
+      var itcMap = sel.itcMap;
+
+      var mapContainer = ClientUtils.el('div', { className: 'itc-map' });
+
+      // Collapsible header
+      var mapHeader = ClientUtils.el('div', { className: 'itc-map__header' });
+      mapHeader.appendChild(ClientUtils.el('span', {}, ['\uD83D\uDDFA\uFE0F']));
+      mapHeader.appendChild(ClientUtils.el('span', { className: 'itc-map__title' }, ['Immunity to Change Map']));
+      if (itcMap && itcMap.status) {
+        mapHeader.appendChild(ClientUtils.el('span', {
+          className: 'badge badge--' + (itcMap.status === 'active' ? 'primary' : itcMap.status === 'completed' ? 'success' : 'default')
+        }, [itcMap.status]));
+      }
+      var chevron = ClientUtils.el('span', { className: 'itc-map__chevron' }, ['\u25BC']);
+      mapHeader.appendChild(chevron);
+
+      var mapBody = ClientUtils.el('div', { className: 'itc-map__body' });
+
+      mapHeader.addEventListener('click', function() {
+        var isOpen = mapBody.classList.contains('itc-map__body--open');
+        mapBody.classList.toggle('itc-map__body--open');
+        chevron.classList.toggle('itc-map__chevron--open');
+
+        // Lazy-create ITC map on first open if none exists and user can edit
+        if (!isOpen && !itcMap && canEdit && !mapBody.dataset.created) {
+          mapBody.dataset.created = 'true';
+          ServerAPI.createITCMap({ selection_id: sel.id }).then(function(newMap) {
+            sel.itcMap = {
+              id: newMap.id,
+              commitment: '', doingNotDoing: '', competingCommitments: '',
+              bigAssumptions: '', status: 'draft', reflectionNotes: ''
+            };
+            buildITCFields(sel.itcMap, canEdit, mapBody);
+          }).catch(function(err) {
+            mapBody.innerHTML = '<p class="text-muted p-md">Failed to create ITC map: ' + (err.message || err) + '</p>';
+          });
+          return;
+        }
+      });
+
+      mapContainer.appendChild(mapHeader);
+      mapContainer.appendChild(mapBody);
+
+      // If ITC map exists, build fields immediately (hidden until expanded)
+      if (itcMap) {
+        buildITCFields(itcMap, canEdit, mapBody);
+      } else if (!canEdit) {
+        mapBody.innerHTML = '<p class="text-muted p-md">No ITC map created yet.</p>';
+      } else {
+        mapBody.innerHTML = '<p class="text-muted p-md">Click to create an Immunity to Change map for this standard.</p>';
+      }
+
+      panel.appendChild(mapContainer);
+    }
+
+    function buildITCFields(itcMap, canEdit, container) {
+      container.innerHTML = '';
+
+      var columns = [
+        { key: 'commitment', dbKey: 'commitment', label: 'Commitment', labelClass: 'itc-map__column-label--1', placeholder: 'I am committed to the value or goal of...' },
+        { key: 'doingNotDoing', dbKey: 'doing_not_doing', label: 'Doing / Not Doing', labelClass: 'itc-map__column-label--2', placeholder: 'What I do or don\'t do that works against my commitment...' },
+        { key: 'competingCommitments', dbKey: 'competing_commitments', label: 'Competing Commitments', labelClass: 'itc-map__column-label--3', placeholder: 'I may also be committed to...' },
+        { key: 'bigAssumptions', dbKey: 'big_assumptions', label: 'Big Assumptions', labelClass: 'itc-map__column-label--4', placeholder: 'I assume that if I...' }
+      ];
+
+      var grid = ClientUtils.el('div', { className: 'itc-map__grid' });
+
+      columns.forEach(function(col) {
+        var colDiv = ClientUtils.el('div', { className: 'itc-map__column' });
+        colDiv.appendChild(ClientUtils.el('div', { className: 'itc-map__column-label ' + col.labelClass }, [col.label]));
+
+        if (canEdit) {
+          var ta = ClientUtils.el('textarea', {
+            className: 'itc-map__textarea',
+            placeholder: col.placeholder
+          });
+          ta.value = itcMap[col.key] || '';
+          var saveTimer = null;
+          (function(fieldKey) {
+            ta.addEventListener('input', function() {
+              clearTimeout(saveTimer);
+              var val = ta.value;
+              var updates = {};
+              updates[fieldKey] = val;
+              saveTimer = setTimeout(function() {
+                ServerAPI.updateITCMap(itcMap.id, updates).catch(function(err) {
+                  console.log('ITC auto-save error:', err);
+                });
+              }, 1500);
+            });
+          })(col.dbKey);
+          colDiv.appendChild(ta);
+        } else {
+          colDiv.appendChild(ClientUtils.el('div', { style: 'font-size:0.85rem;line-height:1.5' }, [
+            itcMap[col.key] || '\u2014'
+          ]));
+        }
+
+        grid.appendChild(colDiv);
+      });
+
+      container.appendChild(grid);
+
+      // Reflection Notes
+      var refDiv = ClientUtils.el('div', { className: 'itc-map__reflection' });
+      refDiv.appendChild(ClientUtils.el('div', { className: 'itc-map__reflection-label' }, ['Reflection Notes']));
+      if (canEdit) {
+        var refTa = ClientUtils.el('textarea', {
+          className: 'itc-map__textarea',
+          placeholder: 'What are you noticing as you work with this map? What experiments have you run to test your big assumptions?'
+        });
+        refTa.value = itcMap.reflectionNotes || '';
+        var refTimer = null;
+        refTa.addEventListener('input', function() {
+          clearTimeout(refTimer);
+          var val = refTa.value;
+          refTimer = setTimeout(function() {
+            ServerAPI.updateITCMap(itcMap.id, { reflection_notes: val }).catch(function(err) {
+              console.log('ITC reflection save error:', err);
+            });
+          }, 1500);
+        });
+        refDiv.appendChild(refTa);
+      } else {
+        refDiv.appendChild(ClientUtils.el('div', { style: 'font-size:0.85rem;line-height:1.5' }, [
+          itcMap.reflectionNotes || '\u2014'
+        ]));
+      }
+      container.appendChild(refDiv);
+
+      // Status selector (admin only)
+      if (state.isAdmin) {
+        var statusRow = ClientUtils.el('div', { className: 'itc-map__status' });
+        statusRow.appendChild(ClientUtils.el('label', { className: 'text-sm text-muted' }, ['ITC Status:']));
+        var statusSel = ClientUtils.el('select', {
+          className: 'form-control form-control-sm',
+          style: 'width:auto',
+          onChange: function(e) {
+            ServerAPI.updateITCMap(itcMap.id, { status: e.target.value }).catch(function(err) {
+              alert('Error: ' + (err.message || err));
+            });
+          }
+        });
+        statusSel.innerHTML = '<option value="draft">Draft</option><option value="active">Active</option><option value="testing">Testing Assumptions</option><option value="completed">Completed</option>';
+        statusSel.value = itcMap.status || 'draft';
+        statusRow.appendChild(statusSel);
+        container.appendChild(statusRow);
+      }
+    }
+
+    // ════════════════════════════════════════════
+    // Developmental Wall
+    // ════════════════════════════════════════════
+
+    function loadDevelopmentalWall() {
+      viewContainer.innerHTML = '<div class="loading-spinner"></div>';
+      ServerAPI.getDevelopmentalWall().then(function(entries) {
+        renderDevelopmentalWall(entries);
+      }).catch(function(err) {
+        viewContainer.innerHTML = '<div class="card"><p class="text-muted p-md">Error loading developmental wall: ' + (err.message || err) + '</p></div>';
+      });
+    }
+
+    function renderDevelopmentalWall(entries) {
+      viewContainer.innerHTML = '';
+
+      // Header
+      var header = ClientUtils.el('div', { style: 'margin-bottom:var(--space-lg)' }, [
+        ClientUtils.el('h2', { className: 'text-lg font-semibold' }, ['\uD83C\uDF31 Developmental Wall']),
+        ClientUtils.el('p', { className: 'text-sm text-muted', style: 'margin-top:4px' }, [
+          'Publicly shared growing edges across the school community. In a Deliberately Developmental Organization, growth is visible and celebrated.'
+        ])
+      ]);
+      viewContainer.appendChild(header);
+
+      if (!entries || entries.length === 0) {
+        viewContainer.appendChild(ClientUtils.el('div', { className: 'card' }, [
+          ClientUtils.el('div', { className: 'empty-state' }, [
+            ClientUtils.el('div', { className: 'empty-state__icon' }, ['\uD83C\uDF31']),
+            ClientUtils.el('div', { className: 'empty-state__text' }, ['No growing edges shared yet']),
+            ClientUtils.el('div', { className: 'empty-state__sub' }, ['When staff make their growing edges public or team-visible, they will appear here.'])
+          ])
+        ]));
+        return;
+      }
+
+      // Group by department
+      var byDept = {};
+      entries.forEach(function(e) {
+        var dept = e.department || 'Other';
+        if (!byDept[dept]) byDept[dept] = [];
+        byDept[dept].push(e);
+      });
+
+      Object.keys(byDept).sort().forEach(function(dept) {
+        viewContainer.appendChild(ClientUtils.el('div', { className: 'dev-wall__dept-heading' }, [dept]));
+
+        var grid = ClientUtils.el('div', { className: 'dev-wall-grid' });
+        byDept[dept].forEach(function(entry) {
+          var initials = (entry.staffName || '?').split(' ').map(function(n) { return n.charAt(0); }).join('').toUpperCase();
+
+          var card = ClientUtils.el('div', { className: 'dev-wall-card' });
+
+          // Header
+          card.appendChild(ClientUtils.el('div', { className: 'dev-wall-card__header' }, [
+            ClientUtils.el('div', { className: 'dev-wall-card__avatar' }, [initials]),
+            ClientUtils.el('div', {}, [
+              ClientUtils.el('div', { className: 'dev-wall-card__name' }, [entry.staffName]),
+              ClientUtils.el('div', { className: 'dev-wall-card__dept' }, [entry.department || ''])
+            ])
+          ]));
+
+          // Growing edge text
+          card.appendChild(ClientUtils.el('div', { className: 'dev-wall-card__edge' }, [
+            entry.growingEdge || ''
+          ]));
+
+          // Standard hashtags
+          if (entry.hashtags && entry.hashtags.length > 0) {
+            var tagsDiv = ClientUtils.el('div', { className: 'dev-wall-card__tags' });
+            entry.hashtags.forEach(function(tag) {
+              tagsDiv.appendChild(ClientUtils.el('span', { className: 'dev-wall-card__tag' }, [tag]));
+            });
+            card.appendChild(tagsDiv);
+          }
+
+          grid.appendChild(card);
+        });
+
+        viewContainer.appendChild(grid);
+      });
+    }
+
+    // ════════════════════════════════════════════
+    // Coaching Triads — Admin View
+    // ════════════════════════════════════════════
+
+    function loadCoachingAdmin() {
+      viewContainer.innerHTML = '<div class="loading-spinner"></div>';
+      ServerAPI.getCoachingGroups().then(function(groups) {
+        renderCoachingAdmin(groups);
+      }).catch(function(err) {
+        viewContainer.innerHTML = '<div class="card"><p class="text-muted p-md">Error loading coaching groups: ' + (err.message || err) + '</p></div>';
+      });
+    }
+
+    function renderCoachingAdmin(groups) {
+      viewContainer.innerHTML = '';
+
+      var toolbar = ClientUtils.el('div', { className: 'toolbar', style: 'margin-bottom:var(--space-lg)' }, [
+        ClientUtils.el('h2', { className: 'text-lg font-semibold' }, ['Coaching Triads & Groups']),
+        ClientUtils.el('div', { style: 'flex:1' }),
+        ClientUtils.el('button', {
+          className: 'btn btn-primary btn-sm',
+          onClick: openCreateGroupModal
+        }, ['+ New Group'])
+      ]);
+      viewContainer.appendChild(toolbar);
+
+      if (!groups || groups.length === 0) {
+        viewContainer.appendChild(ClientUtils.el('div', { className: 'card' }, [
+          ClientUtils.el('div', { className: 'empty-state' }, [
+            ClientUtils.el('div', { className: 'empty-state__icon' }, ['\uD83E\uDD1D']),
+            ClientUtils.el('div', { className: 'empty-state__text' }, ['No coaching groups yet']),
+            ClientUtils.el('div', { className: 'empty-state__sub' }, ['Create triads, dyads, or home groups to support peer coaching and developmental growth.'])
+          ])
+        ]));
+        return;
+      }
+
+      var grid = ClientUtils.el('div', { className: 'coaching-groups-grid' });
+
+      groups.forEach(function(g) {
+        var card = ClientUtils.el('div', { className: 'coaching-group-card' });
+
+        // Header
+        var typeLabels = { triad: 'Triad', dyad: 'Dyad', home_group: 'Home Group' };
+        card.appendChild(ClientUtils.el('div', { className: 'coaching-group-card__header' }, [
+          ClientUtils.el('div', { className: 'coaching-group-card__name' }, [g.groupName]),
+          ClientUtils.el('span', { className: 'coaching-group-card__type' }, [typeLabels[g.groupType] || g.groupType])
+        ]));
+
+        // Members
+        var membersDiv = ClientUtils.el('div', { className: 'coaching-group-card__members' });
+        (g.members || []).forEach(function(m) {
+          var chipClass = 'coaching-member-chip' + (m.role === 'facilitator' ? ' coaching-member-chip--facilitator' : '');
+          var chip = ClientUtils.el('div', { className: chipClass }, [
+            ClientUtils.el('span', { className: 'coaching-member-chip__avatar' }, [m.initials || '?']),
+            m.staffName + (m.role === 'facilitator' ? ' (F)' : '')
+          ]);
+          membersDiv.appendChild(chip);
+        });
+        card.appendChild(membersDiv);
+
+        // Footer
+        card.appendChild(ClientUtils.el('div', { className: 'coaching-group-card__footer' }, [
+          ClientUtils.el('span', {}, ['Every ' + g.meetingFrequencyWeeks + ' weeks']),
+          ClientUtils.el('button', {
+            className: 'btn btn-ghost btn-sm',
+            onClick: function() { openGroupDetailModal(g); }
+          }, ['View Meetings'])
+        ]));
+
+        grid.appendChild(card);
+      });
+
+      viewContainer.appendChild(grid);
+    }
+
+    function openCreateGroupModal() {
+      var body = ClientUtils.el('div', { className: 'form-stack' });
+
+      var nameInput = ClientUtils.el('input', { type: 'text', className: 'form-control', placeholder: 'Group name' });
+      var typeSelect = ClientUtils.el('select', { className: 'form-control' });
+      typeSelect.innerHTML = '<option value="triad">Triad (3 members)</option><option value="dyad">Dyad (2 members)</option><option value="home_group">Home Group (4+ members)</option>';
+      var freqInput = ClientUtils.el('input', { type: 'number', className: 'form-control', placeholder: 'Meeting frequency (weeks)', value: '2', min: '1' });
+
+      body.appendChild(formGroup('Group Name', nameInput));
+      body.appendChild(formGroup('Type', typeSelect));
+      body.appendChild(formGroup('Meeting Frequency (weeks)', freqInput));
+
+      Modal.open('Create Coaching Group', body, [
+        {
+          label: 'Create',
+          className: 'btn-primary',
+          onClick: function() {
+            if (!nameInput.value.trim()) { alert('Group name is required.'); return; }
+            ServerAPI.createCoachingGroup({
+              group_name: nameInput.value.trim(),
+              group_type: typeSelect.value,
+              meeting_frequency_weeks: parseInt(freqInput.value) || 2
+            }).then(function() {
+              Modal.close();
+              loadCoachingAdmin();
+            }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+          }
+        },
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+      ]);
+    }
+
+    function openGroupDetailModal(group) {
+      var body = ClientUtils.el('div');
+      body.innerHTML = '<div class="loading-spinner"></div>';
+
+      Modal.open(group.groupName + ' \u2014 Meetings', body, [
+        { label: 'Close', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+      ]);
+
+      ServerAPI.getCoachingMeetings(group.id).then(function(meetings) {
+        body.innerHTML = '';
+
+        if (!meetings || meetings.length === 0) {
+          body.appendChild(ClientUtils.el('p', { className: 'text-muted' }, ['No meetings logged yet.']));
+          return;
+        }
+
+        meetings.forEach(function(m) {
+          var row = ClientUtils.el('div', { className: 'coaching-meeting-row' });
+          row.appendChild(ClientUtils.el('div', { className: 'coaching-meeting-date' }, [
+            ClientUtils.formatDate(m.meetingDate)
+          ]));
+          var details = ClientUtils.el('div', { className: 'coaching-meeting-details' });
+          details.appendChild(ClientUtils.el('div', { className: 'coaching-meeting-topic' }, [m.topic || 'No topic']));
+          if (m.keyInsights) {
+            details.appendChild(ClientUtils.el('div', { className: 'coaching-meeting-insights' }, [m.keyInsights]));
+          }
+          row.appendChild(details);
+          body.appendChild(row);
+        });
+      }).catch(function(err) {
+        body.innerHTML = '<p class="text-muted">Error: ' + (err.message || err) + '</p>';
+      });
+    }
+
+    // ════════════════════════════════════════════
+    // My Triad — Teacher View
+    // ════════════════════════════════════════════
+
+    function loadMyTriad() {
+      viewContainer.innerHTML = '<div class="loading-spinner"></div>';
+      ServerAPI.getMyCoachingGroup().then(function(data) {
+        renderMyTriad(data);
+      }).catch(function(err) {
+        viewContainer.innerHTML = '<div class="card"><p class="text-muted p-md">Error loading your coaching group: ' + (err.message || err) + '</p></div>';
+      });
+    }
+
+    function renderMyTriad(data) {
+      viewContainer.innerHTML = '';
+
+      if (!data || !data.group) {
+        viewContainer.appendChild(ClientUtils.el('div', { className: 'card' }, [
+          ClientUtils.el('div', { className: 'empty-state' }, [
+            ClientUtils.el('div', { className: 'empty-state__icon' }, ['\uD83E\uDD1D']),
+            ClientUtils.el('div', { className: 'empty-state__text' }, ['No coaching group assigned']),
+            ClientUtils.el('div', { className: 'empty-state__sub' }, ['You have not been assigned to a coaching triad or group yet. Contact your administrator.'])
+          ])
+        ]));
+        return;
+      }
+
+      var group = data.group;
+      var typeLabels = { triad: 'Triad', dyad: 'Dyad', home_group: 'Home Group' };
+
+      // Group header card
+      var headerCard = ClientUtils.el('div', { className: 'card', style: 'margin-bottom:var(--space-lg)' });
+      headerCard.appendChild(ClientUtils.el('div', { style: 'padding:var(--space-md)' }, [
+        ClientUtils.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [
+          ClientUtils.el('h2', { className: 'text-lg font-semibold' }, [group.groupName]),
+          ClientUtils.el('span', { className: 'coaching-group-card__type' }, [typeLabels[group.groupType] || group.groupType])
+        ]),
+        ClientUtils.el('div', { className: 'text-sm text-muted', style: 'margin-bottom:12px' }, [
+          'Meets every ' + group.meetingFrequencyWeeks + ' weeks'
+        ])
+      ]));
+
+      // Members list
+      var membersDiv = ClientUtils.el('div', { className: 'coaching-group-card__members', style: 'padding:0 var(--space-md) var(--space-md)' });
+      (group.members || []).forEach(function(m) {
+        var chipClass = 'coaching-member-chip' + (m.role === 'facilitator' ? ' coaching-member-chip--facilitator' : '');
+        membersDiv.appendChild(ClientUtils.el('div', { className: chipClass }, [
+          ClientUtils.el('span', { className: 'coaching-member-chip__avatar' }, [m.initials || '?']),
+          m.staffName + (m.role === 'facilitator' ? ' (Facilitator)' : '')
+        ]));
+      });
+      headerCard.appendChild(membersDiv);
+      viewContainer.appendChild(headerCard);
+
+      // Log Meeting button
+      var meetingToolbar = ClientUtils.el('div', { className: 'toolbar', style: 'margin-bottom:var(--space-md)' }, [
+        ClientUtils.el('h3', { className: 'text-lg font-semibold' }, ['Meeting History']),
+        ClientUtils.el('div', { style: 'flex:1' }),
+        ClientUtils.el('button', {
+          className: 'btn btn-primary btn-sm',
+          onClick: function() { openCoachingMeetingModal(group); }
+        }, ['+ Log Meeting'])
+      ]);
+      viewContainer.appendChild(meetingToolbar);
+
+      // Meetings list
+      var meetings = data.meetings || [];
+      if (meetings.length === 0) {
+        viewContainer.appendChild(ClientUtils.el('div', { className: 'card' }, [
+          ClientUtils.el('p', { className: 'text-muted p-md' }, ['No meetings logged yet. Click "Log Meeting" to record your first coaching session.'])
+        ]));
+        return;
+      }
+
+      var meetingsCard = ClientUtils.el('div', { className: 'card' });
+      meetings.forEach(function(m) {
+        var row = ClientUtils.el('div', { className: 'coaching-meeting-row' });
+        row.appendChild(ClientUtils.el('div', { className: 'coaching-meeting-date' }, [
+          ClientUtils.formatDate(m.meetingDate)
+        ]));
+        var details = ClientUtils.el('div', { className: 'coaching-meeting-details' });
+        if (m.topic) details.appendChild(ClientUtils.el('div', { className: 'coaching-meeting-topic' }, [m.topic]));
+        if (m.growingEdgeDiscussed) details.appendChild(ClientUtils.el('div', { style: 'margin-bottom:4px' }, [
+          ClientUtils.el('strong', {}, ['Growing Edge: ']), m.growingEdgeDiscussed
+        ]));
+        if (m.keyInsights) details.appendChild(ClientUtils.el('div', { className: 'coaching-meeting-insights' }, [m.keyInsights]));
+        if (m.actionCommitments) details.appendChild(ClientUtils.el('div', { style: 'margin-top:4px;font-weight:600' }, [
+          'Actions: ' + m.actionCommitments
+        ]));
+        row.appendChild(details);
+        meetingsCard.appendChild(row);
+      });
+      viewContainer.appendChild(meetingsCard);
+    }
+
+    function openCoachingMeetingModal(group) {
+      var body = ClientUtils.el('div', { className: 'form-stack' });
+
+      var dateInput = ClientUtils.el('input', { type: 'date', className: 'form-control' });
+      dateInput.value = new Date().toISOString().substring(0, 10);
+      var topicInput = ClientUtils.el('input', { type: 'text', className: 'form-control', placeholder: 'Meeting topic' });
+      var edgeInput = ClientUtils.el('textarea', { className: 'form-control', rows: 2, placeholder: 'What growing edge was discussed?' });
+      var insightsInput = ClientUtils.el('textarea', { className: 'form-control', rows: 3, placeholder: 'Key insights from the conversation...' });
+      var actionsInput = ClientUtils.el('textarea', { className: 'form-control', rows: 2, placeholder: 'Action commitments...' });
+      var nextDateInput = ClientUtils.el('input', { type: 'date', className: 'form-control' });
+
+      body.appendChild(formGroup('Meeting Date', dateInput));
+      body.appendChild(formGroup('Topic', topicInput));
+      body.appendChild(formGroup('Growing Edge Discussed', edgeInput));
+      body.appendChild(formGroup('Key Insights', insightsInput));
+      body.appendChild(formGroup('Action Commitments', actionsInput));
+      body.appendChild(formGroup('Next Meeting Date', nextDateInput));
+
+      Modal.open('Log Coaching Meeting', body, [
+        {
+          label: 'Save',
+          className: 'btn-primary',
+          onClick: function() {
+            if (!dateInput.value) { alert('Meeting date is required.'); return; }
+            ServerAPI.createCoachingMeeting({
+              group_id: group.id,
+              meeting_date: new Date(dateInput.value).toISOString(),
+              topic: topicInput.value.trim(),
+              growing_edge_discussed: edgeInput.value.trim(),
+              key_insights: insightsInput.value.trim(),
+              action_commitments: actionsInput.value.trim(),
+              next_meeting_date: nextDateInput.value ? new Date(nextDateInput.value).toISOString() : ''
+            }).then(function() {
+              Modal.close();
+              Toast.success('Meeting logged successfully');
+              loadMyTriad();
+            }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+          }
+        },
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+      ]);
+    }
+
+    // ════════════════════════════════════════════
+    // Select Standards Modal
+    // ════════════════════════════════════════════
+
+    function openSelectStandardsModal(plan) {
+      // Load standards first
+      ServerAPI.getPgpStandards().then(function(standards) {
+        state.standards = standards;
+        renderSelectStandardsModal(plan, standards);
+      }).catch(function(err) { alert('Error loading standards: ' + (err.message || err)); });
+    }
+
+    function renderSelectStandardsModal(plan, standards) {
+      var body = ClientUtils.el('div');
+      body.appendChild(ClientUtils.el('p', { className: 'text-sm text-muted', style: 'margin-bottom:var(--space-md)' }, [
+        'Select up to 2 custom standards plus the mandatory Wellbeing standard. Click to toggle selection.'
+      ]));
+
+      // Year in cycle selector
+      var cycleRow = ClientUtils.el('div', { style: 'margin-bottom:var(--space-lg);display:flex;align-items:center;gap:8px' });
+      cycleRow.appendChild(ClientUtils.el('label', { className: 'text-sm font-semibold' }, ['Year in Cycle:']));
+      var cycleSelect = ClientUtils.el('select', { className: 'form-control form-control-sm', style: 'width:auto' });
+      cycleSelect.innerHTML = '<option value="1">Year 1</option><option value="2">Year 2</option><option value="3">Year 3</option><option value="4">Year 4</option>';
+      cycleRow.appendChild(cycleSelect);
+      body.appendChild(cycleRow);
+
+      // Pre-select existing selections
+      var existingIds = (state.planDetail && state.planDetail.selections || []).map(function(s) { return s.standardId; });
+      var existingCycle = (state.planDetail && state.planDetail.selections && state.planDetail.selections[0]) ? state.planDetail.selections[0].yearInCycle : 1;
+      cycleSelect.value = String(existingCycle);
+
+      var selected = {};
+      existingIds.forEach(function(id) { selected[id] = true; });
+
+      // Grid of standard cards
+      var grid = ClientUtils.el('div', { className: 'gp-select-grid' });
+
+      standards.forEach(function(std) {
+        var isMandatory = std.isMandatory;
+        if (isMandatory) selected[std.id] = true; // Force mandatory
+
+        var card = ClientUtils.el('div', {
+          className: 'gp-select-card' + (selected[std.id] ? ' gp-select-card--selected' : '') + (isMandatory ? ' gp-select-card--mandatory' : '')
+        });
+
+        card.appendChild(ClientUtils.el('div', { className: 'gp-select-card__number' }, [String(std.standardNumber)]));
+        card.appendChild(ClientUtils.el('div', { className: 'gp-select-card__name' }, [std.shortName]));
+        card.appendChild(ClientUtils.el('div', { className: 'gp-select-card__desc' }, [std.description || '']));
+
+        if (isMandatory) {
+          card.appendChild(ClientUtils.el('span', { className: 'gp-select-card__badge gp-select-card__badge--mandatory' }, ['Required']));
+        }
+
+        if (!isMandatory) {
+          card.addEventListener('click', function() {
+            if (selected[std.id]) {
+              delete selected[std.id];
+              card.classList.remove('gp-select-card--selected');
+            } else {
+              // Count custom selections
+              var customCount = 0;
+              Object.keys(selected).forEach(function(id) {
+                var s = standards.filter(function(st) { return st.id === id; })[0];
+                if (s && !s.isMandatory) customCount++;
+              });
+              if (customCount >= 2) {
+                alert('You can select at most 2 custom standards. Deselect one first.');
+                return;
+              }
+              selected[std.id] = true;
+              card.classList.add('gp-select-card--selected');
+            }
+          });
+        }
+
+        grid.appendChild(card);
+      });
+
+      body.appendChild(grid);
+
+      Modal.open('Select Standards for PGP', body, [
+        {
+          label: 'Save Selection',
+          className: 'btn-primary',
+          onClick: function() {
+            var selectedIds = Object.keys(selected);
+            if (selectedIds.length === 0) { alert('Please select at least one standard.'); return; }
+
+            ServerAPI.selectStandards({
+              plan_id: plan.id,
+              standard_ids: selectedIds,
+              year_in_cycle: parseInt(cycleSelect.value) || 1
+            }).then(function() {
+              Modal.close();
+              loadPlanDetail(plan.id);
+            }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+          }
+        },
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+      ]);
+    }
+
+    // ════════════════════════════════════════════
+    // Create Plan Modal (Admin)
+    // ════════════════════════════════════════════
+
+    function openCreatePlanModal() {
+      // Load staff for select
+      ServerAPI.call('apiGetStaffList').then(function(staffList) {
+        var body = ClientUtils.el('div', { className: 'form-stack' });
+
+        // Staff select
+        var staffSelect = ClientUtils.el('select', { className: 'form-control' });
+        staffSelect.innerHTML = '<option value="">-- Select Staff Member --</option>';
+        var admins = [];
+        staffList.forEach(function(s) {
+          if (s.role === 'admin') admins.push(s);
+          if (s.role !== 'admin') {
+            var opt = ClientUtils.el('option', { value: s.id }, [s.first_name + ' ' + s.last_name + ' (' + s.department + ')']);
+            staffSelect.appendChild(opt);
+          }
+        });
+
+        // Supervisor select
+        var supSelect = ClientUtils.el('select', { className: 'form-control' });
+        supSelect.innerHTML = '<option value="">-- Select Supervisor --</option>';
+        staffList.forEach(function(s) {
+          if (s.role === 'admin') {
+            var opt = ClientUtils.el('option', { value: s.id }, [s.first_name + ' ' + s.last_name]);
+            supSelect.appendChild(opt);
+          }
+        });
+
+        // Division
+        var divSelect = ClientUtils.el('select', { className: 'form-control' });
+        divSelect.innerHTML = '<option value="">-- Select Division --</option><option value="Elementary">Elementary</option><option value="Middle School">Middle School</option><option value="High School">High School</option>';
+
+        // Years at school
+        var yearsInput = ClientUtils.el('input', { type: 'number', className: 'form-control', placeholder: 'Years at school', min: '0' });
+
+        body.appendChild(formGroup('Staff Member', staffSelect));
+        body.appendChild(formGroup('Supervisor', supSelect));
+        body.appendChild(formGroup('Division', divSelect));
+        body.appendChild(formGroup('Years at School', yearsInput));
+
+        Modal.open('Create Growth Plan', body, [
+          {
+            label: 'Create',
+            className: 'btn-primary',
+            onClick: function() {
+              if (!staffSelect.value) { alert('Please select a staff member.'); return; }
+              if (!supSelect.value) { alert('Please select a supervisor.'); return; }
+
+              ServerAPI.createGrowthPlan({
+                staff_id: staffSelect.value,
+                supervisor_id: supSelect.value,
+                division: divSelect.value,
+                years_at_school: yearsInput.value || ''
+              }).then(function(plan) {
+                Modal.close();
+                state.currentPlanId = plan.id;
+                switchView('plan_detail');
+              }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+            }
+          },
+          { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+        ]);
+      }).catch(function(err) { alert('Error loading staff: ' + (err.message || err)); });
+    }
+
+    // ════════════════════════════════════════════
+    // Meeting Form Modal
+    // ════════════════════════════════════════════
+
+    function openMeetingModal(plan, existing) {
+      var isEdit = !!existing;
+      var body = ClientUtils.el('div', { className: 'form-stack' });
+
+      var dateInput = ClientUtils.el('input', { type: 'date', className: 'form-control' });
+      if (existing) dateInput.value = (existing.meetingDate || '').substring(0, 10);
+
+      var typeSelect = ClientUtils.el('select', { className: 'form-control' });
+      typeSelect.innerHTML = '<option value="initial">Initial</option><option value="check_in">Check-in</option><option value="mid_year">Mid-Year</option><option value="final">Final</option><option value="informal">Informal</option>';
+      if (existing) typeSelect.value = existing.meetingType;
+
+      var notesInput = ClientUtils.el('textarea', { className: 'form-control', rows: 4, placeholder: 'Meeting notes...' });
+      if (existing) notesInput.value = existing.notes || '';
+
+      var actionsInput = ClientUtils.el('textarea', { className: 'form-control', rows: 3, placeholder: 'Action items...' });
+      if (existing) actionsInput.value = existing.actionItems || '';
+
+      var nextDateInput = ClientUtils.el('input', { type: 'date', className: 'form-control' });
+      if (existing && existing.nextMeetingDate) nextDateInput.value = existing.nextMeetingDate.substring(0, 10);
+
+      body.appendChild(formGroup('Meeting Date', dateInput));
+      body.appendChild(formGroup('Type', typeSelect));
+      body.appendChild(formGroup('Notes', notesInput));
+      body.appendChild(formGroup('Action Items', actionsInput));
+      body.appendChild(formGroup('Next Meeting Date', nextDateInput));
+
+      Modal.open(isEdit ? 'Edit Meeting' : 'Log Meeting', body, [
+        {
+          label: isEdit ? 'Save' : 'Create',
+          className: 'btn-primary',
+          onClick: function() {
+            if (!dateInput.value) { alert('Meeting date is required.'); return; }
+
+            var payload = {
+              meeting_date: new Date(dateInput.value).toISOString(),
+              meeting_type: typeSelect.value,
+              notes: notesInput.value.trim(),
+              action_items: actionsInput.value.trim(),
+              next_meeting_date: nextDateInput.value ? new Date(nextDateInput.value).toISOString() : ''
+            };
+
+            var promise;
+            if (isEdit) {
+              promise = ServerAPI.updateGrowthMeeting(existing.id, payload);
+            } else {
+              payload.plan_id = plan.id;
+              promise = ServerAPI.createGrowthMeeting(payload);
+            }
+
+            promise.then(function() {
+              Modal.close();
+              loadPlanDetail(plan.id);
+            }).catch(function(err) { alert('Error: ' + (err.message || err)); });
+          }
+        },
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } }
+      ]);
+    }
+
+    // ════════════════════════════════════════════
+    // Helpers
+    // ════════════════════════════════════════════
+
+    function formGroup(label, input) {
+      var group = ClientUtils.el('div', { className: 'form-group' });
+      group.appendChild(ClientUtils.el('label', { className: 'form-label' }, [label]));
+      group.appendChild(input);
+      return group;
+    }
+
+    function formatStatus(s) {
+      var map = {
+        draft: 'Draft', active: 'Active', mid_year_review: 'Mid-Year Review',
+        final_review: 'Final Review', completed: 'Completed'
+      };
+      return map[s] || s;
+    }
+
+    function badgeClass(status) {
+      var map = {
+        draft: 'default', active: 'primary', mid_year_review: 'warning',
+        final_review: 'info', completed: 'success'
+      };
+      return map[status] || 'default';
+    }
+
+    function formatSelectionStatus(s) {
+      var map = { not_started: 'Not Started', in_progress: 'In Progress', completed: 'Completed' };
+      return map[s] || s;
+    }
+
+    function selectionBadgeClass(s) {
+      var map = { not_started: 'default', in_progress: 'primary', completed: 'success' };
+      return map[s] || 'default';
+    }
+
+    function formatMeetingType(t) {
+      var map = { initial: 'Initial', check_in: 'Check-in', mid_year: 'Mid-Year', final: 'Final', informal: 'Informal' };
+      return map[t] || t;
+    }
+
+    function meetingBadge(t) {
+      var map = { initial: 'info', check_in: 'default', mid_year: 'warning', final: 'primary', informal: 'default' };
+      return map[t] || 'default';
+    }
+
+    // ── Init ──
+    buildLayout();
+    if (state.isAdmin) {
+      switchView('overview');
+    } else {
+      switchView('my_plan');
+    }
+
+    return {
+      onActivate: function() {
+        if (state.isAdmin) {
+          loadOverview();
+        } else {
+          loadMyPlan();
+        }
+      }
+    };
+  }
+};
+</script>

@@ -1,0 +1,257 @@
+<script>
+    // ================================================
+    // NOTIFICATION CENTER (ES5)
+    // ntf- prefix, polling-based
+    // ================================================
+
+    console.log('=== Scripts-NotifCenter.html loaded ===');
+
+    var ntfPollingTimer = null;
+    var ntfPanelOpen = false;
+    var ntfData = null;
+    var ntfLastUnreadCount = -1;  // Track last known count for backoff
+    var ntfCurrentInterval = 45000;  // Start fast (45s for first 10 min)
+    var NTF_FAST_INTERVAL = 45000;   // 45s for first 10 minutes
+    var NTF_BASE_INTERVAL = 90000;   // Normal interval after fast phase
+    var NTF_MAX_INTERVAL = 180000;   // Cap at 3 minutes
+    var NTF_FAST_DURATION = 600000;  // 10 minutes of fast polling
+    var ntfSessionStart = null;       // Set on init
+
+    // ================================================
+    // INITIALIZATION
+    // ================================================
+
+    /**
+     * Start notification polling.
+     * Called from loadAllData() after user is authenticated.
+     * Uses single RPC (getNotifications) with adaptive backoff.
+     */
+    function initNotifications() {
+      // Guard against double-initialization
+      if (ntfPollingTimer) clearTimeout(ntfPollingTimer);
+
+      var container = document.getElementById('ntfBellContainer');
+      if (container) container.style.display = 'block';
+
+      // Start fast polling phase (45s for first 10 minutes)
+      ntfSessionStart = Date.now();
+      ntfCurrentInterval = NTF_FAST_INTERVAL;
+      fetchNotifications();
+
+      // Schedule next poll
+      ntfScheduleNextPoll();
+    }
+
+    /**
+     * Schedule next notification poll with adaptive interval.
+     * Uses setTimeout instead of setInterval for adaptive backoff.
+     */
+    function ntfScheduleNextPoll() {
+      if (ntfPollingTimer) clearTimeout(ntfPollingTimer);
+      // After fast duration (10 min), transition to normal base interval
+      if (ntfSessionStart && (Date.now() - ntfSessionStart) > NTF_FAST_DURATION) {
+        if (ntfCurrentInterval < NTF_BASE_INTERVAL) {
+          ntfCurrentInterval = NTF_BASE_INTERVAL;
+        }
+      }
+      ntfPollingTimer = setTimeout(function() {
+        fetchNotifications();
+        ntfScheduleNextPoll();
+      }, ntfCurrentInterval);
+    }
+
+    /**
+     * Fetch notifications (single RPC for both count and list).
+     * Replaces separate fetchUnreadCount/fetchNotifications dual paths.
+     */
+    function fetchNotifications() {
+      google.script.run
+        .withSuccessHandler(function(data) {
+          ntfData = data;
+          updateNtfBadge(data.unreadCount);
+          if (ntfPanelOpen) {
+            renderNotificationList(data.notifications);
+          }
+          // Adaptive backoff: if count changed, reset to base interval
+          if (data.unreadCount !== ntfLastUnreadCount) {
+            ntfCurrentInterval = NTF_BASE_INTERVAL;
+          } else {
+            // No change — slow down polling (90s → 120s → 180s)
+            ntfCurrentInterval = Math.min(ntfCurrentInterval + 30000, NTF_MAX_INTERVAL);
+          }
+          ntfLastUnreadCount = data.unreadCount;
+        })
+        .withFailureHandler(function(err) {
+          console.log('Notification fetch error: ' + (err && err.message ? err.message : 'unknown'));
+          // On error, slow down polling
+          ntfCurrentInterval = NTF_MAX_INTERVAL;
+        })
+        .getNotifications(30);
+    }
+
+    // ================================================
+    // BADGE
+    // ================================================
+
+    function updateNtfBadge(count) {
+      var badge = document.getElementById('ntfBadge');
+      if (!badge) return;
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    // ================================================
+    // PANEL TOGGLE
+    // ================================================
+
+    function toggleNotificationPanel() {
+      ntfPanelOpen = !ntfPanelOpen;
+      var panel = document.getElementById('ntfPanel');
+      if (ntfPanelOpen) {
+        panel.classList.add('open');
+        fetchNotifications(); // Refresh on open
+      } else {
+        panel.classList.remove('open');
+      }
+    }
+
+    // Close panel when clicking outside
+    document.addEventListener('click', function(e) {
+      var container = document.getElementById('ntfBellContainer');
+      if (container && ntfPanelOpen && !container.contains(e.target)) {
+        ntfPanelOpen = false;
+        var panel = document.getElementById('ntfPanel');
+        if (panel) panel.classList.remove('open');
+      }
+    });
+
+    // ================================================
+    // RENDERING
+    // ================================================
+
+    function renderNotificationList(notifications) {
+      var body = document.getElementById('ntfPanelBody');
+      if (!body) return;
+
+      if (!notifications || notifications.length === 0) {
+        body.innerHTML = '<div class="ntf-empty">No notifications yet</div>';
+        return;
+      }
+
+      var icons = {
+        approval_granted: '&#10004;',
+        revision_requested: '&#9998;',
+        submission_pending: '&#128203;',
+        map_assigned: '&#128506;',
+        hex_completed: '&#9989;'
+      };
+
+      var html = '';
+      for (var i = 0; i < notifications.length; i++) {
+        var n = notifications[i];
+        var isUnread = !n.readAt;
+        var icon = icons[n.type] || '&#128276;';
+        var timeAgo = formatTimeAgo(n.createdAt);
+
+        html += '<div class="ntf-item' + (isUnread ? ' unread' : '') + '" ';
+        html += 'onclick="onNotificationClick(\'' + escapeHtml(String(n.notificationId)) + '\', \'';
+        html += escapeHtml(String(n.type)) + '\', \'';
+        html += escapeHtml(String(n.mapId || '')) + '\', \'';
+        html += escapeHtml(String(n.hexId || '')) + '\')">';
+
+        html += '<div class="ntf-item-icon ' + escapeHtml(n.type) + '">' + icon + '</div>';
+        html += '<div class="ntf-item-content">';
+        html += '<div class="ntf-item-title">' + escapeHtml(n.title || '') + '</div>';
+        html += '<div class="ntf-item-message">' + escapeHtml(n.message || '') + '</div>';
+        html += '<div class="ntf-item-time">' + timeAgo + '</div>';
+        html += '</div>';
+
+        if (isUnread) {
+          html += '<div class="ntf-unread-dot"></div>';
+        }
+        html += '</div>';
+      }
+
+      body.innerHTML = html;
+    }
+
+    // ================================================
+    // ACTIONS
+    // ================================================
+
+    function onNotificationClick(notificationId, type, mapId, hexId) {
+      // Mark as read
+      google.script.run
+        .withSuccessHandler(function() {
+          fetchNotifications();
+        })
+        .withFailureHandler(function(err) {
+          console.log('Mark read error: ' + (err && err.message ? err.message : 'unknown'));
+        })
+        .markNotificationRead(notificationId);
+
+      // Close panel
+      ntfPanelOpen = false;
+      var panel = document.getElementById('ntfPanel');
+      if (panel) panel.classList.remove('open');
+
+      // Navigate to relevant view
+      if (type === 'submission_pending' || type === 'hex_completed') {
+        // Teacher: go to progress tab
+        var progressTab = document.querySelector('[data-view="progress"]');
+        if (progressTab) switchTab(progressTab);
+      } else if (type === 'approval_granted' || type === 'revision_requested' || type === 'map_assigned') {
+        // Student: go to progress tab
+        var tab = document.querySelector('[data-view="progress"]');
+        if (tab) switchTab(tab);
+      }
+    }
+
+    function markAllNtfRead() {
+      google.script.run
+        .withSuccessHandler(function() {
+          fetchNotifications();
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + err.message, 'error');
+        })
+        .markAllNotificationsRead();
+    }
+
+    // ================================================
+    // UTILITIES
+    // ================================================
+
+    function formatTimeAgo(isoString) {
+      if (!isoString) return '';
+      try {
+        var then = new Date(isoString);
+        var now = new Date();
+        var diffMs = now.getTime() - then.getTime();
+        var diffMin = Math.floor(diffMs / 60000);
+        var diffHr = Math.floor(diffMs / 3600000);
+        var diffDay = Math.floor(diffMs / 86400000);
+
+        if (diffMin < 1) return 'Just now';
+        if (diffMin < 60) return diffMin + 'm ago';
+        if (diffHr < 24) return diffHr + 'h ago';
+        if (diffDay < 7) return diffDay + 'd ago';
+        return then.toLocaleDateString();
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // Clean up polling timer on page unload
+    window.addEventListener('beforeunload', function() {
+      if (ntfPollingTimer) {
+        clearTimeout(ntfPollingTimer);
+      }
+    });
+
+    console.log('=== Scripts-NotifCenter.html ready ===');
+</script>

@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <?!= include('Styles'); ?>
+</head>
+<body>
+
+  <!-- Server-injected user data -->
+  <script id="user-data" type="application/json"><?!= userData ?></script>
+
+  <div class="app-container">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <h1>IB Chemistry Assessment Tracker</h1>
+      <button id="vas-toggle-btn" class="vas-toggle-btn" onclick="vasOpenSelector()"
+        style="display:none;" title="View the app as a student sees it">View as Student</button>
+      <div class="app-header-user" id="header-user-info"></div>
+    </header>
+
+    <!-- View-as-Student banner -->
+    <div id="vas-banner" class="vas-banner" style="display:none;">
+      <span class="vas-banner-badge">STUDENT VIEW</span>
+      <span id="vas-banner-name"></span>
+      <span id="vas-banner-level" class="level-badge" style="display:none;"></span>
+      <button class="vas-exit-btn" onclick="vasExit()">Exit Student View</button>
+    </div>
+
+    <!-- NAVIGATION -->
+    <nav class="app-nav" id="app-nav">
+      <!-- Teacher tabs -->
+      <button data-panel="grading" data-hash="grading" data-teacher-only="true">Grading</button>
+      <button data-panel="exam-viewer" data-hash="exam-viewer" data-teacher-only="true">Exam Viewer</button>
+      <button data-panel="dashboard" data-hash="dashboard" data-teacher-only="true">Dashboard</button>
+      <button data-panel="overview" data-hash="overview" data-teacher-only="true">Overview</button>
+      <button data-panel="builder" data-hash="builder" data-teacher-only="true">Builder</button>
+      <button data-panel="reports" data-hash="reports" data-teacher-only="true">Reports</button>
+      <!-- Student tabs -->
+      <button data-panel="student-dashboard" data-hash="dashboard" data-student-only="true">Dashboard</button>
+      <button data-panel="student-exams" data-hash="exams" data-student-only="true">Exams</button>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main class="app-content">
+
+      <!-- Access Denied -->
+      <div id="panel-access-denied" class="panel">
+        <div class="access-denied-card">
+          <h2>Access Denied</h2>
+          <p>Your account is not recognized as a teacher or student for this course.</p>
+          <p id="denied-email"></p>
+          <p style="margin-top: 16px;">If you believe this is an error, please contact your teacher to have your email added to the roster.</p>
+        </div>
+      </div>
+
+      <!-- Teacher panels -->
+      <div id="panel-grading" class="panel">
+
+        <!-- Selectors bar -->
+        <div class="gr-selectors" id="gr-selectors" style="display:none;">
+          <div class="gr-selector-row">
+            <label>Exam:</label>
+            <select id="gr-exam-select" onchange="grExamChanged()"></select>
+            <label>Class:</label>
+            <select id="gr-class-select" onchange="grClassChanged()"></select>
+            <label>Student:</label>
+            <select id="gr-student-select" onchange="grStudentChanged()"></select>
+          </div>
+        </div>
+
+        <!-- Paper tabs -->
+        <div class="gr-paper-tabs" id="gr-paper-tabs" style="display:none;">
+          <button class="gr-tab-btn active" data-paper="1A" onclick="grSetPaper('1A')">Paper 1A</button>
+          <button class="gr-tab-btn" data-paper="1B" onclick="grSetPaper('1B')">Paper 1B</button>
+          <button class="gr-tab-btn" data-paper="2" onclick="grSetPaper('2')">Paper 2</button>
+        </div>
+
+        <!-- States -->
+        <div id="gr-loading" class="gr-loading" style="display:none;">Loading&hellip;</div>
+        <div id="gr-empty" class="gr-empty" style="display:none;"></div>
+        <div id="gr-error" class="gr-error" style="display:none;"></div>
+
+        <!-- Paper 1A content -->
+        <div id="gr-paper-1a" style="display:none;">
+          <div class="gr-1a-toolbar">
+            <input type="text" id="gr-1a-paste" placeholder="Paste answers (e.g. ABCDE...)" class="gr-paste-input">
+            <button class="gr-btn" onclick="grApplyPaste()">Apply Paste</button>
+            <button class="gr-btn gr-btn-primary" onclick="grSavePaper1A()">Save Paper 1A</button>
+          </div>
+          <div id="gr-1a-grid" class="gr-mcq-grid"></div>
+        </div>
+
+        <!-- Paper 1B content -->
+        <div id="gr-paper-1b" style="display:none;">
+          <div class="gr-paper-toolbar">
+            <button class="gr-btn gr-btn-primary" onclick="grSaveAllPaper('1B')">Save All Paper 1B</button>
+          </div>
+          <div id="gr-1b-questions"></div>
+        </div>
+
+        <!-- Paper 2 content -->
+        <div id="gr-paper-2" style="display:none;">
+          <div class="gr-paper-toolbar">
+            <button class="gr-btn gr-btn-primary" onclick="grSaveAllPaper('2')">Save All Paper 2</button>
+          </div>
+          <div id="gr-2-questions"></div>
+        </div>
+
+        <!-- Recompute bar -->
+        <div id="gr-recompute-bar" class="gr-recompute-bar" style="display:none;">
+          <button class="gr-btn gr-btn-success" onclick="grRecompute()">Recompute Scores</button>
+          <span id="gr-recompute-status"></span>
+        </div>
+
+      </div>
+
+      <div id="panel-exam-viewer" class="panel">
+
+        <!-- Selector -->
+        <div class="ev-selectors" id="ev-selectors" style="display:none;">
+          <label>Exam:</label>
+          <select id="ev-exam-select" onchange="evExamChanged()"></select>
+        </div>
+
+        <!-- Paper tabs -->
+        <div class="ev-paper-tabs" id="ev-paper-tabs" style="display:none;"></div>
+
+        <!-- States -->
+        <div id="ev-loading" class="ev-loading" style="display:none;">Loading exam&hellip;</div>
+        <div id="ev-empty" class="ev-empty" style="display:none;"></div>
+        <div id="ev-error" class="ev-error" style="display:none;"></div>
+
+        <!-- Content -->
+        <div id="ev-content" style="display:none;">
+          <div id="ev-question-list" class="ev-question-list"></div>
+        </div>
+
+      </div>
+
+      <div id="panel-dashboard" class="panel">
+
+        <!-- Selectors -->
+        <div class="db-selectors" id="db-selectors" style="display:none;">
+          <label>Exam:</label>
+          <select id="db-exam-select" onchange="dbExamChanged()"></select>
+          <label>Class:</label>
+          <select id="db-class-select" onchange="dbClassChanged()">
+            <option value="">All Classes</option>
+          </select>
+        </div>
+
+        <!-- States -->
+        <div id="db-loading" class="db-loading" style="display:none;">Loading dashboard&hellip;</div>
+        <div id="db-empty" class="db-empty" style="display:none;"></div>
+        <div id="db-error" class="db-error" style="display:none;"></div>
+
+        <!-- Cards -->
+        <div id="db-content" style="display:none;">
+          <div id="db-cards" class="db-cards"></div>
+        </div>
+
+      </div>
+
+      <!-- Story 4: Class Overview -->
+      <div id="panel-overview" class="panel">
+
+        <!-- Filter bar -->
+        <div class="co-filters" id="co-filters" style="display:none;">
+          <label>Exam:</label>
+          <select id="co-exam-select" onchange="coApplyFilters()"></select>
+          <div class="co-class-toggle" id="co-class-toggle">
+            <button class="co-toggle-btn active" data-cls="" onclick="coSetClass('')">All</button>
+          </div>
+        </div>
+
+        <!-- States -->
+        <div id="co-loading" class="co-loading" style="display:none;">Loading class overview&hellip;</div>
+        <div id="co-empty" class="co-empty" style="display:none;"></div>
+        <div id="co-error" class="co-error" style="display:none;"></div>
+
+        <!-- Content -->
+        <div id="co-content" style="display:none;">
+          <div id="co-summary" class="co-summary"></div>
+          <div id="co-bands"></div>
+          <div id="co-students"></div>
+        </div>
+
+      </div>
+
+      <div id="panel-builder" class="panel">
+
+        <!-- Exam selector bar -->
+        <div class="eb-exam-bar" id="eb-exam-bar" style="display:none;">
+          <div class="eb-exam-bar-row">
+            <label>Exam:</label>
+            <select id="eb-exam-select" onchange="ebExamChanged()"></select>
+            <span id="eb-level-badge" class="level-badge"></span>
+            <button class="eb-btn" onclick="ebSetActiveExam()">Set as Active</button>
+            <button id="eb-vis-btn" class="eb-vis-toggle hidden" onclick="ebToggleVisibility()"
+              title="Toggle student visibility" style="display:none;">
+              <span id="eb-vis-icon">&#10005;</span> <span id="eb-vis-label">Hidden</span>
+            </button>
+            <span class="eb-vis-bulk">
+              <button class="eb-vis-bulk-btn" onclick="ebBulkVisibility('visible')">Show All</button>
+              <button class="eb-vis-bulk-btn" onclick="ebBulkVisibility('hidden')">Hide All</button>
+            </span>
+            <span id="eb-showq-toggle" style="display:none;">
+              <label class="eb-showq-label"><input type="checkbox" id="eb-showq-check" onchange="ebToggleShowQuestions()"> Show Q's</label>
+            </span>
+            <span id="eb-export-btns" style="display:none;">
+              <button class="eb-btn" onclick="ebExportExamPaper()" title="Export exam paper (Google Doc)">Export Paper</button>
+              <button class="eb-btn" onclick="ebExportAnswerKey()" title="Export answer key (Google Doc)">Export Key</button>
+            </span>
+            <button class="eb-btn" onclick="pvOpenSelector()" title="Preview how a student sees this exam" id="eb-preview-btn" style="display:none;">Preview as Student</button>
+          </div>
+        </div>
+
+        <!-- Section tabs -->
+        <div class="eb-section-tabs" id="eb-section-tabs" style="display:none;">
+          <button class="eb-section-tab active" data-section="setup" onclick="ebSetSection('setup')">Create Exam</button>
+          <button class="eb-section-tab" data-section="paper1a" onclick="ebSetSection('paper1a')">Paper 1A</button>
+          <button class="eb-section-tab" data-section="paper1b" onclick="ebSetSection('paper1b')">Paper 1B</button>
+          <button class="eb-section-tab" data-section="paper2" onclick="ebSetSection('paper2')">Paper 2</button>
+          <button class="eb-section-tab" data-section="rubric" onclick="ebSetSection('rubric')">Rubric</button>
+          <button class="eb-section-tab" data-section="bands" onclick="ebSetSection('bands')">Grade Bands</button>
+          <button class="eb-section-tab" data-section="content" onclick="ebSetSection('content')">Content</button>
+        </div>
+
+        <!-- States -->
+        <div id="eb-loading" class="eb-loading" style="display:none;">Loading&hellip;</div>
+        <div id="eb-empty" class="eb-empty" style="display:none;"></div>
+        <div id="eb-error" class="eb-error" style="display:none;"></div>
+
+        <!-- SECTION: Create Exam -->
+        <div id="eb-section-setup" class="eb-section" style="display:none;">
+          <div class="eb-card">
+            <h3 class="eb-card-title">Create New Exam</h3>
+            <div class="eb-form-grid">
+              <div class="eb-form-group eb-span-2">
+                <label>Exam ID (short, unique)</label>
+                <input id="eb-new-exam-id" placeholder="IB_S1S2_Jan2026">
+              </div>
+              <div class="eb-form-group eb-span-2">
+                <label>Exam Name</label>
+                <input id="eb-new-exam-name" placeholder="Structure 1-2 Assessment">
+              </div>
+              <div class="eb-form-group">
+                <label>Course</label>
+                <input id="eb-new-course" value="IB Chemistry">
+              </div>
+              <div class="eb-form-group">
+                <label>Level</label>
+                <select id="eb-new-level">
+                  <option value="HL">HL (Higher Level)</option>
+                  <option value="SL">SL (Standard Level)</option>
+                </select>
+              </div>
+              <div class="eb-form-group">
+                <label>Term</label>
+                <input id="eb-new-term" placeholder="Spring 2026">
+              </div>
+              <div class="eb-form-group">
+                <label>Class Section</label>
+                <input id="eb-new-class" placeholder="IB Chem HL">
+              </div>
+              <div class="eb-form-group">
+                <label>Papers Included</label>
+                <input id="eb-new-papers" value="1A,1B,2" placeholder="1A,1B,2">
+              </div>
+              <div class="eb-form-group">
+                <label>Topics Covered</label>
+                <input id="eb-new-topics" placeholder="S1,S2">
+              </div>
+            </div>
+            <div class="eb-form-actions">
+              <button class="eb-btn eb-btn-primary" onclick="ebCreateExam()">Create Exam</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION: Paper 1A -->
+        <div id="eb-section-paper1a" class="eb-section" style="display:none;">
+          <div class="eb-card">
+            <h3 class="eb-card-title">Step 1: Set Question Count</h3>
+            <div class="eb-inline-form">
+              <label># of Paper 1A questions:</label>
+              <input id="eb-p1a-count" type="number" value="30" class="eb-input-sm">
+              <span class="eb-hint">SL: ~30 | HL: ~40</span>
+              <button class="eb-btn eb-btn-primary" onclick="ebSetPaper1ACount()">Create / Resize</button>
+            </div>
+          </div>
+          <div class="eb-card">
+            <h3 class="eb-card-title">Step 2: Answer Key + Tags</h3>
+            <div class="eb-card-actions-top">
+              <button class="eb-btn" onclick="ebLoadPaper1ATable()">Load Paper 1A Table</button>
+              <button class="eb-btn eb-btn-primary" onclick="ebSavePaper1ATable()">Save Paper 1A</button>
+            </div>
+            <div id="eb-p1a-table-area"></div>
+            <p class="eb-hint">IB topics: use S1.1, S2.3, R1.2, etc. Check HL for HL-only questions.</p>
+          </div>
+          <div class="eb-card">
+            <h3 class="eb-card-title">Step 3: Bulk Import Answer Key</h3>
+            <p class="eb-hint">Paste in any format: letters only (ABDCE…), CSV with headers, or pipe/tab table.</p>
+            <textarea id="eb-bulk-input" class="eb-bulk-textarea" rows="8"
+              placeholder="ABDCEBADCB...&#10;— or —&#10;number,answer,strand,topic&#10;1,A,KU,S1.3.4&#10;— or —&#10;1 | A | KU | S1.3.4"></textarea>
+            <div class="eb-bulk-actions">
+              <button class="eb-btn" onclick="ebBulkParse()">Parse &amp; Preview</button>
+              <span id="eb-bulk-format-badge" class="eb-bulk-format-badge"></span>
+              <span id="eb-bulk-status" class="eb-hint"></span>
+            </div>
+            <div id="eb-bulk-validation" class="eb-bulk-validation" style="display:none;"></div>
+            <div id="eb-bulk-preview" style="display:none;">
+              <div id="eb-bulk-table-area"></div>
+              <div class="eb-form-actions">
+                <button class="eb-btn" onclick="ebBulkClear()">Clear</button>
+                <button class="eb-btn eb-btn-primary" onclick="ebBulkApply()">Apply to Paper 1A</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION: Paper 1B -->
+        <div id="eb-section-paper1b" class="eb-section" style="display:none;">
+          <div class="eb-two-col">
+            <div class="eb-card">
+              <h3 class="eb-card-title">Add Questions</h3>
+              <div class="eb-form-group">
+                <label>Question Number</label>
+                <div class="eb-inline-form">
+                  <input id="eb-p1b-num" placeholder="1" class="eb-input-sm">
+                  <button class="eb-btn" onclick="ebAddPaperRoot('1B')">Add Root</button>
+                </div>
+              </div>
+              <div class="eb-form-grid eb-form-grid-2">
+                <div class="eb-form-group">
+                  <label>Root Question</label>
+                  <select id="eb-p1b-root"></select>
+                </div>
+                <div class="eb-form-group">
+                  <label>Parent (for sub-parts)</label>
+                  <select id="eb-p1b-parent"></select>
+                </div>
+              </div>
+              <div class="eb-form-group">
+                <label>Token (a, b, i, ii, etc.)</label>
+                <input id="eb-p1b-token" placeholder="a">
+              </div>
+              <div class="eb-form-grid eb-form-grid-2">
+                <div class="eb-form-group">
+                  <label>Max Points</label>
+                  <input id="eb-p1b-pts" type="number" value="1">
+                </div>
+                <div class="eb-form-group">
+                  <label>Scoring</label>
+                  <select id="eb-p1b-mode">
+                    <option value="checklist">checklist</option>
+                    <option value="manual">manual</option>
+                  </select>
+                </div>
+              </div>
+              <div class="eb-form-grid eb-form-grid-2">
+                <div class="eb-form-group">
+                  <label>AISC Strand</label>
+                  <select id="eb-p1b-strand">
+                    <option>KU</option>
+                    <option>TT</option>
+                    <option>C</option>
+                  </select>
+                </div>
+                <div class="eb-form-group">
+                  <label>IB Topic</label>
+                  <input id="eb-p1b-topic" placeholder="S1.1">
+                </div>
+              </div>
+              <div class="eb-form-group">
+                <label class="eb-checkbox-label">
+                  <input type="checkbox" id="eb-p1b-hl-only"> HL Only
+                </label>
+              </div>
+              <div class="eb-form-actions">
+                <button class="eb-btn eb-btn-primary" onclick="ebAddPaperPart('1B')">Add Part</button>
+              </div>
+            </div>
+            <div class="eb-card">
+              <h3 class="eb-card-title">Paper 1B Parts</h3>
+              <div class="eb-card-actions-top">
+                <button class="eb-btn" onclick="ebLoadPaperParts('1B')">Load Parts</button>
+                <button class="eb-btn eb-btn-primary" onclick="ebSavePaperParts('1B')">Save Parts</button>
+              </div>
+              <div id="eb-p1b-parts-area"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION: Paper 2 -->
+        <div id="eb-section-paper2" class="eb-section" style="display:none;">
+          <div class="eb-two-col">
+            <div class="eb-card">
+              <h3 class="eb-card-title">Add Questions</h3>
+              <div class="eb-form-group">
+                <label>Question Number</label>
+                <div class="eb-inline-form">
+                  <input id="eb-p2-num" placeholder="1" class="eb-input-sm">
+                  <button class="eb-btn" onclick="ebAddPaperRoot('2')">Add Root</button>
+                </div>
+              </div>
+              <div class="eb-form-grid eb-form-grid-2">
+                <div class="eb-form-group">
+                  <label>Root Question</label>
+                  <select id="eb-p2-root"></select>
+                </div>
+                <div class="eb-form-group">
+                  <label>Parent (for sub-parts)</label>
+                  <select id="eb-p2-parent"></select>
+                </div>
+              </div>
+              <div class="eb-form-group">
+                <label>Token (a, b, i, ii, etc.)</label>
+                <input id="eb-p2-token" placeholder="a">
+              </div>
+              <div class="eb-form-grid eb-form-grid-2">
+                <div class="eb-form-group">
+                  <label>Max Points</label>
+                  <input id="eb-p2-pts" type="number" value="1">
+                </div>
+                <div class="eb-form-group">
+                  <label>Scoring</label>
+                  <select id="eb-p2-mode">
+                    <option value="checklist">checklist</option>
+                    <option value="manual">manual</option>
+                  </select>
+                </div>
+              </div>
+              <div class="eb-form-grid eb-form-grid-2">
+                <div class="eb-form-group">
+                  <label>AISC Strand</label>
+                  <select id="eb-p2-strand">
+                    <option>KU</option>
+                    <option selected>TT</option>
+                    <option>C</option>
+                  </select>
+                </div>
+                <div class="eb-form-group">
+                  <label>IB Topic</label>
+                  <input id="eb-p2-topic" placeholder="R1.2">
+                </div>
+              </div>
+              <div class="eb-form-group">
+                <label class="eb-checkbox-label">
+                  <input type="checkbox" id="eb-p2-hl-only"> HL Only
+                </label>
+              </div>
+              <div class="eb-form-actions">
+                <button class="eb-btn eb-btn-primary" onclick="ebAddPaperPart('2')">Add Part</button>
+              </div>
+            </div>
+            <div class="eb-card">
+              <h3 class="eb-card-title">Paper 2 Parts</h3>
+              <div class="eb-card-actions-top">
+                <button class="eb-btn" onclick="ebLoadPaperParts('2')">Load Parts</button>
+                <button class="eb-btn eb-btn-primary" onclick="ebSavePaperParts('2')">Save Parts</button>
+              </div>
+              <div id="eb-p2-parts-area"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION: Rubric Editor -->
+        <div id="eb-section-rubric" class="eb-section" style="display:none;">
+          <div class="eb-card">
+            <h3 class="eb-card-title">Checklist Rubric Editor</h3>
+            <div class="eb-inline-form">
+              <label>Question:</label>
+              <select id="eb-rubric-qid"></select>
+              <button class="eb-btn" onclick="ebLoadRubric()">Load</button>
+            </div>
+            <div id="eb-rubric-area"></div>
+            <div class="eb-form-actions">
+              <button class="eb-btn" onclick="ebAddRubricRow()">Add Item</button>
+              <button class="eb-btn eb-btn-primary" onclick="ebSaveRubric()">Save Rubric</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION: Grade Bands -->
+        <div id="eb-section-bands" class="eb-section" style="display:none;">
+          <div class="eb-card">
+            <h3 class="eb-card-title">Grade Boundaries</h3>
+            <div class="eb-inline-form">
+              <button class="eb-btn" onclick="ebLoadBands()">Load</button>
+              <button class="eb-btn eb-btn-sl" onclick="ebLoadDefaultBandsSL()">SL Defaults</button>
+              <button class="eb-btn eb-btn-hl" onclick="ebLoadDefaultBandsHL()">HL Defaults</button>
+            </div>
+            <div id="eb-bands-meta" class="eb-bands-meta"></div>
+            <div id="eb-bands-area"></div>
+            <div class="eb-form-actions">
+              <button class="eb-btn" onclick="ebAddBandRow()">Add Row</button>
+              <button class="eb-btn eb-btn-primary" onclick="ebSaveBands()">Save Bands</button>
+            </div>
+            <p class="eb-hint">Point ranges only (inclusive). IB 1-7 for overall, AISC 1-8 for strands. Saving triggers automatic score recompute.</p>
+          </div>
+        </div>
+
+        <!-- SECTION: Question Content (Story 13) -->
+        <div id="eb-section-content" class="eb-section" style="display:none;">
+          <div class="eb-card">
+            <h3 class="eb-card-title">Question Content Editor</h3>
+            <div class="qc-controls">
+              <label>Paper:</label>
+              <select id="qc-paper-filter" onchange="qcFilterChanged()">
+                <option value="">All Papers</option>
+                <option value="1A">Paper 1A</option>
+                <option value="1B">Paper 1B</option>
+                <option value="2">Paper 2</option>
+              </select>
+              <label>Question:</label>
+              <select id="qc-question-select" onchange="qcQuestionChanged()"></select>
+            </div>
+            <div id="qc-blocks-list"></div>
+            <div id="qc-blocks-actions" class="qc-actions" style="display:none;">
+              <button class="eb-btn" onclick="qcAddBlock('text')">+ Text Block</button>
+              <button class="eb-btn" onclick="qcAddBlock('image')">+ Image Block</button>
+              <button class="eb-btn eb-btn-primary" onclick="qcSaveBlocks()">Save Content</button>
+              <span id="qc-save-status"></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="panel-reports" class="panel">
+
+        <!-- States -->
+        <div id="rp-loading" class="rp-loading" style="display:none;">Loading reports panel&hellip;</div>
+        <div id="rp-error" class="rp-error" style="display:none;"></div>
+
+        <!-- Selectors bar -->
+        <div class="rp-selectors" id="rp-selectors" style="display:none;">
+          <label>Exam:</label>
+          <select id="rp-exam-select" onchange="rpExamChanged()"></select>
+          <label>Class:</label>
+          <select id="rp-class-select" onchange="rpLoadStudents()"></select>
+          <button class="rp-btn rp-btn-primary" onclick="rpLoadStudents()">Load Students</button>
+        </div>
+
+        <!-- Export options -->
+        <div class="rp-export-options" id="rp-export-options" style="display:none;">
+          <label>Format:</label>
+          <select id="rp-format-select">
+            <option value="doc">Google Doc</option>
+            <option value="pdf">PDF</option>
+            <option value="both">Both (Doc + PDF)</option>
+          </select>
+          <label>Naming:</label>
+          <select id="rp-naming-select">
+            <option value="custom">FirstName_LastName_ExamName</option>
+            <option value="legacy">Class_LastName_FirstName_Report</option>
+          </select>
+        </div>
+
+        <!-- Folder bar -->
+        <div class="rp-folder-bar" id="rp-folder-bar" style="display:none;">
+          <button class="rp-btn" id="rp-pick-folder-btn" onclick="rpPickFolder()">Choose Folder</button>
+          <button class="rp-btn" id="rp-create-folder-btn" onclick="rpCreateFolder()">Create Subfolder</button>
+          <span class="rp-folder-status" id="rp-folder-status">No folder selected</span>
+        </div>
+
+        <!-- Student list section -->
+        <div id="rp-student-section" style="display:none;">
+          <div class="rp-select-bar">
+            <button class="rp-btn" onclick="rpSelectAll()">Select All</button>
+            <button class="rp-btn" onclick="rpDeselectAll()">Deselect All</button>
+            <span class="rp-selected-count" id="rp-selected-count">0 selected</span>
+          </div>
+          <div class="rp-student-list" id="rp-student-list"></div>
+        </div>
+
+        <!-- Generate action -->
+        <div id="rp-action-bar" style="display:none; margin-bottom:16px;">
+          <button class="rp-btn rp-btn-primary" id="rp-generate-btn"
+            onclick="rpGenerateReports()" disabled>Generate Reports</button>
+        </div>
+
+        <!-- Progress section -->
+        <div id="rp-progress-section" style="display:none;">
+          <div class="rp-progress-wrap">
+            <div class="rp-progress-bar" id="rp-progress-bar" style="width:0%">0/0</div>
+          </div>
+        </div>
+
+        <!-- Results section -->
+        <div id="rp-results-section" style="display:none;">
+          <div class="rp-results-list" id="rp-results-list"></div>
+          <div style="margin-top:10px;">
+            <button class="rp-btn" id="rp-open-folder-btn"
+              onclick="rpOpenFolder()" style="display:none;">Open Folder in Drive</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Student panels -->
+      <div id="panel-student-dashboard" class="panel">
+
+        <!-- Exam selector -->
+        <div class="sd-exam-selector" id="sd-exam-selector" style="display:none;">
+          <label>Exam:</label>
+          <select id="sd-exam-select" onchange="sdSelectExam(this.value)"></select>
+        </div>
+
+        <!-- View toggle -->
+        <div class="sd-view-toggle" id="sd-view-toggle" style="display:none;">
+          <button class="sd-view-btn active" id="sd-btn-summary" onclick="sdSetView('summary')">Summary</button>
+          <button class="sd-view-btn" id="sd-btn-topics" onclick="sdSetView('topics')">Topics</button>
+          <button class="sd-view-btn" id="sd-btn-trend" onclick="sdSetView('trend')">Trend</button>
+        </div>
+
+        <!-- Loading / empty / error states -->
+        <div id="sd-loading" class="sd-loading" style="display:none;">Loading your dashboard...</div>
+        <div id="sd-empty" class="sd-empty" style="display:none;"></div>
+        <div id="sd-error" class="sd-error" style="display:none;"></div>
+
+        <!-- Summary view -->
+        <div id="sd-summary" style="display:none;">
+          <div id="sd-score-hero"></div>
+          <div id="sd-papers"></div>
+          <div id="sd-strands"></div>
+        </div>
+
+        <!-- Topics view -->
+        <div id="sd-topics" style="display:none;">
+          <div id="sd-topic-tree"></div>
+        </div>
+
+        <!-- Trend view -->
+        <div id="sd-trend" style="display:none;">
+          <div id="sd-trend-content"></div>
+        </div>
+
+      </div>
+
+      <div id="panel-student-exams" class="panel">
+
+        <!-- Exam selector -->
+        <div class="se-exam-selector" id="se-exam-selector" style="display:none;">
+          <label>Exam:</label>
+          <select id="se-exam-select" onchange="seSelectExam(this.value)"></select>
+        </div>
+
+        <!-- States -->
+        <div id="se-loading" class="se-loading" style="display:none;">Loading exam results&hellip;</div>
+        <div id="se-empty" class="se-empty" style="display:none;"></div>
+        <div id="se-error" class="se-error" style="display:none;"></div>
+
+        <!-- Exam results content -->
+        <div id="se-content" style="display:none;">
+          <div id="se-exam-header"></div>
+          <div id="se-paper-1a"></div>
+          <div id="se-paper-1b"></div>
+          <div id="se-paper-2"></div>
+        </div>
+
+      </div>
+
+    <!-- Topic Drill-Down Modal -->
+    <div id="td-modal" class="td-modal" style="display:none;">
+      <div class="td-modal-backdrop" onclick="tdClose()"></div>
+      <div class="td-modal-content">
+        <div class="td-modal-header">
+          <div class="td-modal-title">
+            <span class="td-topic-badge" id="td-topic-badge"></span>
+            <span class="td-topic-desc" id="td-topic-desc"></span>
+          </div>
+          <button class="td-close-btn" onclick="tdClose()">&times;</button>
+        </div>
+        <div class="td-modal-toggle">
+          <button class="td-toggle-btn active" id="td-btn-current" onclick="tdSetScope('current')">This Exam</button>
+          <button class="td-toggle-btn" id="td-btn-all" onclick="tdSetScope('all')">All Exams</button>
+        </div>
+        <div id="td-loading" class="td-loading" style="display:none;">Loading&hellip;</div>
+        <div id="td-error" class="td-error" style="display:none;"></div>
+        <div id="td-body" class="td-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Student Profile Modal (Story 12) -->
+    <div id="sp-modal" class="sp-modal" style="display:none;">
+      <div class="sp-modal-backdrop" onclick="spClose()"></div>
+      <div class="sp-modal-content">
+        <div class="sp-modal-header">
+          <div class="sp-modal-title">
+            <span class="sp-student-name" id="sp-student-name"></span>
+            <span class="sp-student-meta" id="sp-student-meta"></span>
+          </div>
+          <button class="sp-close-btn" onclick="spClose()">&times;</button>
+        </div>
+        <div class="sp-tab-bar" id="sp-tab-bar">
+          <button class="sp-tab-btn active" id="sp-tab-exams" onclick="spSetTab('exams')">Exams</button>
+          <button class="sp-tab-btn" id="sp-tab-topics" onclick="spSetTab('topics')">Topics</button>
+          <button class="sp-tab-btn" id="sp-tab-charts" onclick="spSetTab('charts')">Charts</button>
+        </div>
+        <div class="sp-exam-filter" id="sp-exam-filter" style="display:none;">
+          <label class="sp-filter-label">Include exams:</label>
+          <div class="sp-exam-checkboxes" id="sp-exam-checkboxes"></div>
+          <button class="sp-filter-btn" onclick="spSelectAllExams()">All</button>
+          <button class="sp-filter-btn" onclick="spDeselectAllExams()">None</button>
+        </div>
+        <div id="sp-loading" class="sp-loading" style="display:none;">Loading student profile&hellip;</div>
+        <div id="sp-error" class="sp-error" style="display:none;"></div>
+        <div class="sp-modal-body" id="sp-body">
+          <div id="sp-tab-content-exams"></div>
+          <div id="sp-tab-content-topics" style="display:none;"></div>
+          <div id="sp-tab-content-charts" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Student Preview Modal (Story 15) -->
+    <div id="pv-modal" class="pv-modal" style="display:none;">
+      <div class="pv-modal-backdrop" onclick="pvClose()"></div>
+      <div class="pv-modal-content">
+        <div class="pv-modal-header">
+          <div class="pv-modal-title">
+            <span class="pv-preview-badge">STUDENT PREVIEW</span>
+            <span id="pv-student-name"></span>
+            <span id="pv-exam-name" style="color:#6b7280;font-size:13px;"></span>
+          </div>
+          <button class="pv-close-btn" onclick="pvClose()">&times;</button>
+        </div>
+        <div class="pv-selector-bar" id="pv-selector-bar">
+          <label>Student:</label>
+          <select id="pv-student-select" onchange="pvSelectStudent()">
+            <option value="">-- Select Student --</option>
+          </select>
+          <span id="pv-student-count" style="color:#6b7280;font-size:12px;"></span>
+        </div>
+        <div id="pv-loading" class="pv-loading" style="display:none;">Loading student view&hellip;</div>
+        <div id="pv-error" class="pv-error" style="display:none;"></div>
+        <div id="pv-content" class="pv-modal-body" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Image Browser Modal (Story 15) -->
+    <div id="ib-modal" class="ib-modal" style="display:none;">
+      <div class="ib-modal-backdrop" onclick="qcCloseImageBrowser()"></div>
+      <div class="ib-modal-content">
+        <div class="ib-modal-header">
+          <div class="ib-modal-title">
+            <span>Images in:</span>
+            <span id="ib-folder-name" style="font-weight:700;"></span>
+          </div>
+          <button class="ib-close-btn" onclick="qcCloseImageBrowser()">&times;</button>
+        </div>
+        <div id="ib-loading" class="ib-loading" style="display:none;">Loading images&hellip;</div>
+        <div id="ib-empty" class="ib-empty" style="display:none;">No images found in this folder.</div>
+        <div id="ib-grid" class="ib-grid"></div>
+      </div>
+    </div>
+
+    <!-- View-as-Student Selector Modal (Story 16) -->
+    <div id="vas-modal" class="vas-modal" style="display:none;">
+      <div class="vas-modal-backdrop" onclick="vasCloseSelector()"></div>
+      <div class="vas-modal-content">
+        <div class="vas-modal-header">
+          <div class="vas-modal-title">Select a Student to View As</div>
+          <button class="vas-close-btn" onclick="vasCloseSelector()">&times;</button>
+        </div>
+        <div class="vas-modal-body">
+          <div class="vas-filter-row">
+            <label>Class:</label>
+            <select id="vas-class-filter" onchange="vasFilterStudents()">
+              <option value="">All Classes</option>
+            </select>
+            <label>Search:</label>
+            <input type="text" id="vas-search" placeholder="Filter by name..." oninput="vasFilterStudents()" class="vas-search-input">
+          </div>
+          <div id="vas-loading" class="vas-loading" style="display:none;">Loading students&hellip;</div>
+          <div id="vas-student-list" class="vas-student-list"></div>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <?!= include('Scripts'); ?>
+</body>
+</html>

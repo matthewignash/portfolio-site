@@ -1,0 +1,646 @@
+<script>
+    // ================================================
+    // COURSE ANALYTICS DASHBOARD (ES5)
+    // ================================================
+
+    /**
+     * 1. switchProgressSubNav — Toggle between Class Progress and Course Analytics
+     */
+    var SUB_NAV_CONTAINERS = [
+      'classProgressContainer', 'courseAnalyticsContainer', 'knowledgeGapContainer',
+      'formativeChecksContainer', 'supportInsightsContainer', 'pblInsightsContainer',
+      'noteInsightsContainer', 'myRemindersContainer', 'difInsightsContainer',
+      'gradeReviewContainer', 'portfolioInsightsContainer', 'labInsightsContainer',
+      'lessonInsightsContainer', 'reviewInsightsContainer', 'compAtlContainer'
+    ];
+
+    function switchProgressSubNav(subView) {
+      var btns = document.querySelectorAll('.cad-subnav-btn');
+
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.remove('active');
+      }
+
+      // Hide all sub-views
+      for (var c = 0; c < SUB_NAV_CONTAINERS.length; c++) {
+        var el = document.getElementById(SUB_NAV_CONTAINERS[c]);
+        if (el) el.style.display = 'none';
+      }
+
+      // Stop Grade & Review polling when switching away
+      if (typeof grvStopPolling === 'function') grvStopPolling();
+
+      // Map subView to container ID and button index
+      var SUB_NAV_MAP = {
+        classProgress:     { id: 'classProgressContainer', btn: 0 },
+        courseAnalytics:    { id: 'courseAnalyticsContainer', btn: 1 },
+        knowledgeGaps:     { id: 'knowledgeGapContainer', btn: 2 },
+        formativeChecks:   { id: 'formativeChecksContainer', btn: 3 },
+        supportInsights:   { id: 'supportInsightsContainer', btn: 4 },
+        pblInsights:       { id: 'pblInsightsContainer', btn: 5 },
+        noteInsights:      { id: 'noteInsightsContainer', btn: 6 },
+        myReminders:       { id: 'myRemindersContainer', btn: 7 },
+        difInsights:       { id: 'difInsightsContainer', btn: 8 },
+        gradeReview:       { id: 'gradeReviewContainer', btn: 9 },
+        portfolioInsights: { id: 'portfolioInsightsContainer', btn: 10 },
+        labInsights:       { id: 'labInsightsContainer', btn: 11 },
+        lessonInsights:    { id: 'lessonInsightsContainer', btn: 12 },
+        reviewInsights:    { id: 'reviewInsightsContainer', btn: 13 },
+        compAtl:           { id: 'compAtlContainer', btn: 14 }
+      };
+
+      // Show target container
+      var target = SUB_NAV_MAP[subView] || SUB_NAV_MAP.classProgress;
+      var targetEl = document.getElementById(target.id);
+      if (targetEl) targetEl.style.display = 'block';
+      if (btns[target.btn]) btns[target.btn].classList.add('active');
+
+      // Sub-view specific initialization
+      if (subView === 'courseAnalytics') {
+        if (!cadInitialized) {
+          cadInitialized = true;
+          populateCadCourseDropdown();
+        }
+      } else if (subView === 'knowledgeGaps') {
+        if (typeof progressDashboardData !== 'undefined' && progressDashboardData) {
+          renderKnowledgeGapAnalysis(progressDashboardData);
+        }
+      } else if (subView === 'formativeChecks') {
+        if (typeof progressSelectedMapId !== 'undefined' && progressSelectedMapId) {
+          fclLoadMapChecks(progressSelectedMapId);
+        }
+      } else if (subView === 'supportInsights') {
+        tsdLoadDashboard();
+      } else if (subView === 'pblInsights') {
+        if (typeof pblLoadDashboard === 'function') pblLoadDashboard();
+      } else if (subView === 'noteInsights') {
+        if (typeof cncLoadDashboard === 'function') cncLoadDashboard();
+      } else if (subView === 'myReminders') {
+        if (!trmInitialized) {
+          trmInitialized = true;
+          if (typeof trmLoadReminders === 'function') trmLoadReminders();
+        }
+      } else if (subView === 'difInsights') {
+        if (typeof dfaLoadDashboard === 'function') dfaLoadDashboard();
+      } else if (subView === 'gradeReview') {
+        if (!grvInitialized) {
+          grvInitialized = true;
+          if (typeof grvLoadQueue === 'function') grvLoadQueue();
+        } else if (typeof grvStartPolling === 'function' && grvQueueData) {
+          grvStartPolling();
+        }
+      } else if (subView === 'portfolioInsights') {
+        if (typeof piaLoadDashboard === 'function') piaLoadDashboard();
+      } else if (subView === 'labInsights') {
+        if (typeof linLoadDashboard === 'function') linLoadDashboard();
+      } else if (subView === 'lessonInsights') {
+        if (typeof lsmtLoadDashboard === 'function') lsmtLoadDashboard();
+      } else if (subView === 'reviewInsights') {
+        if (typeof rviLoadDashboard === 'function') rviLoadDashboard();
+      } else if (subView === 'compAtl') {
+        if (typeof catLoadDashboard === 'function') catLoadDashboard();
+      }
+    }
+
+    /**
+     * 2. populateCadCourseDropdown — Fill course dropdown from global coursesData
+     */
+    function populateCadCourseDropdown() {
+      var sel = document.getElementById('cadCourseSelect');
+      if (!sel) return;
+
+      var html = '<option value="">-- Select Course --</option>';
+      for (var i = 0; i < coursesData.length; i++) {
+        var c = coursesData[i];
+        html += '<option value="' + escapeHtml(String(c.courseId)) + '">' + escapeHtml(c.title || 'Untitled') + '</option>';
+      }
+      sel.innerHTML = html;
+
+      // Restore selection if we had one
+      if (cadSelectedCourseId) {
+        sel.value = cadSelectedCourseId;
+      }
+    }
+
+    /**
+     * 3. onCadCourseChange — Course selected: load analytics
+     */
+    function onCadCourseChange(courseId) {
+      cadSelectedCourseId = courseId;
+      cadDashboardData = null;
+      cadCoverageDetailCache = {};
+      cadStandardsReportData = null;
+
+      var content = document.getElementById('cadContent');
+      if (!courseId) {
+        content.innerHTML = '<div class="cad-empty"><div class="icon">&#128202;</div><p>Select a course to view analytics.</p></div>';
+        return;
+      }
+
+      content.innerHTML = '<div class="cad-loading"><span class="loading-spinner"></span> Loading course analytics...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          cadDashboardData = data;
+          renderCadDashboard();
+        })
+        .withFailureHandler(function(err) {
+          content.innerHTML = '<div class="cad-empty"><p style="color:#dc2626;">Error: ' + escapeHtml(err.message) + '</p></div>';
+        })
+        .getCourseAnalyticsDashboard(courseId);
+    }
+
+    /**
+     * 4. renderCadDashboard — Orchestrator: builds all section HTML
+     */
+    function renderCadDashboard() {
+      var data = cadDashboardData;
+      if (!data) return;
+
+      var html = '<div class="cad-container">';
+
+      // Overview cards
+      html += '<div class="cad-section-title">Overview</div>';
+      html += renderCadOverviewCards(data.overview);
+
+      // Standards coverage bars (per map)
+      if (data.maps.length > 0) {
+        html += '<div class="cad-section-title">Standards Coverage by Map</div>';
+        html += renderCadStandardsCoverage(data.maps);
+      }
+
+      // Heatmap (students x maps)
+      if (data.students.length > 0 && data.maps.length > 0) {
+        html += '<div class="cad-section-title">Student Progress Heatmap</div>';
+        html += renderCadHeatmap(data.students, data.maps);
+      }
+
+      // Completion histogram
+      if (data.students.length > 0) {
+        html += '<div class="cad-section-title">Completion Distribution</div>';
+        html += renderCadCompletionHistogram(data.completionDistribution);
+      }
+
+      // At-risk students
+      if (data.atRiskStudents.length > 0) {
+        html += '<div class="cad-section-title">At-Risk Students (below 25%)</div>';
+        html += renderCadAtRiskStudents(data.atRiskStudents);
+      }
+
+      // Course Standards Report (lazy-loaded on button click)
+      html += '<div class="cad-section-title">Course Standards Report</div>';
+      html += '<div id="cadStandardsReport">';
+      html += '<button class="btn btn-outline" onclick="loadCadStandardsReport()">&#128202; Load Full Standards Report</button>';
+      html += '</div>';
+
+      html += '</div>';
+      document.getElementById('cadContent').innerHTML = html;
+    }
+
+    /**
+     * 5. renderCadOverviewCards — 6 stat cards
+     */
+    function renderCadOverviewCards(overview) {
+      var cards = [
+        { value: overview.totalUnits, label: 'Units' },
+        { value: overview.totalMaps, label: 'Maps' },
+        { value: overview.totalHexes, label: 'Hexes' },
+        { value: overview.totalStudents, label: 'Students' },
+        { value: formatCadPercent(overview.avgCompletion), label: 'Avg Completion' },
+        { value: formatCadScore(overview.avgScore), label: 'Avg Score' }
+      ];
+
+      var html = '<div class="cad-overview-cards">';
+      for (var i = 0; i < cards.length; i++) {
+        html += '<div class="cad-overview-card">';
+        html += '<div class="cad-overview-value">' + escapeHtml(String(cards[i].value)) + '</div>';
+        html += '<div class="cad-overview-label">' + escapeHtml(cards[i].label) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 6. renderCadStandardsCoverage — Per-map bars, clickable for drill-down
+     */
+    function renderCadStandardsCoverage(maps) {
+      var html = '<div class="cad-coverage-section">';
+      for (var i = 0; i < maps.length; i++) {
+        var m = maps[i];
+        var pct = m.standardsCoverage.percent || 0;
+        var label = m.title;
+        if (m.unitTitle) {
+          label = m.unitTitle + ' — ' + m.title;
+        }
+
+        html += '<div class="cad-coverage-row" onclick="toggleCadCoverageDetail(' + i + ')">';
+        html += '<div class="cad-coverage-label" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</div>';
+        html += '<div class="cad-coverage-bar-container">';
+        html += '<div class="cad-coverage-bar-fill" style="width:' + pct + '%;"></div>';
+        html += '</div>';
+        html += '<div class="cad-coverage-value">' + pct + '%</div>';
+        html += '</div>';
+        html += '<div class="cad-coverage-detail" id="cadCoverageDetail-' + i + '"></div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 7. toggleCadCoverageDetail — Expand/collapse; lazy-load via RPC if not cached
+     */
+    function toggleCadCoverageDetail(index) {
+      var detailEl = document.getElementById('cadCoverageDetail-' + index);
+      if (!detailEl) return;
+
+      // Toggle open/close
+      if (detailEl.classList.contains('open')) {
+        detailEl.classList.remove('open');
+        return;
+      }
+
+      detailEl.classList.add('open');
+
+      var data = cadDashboardData;
+      if (!data || !data.maps[index]) return;
+
+      var mapId = data.maps[index].mapId;
+
+      // Check cache first
+      if (cadCoverageDetailCache[mapId]) {
+        var cached = cadCoverageDetailCache[mapId];
+        detailEl.innerHTML = renderCadCoverageDetailChips(cached.covered, cached.gaps);
+        return;
+      }
+
+      // Loading state
+      detailEl.innerHTML = '<span style="font-size:12px; color:#64748b;">Loading standards...</span>';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          cadCoverageDetailCache[mapId] = result;
+          var el = document.getElementById('cadCoverageDetail-' + index);
+          if (el) {
+            el.innerHTML = renderCadCoverageDetailChips(result.covered, result.gaps);
+          }
+        })
+        .withFailureHandler(function(err) {
+          var el = document.getElementById('cadCoverageDetail-' + index);
+          if (el) {
+            el.innerHTML = '<span style="font-size:12px; color:#dc2626;">Error loading details</span>';
+          }
+        })
+        .getCourseStandardsDetail(cadSelectedCourseId, mapId);
+    }
+
+    /**
+     * 8. renderCadCoverageDetailChips — Standard code chips (green=covered, gray=gap)
+     */
+    function renderCadCoverageDetailChips(covered, gaps) {
+      if ((!covered || covered.length === 0) && (!gaps || gaps.length === 0)) {
+        return '<span style="font-size:12px; color:#94a3b8;">No standards linked to this map.</span>';
+      }
+
+      var html = '';
+      for (var i = 0; i < covered.length; i++) {
+        var std = covered[i].standard || covered[i];
+        var code = std.code || std.standardId || '';
+        var title = std.title || '';
+        html += '<span class="cad-coverage-chip covered" title="' + escapeHtml(title) + '">' + escapeHtml(code) + '</span>';
+      }
+      for (var j = 0; j < gaps.length; j++) {
+        var gStd = gaps[j];
+        var gCode = gStd.code || gStd.standardId || '';
+        var gTitle = gStd.title || '';
+        html += '<span class="cad-coverage-chip gap" title="' + escapeHtml(gTitle) + '">' + escapeHtml(gCode) + '</span>';
+      }
+      return html;
+    }
+
+    /**
+     * 9. renderCadHeatmap — Students(rows) x Maps(cols) color-coded grid
+     */
+    function renderCadHeatmap(students, maps) {
+      var html = '<div class="cad-heatmap-container">';
+      html += '<table class="cad-heatmap">';
+
+      // Header row
+      html += '<tr><th>Student</th>';
+      for (var m = 0; m < maps.length; m++) {
+        var mapTitle = maps[m].title || 'Map';
+        if (mapTitle.length > 15) mapTitle = mapTitle.substring(0, 14) + '...';
+        html += '<th title="' + escapeHtml(maps[m].title) + '">' + escapeHtml(mapTitle) + '</th>';
+      }
+      html += '<th>Overall</th></tr>';
+
+      // Student rows
+      for (var s = 0; s < students.length; s++) {
+        var st = students[s];
+        html += '<tr>';
+        html += '<td title="' + escapeHtml(st.email) + '">' + escapeHtml(st.name) + '</td>';
+
+        for (var m2 = 0; m2 < maps.length; m2++) {
+          var mp = st.mapProgress[maps[m2].mapId];
+          var pct = mp ? mp.percentComplete : 0;
+          var bucket = getCadHeatmapBucket(pct);
+          html += '<td><span class="cad-heatmap-cell ' + bucket + '" title="' + pct + '%">' + Math.round(pct) + '</span></td>';
+        }
+
+        // Overall column
+        var overallBucket = getCadHeatmapBucket(st.overallCompletion);
+        html += '<td><span class="cad-heatmap-cell ' + overallBucket + '" title="' + st.overallCompletion + '%">' + Math.round(st.overallCompletion) + '</span></td>';
+        html += '</tr>';
+      }
+
+      html += '</table>';
+
+      // Legend
+      html += '<div class="cad-heatmap-legend">';
+      html += '<span style="font-size:11px; font-weight:600; color:#475569;">Legend:</span>';
+      var bucketLabels = [
+        { cls: 'bucket-0', label: '0%' },
+        { cls: 'bucket-1', label: '1–25%' },
+        { cls: 'bucket-2', label: '25–50%' },
+        { cls: 'bucket-3', label: '50–75%' },
+        { cls: 'bucket-4', label: '75–100%' }
+      ];
+      for (var b = 0; b < bucketLabels.length; b++) {
+        html += '<span class="cad-heatmap-legend-item">';
+        html += '<span class="cad-heatmap-legend-swatch cad-heatmap-cell ' + bucketLabels[b].cls + '" style="width:14px; height:14px;"></span>';
+        html += '<span>' + bucketLabels[b].label + '</span>';
+        html += '</span>';
+      }
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 10. getCadHeatmapBucket — Returns bucket class for completion %
+     */
+    function getCadHeatmapBucket(percent) {
+      if (percent <= 0) return 'bucket-0';
+      if (percent < 25) return 'bucket-1';
+      if (percent < 50) return 'bucket-2';
+      if (percent < 75) return 'bucket-3';
+      return 'bucket-4';
+    }
+
+    /**
+     * 11. renderCadCompletionHistogram — 4-bar CSS histogram
+     */
+    function renderCadCompletionHistogram(distribution) {
+      // Find max for scaling
+      var maxCount = 0;
+      for (var i = 0; i < distribution.length; i++) {
+        if (distribution[i].count > maxCount) maxCount = distribution[i].count;
+      }
+      if (maxCount === 0) maxCount = 1; // avoid division by zero
+
+      var html = '<div class="cad-histogram">';
+      for (var i = 0; i < distribution.length; i++) {
+        var d = distribution[i];
+        var heightPct = Math.round((d.count / maxCount) * 100);
+        html += '<div class="cad-histogram-bar">';
+        html += '<div class="cad-histogram-bar-count">' + d.count + '</div>';
+        html += '<div class="cad-histogram-bar-fill" style="height:' + heightPct + '%;"></div>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      html += '<div class="cad-histogram-labels">';
+      for (var j = 0; j < distribution.length; j++) {
+        html += '<div class="cad-histogram-label">' + escapeHtml(distribution[j].label) + '</div>';
+      }
+      html += '</div>';
+
+      return html;
+    }
+
+    /**
+     * 12. renderCadAtRiskStudents — Students below 25% completion
+     */
+    function renderCadAtRiskStudents(students) {
+      var html = '<div class="cad-atrisk-list">';
+      for (var i = 0; i < students.length; i++) {
+        var s = students[i];
+        html += '<div class="cad-atrisk-item" onclick="selectCadStudent(\'' + escapeHtml(s.email) + '\')">';
+        html += '<span class="cad-atrisk-name">' + escapeHtml(s.name) + '</span>';
+        html += '<span class="cad-atrisk-badge">' + formatCadPercent(s.overallCompletion) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 13. selectCadStudent — Open detail panel with student breakdown
+     */
+    function selectCadStudent(email) {
+      var panel = document.getElementById('progressDetailPanel');
+      if (!panel) return;
+
+      panel.classList.add('open');
+      document.getElementById('progressDetailTitle').textContent = 'Student Details';
+
+      renderCadStudentDetail(email);
+    }
+
+    /**
+     * 14. renderCadStudentDetail — Build detail HTML for a student
+     */
+    function renderCadStudentDetail(email) {
+      var body = document.getElementById('progressDetailBody');
+      if (!body || !cadDashboardData) return;
+
+      // Find student in data
+      var student = null;
+      for (var i = 0; i < cadDashboardData.students.length; i++) {
+        if (cadDashboardData.students[i].email === email) {
+          student = cadDashboardData.students[i];
+          break;
+        }
+      }
+
+      if (!student) {
+        body.innerHTML = '<p style="color:#94a3b8; padding:20px;">Student not found.</p>';
+        return;
+      }
+
+      var html = '<div style="padding:16px;">';
+      html += '<div style="margin-bottom:16px;">';
+      html += '<div style="font-size:16px; font-weight:700; color:#1e293b;">' + escapeHtml(student.name) + '</div>';
+      html += '<div style="font-size:12px; color:#64748b;">' + escapeHtml(student.email) + '</div>';
+      html += '</div>';
+
+      // Overall stats
+      html += '<div style="display:flex; gap:12px; margin-bottom:20px;">';
+      html += '<div class="cad-overview-card" style="flex:1;">';
+      html += '<div class="cad-overview-value" style="font-size:20px;">' + formatCadPercent(student.overallCompletion) + '</div>';
+      html += '<div class="cad-overview-label">Completion</div>';
+      html += '</div>';
+      html += '<div class="cad-overview-card" style="flex:1;">';
+      html += '<div class="cad-overview-value" style="font-size:20px;">' + formatCadScore(student.overallScore) + '</div>';
+      html += '<div class="cad-overview-label">Avg Score</div>';
+      html += '</div>';
+      html += '</div>';
+
+      // Per-map breakdown
+      html += '<div style="font-size:13px; font-weight:700; color:#1e293b; margin-bottom:8px;">Progress by Map</div>';
+
+      var maps = cadDashboardData.maps;
+      for (var m = 0; m < maps.length; m++) {
+        var mapId = maps[m].mapId;
+        var mp = student.mapProgress[mapId];
+        var pct = mp ? mp.percentComplete : 0;
+        var score = mp ? mp.avgScore : null;
+        var statusCounts = mp ? mp.statusCounts : { not_started: 0, in_progress: 0, completed: 0, mastered: 0 };
+
+        html += '<div style="padding:10px 0; border-bottom:1px solid #f1f5f9;">';
+        html += '<div style="font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">' + escapeHtml(maps[m].title) + '</div>';
+
+        // Progress bar
+        html += '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">';
+        html += '<div class="cad-coverage-bar-container" style="height:12px;">';
+        html += '<div class="cad-coverage-bar-fill" style="width:' + pct + '%; height:100%;"></div>';
+        html += '</div>';
+        html += '<span style="font-size:12px; font-weight:700; color:#334155; width:40px; text-align:right;">' + formatCadPercent(pct) + '</span>';
+        html += '</div>';
+
+        // Status counts
+        html += '<div style="display:flex; gap:8px; font-size:11px; color:#64748b;">';
+        html += '<span>' + statusCounts.mastered + ' mastered</span>';
+        html += '<span>' + statusCounts.completed + ' completed</span>';
+        html += '<span>' + statusCounts.in_progress + ' in progress</span>';
+        html += '<span>' + statusCounts.not_started + ' not started</span>';
+        html += '</div>';
+
+        if (score !== null) {
+          html += '<div style="font-size:11px; color:#64748b; margin-top:2px;">Avg Score: ' + formatCadScore(score) + '</div>';
+        }
+
+        html += '</div>';
+      }
+
+      html += '</div>';
+      body.innerHTML = html;
+    }
+
+    /**
+     * 15. formatCadPercent — "XX%" or "—"
+     */
+    function formatCadPercent(value) {
+      if (value === null || value === undefined) return '\u2014';
+      return Math.round(value) + '%';
+    }
+
+    /**
+     * 16. formatCadScore — Score display or "—"
+     */
+    function formatCadScore(value) {
+      if (value === null || value === undefined) return '\u2014';
+      return Math.round(value) + '%';
+    }
+
+    // ================================================
+    // COURSE STANDARDS REPORT (csr- prefix)
+    // ================================================
+
+    var cadStandardsReportLoading = false;
+
+    function loadCadStandardsReport() {
+      if (!cadSelectedCourseId) return;
+      var container = document.getElementById('cadStandardsReport');
+      if (!container) return;
+      if (cadStandardsReportLoading) return;
+
+      cadStandardsReportLoading = true;
+      container.innerHTML = '<div class="cad-loading"><span class="loading-spinner"></span> Loading standards report...</div>';
+
+      var expectedCourseId = cadSelectedCourseId;
+      google.script.run
+        .withSuccessHandler(function(data) {
+          cadStandardsReportLoading = false;
+          if (String(cadSelectedCourseId) !== String(expectedCourseId)) return;
+          cadStandardsReportData = data;
+          renderCadStandardsReport();
+        })
+        .withFailureHandler(function(err) {
+          cadStandardsReportLoading = false;
+          var el = document.getElementById('cadStandardsReport');
+          if (el) el.innerHTML = '<div style="color:#dc2626; font-size:13px; padding:8px;">Error: ' + escapeHtml(err.message) + '</div>';
+        })
+        .getCourseStandardsReport(cadSelectedCourseId);
+    }
+
+    function renderCadStandardsReport() {
+      var container = document.getElementById('cadStandardsReport');
+      if (!container || !cadStandardsReportData) return;
+      var r = cadStandardsReportData;
+
+      var html = '';
+
+      // Summary cards (reuse cad-overview-cards)
+      var covPct = r.coveragePercent || 0;
+      var covColor = covPct >= 80 ? '#16a34a' : (covPct >= 50 ? '#3b82f6' : '#f59e0b');
+
+      html += '<div class="cad-overview-cards" style="margin-bottom:14px;">';
+      html += '<div class="cad-overview-card"><div class="cad-overview-value">' + r.totalStandards + '</div><div class="cad-overview-label">Total Standards</div></div>';
+      html += '<div class="cad-overview-card"><div class="cad-overview-value" style="color:#16a34a;">' + r.coveredCount + '</div><div class="cad-overview-label">Covered</div></div>';
+      html += '<div class="cad-overview-card"><div class="cad-overview-value" style="color:#dc2626;">' + r.gapCount + '</div><div class="cad-overview-label">Gaps</div></div>';
+      html += '<div class="cad-overview-card"><div class="cad-overview-value" style="color:' + covColor + ';">' + covPct + '%</div><div class="cad-overview-label">Coverage</div></div>';
+      html += '</div>';
+
+      // Coverage bar
+      html += '<div style="height:8px; background:#e2e8f0; border-radius:4px; margin-bottom:14px;">';
+      html += '<div style="height:100%; width:' + covPct + '%; background:' + covColor + '; border-radius:4px; transition:width 0.3s;"></div>';
+      html += '</div>';
+
+      // Covered standards with cross-references
+      if (r.covered && r.covered.length > 0) {
+        html += '<div style="font-size:13px; font-weight:600; color:#16a34a; margin-bottom:6px;">Covered Standards (' + r.covered.length + ')</div>';
+        for (var ci = 0; ci < r.covered.length; ci++) {
+          var c = r.covered[ci];
+          var std = c.standard || {};
+          var code = std.code || std.standardCode || std.standardId || '';
+          var desc = std.description || std.standardText || '';
+          html += '<div class="csr-std-row">';
+          html += '<span class="csr-std-code">' + escapeHtml(code) + '</span>';
+          if (desc) html += '<span class="csr-std-desc">' + escapeHtml(desc.length > 80 ? desc.substring(0, 77) + '...' : desc) + '</span>';
+          // Unit/lesson cross-references
+          if (c.lessons && c.lessons.length > 0) {
+            html += '<div class="csr-std-refs">';
+            var maxRefs = Math.min(c.lessons.length, 5);
+            for (var ri = 0; ri < maxRefs; ri++) {
+              html += '<span class="csr-ref-chip">' + escapeHtml(c.lessons[ri].unitTitle || '') + ' \u2192 ' + escapeHtml(c.lessons[ri].lessonTitle || '') + '</span>';
+            }
+            if (c.lessons.length > 5) html += '<span class="csr-ref-more">+' + (c.lessons.length - 5) + ' more</span>';
+            html += '</div>';
+          }
+          html += '</div>';
+        }
+      }
+
+      // Gap standards
+      if (r.gaps && r.gaps.length > 0) {
+        html += '<div style="font-size:13px; font-weight:600; color:#dc2626; margin:14px 0 6px;">Gap Standards (' + r.gaps.length + ')</div>';
+        for (var gi = 0; gi < r.gaps.length; gi++) {
+          var g = r.gaps[gi];
+          var gCode = g.code || g.standardCode || g.standardId || '';
+          var gDesc = g.description || g.standardText || '';
+          html += '<div class="csr-std-row csr-gap">';
+          html += '<span class="csr-std-code">' + escapeHtml(gCode) + '</span>';
+          if (gDesc) html += '<span class="csr-std-desc">' + escapeHtml(gDesc.length > 80 ? gDesc.substring(0, 77) + '...' : gDesc) + '</span>';
+          html += '</div>';
+        }
+      }
+
+      if (r.totalStandards === 0) {
+        html += '<div style="color:#94a3b8; font-size:13px; padding:12px;">No standards found. Add standards to your lessons to see coverage data.</div>';
+      }
+
+      container.innerHTML = html;
+    }
+</script>

@@ -1,0 +1,3162 @@
+{
+  "staff": [
+    {
+      "id": "staff-a-001",
+      "email": "sarah.shanahan@school.edu",
+      "firstName": "Sarah",
+      "lastName": "Mann",
+      "role": "admin",
+      "department": "Administration",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-002",
+      "email": "james.zboncak@school.edu",
+      "firstName": "James",
+      "lastName": "Rogahn",
+      "role": "admin",
+      "department": "Administration",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-003",
+      "email": "priya.ward@school.edu",
+      "firstName": "Priya",
+      "lastName": "Leffler-Botsford",
+      "role": "admin",
+      "department": "Administration",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-004",
+      "email": "keith.shields64@school.edu",
+      "firstName": "Catherine",
+      "lastName": "Blick",
+      "role": "teacher",
+      "department": "English",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-005",
+      "email": "katrine.littel@school.edu",
+      "firstName": "Denis",
+      "lastName": "Gislason",
+      "role": "teacher",
+      "department": "Languages",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-006",
+      "email": "tamara_kemmer85@school.edu",
+      "firstName": "Weston",
+      "lastName": "DuBuque",
+      "role": "teacher",
+      "department": "English",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-007",
+      "email": "mona87@school.edu",
+      "firstName": "Candice",
+      "lastName": "Larson",
+      "role": "teacher",
+      "department": "Technology",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-008",
+      "email": "brandon.shields@school.edu",
+      "firstName": "Christie",
+      "lastName": "Hermann",
+      "role": "teacher",
+      "department": "Technology",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-009",
+      "email": "patsy.ziemann41@school.edu",
+      "firstName": "Jarred",
+      "lastName": "Blick",
+      "role": "teacher",
+      "department": "Technology",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-010",
+      "email": "sterling51@school.edu",
+      "firstName": "Mary",
+      "lastName": "Jacobi",
+      "role": "teacher",
+      "department": "PE & Health",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-011",
+      "email": "mayra_gusikowski65@school.edu",
+      "firstName": "Stella",
+      "lastName": "Feeney",
+      "role": "teacher",
+      "department": "Mathematics",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-012",
+      "email": "rick76@school.edu",
+      "firstName": "Erik",
+      "lastName": "Pfannerstill",
+      "role": "teacher",
+      "department": "Technology",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-013",
+      "email": "bernard.rice@school.edu",
+      "firstName": "Deanna",
+      "lastName": "Cronin",
+      "role": "teacher",
+      "department": "Mathematics",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-014",
+      "email": "tammy.schumm66@school.edu",
+      "firstName": "Charlie",
+      "lastName": "Kertzmann",
+      "role": "teacher",
+      "department": "Arts",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-015",
+      "email": "jake78@school.edu",
+      "firstName": "Sandra",
+      "lastName": "Huels",
+      "role": "teacher",
+      "department": "Languages",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-016",
+      "email": "xavier41@school.edu",
+      "firstName": "Carla",
+      "lastName": "Jacobson",
+      "role": "teacher",
+      "department": "Student Services",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-017",
+      "email": "jean84@school.edu",
+      "firstName": "Tami",
+      "lastName": "Nolan",
+      "role": "teacher",
+      "department": "Languages",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-018",
+      "email": "emanuel.leannon@school.edu",
+      "firstName": "Bettie",
+      "lastName": "Morar",
+      "role": "teacher",
+      "department": "Technology",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-019",
+      "email": "nathan.ondricka22@school.edu",
+      "firstName": "Sabrina",
+      "lastName": "Cartwright-Davis",
+      "role": "teacher",
+      "department": "Arts",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-020",
+      "email": "leticia83@school.edu",
+      "firstName": "Kent",
+      "lastName": "Steuber",
+      "role": "teacher",
+      "department": "Languages",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-021",
+      "email": "eleanor.robel77@school.edu",
+      "firstName": "Scott",
+      "lastName": "Williamson",
+      "role": "teacher",
+      "department": "Humanities",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-022",
+      "email": "wallace47@school.edu",
+      "firstName": "Ben",
+      "lastName": "Runolfsdottir",
+      "role": "support",
+      "department": "Student Services",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-023",
+      "email": "clint_stamm@school.edu",
+      "firstName": "Geovanni",
+      "lastName": "Satterfield",
+      "role": "support",
+      "department": "Student Services",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-024",
+      "email": "cara_yost@school.edu",
+      "firstName": "Bernice",
+      "lastName": "Abshire",
+      "role": "specialist",
+      "department": "Student Services",
+      "isActive": true
+    },
+    {
+      "id": "staff-a-025",
+      "email": "kassandra.zulauf15@school.edu",
+      "firstName": "Kenneth",
+      "lastName": "Macejkovic",
+      "role": "specialist",
+      "department": "Student Services",
+      "isActive": true
+    }
+  ],
+  "boards": [
+    {
+      "id": "board-a-001",
+      "title": "Strategic Plan 2026",
+      "description": "School-wide strategic initiatives and improvement goals for the 2026 academic year",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-01-14T15:06:30.855Z",
+      "isArchived": false
+    },
+    {
+      "id": "board-a-002",
+      "title": "Operations & Compliance",
+      "description": "Day-to-day operational tasks, policy updates, and regulatory compliance tracking",
+      "createdBy": "staff-a-002",
+      "createdAt": "2026-02-02T15:59:32.415Z",
+      "isArchived": false
+    },
+    {
+      "id": "board-a-003",
+      "title": "Accreditation Preparation",
+      "description": "Tasks and evidence gathering for the upcoming NEASC accreditation visit",
+      "createdBy": "staff-a-001",
+      "createdAt": "2025-12-06T17:40:38.579Z",
+      "isArchived": false
+    }
+  ],
+  "columns": [
+    {
+      "id": "col-a-001",
+      "boardId": "board-a-001",
+      "title": "Backlog",
+      "position": 0,
+      "color": "#94a3b8",
+      "wipLimit": 12
+    },
+    {
+      "id": "col-a-002",
+      "boardId": "board-a-001",
+      "title": "This Quarter",
+      "position": 1,
+      "color": "#8b5cf6",
+      "wipLimit": 8
+    },
+    {
+      "id": "col-a-003",
+      "boardId": "board-a-001",
+      "title": "In Progress",
+      "position": 2,
+      "color": "#3b82f6",
+      "wipLimit": 5
+    },
+    {
+      "id": "col-a-004",
+      "boardId": "board-a-001",
+      "title": "Under Review",
+      "position": 3,
+      "color": "#f59e0b",
+      "wipLimit": 4
+    },
+    {
+      "id": "col-a-005",
+      "boardId": "board-a-001",
+      "title": "Completed",
+      "position": 4,
+      "color": "#22c55e",
+      "wipLimit": 0
+    },
+    {
+      "id": "col-a-006",
+      "boardId": "board-a-002",
+      "title": "To Do",
+      "position": 0,
+      "color": "#94a3b8",
+      "wipLimit": 10
+    },
+    {
+      "id": "col-a-007",
+      "boardId": "board-a-002",
+      "title": "In Progress",
+      "position": 1,
+      "color": "#3b82f6",
+      "wipLimit": 6
+    },
+    {
+      "id": "col-a-008",
+      "boardId": "board-a-002",
+      "title": "Awaiting Approval",
+      "position": 2,
+      "color": "#f59e0b",
+      "wipLimit": 4
+    },
+    {
+      "id": "col-a-009",
+      "boardId": "board-a-002",
+      "title": "Done",
+      "position": 3,
+      "color": "#22c55e",
+      "wipLimit": 0
+    },
+    {
+      "id": "col-a-010",
+      "boardId": "board-a-003",
+      "title": "Evidence Needed",
+      "position": 0,
+      "color": "#ef4444",
+      "wipLimit": 15
+    },
+    {
+      "id": "col-a-011",
+      "boardId": "board-a-003",
+      "title": "Gathering",
+      "position": 1,
+      "color": "#f59e0b",
+      "wipLimit": 8
+    },
+    {
+      "id": "col-a-012",
+      "boardId": "board-a-003",
+      "title": "Drafting Narrative",
+      "position": 2,
+      "color": "#3b82f6",
+      "wipLimit": 5
+    },
+    {
+      "id": "col-a-013",
+      "boardId": "board-a-003",
+      "title": "Submitted",
+      "position": 3,
+      "color": "#22c55e",
+      "wipLimit": 0
+    }
+  ],
+  "cards": [
+    {
+      "id": "card-a-001",
+      "boardId": "board-a-001",
+      "columnId": "col-a-001",
+      "title": "Define Year 7-9 literacy improvement benchmarks",
+      "description": "Clibanus conforto conventus natus civis pariatur excepturi aut tergeo tener. Officia reprehenderit amaritudo. Suus callide aufero alveus.",
+      "priority": "medium",
+      "dueDate": "2026-03-25",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-02-05T05:15:18.462Z",
+      "updatedAt": "2026-02-18T17:37:41.740Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-020",
+        "staff-a-012",
+        "staff-a-017"
+      ],
+      "labels": [
+        "literacy",
+        "data",
+        "strategic"
+      ],
+      "category": "project",
+      "keyTakeaway": "Required for compliance — non-negotiable deadline",
+      "checklists": [
+        {
+          "id": "9a0dcf4a",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "8d771e46",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "e70442f3",
+          "text": "Follow up on outstanding items",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "668cf2e3",
+          "text": "Collect data from Science",
+          "isChecked": true,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [
+        {
+          "id": "1f0916c4",
+          "authorId": "staff-a-010",
+          "content": "I've shared the relevant documents in the shared drive.",
+          "createdAt": "2026-02-25T15:36:43.414Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "48cf0792",
+          "userId": "staff-a-001",
+          "actionType": "card_created",
+          "createdAt": "2026-02-05T05:15:18.462Z"
+        },
+        {
+          "id": "fd4fb6f4",
+          "userId": "staff-a-004",
+          "actionType": "card_updated",
+          "fieldName": "assignees",
+          "createdAt": "2026-02-24T20:09:29.211Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-002",
+      "boardId": "board-a-001",
+      "columnId": "col-a-001",
+      "title": "Launch staff wellbeing pulse survey",
+      "description": "Textilis aegrotatio copiose degenero trucido eos. Aetas xiphias vox tolero utique usitas arcus vetus spero patria.",
+      "priority": "critical",
+      "dueDate": "2026-03-28",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-01-31T13:12:35.806Z",
+      "updatedAt": "2026-03-05T00:36:43.213Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-025",
+        "staff-a-022",
+        "staff-a-013"
+      ],
+      "labels": [
+        "wellbeing",
+        "staff",
+        "survey"
+      ],
+      "category": "area",
+      "keyTakeaway": "Quick win with high impact on school culture",
+      "checklists": [
+        {
+          "id": "46a8642b",
+          "text": "Follow up on outstanding items",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "b878c4e5",
+          "text": "Submit final version for review",
+          "isChecked": false,
+          "sortOrder": 1
+        }
+      ],
+      "comments": [
+        {
+          "id": "c4e436b6",
+          "authorId": "staff-a-014",
+          "content": "Updated the timeline for this — should be feasible by end of term.",
+          "createdAt": "2026-03-05T00:32:42.430Z"
+        },
+        {
+          "id": "0c759626",
+          "authorId": "staff-a-024",
+          "content": "Pushed the deadline back by one week due to competing priorities.",
+          "createdAt": "2026-02-06T18:06:44.360Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "8f94a4dc",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-01-31T13:12:35.806Z"
+        },
+        {
+          "id": "662dafd7",
+          "userId": "staff-a-017",
+          "actionType": "card_updated",
+          "fieldName": "due_date",
+          "createdAt": "2026-02-24T21:30:10.561Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-003",
+      "boardId": "board-a-001",
+      "columnId": "col-a-001",
+      "title": "Develop STEM pathways proposal for Board",
+      "description": "Depulso cupiditate arceo turpis animi vinco color utroque. Abduco quia abeo baiulus subvenio a ut. Suspendo contra vae fugit.",
+      "priority": "medium",
+      "dueDate": "2026-03-22",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-01-22T03:22:27.445Z",
+      "updatedAt": "2026-02-04T12:22:59.744Z",
+      "position": 2,
+      "assignedTo": [
+        "staff-a-021"
+      ],
+      "labels": [
+        "stem",
+        "curriculum",
+        "board"
+      ],
+      "category": "project",
+      "keyTakeaway": "Budget implications need CFO sign-off",
+      "checklists": [
+        {
+          "id": "e3fbe380",
+          "text": "Send progress update to leadership team",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "5a6b44cc",
+          "text": "Follow up on outstanding items",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "79e6326b",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "d14048e7",
+          "text": "Submit final version for review",
+          "isChecked": false,
+          "sortOrder": 3
+        },
+        {
+          "id": "8008db22",
+          "text": "Draft initial mild outline",
+          "isChecked": false,
+          "sortOrder": 4
+        }
+      ],
+      "comments": [],
+      "activity": [
+        {
+          "id": "c21879dc",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-01-22T03:22:27.445Z"
+        },
+        {
+          "id": "eefc401d",
+          "userId": "staff-a-020",
+          "actionType": "card_updated",
+          "fieldName": "assignees",
+          "createdAt": "2026-02-27T00:51:33.265Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-004",
+      "boardId": "board-a-001",
+      "columnId": "col-a-002",
+      "title": "Coordinate Indigenous perspectives audit across departments",
+      "description": "Vinculum ascit demergo chirographum caveo. Unus ipsam arcus coepi aetas tolero alius via defaeco patria.",
+      "priority": "low",
+      "dueDate": null,
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-01-26T11:40:48.072Z",
+      "updatedAt": "2026-02-12T13:05:49.021Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-001",
+        "staff-a-007"
+      ],
+      "labels": [
+        "inclusion",
+        "curriculum",
+        "audit"
+      ],
+      "category": "project",
+      "keyTakeaway": "Budget implications need CFO sign-off",
+      "checklists": [
+        {
+          "id": "1cbb5666",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "9d8b2b92",
+          "text": "Send progress update to leadership team",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "b40cab34",
+          "text": "Consult with Etha about requirements",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "b387afe7",
+          "text": "Send progress update to leadership team",
+          "isChecked": false,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [
+        {
+          "id": "9bd38c6f",
+          "authorId": "staff-a-023",
+          "content": "Completed my section. Ready for the next person to take over.",
+          "createdAt": "2026-03-01T11:31:11.792Z"
+        },
+        {
+          "id": "823a329f",
+          "authorId": "staff-a-023",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-02-16T23:25:02.448Z"
+        },
+        {
+          "id": "e14c2a9f",
+          "authorId": "staff-a-002",
+          "content": "I've shared the relevant documents in the shared drive.",
+          "createdAt": "2026-02-07T16:12:07.935Z"
+        },
+        {
+          "id": "d4187405",
+          "authorId": "staff-a-017",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-02-14T00:00:04.426Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "175aa9a5",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-01-26T11:40:48.072Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-005",
+      "boardId": "board-a-001",
+      "columnId": "col-a-002",
+      "title": "Implement new parent communication platform",
+      "description": "Ambitus veritatis pariatur pel. Absque condico adulescens cerno valeo ter. Audio centum iste corpus paulatim pax.",
+      "priority": "low",
+      "dueDate": "2026-03-19",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-01-21T14:54:51.399Z",
+      "updatedAt": "2026-02-11T06:21:22.044Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-016",
+        "staff-a-021",
+        "staff-a-003"
+      ],
+      "labels": [
+        "communication",
+        "technology",
+        "parents"
+      ],
+      "category": "project",
+      "keyTakeaway": "Key priority for Board reporting this quarter",
+      "checklists": [
+        {
+          "id": "c107a813",
+          "text": "Draft initial evil outline",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "f02df400",
+          "text": "Get sign-off from department head",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "c24c6f75",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 2
+        }
+      ],
+      "comments": [],
+      "activity": [
+        {
+          "id": "6bef304a",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-01-21T14:54:51.399Z"
+        },
+        {
+          "id": "d0e88ab6",
+          "userId": "staff-a-001",
+          "actionType": "card_moved",
+          "oldValue": "Backlog",
+          "newValue": "This Quarter",
+          "createdAt": "2026-02-25T01:02:02.256Z"
+        },
+        {
+          "id": "77a0a048",
+          "userId": "staff-a-010",
+          "actionType": "card_updated",
+          "fieldName": "description",
+          "createdAt": "2026-02-05T20:53:42.472Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-006",
+      "boardId": "board-a-001",
+      "columnId": "col-a-002",
+      "title": "Review and update behaviour management policy",
+      "description": "Xiphias cupressus quis colligo deleo desolo. Crux pax venustas damno caste addo. Benigne cresco contra concido totus atrox confido una argentum taceo.",
+      "priority": "medium",
+      "dueDate": "2026-03-15",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-26T22:24:02.936Z",
+      "updatedAt": "2026-03-01T17:06:40.247Z",
+      "position": 2,
+      "assignedTo": [
+        "staff-a-014",
+        "staff-a-002",
+        "staff-a-008"
+      ],
+      "labels": [
+        "policy",
+        "student-welfare"
+      ],
+      "category": "area",
+      "keyTakeaway": "Quick win with high impact on school culture",
+      "checklists": [
+        {
+          "id": "07e2f684",
+          "text": "Update spreadsheet with latest figures",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "e72aa9b8",
+          "text": "Review existing documentation",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "ed780bdb",
+          "text": "Review existing documentation",
+          "isChecked": true,
+          "sortOrder": 2
+        },
+        {
+          "id": "d4964dfb",
+          "text": "Collect data from Languages",
+          "isChecked": false,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [],
+      "activity": [
+        {
+          "id": "03fa958a",
+          "userId": "staff-a-001",
+          "actionType": "card_created",
+          "createdAt": "2026-02-26T22:24:02.936Z"
+        },
+        {
+          "id": "16f548db",
+          "userId": "staff-a-001",
+          "actionType": "card_moved",
+          "oldValue": "Backlog",
+          "newValue": "This Quarter",
+          "createdAt": "2026-03-04T17:49:50.740Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-007",
+      "boardId": "board-a-001",
+      "columnId": "col-a-003",
+      "title": "Establish peer coaching triads for semester 2",
+      "description": "Cariosus ab thema coadunatio.",
+      "priority": "medium",
+      "dueDate": null,
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-16T04:24:37.971Z",
+      "updatedAt": "2026-03-04T13:48:15.255Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-020",
+        "staff-a-024"
+      ],
+      "labels": [
+        "pd",
+        "coaching",
+        "staff"
+      ],
+      "category": "area",
+      "keyTakeaway": "Required for compliance — non-negotiable deadline",
+      "checklists": [
+        {
+          "id": "bab0e044",
+          "text": "Review existing documentation",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "78fd20db",
+          "text": "Submit final version for review",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "0658775c",
+          "text": "Send progress update to leadership team",
+          "isChecked": true,
+          "sortOrder": 2
+        },
+        {
+          "id": "ec5d3f22",
+          "text": "Send progress update to leadership team",
+          "isChecked": false,
+          "sortOrder": 3
+        },
+        {
+          "id": "d95ac2e7",
+          "text": "Draft initial alienated outline",
+          "isChecked": true,
+          "sortOrder": 4
+        }
+      ],
+      "comments": [
+        {
+          "id": "6bfb0e66",
+          "authorId": "staff-a-001",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-02-18T00:56:39.986Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "04f4567f",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-02-16T04:24:37.971Z"
+        },
+        {
+          "id": "9de3b4ce",
+          "userId": "staff-a-003",
+          "actionType": "card_moved",
+          "oldValue": "This Quarter",
+          "newValue": "In Progress",
+          "createdAt": "2026-02-23T11:51:13.119Z"
+        },
+        {
+          "id": "f79d219e",
+          "userId": "staff-a-004",
+          "actionType": "card_updated",
+          "fieldName": "description",
+          "createdAt": "2026-03-04T09:49:10.634Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-008",
+      "boardId": "board-a-001",
+      "columnId": "col-a-003",
+      "title": "Create data dashboard for academic performance tracking",
+      "description": "Amicitia usus necessitatibus trado caries. Sufficio aegrotatio audacia optio subnecto decet clarus cilicium aeternus ter. Virga speculum esse conforto cometes nulla capio deorsum.",
+      "priority": "high",
+      "dueDate": "2026-03-19",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-24T09:11:02.471Z",
+      "updatedAt": "2026-02-28T20:03:19.015Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-017",
+        "staff-a-007",
+        "staff-a-025"
+      ],
+      "labels": [
+        "data",
+        "technology",
+        "reporting"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Parent community will see this outcome directly",
+      "checklists": [
+        {
+          "id": "e03d269f",
+          "text": "Draft initial which outline",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "77f6ed91",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "effab285",
+          "text": "Consult with Gilbert about requirements",
+          "isChecked": true,
+          "sortOrder": 2
+        },
+        {
+          "id": "bf9e2702",
+          "text": "Update spreadsheet with latest figures",
+          "isChecked": true,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [
+        {
+          "id": "6e1fe330",
+          "authorId": "staff-a-002",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-02-27T04:21:04.838Z"
+        },
+        {
+          "id": "1755374b",
+          "authorId": "staff-a-012",
+          "content": "This is blocked until we get the budget approval. Following up.",
+          "createdAt": "2026-03-01T09:43:48.148Z"
+        },
+        {
+          "id": "ca197d2a",
+          "authorId": "staff-a-005",
+          "content": "Pushed the deadline back by one week due to competing priorities.",
+          "createdAt": "2026-03-04T03:45:05.573Z"
+        },
+        {
+          "id": "17b53b67",
+          "authorId": "staff-a-022",
+          "content": "Updated the timeline for this — should be feasible by end of term.",
+          "createdAt": "2026-02-28T01:53:54.230Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "fe569b5f",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-02-24T09:11:02.471Z"
+        },
+        {
+          "id": "b20ba4a2",
+          "userId": "staff-a-002",
+          "actionType": "card_moved",
+          "oldValue": "This Quarter",
+          "newValue": "In Progress",
+          "createdAt": "2026-03-03T13:36:18.974Z"
+        },
+        {
+          "id": "3ca8145e",
+          "userId": "staff-a-024",
+          "actionType": "card_updated",
+          "fieldName": "description",
+          "createdAt": "2026-02-25T13:06:43.433Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-009",
+      "boardId": "board-a-001",
+      "columnId": "col-a-004",
+      "title": "Plan leadership retreat — Term 2 Week 5",
+      "description": "Advenio comparo quasi aranea. Vesica adsidue ex similique conor paens copiose.",
+      "priority": "critical",
+      "dueDate": "2026-03-15",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-10T07:19:53.618Z",
+      "updatedAt": "2026-02-11T12:46:16.799Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-008",
+        "staff-a-024",
+        "staff-a-023"
+      ],
+      "labels": [
+        "leadership",
+        "planning"
+      ],
+      "category": "project",
+      "keyTakeaway": "Links to accreditation Standard 4",
+      "checklists": [
+        {
+          "id": "4fb3045f",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "a0f6b525",
+          "text": "Draft initial useless outline",
+          "isChecked": false,
+          "sortOrder": 1
+        }
+      ],
+      "comments": [
+        {
+          "id": "460483b4",
+          "authorId": "staff-a-011",
+          "content": "The draft is ready for review — please check the shared folder.",
+          "createdAt": "2026-02-13T09:37:50.274Z"
+        },
+        {
+          "id": "3d6ff044",
+          "authorId": "staff-a-001",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-02-21T16:47:59.222Z"
+        },
+        {
+          "id": "d522b315",
+          "authorId": "staff-a-014",
+          "content": "I've assigned two more staff to help with the data collection.",
+          "createdAt": "2026-02-24T13:03:50.105Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "0580ca75",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-10T07:19:53.618Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-010",
+      "boardId": "board-a-001",
+      "columnId": "col-a-004",
+      "title": "Develop graduate profile aligned to school vision",
+      "description": "Causa adeptio quos depraedor deficio demulceo. Decipio pecto succedo usitas tepesco ipsum tamen auctus.",
+      "priority": "medium",
+      "dueDate": "2026-03-30",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-02-19T11:57:26.782Z",
+      "updatedAt": "2026-02-24T11:24:26.294Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-025"
+      ],
+      "labels": [
+        "strategic",
+        "curriculum",
+        "vision"
+      ],
+      "category": "project",
+      "keyTakeaway": "Cross-departmental collaboration needed",
+      "checklists": [
+        {
+          "id": "7a8bf953",
+          "text": "Submit final version for review",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "7c4ff4b7",
+          "text": "Consult with Kacey about requirements",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "1c672aa6",
+          "text": "Submit final version for review",
+          "isChecked": true,
+          "sortOrder": 2
+        },
+        {
+          "id": "af9e7534",
+          "text": "Send progress update to leadership team",
+          "isChecked": false,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [],
+      "activity": [
+        {
+          "id": "4d940739",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-02-19T11:57:26.782Z"
+        },
+        {
+          "id": "a5cce9dc",
+          "userId": "staff-a-025",
+          "actionType": "card_updated",
+          "fieldName": "priority",
+          "createdAt": "2026-02-28T06:44:31.896Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-011",
+      "boardId": "board-a-001",
+      "columnId": "col-a-005",
+      "title": "Pilot flexible learning spaces in Building D",
+      "description": "Terebro cohors fuga cena vito texo minus depraedor autus absorbeo. Complectus sapiente color. Voluntarius sumptus paulatim video perspiciatis capio vomica vado vitium.",
+      "priority": "low",
+      "dueDate": "2026-03-04",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-02-22T02:30:27.964Z",
+      "updatedAt": "2026-02-28T15:21:26.940Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-025"
+      ],
+      "labels": [
+        "facilities",
+        "innovation"
+      ],
+      "category": "project",
+      "keyTakeaway": "Required for compliance — non-negotiable deadline",
+      "checklists": [
+        {
+          "id": "0988cbd9",
+          "text": "Update spreadsheet with latest figures",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "042cda91",
+          "text": "Update spreadsheet with latest figures",
+          "isChecked": false,
+          "sortOrder": 1
+        }
+      ],
+      "comments": [],
+      "activity": [
+        {
+          "id": "66cea26f",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-22T02:30:27.964Z"
+        },
+        {
+          "id": "380be2aa",
+          "userId": "staff-a-003",
+          "actionType": "card_moved",
+          "oldValue": "Under Review",
+          "newValue": "Completed",
+          "createdAt": "2026-02-23T01:55:43.693Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-012",
+      "boardId": "board-a-001",
+      "columnId": "col-a-005",
+      "title": "Draft community engagement strategy",
+      "description": "Sumptus argentum strues adfero sollers. Cresco volubilis tres vulgus deorsum capio surculus.",
+      "priority": "medium",
+      "dueDate": "2026-03-04",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-02-24T19:53:09.500Z",
+      "updatedAt": "2026-03-01T10:40:01.970Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-008"
+      ],
+      "labels": [
+        "community",
+        "strategic",
+        "engagement"
+      ],
+      "category": "area",
+      "keyTakeaway": "Cross-departmental collaboration needed",
+      "checklists": [
+        {
+          "id": "f8af1cf2",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "6073bcac",
+          "text": "Archive completed materials",
+          "isChecked": false,
+          "sortOrder": 1
+        }
+      ],
+      "comments": [
+        {
+          "id": "56eaa0ac",
+          "authorId": "staff-a-002",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-03-03T11:47:11.317Z"
+        },
+        {
+          "id": "eb8730cf",
+          "authorId": "staff-a-009",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-03-02T10:46:59.514Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "4578adac",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-02-24T19:53:09.500Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-013",
+      "boardId": "board-a-002",
+      "columnId": "col-a-006",
+      "title": "Update emergency evacuation procedures",
+      "description": "Adfectus cras somnus cognomen. Theatrum tandem avaritia turpis acsi utpote attollo consequuntur.",
+      "priority": "low",
+      "dueDate": "2026-03-16",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-05T15:05:08.744Z",
+      "updatedAt": "2026-02-23T11:59:27.451Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-015",
+        "staff-a-003"
+      ],
+      "labels": [
+        "safety",
+        "compliance"
+      ],
+      "category": "area",
+      "keyTakeaway": "Data-driven decision making in action",
+      "checklists": [
+        {
+          "id": "b4f35cbd",
+          "text": "Archive completed materials",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "aa7bf759",
+          "text": "Update spreadsheet with latest figures",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "b3e4c99f",
+          "text": "Consult with Becky about requirements",
+          "isChecked": true,
+          "sortOrder": 2
+        },
+        {
+          "id": "f1515f97",
+          "text": "Submit final version for review",
+          "isChecked": true,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [
+        {
+          "id": "8e9ae63a",
+          "authorId": "staff-a-003",
+          "content": "This is blocked until we get the budget approval. Following up.",
+          "createdAt": "2026-02-21T09:42:40.480Z"
+        },
+        {
+          "id": "2dabb537",
+          "authorId": "staff-a-021",
+          "content": "I've assigned two more staff to help with the data collection.",
+          "createdAt": "2026-02-18T06:16:48.065Z"
+        },
+        {
+          "id": "6b627afc",
+          "authorId": "staff-a-018",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-02-25T13:24:15.654Z"
+        },
+        {
+          "id": "e620ccd7",
+          "authorId": "staff-a-011",
+          "content": "I've shared the relevant documents in the shared drive.",
+          "createdAt": "2026-02-11T07:43:12.121Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "2c6a8524",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-05T15:05:08.744Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-014",
+      "boardId": "board-a-002",
+      "columnId": "col-a-006",
+      "title": "Process teacher registration renewals (Term 2)",
+      "description": "Decet cohaero iure distinctio socius conspergo aestas videlicet saepe bos. Color quibusdam valens admiratio compello bardus capillus videlicet. Corporis comburo arx ara turba speciosus.",
+      "priority": "high",
+      "dueDate": "2026-03-08",
+      "createdBy": "staff-a-002",
+      "createdAt": "2026-02-11T02:15:50.538Z",
+      "updatedAt": "2026-02-11T11:23:49.024Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-016",
+        "staff-a-018",
+        "staff-a-021"
+      ],
+      "labels": [
+        "compliance",
+        "hr"
+      ],
+      "category": "area",
+      "keyTakeaway": "Data-driven decision making in action",
+      "checklists": [
+        {
+          "id": "0ec48ba2",
+          "text": "Submit final version for review",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "3b9aa93f",
+          "text": "Collect data from Humanities",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "8246b259",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "38ce3a65",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [
+        {
+          "id": "75e40ae1",
+          "authorId": "staff-a-022",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-02-11T23:14:04.286Z"
+        },
+        {
+          "id": "496a350f",
+          "authorId": "staff-a-022",
+          "content": "I've assigned two more staff to help with the data collection.",
+          "createdAt": "2026-02-25T22:17:31.090Z"
+        },
+        {
+          "id": "06bbf2df",
+          "authorId": "staff-a-002",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-02-19T06:31:19.962Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "daeb59c1",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-11T02:15:50.538Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-015",
+      "boardId": "board-a-002",
+      "columnId": "col-a-006",
+      "title": "Coordinate bus route changes for field trip season",
+      "description": "Thymum coaegresco adficio cicuta vere. Clam concido tabgo cornu.",
+      "priority": "medium",
+      "dueDate": "2026-04-02",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-03-04T07:38:27.682Z",
+      "updatedAt": "2026-03-05T01:16:52.900Z",
+      "position": 2,
+      "assignedTo": [
+        "staff-a-004"
+      ],
+      "labels": [
+        "logistics",
+        "transport"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Directly supports Strategic Goal #2: Student Outcomes",
+      "checklists": [
+        {
+          "id": "97071d46",
+          "text": "Archive completed materials",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "99e19709",
+          "text": "Collect data from Humanities",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "0b4a0371",
+          "text": "Prepare presentation slides",
+          "isChecked": true,
+          "sortOrder": 2
+        }
+      ],
+      "comments": [],
+      "activity": [
+        {
+          "id": "776c1012",
+          "userId": "staff-a-001",
+          "actionType": "card_created",
+          "createdAt": "2026-03-04T07:38:27.682Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-016",
+      "boardId": "board-a-002",
+      "columnId": "col-a-007",
+      "title": "Submit OHS audit report to regional office",
+      "description": "Taceo laudantium cruciamentum odit conventus. Patria in desidero cursim aetas. Summa cernuus repudiandae damno.",
+      "priority": "high",
+      "dueDate": "2026-03-29",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-01-31T01:55:46.295Z",
+      "updatedAt": "2026-02-01T23:37:05.783Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-020",
+        "staff-a-002",
+        "staff-a-016"
+      ],
+      "labels": [
+        "compliance",
+        "safety",
+        "reporting"
+      ],
+      "category": "archive",
+      "keyTakeaway": "Directly supports Strategic Goal #2: Student Outcomes",
+      "checklists": [
+        {
+          "id": "15aa7fe4",
+          "text": "Update spreadsheet with latest figures",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "0ac51799",
+          "text": "Archive completed materials",
+          "isChecked": true,
+          "sortOrder": 1
+        }
+      ],
+      "comments": [
+        {
+          "id": "2d2422ca",
+          "authorId": "staff-a-008",
+          "content": "Can we get an update on progress here? Board meeting is next week.",
+          "createdAt": "2026-02-27T00:31:09.652Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "286fdad5",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-01-31T01:55:46.295Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-017",
+      "boardId": "board-a-002",
+      "columnId": "col-a-007",
+      "title": "Review contractor access policies",
+      "description": "Patruus vinum communis adipiscor. Crapula cura una censura delibero summisse summopere adimpleo. Esse attollo suscipio tam crebro.",
+      "priority": "medium",
+      "dueDate": "2026-03-21",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-03-01T09:37:17.248Z",
+      "updatedAt": "2026-03-02T04:16:59.394Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-022"
+      ],
+      "labels": [
+        "security",
+        "policy"
+      ],
+      "category": "area",
+      "keyTakeaway": "Required for compliance — non-negotiable deadline",
+      "checklists": [
+        {
+          "id": "9e2a6b52",
+          "text": "Send progress update to leadership team",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "83e1f97f",
+          "text": "Archive completed materials",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "ddf2c20e",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "f1f99578",
+          "text": "Archive completed materials",
+          "isChecked": true,
+          "sortOrder": 3
+        },
+        {
+          "id": "dab16c28",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 4
+        }
+      ],
+      "comments": [
+        {
+          "id": "ef001f58",
+          "authorId": "staff-a-024",
+          "content": "I've assigned two more staff to help with the data collection.",
+          "createdAt": "2026-03-04T23:18:14.544Z"
+        },
+        {
+          "id": "5fc730c1",
+          "authorId": "staff-a-014",
+          "content": "This is blocked until we get the budget approval. Following up.",
+          "createdAt": "2026-03-01T17:55:58.496Z"
+        },
+        {
+          "id": "7fa0d6b0",
+          "authorId": "staff-a-024",
+          "content": "The draft is ready for review — please check the shared folder.",
+          "createdAt": "2026-03-04T09:09:15.596Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "d7aaceec",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-03-01T09:37:17.248Z"
+        },
+        {
+          "id": "aef20288",
+          "userId": "staff-a-002",
+          "actionType": "card_moved",
+          "oldValue": "To Do",
+          "newValue": "In Progress",
+          "createdAt": "2026-03-04T19:03:22.077Z"
+        },
+        {
+          "id": "92f83a59",
+          "userId": "staff-a-019",
+          "actionType": "card_updated",
+          "fieldName": "due_date",
+          "createdAt": "2026-03-03T01:49:11.593Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-018",
+      "boardId": "board-a-002",
+      "columnId": "col-a-007",
+      "title": "Schedule building maintenance — Easter break",
+      "description": "Impedit vomica adicio celer alo volubilis aequus alioqui.",
+      "priority": "critical",
+      "dueDate": "2026-03-24",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-01-26T11:47:32.165Z",
+      "updatedAt": "2026-01-28T06:35:12.243Z",
+      "position": 2,
+      "assignedTo": [
+        "staff-a-001"
+      ],
+      "labels": [
+        "facilities",
+        "maintenance"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Staff engagement initiative — high visibility",
+      "checklists": [
+        {
+          "id": "fc17d2ab",
+          "text": "Consult with Daniel about requirements",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "2a3ef7f8",
+          "text": "Send progress update to leadership team",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "0c3ff1d4",
+          "text": "Archive completed materials",
+          "isChecked": true,
+          "sortOrder": 2
+        }
+      ],
+      "comments": [
+        {
+          "id": "8544a29f",
+          "authorId": "staff-a-024",
+          "content": "I've shared the relevant documents in the shared drive.",
+          "createdAt": "2026-01-31T04:24:12.780Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "42df41cd",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-01-26T11:47:32.165Z"
+        },
+        {
+          "id": "5478119b",
+          "userId": "staff-a-003",
+          "actionType": "card_moved",
+          "oldValue": "To Do",
+          "newValue": "In Progress",
+          "createdAt": "2026-02-05T06:01:52.623Z"
+        },
+        {
+          "id": "e54297d1",
+          "userId": "staff-a-008",
+          "actionType": "card_updated",
+          "fieldName": "assignees",
+          "createdAt": "2026-03-01T17:41:48.007Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-019",
+      "boardId": "board-a-002",
+      "columnId": "col-a-008",
+      "title": "Update staff handbook for 2026 changes",
+      "description": "Verecundia bene confugo crinis amicitia cursim tredecim eos aeger viriliter. Tabesco caecus argentum tubineus voveo defaeco atrox damnatio. Suffragium clam demo tracto uterque contego accusator caelum canto.",
+      "priority": "medium",
+      "dueDate": null,
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-08T15:44:36.290Z",
+      "updatedAt": "2026-02-12T00:05:12.977Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-024",
+        "staff-a-010",
+        "staff-a-022"
+      ],
+      "labels": [
+        "hr",
+        "documentation"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Quick win with high impact on school culture",
+      "checklists": [
+        {
+          "id": "e5266338",
+          "text": "Follow up on outstanding items",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "27977d01",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "f154f07a",
+          "text": "Archive completed materials",
+          "isChecked": true,
+          "sortOrder": 2
+        }
+      ],
+      "comments": [
+        {
+          "id": "1241677e",
+          "authorId": "staff-a-015",
+          "content": "Completed my section. Ready for the next person to take over.",
+          "createdAt": "2026-02-16T15:10:32.881Z"
+        },
+        {
+          "id": "e05cea3d",
+          "authorId": "staff-a-012",
+          "content": "This is blocked until we get the budget approval. Following up.",
+          "createdAt": "2026-02-25T05:10:33.924Z"
+        },
+        {
+          "id": "50cd0890",
+          "authorId": "staff-a-012",
+          "content": "The draft is ready for review — please check the shared folder.",
+          "createdAt": "2026-02-24T05:40:46.375Z"
+        },
+        {
+          "id": "b5c268db",
+          "authorId": "staff-a-003",
+          "content": "Can we get an update on progress here? Board meeting is next week.",
+          "createdAt": "2026-03-03T16:50:35.051Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "f62e0466",
+          "userId": "staff-a-001",
+          "actionType": "card_created",
+          "createdAt": "2026-02-08T15:44:36.290Z"
+        },
+        {
+          "id": "0fd87398",
+          "userId": "staff-a-001",
+          "actionType": "card_moved",
+          "oldValue": "In Progress",
+          "newValue": "Awaiting Approval",
+          "createdAt": "2026-02-25T06:50:59.305Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-020",
+      "boardId": "board-a-002",
+      "columnId": "col-a-008",
+      "title": "Renew software licenses (Adobe, Microsoft)",
+      "description": "Clibanus subito thesis capio temporibus tripudio inflammatio coerceo.",
+      "priority": "high",
+      "dueDate": "2026-03-21",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-02-20T22:12:24.616Z",
+      "updatedAt": "2026-02-27T04:21:42.679Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-016",
+        "staff-a-008"
+      ],
+      "labels": [
+        "technology",
+        "budget"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Staff engagement initiative — high visibility",
+      "checklists": [
+        {
+          "id": "6c13926c",
+          "text": "Update spreadsheet with latest figures",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "d94279c8",
+          "text": "Prepare presentation slides",
+          "isChecked": true,
+          "sortOrder": 1
+        }
+      ],
+      "comments": [
+        {
+          "id": "9c566a23",
+          "authorId": "staff-a-010",
+          "content": "Pushed the deadline back by one week due to competing priorities.",
+          "createdAt": "2026-02-27T13:07:13.776Z"
+        },
+        {
+          "id": "bb1384cf",
+          "authorId": "staff-a-022",
+          "content": "Updated the timeline for this — should be feasible by end of term.",
+          "createdAt": "2026-02-23T10:08:29.091Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "6409dd2a",
+          "userId": "staff-a-001",
+          "actionType": "card_created",
+          "createdAt": "2026-02-20T22:12:24.616Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-021",
+      "boardId": "board-a-002",
+      "columnId": "col-a-009",
+      "title": "Plan Year 12 formal logistics",
+      "description": "Aggredior vix concedo stultus solio. Ullam currus depereo supra cribro. Odio dignissimos vitiosus una congregatio vilis acidus.",
+      "priority": "critical",
+      "dueDate": "2026-03-02",
+      "createdBy": "staff-a-002",
+      "createdAt": "2026-02-12T07:08:32.567Z",
+      "updatedAt": "2026-02-13T02:12:20.534Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-014",
+        "staff-a-021"
+      ],
+      "labels": [
+        "events",
+        "student-engagement"
+      ],
+      "category": "project",
+      "keyTakeaway": "Parent community will see this outcome directly",
+      "checklists": [
+        {
+          "id": "0c2997ea",
+          "text": "Collect data from PE & Health",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "68a52a06",
+          "text": "Draft initial tinted outline",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "6d566d58",
+          "text": "Archive completed materials",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "909ea366",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 3
+        },
+        {
+          "id": "c2b03251",
+          "text": "Submit final version for review",
+          "isChecked": false,
+          "sortOrder": 4
+        }
+      ],
+      "comments": [],
+      "activity": [
+        {
+          "id": "fc4cb03c",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-12T07:08:32.567Z"
+        },
+        {
+          "id": "b875ea13",
+          "userId": "staff-a-001",
+          "actionType": "card_moved",
+          "oldValue": "Awaiting Approval",
+          "newValue": "Done",
+          "createdAt": "2026-03-03T08:45:03.954Z"
+        },
+        {
+          "id": "e6783a76",
+          "userId": "staff-a-015",
+          "actionType": "card_updated",
+          "fieldName": "description",
+          "createdAt": "2026-02-24T21:39:03.985Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-022",
+      "boardId": "board-a-002",
+      "columnId": "col-a-009",
+      "title": "Finalise budget allocation for Term 3",
+      "description": "Accusator vere patruus aiunt alii vallum. Despecto sublime viscus charisma adversus alias. Sordeo civitas acerbitas alioqui articulus decerno ars.",
+      "priority": "high",
+      "dueDate": "2026-03-02",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-02-07T09:07:22.832Z",
+      "updatedAt": "2026-02-10T16:55:52.585Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-023",
+        "staff-a-020"
+      ],
+      "labels": [
+        "budget",
+        "finance"
+      ],
+      "category": "area",
+      "keyTakeaway": "Directly supports Strategic Goal #2: Student Outcomes",
+      "checklists": [
+        {
+          "id": "2d3dff34",
+          "text": "Get sign-off from department head",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "370a8d41",
+          "text": "Follow up on outstanding items",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "33edde7c",
+          "text": "Draft initial steel outline",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "0b798b6c",
+          "text": "Review existing documentation",
+          "isChecked": false,
+          "sortOrder": 3
+        },
+        {
+          "id": "ad02661b",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 4
+        },
+        {
+          "id": "ed94fc4e",
+          "text": "Draft initial tender outline",
+          "isChecked": true,
+          "sortOrder": 5
+        }
+      ],
+      "comments": [
+        {
+          "id": "5dffcea3",
+          "authorId": "staff-a-005",
+          "content": "Completed my section. Ready for the next person to take over.",
+          "createdAt": "2026-02-15T06:18:06.408Z"
+        },
+        {
+          "id": "ca7b4498",
+          "authorId": "staff-a-007",
+          "content": "Pushed the deadline back by one week due to competing priorities.",
+          "createdAt": "2026-03-04T05:04:54.463Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "550c561f",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-07T09:07:22.832Z"
+        },
+        {
+          "id": "fdd7381f",
+          "userId": "staff-a-004",
+          "actionType": "card_updated",
+          "fieldName": "assignees",
+          "createdAt": "2026-02-07T09:42:10.536Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-023",
+      "boardId": "board-a-003",
+      "columnId": "col-a-010",
+      "title": "Collect student survey data on learning environment",
+      "description": "Asper laboriosam substantia cernuus velit cupiditas ambulo cicuta. Verecundia cupiditas depereo voluptatum anser adinventitias quaerat aestivus admitto calco. Debilito debilito sophismata animi charisma bibo ustilo cura pauper supplanto.",
+      "priority": "critical",
+      "dueDate": "2026-04-01",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-27T11:55:46.198Z",
+      "updatedAt": "2026-02-27T21:35:41.829Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-008"
+      ],
+      "labels": [
+        "evidence",
+        "students",
+        "survey"
+      ],
+      "category": "project",
+      "keyTakeaway": "Directly supports Strategic Goal #2: Student Outcomes",
+      "checklists": [
+        {
+          "id": "c8e930be",
+          "text": "Review existing documentation",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "34317bb5",
+          "text": "Get sign-off from department head",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "cd613411",
+          "text": "Consult with Walter about requirements",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "550edd91",
+          "text": "Follow up on outstanding items",
+          "isChecked": false,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [
+        {
+          "id": "0a5195a1",
+          "authorId": "staff-a-002",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-03-03T17:33:06.415Z"
+        },
+        {
+          "id": "8fb6c9d6",
+          "authorId": "staff-a-024",
+          "content": "This is blocked until we get the budget approval. Following up.",
+          "createdAt": "2026-03-04T20:48:02.616Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "af749184",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-27T11:55:46.198Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-024",
+      "boardId": "board-a-003",
+      "columnId": "col-a-010",
+      "title": "Document curriculum mapping across Standards 1-3",
+      "description": "Argumentum uxor sed ustilo modi surgo dolorum. Ara appello vociferor.",
+      "priority": "low",
+      "dueDate": "2026-04-03",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-03-03T06:03:25.369Z",
+      "updatedAt": "2026-03-04T19:05:10.470Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-018",
+        "staff-a-011"
+      ],
+      "labels": [
+        "evidence",
+        "curriculum",
+        "standards"
+      ],
+      "category": "project",
+      "keyTakeaway": "Budget implications need CFO sign-off",
+      "checklists": [
+        {
+          "id": "d0c75f33",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "697d0e92",
+          "text": "Get sign-off from department head",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "7eaca722",
+          "text": "Collect data from Science",
+          "isChecked": true,
+          "sortOrder": 2
+        },
+        {
+          "id": "8c0e2562",
+          "text": "Collect data from Mathematics",
+          "isChecked": true,
+          "sortOrder": 3
+        },
+        {
+          "id": "cc17a202",
+          "text": "Draft initial giving outline",
+          "isChecked": false,
+          "sortOrder": 4
+        },
+        {
+          "id": "a7fcc6ae",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 5
+        }
+      ],
+      "comments": [
+        {
+          "id": "2b01d5bb",
+          "authorId": "staff-a-017",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-03-04T22:00:30.795Z"
+        },
+        {
+          "id": "42617f69",
+          "authorId": "staff-a-016",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-03-03T08:18:03.729Z"
+        },
+        {
+          "id": "b2ee98f5",
+          "authorId": "staff-a-013",
+          "content": "Can we get an update on progress here? Board meeting is next week.",
+          "createdAt": "2026-03-03T14:16:06.771Z"
+        },
+        {
+          "id": "33a43b79",
+          "authorId": "staff-a-023",
+          "content": "I've shared the relevant documents in the shared drive.",
+          "createdAt": "2026-03-05T00:59:21.823Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "afc0497c",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-03-03T06:03:25.369Z"
+        },
+        {
+          "id": "ba59dfcd",
+          "userId": "staff-a-011",
+          "actionType": "card_updated",
+          "fieldName": "description",
+          "createdAt": "2026-03-05T00:41:35.173Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-025",
+      "boardId": "board-a-003",
+      "columnId": "col-a-010",
+      "title": "Compile professional development records (3 years)",
+      "description": "Utrum tempus tempore carbo vindico suspendo cervus decimus.",
+      "priority": "medium",
+      "dueDate": "2026-03-30",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-02-08T22:36:28.688Z",
+      "updatedAt": "2026-02-12T16:04:15.484Z",
+      "position": 2,
+      "assignedTo": [
+        "staff-a-012"
+      ],
+      "labels": [
+        "evidence",
+        "pd"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Key priority for Board reporting this quarter",
+      "checklists": [
+        {
+          "id": "ac5f316b",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "3aa74d6e",
+          "text": "Prepare presentation slides",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "75bbeeff",
+          "text": "Follow up on outstanding items",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "21dffcde",
+          "text": "Get sign-off from department head",
+          "isChecked": false,
+          "sortOrder": 3
+        },
+        {
+          "id": "e21799cf",
+          "text": "Collect data from Languages",
+          "isChecked": true,
+          "sortOrder": 4
+        }
+      ],
+      "comments": [
+        {
+          "id": "151f2f2e",
+          "authorId": "staff-a-024",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-03-04T20:38:45.710Z"
+        },
+        {
+          "id": "89ad0a6f",
+          "authorId": "staff-a-011",
+          "content": "I've shared the relevant documents in the shared drive.",
+          "createdAt": "2026-02-23T06:23:27.266Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "09113790",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-08T22:36:28.688Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-026",
+      "boardId": "board-a-003",
+      "columnId": "col-a-011",
+      "title": "Write self-study narrative: Teaching & Learning",
+      "description": "Cauda caritas tabgo. Blanditiis creator tenax. Sit supellex temporibus.",
+      "priority": "low",
+      "dueDate": "2026-03-23",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-11T22:21:44.326Z",
+      "updatedAt": "2026-02-12T07:50:14.956Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-012",
+        "staff-a-020"
+      ],
+      "labels": [
+        "narrative",
+        "teaching"
+      ],
+      "category": "project",
+      "keyTakeaway": "Parent community will see this outcome directly",
+      "checklists": [
+        {
+          "id": "1ba0d1fe",
+          "text": "Submit final version for review",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "e515b652",
+          "text": "Draft initial impressive outline",
+          "isChecked": false,
+          "sortOrder": 1
+        }
+      ],
+      "comments": [
+        {
+          "id": "abcb167b",
+          "authorId": "staff-a-001",
+          "content": "I've assigned two more staff to help with the data collection.",
+          "createdAt": "2026-02-23T07:57:07.742Z"
+        },
+        {
+          "id": "d63d44d8",
+          "authorId": "staff-a-002",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-02-28T01:37:46.754Z"
+        },
+        {
+          "id": "220acdda",
+          "authorId": "staff-a-003",
+          "content": "I've assigned two more staff to help with the data collection.",
+          "createdAt": "2026-03-03T02:07:32.466Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "b474ccfb",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-02-11T22:21:44.326Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-027",
+      "boardId": "board-a-003",
+      "columnId": "col-a-011",
+      "title": "Gather parent satisfaction survey results",
+      "description": "Acervus vulpes vergo velit. Claro vulgus alter denuncio subseco cetera argentum. Quis mollitia pecto delibero tot argentum bonus animus.",
+      "priority": "high",
+      "dueDate": "2026-03-15",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-01-27T19:43:37.720Z",
+      "updatedAt": "2026-02-14T07:58:35.056Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-019",
+        "staff-a-007",
+        "staff-a-023"
+      ],
+      "labels": [
+        "evidence",
+        "parents",
+        "survey"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Required for compliance — non-negotiable deadline",
+      "checklists": [
+        {
+          "id": "3a49f4db",
+          "text": "Submit final version for review",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "9614b1bf",
+          "text": "Schedule meeting with stakeholders",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "d66e0608",
+          "text": "Collect data from English",
+          "isChecked": true,
+          "sortOrder": 2
+        }
+      ],
+      "comments": [
+        {
+          "id": "e0650bc4",
+          "authorId": "staff-a-013",
+          "content": "Completed my section. Ready for the next person to take over.",
+          "createdAt": "2026-02-13T19:05:53.407Z"
+        },
+        {
+          "id": "ba327198",
+          "authorId": "staff-a-019",
+          "content": "I've shared the relevant documents in the shared drive.",
+          "createdAt": "2026-02-04T07:39:33.483Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "c653966b",
+          "userId": "staff-a-001",
+          "actionType": "card_created",
+          "createdAt": "2026-01-27T19:43:37.720Z"
+        },
+        {
+          "id": "d390d877",
+          "userId": "staff-a-001",
+          "actionType": "card_moved",
+          "oldValue": "Evidence Needed",
+          "newValue": "Gathering",
+          "createdAt": "2026-03-02T08:41:54.309Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-028",
+      "boardId": "board-a-003",
+      "columnId": "col-a-012",
+      "title": "Photograph learning spaces for evidence portfolio",
+      "description": "Arbitro adicio demum torqueo. Patrocinor truculenter aegrus surgo.",
+      "priority": "medium",
+      "dueDate": "2026-04-03",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-01-26T00:10:14.602Z",
+      "updatedAt": "2026-02-08T13:53:35.518Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-024",
+        "staff-a-017",
+        "staff-a-018"
+      ],
+      "labels": [
+        "evidence",
+        "facilities"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Required for compliance — non-negotiable deadline",
+      "checklists": [
+        {
+          "id": "81b01205",
+          "text": "Follow up on outstanding items",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "5b269254",
+          "text": "Submit final version for review",
+          "isChecked": false,
+          "sortOrder": 1
+        }
+      ],
+      "comments": [
+        {
+          "id": "e84523b6",
+          "authorId": "staff-a-019",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-02-03T06:56:42.788Z"
+        },
+        {
+          "id": "db3e3387",
+          "authorId": "staff-a-012",
+          "content": "Can we get an update on progress here? Board meeting is next week.",
+          "createdAt": "2026-02-01T23:43:38.526Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "85af74cc",
+          "userId": "staff-a-001",
+          "actionType": "card_created",
+          "createdAt": "2026-01-26T00:10:14.602Z"
+        },
+        {
+          "id": "eda39dc8",
+          "userId": "staff-a-002",
+          "actionType": "card_moved",
+          "oldValue": "Gathering",
+          "newValue": "Drafting Narrative",
+          "createdAt": "2026-02-03T22:36:24.709Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-029",
+      "boardId": "board-a-003",
+      "columnId": "col-a-012",
+      "title": "Write self-study narrative: Governance & Leadership",
+      "description": "Texo stipes numquam amor voluptatibus perferendis tendo.",
+      "priority": "medium",
+      "dueDate": "2026-03-25",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-02-18T03:52:46.176Z",
+      "updatedAt": "2026-02-21T18:23:17.583Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-001"
+      ],
+      "labels": [
+        "narrative",
+        "leadership"
+      ],
+      "category": "project",
+      "keyTakeaway": "Quick win with high impact on school culture",
+      "checklists": [
+        {
+          "id": "467dd546",
+          "text": "Follow up on outstanding items",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "f70073b1",
+          "text": "Submit final version for review",
+          "isChecked": true,
+          "sortOrder": 1
+        },
+        {
+          "id": "515f2a84",
+          "text": "Draft initial natural outline",
+          "isChecked": false,
+          "sortOrder": 2
+        },
+        {
+          "id": "a7ccc359",
+          "text": "Prepare presentation slides",
+          "isChecked": true,
+          "sortOrder": 3
+        },
+        {
+          "id": "73e9b2c5",
+          "text": "Follow up on outstanding items",
+          "isChecked": true,
+          "sortOrder": 4
+        }
+      ],
+      "comments": [
+        {
+          "id": "e2ceed01",
+          "authorId": "staff-a-024",
+          "content": "Can we get an update on progress here? Board meeting is next week.",
+          "createdAt": "2026-03-04T19:57:22.197Z"
+        },
+        {
+          "id": "da56de42",
+          "authorId": "staff-a-016",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-02-22T15:10:46.297Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "2a4b4cea",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-18T03:52:46.176Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-030",
+      "boardId": "board-a-003",
+      "columnId": "col-a-013",
+      "title": "Organise visiting committee schedule",
+      "description": "Infit capto truculenter.",
+      "priority": "medium",
+      "dueDate": "2026-03-02",
+      "createdBy": "staff-a-003",
+      "createdAt": "2026-03-03T09:29:56.595Z",
+      "updatedAt": "2026-03-04T16:12:13.560Z",
+      "position": 0,
+      "assignedTo": [
+        "staff-a-004",
+        "staff-a-011"
+      ],
+      "labels": [
+        "logistics",
+        "committee"
+      ],
+      "category": "area",
+      "keyTakeaway": "Required for compliance — non-negotiable deadline",
+      "checklists": [
+        {
+          "id": "76fc9551",
+          "text": "Draft initial jubilant outline",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "fbb071c7",
+          "text": "Archive completed materials",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "eeb51d2f",
+          "text": "Archive completed materials",
+          "isChecked": false,
+          "sortOrder": 2
+        }
+      ],
+      "comments": [
+        {
+          "id": "be22088c",
+          "authorId": "staff-a-025",
+          "content": "Completed my section. Ready for the next person to take over.",
+          "createdAt": "2026-03-04T01:06:05.474Z"
+        },
+        {
+          "id": "5228cb7d",
+          "authorId": "staff-a-007",
+          "content": "This is blocked until we get the budget approval. Following up.",
+          "createdAt": "2026-03-04T00:30:45.982Z"
+        },
+        {
+          "id": "f25fe2b4",
+          "authorId": "staff-a-025",
+          "content": "Completed my section. Ready for the next person to take over.",
+          "createdAt": "2026-03-03T10:23:04.290Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "a317bd25",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-03-03T09:29:56.595Z"
+        },
+        {
+          "id": "4cacf831",
+          "userId": "staff-a-003",
+          "actionType": "card_moved",
+          "oldValue": "Drafting Narrative",
+          "newValue": "Submitted",
+          "createdAt": "2026-03-04T09:59:41.305Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-031",
+      "boardId": "board-a-003",
+      "columnId": "col-a-013",
+      "title": "Prepare student work samples per standard",
+      "description": "Texo contabesco amicitia clam. Demo balbus termes ustulo bos.",
+      "priority": "low",
+      "dueDate": "2026-03-04",
+      "createdBy": "staff-a-001",
+      "createdAt": "2026-02-01T18:23:21.291Z",
+      "updatedAt": "2026-02-08T17:39:26.169Z",
+      "position": 1,
+      "assignedTo": [
+        "staff-a-019",
+        "staff-a-022"
+      ],
+      "labels": [
+        "evidence",
+        "students"
+      ],
+      "category": "resource",
+      "keyTakeaway": "Data-driven decision making in action",
+      "checklists": [
+        {
+          "id": "8fd3990e",
+          "text": "Send progress update to leadership team",
+          "isChecked": true,
+          "sortOrder": 0
+        },
+        {
+          "id": "80fc9721",
+          "text": "Review existing documentation",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "ee4f5559",
+          "text": "Send progress update to leadership team",
+          "isChecked": true,
+          "sortOrder": 2
+        },
+        {
+          "id": "a82ac9cf",
+          "text": "Consult with Eleanor about requirements",
+          "isChecked": false,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [
+        {
+          "id": "e6958ba8",
+          "authorId": "staff-a-011",
+          "content": "I've shared the relevant documents in the shared drive.",
+          "createdAt": "2026-02-20T06:05:06.046Z"
+        },
+        {
+          "id": "d369717c",
+          "authorId": "staff-a-011",
+          "content": "Great progress on this. Let's review at our next leadership meeting.",
+          "createdAt": "2026-02-16T15:11:48.451Z"
+        },
+        {
+          "id": "04a67a56",
+          "authorId": "staff-a-019",
+          "content": "Spoke with the department heads, they're on board with this approach.",
+          "createdAt": "2026-02-27T08:39:06.348Z"
+        }
+      ],
+      "activity": [
+        {
+          "id": "bfb4448c",
+          "userId": "staff-a-002",
+          "actionType": "card_created",
+          "createdAt": "2026-02-01T18:23:21.291Z"
+        },
+        {
+          "id": "05921d51",
+          "userId": "staff-a-001",
+          "actionType": "card_moved",
+          "oldValue": "Drafting Narrative",
+          "newValue": "Submitted",
+          "createdAt": "2026-02-08T11:20:04.933Z"
+        }
+      ]
+    },
+    {
+      "id": "card-a-032",
+      "boardId": "board-a-003",
+      "columnId": "col-a-013",
+      "title": "Finalize self-study document for submission",
+      "description": "Vitae auctor cado fugiat ocer. Cado videlicet excepturi peior nam contego suus casso. Adsidue alienus caelestis ulterius totam defetiscor volup.",
+      "priority": "critical",
+      "dueDate": "2026-03-05",
+      "createdBy": "staff-a-002",
+      "createdAt": "2026-02-28T08:56:14.765Z",
+      "updatedAt": "2026-03-05T04:57:27.194Z",
+      "position": 2,
+      "assignedTo": [
+        "staff-a-018"
+      ],
+      "labels": [
+        "narrative",
+        "submission"
+      ],
+      "category": "project",
+      "keyTakeaway": "Data-driven decision making in action",
+      "checklists": [
+        {
+          "id": "d28d4a0b",
+          "text": "Prepare presentation slides",
+          "isChecked": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "62ca0b89",
+          "text": "Draft initial overcooked outline",
+          "isChecked": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "67451e81",
+          "text": "Archive completed materials",
+          "isChecked": true,
+          "sortOrder": 2
+        },
+        {
+          "id": "106ffaa4",
+          "text": "Archive completed materials",
+          "isChecked": false,
+          "sortOrder": 3
+        }
+      ],
+      "comments": [],
+      "activity": [
+        {
+          "id": "1f20b380",
+          "userId": "staff-a-003",
+          "actionType": "card_created",
+          "createdAt": "2026-02-28T08:56:14.765Z"
+        }
+      ]
+    }
+  ],
+  "analytics": {
+    "board-a-001": {
+      "totalCards": 12,
+      "completedCards": 2,
+      "overdueCount": 0,
+      "avgCycleTimeDays": 10.8,
+      "cardsByColumn": [
+        {
+          "columnId": "col-a-001",
+          "columnTitle": "Backlog",
+          "count": 3
+        },
+        {
+          "columnId": "col-a-002",
+          "columnTitle": "This Quarter",
+          "count": 3
+        },
+        {
+          "columnId": "col-a-003",
+          "columnTitle": "In Progress",
+          "count": 2
+        },
+        {
+          "columnId": "col-a-004",
+          "columnTitle": "Under Review",
+          "count": 2
+        },
+        {
+          "columnId": "col-a-005",
+          "columnTitle": "Completed",
+          "count": 2
+        }
+      ],
+      "cardsByPriority": [
+        {
+          "priority": "low",
+          "count": 3
+        },
+        {
+          "priority": "medium",
+          "count": 6
+        },
+        {
+          "priority": "high",
+          "count": 1
+        },
+        {
+          "priority": "critical",
+          "count": 2
+        }
+      ],
+      "cardsByCategory": [
+        {
+          "category": "project",
+          "count": 7
+        },
+        {
+          "category": "area",
+          "count": 4
+        },
+        {
+          "category": "resource",
+          "count": 1
+        },
+        {
+          "category": "archive",
+          "count": 0
+        }
+      ],
+      "agingReport": [
+        {
+          "cardId": "card-a-003",
+          "title": "Develop STEM pathways proposal for Board",
+          "column": "Backlog",
+          "priority": "medium",
+          "ageDays": 42,
+          "dueDate": "2026-03-22",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-005",
+          "title": "Implement new parent communication platform",
+          "column": "This Quarter",
+          "priority": "low",
+          "ageDays": 42,
+          "dueDate": "2026-03-19",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-004",
+          "title": "Coordinate Indigenous perspectives audit across departments",
+          "column": "This Quarter",
+          "priority": "low",
+          "ageDays": 37,
+          "dueDate": null,
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-002",
+          "title": "Launch staff wellbeing pulse survey",
+          "column": "Backlog",
+          "priority": "critical",
+          "ageDays": 32,
+          "dueDate": "2026-03-28",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-001",
+          "title": "Define Year 7-9 literacy improvement benchmarks",
+          "column": "Backlog",
+          "priority": "medium",
+          "ageDays": 28,
+          "dueDate": "2026-03-25",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-009",
+          "title": "Plan leadership retreat — Term 2 Week 5",
+          "column": "Under Review",
+          "priority": "critical",
+          "ageDays": 22,
+          "dueDate": "2026-03-15",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-007",
+          "title": "Establish peer coaching triads for semester 2",
+          "column": "In Progress",
+          "priority": "medium",
+          "ageDays": 17,
+          "dueDate": null,
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-010",
+          "title": "Develop graduate profile aligned to school vision",
+          "column": "Under Review",
+          "priority": "medium",
+          "ageDays": 13,
+          "dueDate": "2026-03-30",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-008",
+          "title": "Create data dashboard for academic performance tracking",
+          "column": "In Progress",
+          "priority": "high",
+          "ageDays": 8,
+          "dueDate": "2026-03-19",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-006",
+          "title": "Review and update behaviour management policy",
+          "column": "This Quarter",
+          "priority": "medium",
+          "ageDays": 6,
+          "dueDate": "2026-03-15",
+          "isOverdue": false
+        }
+      ]
+    },
+    "board-a-002": {
+      "totalCards": 10,
+      "completedCards": 2,
+      "overdueCount": 0,
+      "avgCycleTimeDays": 15.5,
+      "cardsByColumn": [
+        {
+          "columnId": "col-a-006",
+          "columnTitle": "To Do",
+          "count": 3
+        },
+        {
+          "columnId": "col-a-007",
+          "columnTitle": "In Progress",
+          "count": 3
+        },
+        {
+          "columnId": "col-a-008",
+          "columnTitle": "Awaiting Approval",
+          "count": 2
+        },
+        {
+          "columnId": "col-a-009",
+          "columnTitle": "Done",
+          "count": 2
+        }
+      ],
+      "cardsByPriority": [
+        {
+          "priority": "low",
+          "count": 1
+        },
+        {
+          "priority": "medium",
+          "count": 3
+        },
+        {
+          "priority": "high",
+          "count": 4
+        },
+        {
+          "priority": "critical",
+          "count": 2
+        }
+      ],
+      "cardsByCategory": [
+        {
+          "category": "project",
+          "count": 1
+        },
+        {
+          "category": "area",
+          "count": 4
+        },
+        {
+          "category": "resource",
+          "count": 4
+        },
+        {
+          "category": "archive",
+          "count": 1
+        }
+      ],
+      "agingReport": [
+        {
+          "cardId": "card-a-018",
+          "title": "Schedule building maintenance — Easter break",
+          "column": "In Progress",
+          "priority": "critical",
+          "ageDays": 37,
+          "dueDate": "2026-03-24",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-016",
+          "title": "Submit OHS audit report to regional office",
+          "column": "In Progress",
+          "priority": "high",
+          "ageDays": 33,
+          "dueDate": "2026-03-29",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-013",
+          "title": "Update emergency evacuation procedures",
+          "column": "To Do",
+          "priority": "low",
+          "ageDays": 27,
+          "dueDate": "2026-03-16",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-019",
+          "title": "Update staff handbook for 2026 changes",
+          "column": "Awaiting Approval",
+          "priority": "medium",
+          "ageDays": 24,
+          "dueDate": null,
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-014",
+          "title": "Process teacher registration renewals (Term 2)",
+          "column": "To Do",
+          "priority": "high",
+          "ageDays": 22,
+          "dueDate": "2026-03-08",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-020",
+          "title": "Renew software licenses (Adobe, Microsoft)",
+          "column": "Awaiting Approval",
+          "priority": "high",
+          "ageDays": 12,
+          "dueDate": "2026-03-21",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-017",
+          "title": "Review contractor access policies",
+          "column": "In Progress",
+          "priority": "medium",
+          "ageDays": 3,
+          "dueDate": "2026-03-21",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-015",
+          "title": "Coordinate bus route changes for field trip season",
+          "column": "To Do",
+          "priority": "medium",
+          "ageDays": 0,
+          "dueDate": "2026-04-02",
+          "isOverdue": false
+        }
+      ]
+    },
+    "board-a-003": {
+      "totalCards": 10,
+      "completedCards": 3,
+      "overdueCount": 0,
+      "avgCycleTimeDays": 17.2,
+      "cardsByColumn": [
+        {
+          "columnId": "col-a-010",
+          "columnTitle": "Evidence Needed",
+          "count": 3
+        },
+        {
+          "columnId": "col-a-011",
+          "columnTitle": "Gathering",
+          "count": 2
+        },
+        {
+          "columnId": "col-a-012",
+          "columnTitle": "Drafting Narrative",
+          "count": 2
+        },
+        {
+          "columnId": "col-a-013",
+          "columnTitle": "Submitted",
+          "count": 3
+        }
+      ],
+      "cardsByPriority": [
+        {
+          "priority": "low",
+          "count": 3
+        },
+        {
+          "priority": "medium",
+          "count": 4
+        },
+        {
+          "priority": "high",
+          "count": 1
+        },
+        {
+          "priority": "critical",
+          "count": 2
+        }
+      ],
+      "cardsByCategory": [
+        {
+          "category": "project",
+          "count": 5
+        },
+        {
+          "category": "area",
+          "count": 1
+        },
+        {
+          "category": "resource",
+          "count": 4
+        },
+        {
+          "category": "archive",
+          "count": 0
+        }
+      ],
+      "agingReport": [
+        {
+          "cardId": "card-a-028",
+          "title": "Photograph learning spaces for evidence portfolio",
+          "column": "Drafting Narrative",
+          "priority": "medium",
+          "ageDays": 38,
+          "dueDate": "2026-04-03",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-027",
+          "title": "Gather parent satisfaction survey results",
+          "column": "Gathering",
+          "priority": "high",
+          "ageDays": 36,
+          "dueDate": "2026-03-15",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-025",
+          "title": "Compile professional development records (3 years)",
+          "column": "Evidence Needed",
+          "priority": "medium",
+          "ageDays": 24,
+          "dueDate": "2026-03-30",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-026",
+          "title": "Write self-study narrative: Teaching & Learning",
+          "column": "Gathering",
+          "priority": "low",
+          "ageDays": 21,
+          "dueDate": "2026-03-23",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-029",
+          "title": "Write self-study narrative: Governance & Leadership",
+          "column": "Drafting Narrative",
+          "priority": "medium",
+          "ageDays": 15,
+          "dueDate": "2026-03-25",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-023",
+          "title": "Collect student survey data on learning environment",
+          "column": "Evidence Needed",
+          "priority": "critical",
+          "ageDays": 5,
+          "dueDate": "2026-04-01",
+          "isOverdue": false
+        },
+        {
+          "cardId": "card-a-024",
+          "title": "Document curriculum mapping across Standards 1-3",
+          "column": "Evidence Needed",
+          "priority": "low",
+          "ageDays": 2,
+          "dueDate": "2026-04-03",
+          "isOverdue": false
+        }
+      ]
+    }
+  }
+}

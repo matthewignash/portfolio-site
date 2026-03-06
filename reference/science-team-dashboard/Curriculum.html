@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Curriculum Scope &amp; Sequence</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f5f6f8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .app-container {
+      margin: 0 auto;
+      padding: 12px 16px;
+    }
+
+    /* Header */
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .app-header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0;
+      color: #1a1a2e;
+    }
+
+    .header-controls {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    /* Banners */
+    .error-banner {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    .success-banner {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    /* Loading */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 0;
+      color: #6c757d;
+    }
+
+    .loading-container .spinner-border {
+      width: 2.5rem;
+      height: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .filter-bar select,
+    .filter-bar input {
+      font-size: 0.8rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+      background: #fff;
+    }
+
+    .filter-bar input {
+      min-width: 160px;
+    }
+
+    /* Course lane */
+    .course-lane {
+      background: #fff;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      border: 1px solid #e9ecef;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .lane-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .lane-title-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lane-color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .lane-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #1a1a2e;
+    }
+
+    .lane-grade-badge {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #e9ecef;
+      color: #495057;
+      font-weight: 500;
+    }
+
+    .lane-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.75rem;
+      color: #6c757d;
+    }
+
+    .lane-meta .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .lane-gear-btn {
+      background: none;
+      border: none;
+      color: #6c757d;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+
+    .lane-gear-btn:hover {
+      background: #f0f0f0;
+      color: #1a1a2e;
+    }
+
+    /* Lane body: horizontal scroll */
+    .lane-body {
+      display: flex;
+      gap: 10px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      min-height: 100px;
+      align-items: flex-start;
+    }
+
+    .lane-body::-webkit-scrollbar {
+      height: 6px;
+    }
+
+    .lane-body::-webkit-scrollbar-track {
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+
+    .lane-body::-webkit-scrollbar-thumb {
+      background: #ccc;
+      border-radius: 3px;
+    }
+
+    /* Unit card */
+    .unit-card {
+      min-width: 190px;
+      max-width: 190px;
+      background: #fff;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 10px;
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.15s;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .unit-card:hover {
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+      transform: translateY(-1px);
+    }
+
+    .unit-card.topic-border {
+      border-left: 4px solid var(--topic-color, #dee2e6);
+    }
+
+    .unit-card .status-badge {
+      font-size: 0.6rem;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: inline-block;
+    }
+
+    .status-badge.draft {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .status-badge.proposed {
+      background: #ffe0b2;
+      color: #e65100;
+    }
+
+    .status-badge.edit-copy {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .unit-card .card-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #1a1a2e;
+      margin-bottom: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.3;
+    }
+
+    .unit-card .card-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .unit-card .card-badge {
+      font-size: 0.65rem;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: #f0f0f0;
+      color: #495057;
+    }
+
+    .unit-card .card-badge.duration {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .unit-card .card-badge.standards {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .unit-card .card-badge.topic {
+      background: #fce4ec;
+      color: #c62828;
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Add unit button */
+    .add-unit-btn {
+      min-width: 120px;
+      max-width: 120px;
+      border: 2px dashed #dee2e6;
+      border-radius: 8px;
+      background: transparent;
+      color: #6c757d;
+      padding: 20px 10px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: border-color 0.2s, color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .add-unit-btn:hover {
+      border-color: #0d6efd;
+      color: #0d6efd;
+    }
+
+    .add-unit-btn i {
+      font-size: 1.2rem;
+    }
+
+    /* SortableJS ghost/chosen */
+    .sortable-ghost {
+      opacity: 0.4;
+    }
+
+    .sortable-chosen {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    /* Empty lane */
+    .lane-empty {
+      color: #adb5bd;
+      font-size: 0.8rem;
+      padding: 16px;
+      text-align: center;
+      flex: 1;
+    }
+
+    /* Modal sections */
+    .modal-section-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 16px;
+      margin-bottom: 6px;
+    }
+
+    .unit-metadata {
+      font-size: 0.72rem;
+      color: #adb5bd;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid #f0f0f0;
+    }
+
+    .workflow-buttons {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Course manager list */
+    .course-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .course-list-item:last-child {
+      border-bottom: none;
+    }
+
+    .course-item-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .course-color-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .course-item-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .course-item-grade {
+      font-size: 0.72rem;
+      color: #6c757d;
+    }
+
+    /* Responsive */
+    @media (max-width: 576px) {
+      .app-container { padding: 8px 10px; }
+      .filter-bar { gap: 4px; }
+      .filter-bar select, .filter-bar input { font-size: 0.75rem; }
+      .unit-card { min-width: 160px; max-width: 160px; }
+      .add-unit-btn { min-width: 100px; max-width: 100px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Error banner -->
+  <div id="error-banner" class="error-banner alert alert-danger alert-dismissible fade show" role="alert">
+    <span id="error-text"></span>
+    <button type="button" class="btn-close" onclick="hideError()"></button>
+  </div>
+
+  <!-- Success banner -->
+  <div id="success-banner" class="success-banner alert alert-success alert-dismissible fade show" role="alert">
+    <span id="success-text"></span>
+    <button type="button" class="btn-close" onclick="hideSuccess()"></button>
+  </div>
+
+  <!-- Loading spinner -->
+  <div id="loading-spinner" class="loading-container">
+    <div class="spinner-border text-primary" role="status"></div>
+    <div>Loading curriculum...</div>
+  </div>
+
+  <!-- Main app content -->
+  <div id="app-content" class="app-container" style="display:none;"></div>
+
+  <!-- Unit Detail / Edit Modal -->
+  <div class="modal fade" id="unitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="unitModalTitle">Unit Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="unitModalBody"></div>
+        <div class="modal-footer d-flex justify-content-between">
+          <div class="workflow-buttons" id="unitWorkflowButtons"></div>
+          <div>
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary btn-sm" id="unitSaveBtn" onclick="handleSaveUnit()">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Course Manager Modal -->
+  <div class="modal fade" id="courseManagerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Manage Courses</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="courseManagerBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Course Edit Modal -->
+  <div class="modal fade" id="courseEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="courseEditTitle">Add Course</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label form-label-sm">Course Name *</label>
+            <input type="text" id="courseEditName" class="form-control form-control-sm" placeholder="e.g. HS Biology">
+          </div>
+          <div class="row mb-2">
+            <div class="col-6">
+              <label class="form-label form-label-sm">Grade Level</label>
+              <input type="text" id="courseEditGrade" class="form-control form-control-sm" placeholder="e.g. 9-10">
+            </div>
+            <div class="col-6">
+              <label class="form-label form-label-sm">School</label>
+              <select id="courseEditSchool" class="form-select form-select-sm">
+                <option value="ALL">All Schools</option>
+                <option value="ES">Elementary</option>
+                <option value="MS">Middle School</option>
+                <option value="HS">High School</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label form-label-sm">Color</label>
+            <input type="color" id="courseEditColor" class="form-control form-control-sm form-control-color" value="#0d6efd">
+          </div>
+          <div class="mb-2">
+            <label class="form-label form-label-sm">Description</label>
+            <textarea id="courseEditDesc" class="form-control form-control-sm" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer d-flex justify-content-between">
+          <div>
+            <button type="button" class="btn btn-danger btn-sm" id="courseDeleteBtn" onclick="handleDeleteCourse()" style="display:none;">Delete Course</button>
+          </div>
+          <div>
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="handleSaveCourse()">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete confirmation modal -->
+  <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title">Confirm Delete</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="deleteConfirmBody">
+          <p class="mb-0">Are you sure you want to delete this unit?</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="handleConfirmDelete()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script>
+  /* ============================================================
+     SECTION 1: STATE & BOOTSTRAP
+     ============================================================ */
+
+  var AppState = {
+    currentUser: null,
+    courses: [],
+    units: {},       // { courseId: [unit, ...] }
+    isLoading: true,
+    submitting: false,
+    // Filters
+    filterSchool: '',
+    filterTopicArea: '',
+    filterStatus: '',
+    searchText: '',
+    // UI state
+    editingUnit: null,        // unit object being viewed/edited
+    addingToCourseId: null,   // courseId when adding new unit
+    editingCourse: null,      // course object being edited (null = new)
+    pendingDeleteUnitId: null,
+    sortableInstances: [],
+    staffList: []
+  };
+
+  // Bootstrap modal instances (lazy)
+  var unitModalInstance = null;
+  var courseManagerInstance = null;
+  var courseEditInstance = null;
+  var deleteConfirmInstance = null;
+
+  function getUnitModal() {
+    if (!unitModalInstance) unitModalInstance = new bootstrap.Modal(document.getElementById('unitModal'));
+    return unitModalInstance;
+  }
+
+  function getCourseManagerModal() {
+    if (!courseManagerInstance) courseManagerInstance = new bootstrap.Modal(document.getElementById('courseManagerModal'));
+    return courseManagerInstance;
+  }
+
+  function getCourseEditModal() {
+    if (!courseEditInstance) courseEditInstance = new bootstrap.Modal(document.getElementById('courseEditModal'));
+    return courseEditInstance;
+  }
+
+  function getDeleteConfirmModal() {
+    if (!deleteConfirmInstance) deleteConfirmInstance = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+    return deleteConfirmInstance;
+  }
+
+  // Boot
+  var loadCount = 0;
+  function checkLoaded() {
+    loadCount++;
+    if (loadCount >= 3) {
+      AppState.isLoading = false;
+      renderApp();
+    }
+  }
+
+  google.script.run
+    .withSuccessHandler(function(user) {
+      AppState.currentUser = user;
+      checkLoaded();
+    })
+    .withFailureHandler(function(err) {
+      showError('Failed to get user: ' + err.message);
+      checkLoaded();
+    })
+    .getCurrentUser();
+
+  google.script.run
+    .withSuccessHandler(function(board) {
+      AppState.courses = board.courses || [];
+      AppState.units = board.units || {};
+      checkLoaded();
+    })
+    .withFailureHandler(function(err) {
+      showError('Failed to load curriculum: ' + err.message);
+      checkLoaded();
+    })
+    .getCurriculumBoard();
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      AppState.staffList = data || [];
+      checkLoaded();
+    })
+    .withFailureHandler(function() {
+      checkLoaded();
+    })
+    .getStaff();
+
+  /* ============================================================
+     SECTION 2: RENDER APP
+     ============================================================ */
+
+  function renderApp() {
+    document.getElementById('loading-spinner').style.display = AppState.isLoading ? 'flex' : 'none';
+    document.getElementById('app-content').style.display = AppState.isLoading ? 'none' : 'block';
+    if (AppState.isLoading) return;
+
+    var html = '';
+    html += renderHeader();
+    html += renderFilterBar();
+    html += renderBoard();
+
+    document.getElementById('app-content').innerHTML = html;
+    initSortable();
+  }
+
+  function renderHeader() {
+    var html = '<div class="app-header">';
+    html += '<h1><i class="bi bi-journal-bookmark-fill" style="margin-right:6px;"></i>Curriculum Scope &amp; Sequence</h1>';
+    html += '<div class="header-controls">';
+    if (AppState.currentUser && AppState.currentUser.isAdmin) {
+      html += '<button class="btn btn-outline-secondary btn-sm" onclick="openCourseManager()" title="Manage Courses"><i class="bi bi-gear"></i> Courses</button>';
+    }
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderFilterBar() {
+    // Collect unique topic areas
+    var topicAreas = {};
+    var allCourseIds = Object.keys(AppState.units);
+    for (var c = 0; c < allCourseIds.length; c++) {
+      var courseUnits = AppState.units[allCourseIds[c]] || [];
+      for (var u = 0; u < courseUnits.length; u++) {
+        var ta = courseUnits[u].TopicArea;
+        if (ta) topicAreas[ta] = true;
+      }
+    }
+
+    var html = '<div class="filter-bar">';
+
+    // School filter
+    html += '<select onchange="handleFilterSchool(this.value)">';
+    html += '<option value="">All Schools</option>';
+    html += '<option value="ES"' + (AppState.filterSchool === 'ES' ? ' selected' : '') + '>Elementary</option>';
+    html += '<option value="MS"' + (AppState.filterSchool === 'MS' ? ' selected' : '') + '>Middle School</option>';
+    html += '<option value="HS"' + (AppState.filterSchool === 'HS' ? ' selected' : '') + '>High School</option>';
+    html += '</select>';
+
+    // Topic area filter
+    html += '<select onchange="handleFilterTopicArea(this.value)">';
+    html += '<option value="">All Topics</option>';
+    var topics = Object.keys(topicAreas).sort();
+    for (var t = 0; t < topics.length; t++) {
+      html += '<option value="' + escapeHtml(topics[t]) + '"' + (AppState.filterTopicArea === topics[t] ? ' selected' : '') + '>' + escapeHtml(topics[t]) + '</option>';
+    }
+    html += '</select>';
+
+    // Status filter
+    html += '<select onchange="handleFilterStatus(this.value)">';
+    html += '<option value="">All Statuses</option>';
+    html += '<option value="Draft"' + (AppState.filterStatus === 'Draft' ? ' selected' : '') + '>Draft</option>';
+    html += '<option value="Proposed"' + (AppState.filterStatus === 'Proposed' ? ' selected' : '') + '>Proposed</option>';
+    html += '<option value="Approved"' + (AppState.filterStatus === 'Approved' ? ' selected' : '') + '>Approved</option>';
+    html += '</select>';
+
+    // Search
+    html += '<input type="text" placeholder="Search units..." value="' + escapeHtml(AppState.searchText) + '" onkeyup="handleSearch(this.value)">';
+
+    html += '</div>';
+    return html;
+  }
+
+  function renderBoard() {
+    var html = '';
+    var courses = AppState.courses;
+
+    for (var i = 0; i < courses.length; i++) {
+      var course = courses[i];
+
+      // School filter
+      if (AppState.filterSchool && course.School !== AppState.filterSchool && course.School !== 'ALL') {
+        continue;
+      }
+
+      var units = filterUnits(AppState.units[course.CourseId] || []);
+
+      // If topic/status/search filter active and no matching units, still show lane but empty
+      html += renderCourseLane(course, units);
+    }
+
+    if (courses.length === 0) {
+      html += '<div class="text-center text-muted py-5">';
+      html += '<i class="bi bi-journal-bookmark" style="font-size:2rem;"></i>';
+      html += '<p class="mt-2">No courses yet. ' + (AppState.currentUser && AppState.currentUser.isAdmin ? 'Click <b>Courses</b> to add one.' : 'Ask an admin to set up courses.') + '</p>';
+      html += '</div>';
+    }
+
+    return html;
+  }
+
+  function filterUnits(units) {
+    var result = [];
+    for (var i = 0; i < units.length; i++) {
+      var u = units[i];
+
+      // Topic area filter
+      if (AppState.filterTopicArea && u.TopicArea !== AppState.filterTopicArea) continue;
+
+      // Status filter
+      if (AppState.filterStatus && u.Status !== AppState.filterStatus) continue;
+
+      // Search text
+      if (AppState.searchText) {
+        var search = AppState.searchText.toLowerCase();
+        var haystack = (u.Title + ' ' + u.Description + ' ' + u.TopicArea + ' ' + u.Standards + ' ' + u.TeacherNotes).toLowerCase();
+        if (haystack.indexOf(search) === -1) continue;
+      }
+
+      result.push(u);
+    }
+    return result;
+  }
+
+  function renderCourseLane(course, units) {
+    var html = '<div class="course-lane" data-course-id="' + course.CourseId + '">';
+
+    // Lane header
+    html += '<div class="lane-header">';
+    html += '<div class="lane-title-group">';
+    html += '<span class="lane-color-dot" style="background:' + (course.Color || '#6c757d') + ';"></span>';
+    html += '<span class="lane-name">' + escapeHtml(course.Name) + '</span>';
+    if (course.GradeLevel) {
+      html += '<span class="lane-grade-badge">' + escapeHtml(course.GradeLevel) + '</span>';
+    }
+    html += '</div>';
+
+    html += '<div class="lane-meta">';
+    // Total units and weeks
+    var allUnitsInCourse = AppState.units[course.CourseId] || [];
+    var totalWeeks = 0;
+    for (var w = 0; w < allUnitsInCourse.length; w++) {
+      totalWeeks += (Number(allUnitsInCourse[w].Duration) || 0);
+    }
+    html += '<span class="meta-item"><i class="bi bi-layers"></i> ' + allUnitsInCourse.length + ' units</span>';
+    if (totalWeeks > 0) {
+      html += '<span class="meta-item"><i class="bi bi-clock"></i> ' + totalWeeks + ' wks</span>';
+    }
+
+    if (AppState.currentUser && AppState.currentUser.isAdmin) {
+      html += '<button class="lane-gear-btn" onclick="openCourseEdit(\'' + course.CourseId + '\')" title="Edit course"><i class="bi bi-pencil"></i></button>';
+    }
+    html += '</div>';
+    html += '</div>'; // end lane-header
+
+    // Lane body (horizontal scroll of unit cards)
+    html += '<div class="lane-body" id="lane-body-' + course.CourseId + '" data-course-id="' + course.CourseId + '">';
+
+    if (units.length === 0 && !AppState.filterTopicArea && !AppState.filterStatus && !AppState.searchText) {
+      html += '<div class="lane-empty">No units yet</div>';
+    } else {
+      for (var j = 0; j < units.length; j++) {
+        html += renderUnitCard(units[j]);
+      }
+    }
+
+    // Add unit button
+    html += '<button class="add-unit-btn" onclick="openAddUnit(\'' + course.CourseId + '\')">';
+    html += '<i class="bi bi-plus-circle"></i>';
+    html += '<span>Add Unit</span>';
+    html += '</button>';
+
+    html += '</div>'; // end lane-body
+    html += '</div>'; // end course-lane
+    return html;
+  }
+
+  function renderUnitCard(unit) {
+    var topicColor = unit.TopicColor || '';
+    var html = '<div class="unit-card' + (topicColor ? ' topic-border' : '') + '" data-unit-id="' + unit.UnitId + '" onclick="openUnitDetail(\'' + unit.UnitId + '\')"';
+    if (topicColor) {
+      html += ' style="--topic-color:' + topicColor + ';"';
+    }
+    html += '>';
+
+    // Status badge (only if not Approved)
+    if (unit.Status === 'Draft') {
+      html += '<span class="status-badge draft">Draft</span> ';
+    } else if (unit.Status === 'Proposed') {
+      html += '<span class="status-badge proposed">Proposed</span> ';
+    }
+    if (unit.OriginalUnitId) {
+      html += '<span class="status-badge edit-copy">Edit Copy</span> ';
+    }
+
+    // Title
+    html += '<div class="card-title">' + escapeHtml(unit.Title) + '</div>';
+
+    // Badges
+    html += '<div class="card-badges">';
+    if (unit.Duration) {
+      html += '<span class="card-badge duration">' + unit.Duration + ' wks</span>';
+    }
+
+    var stds = safeParseJson(unit.Standards);
+    if (stds && stds.length > 0) {
+      html += '<span class="card-badge standards">' + stds.length + ' std' + (stds.length !== 1 ? 's' : '') + '</span>';
+    }
+
+    if (unit.TopicArea) {
+      html += '<span class="card-badge topic">' + escapeHtml(unit.TopicArea) + '</span>';
+    }
+    html += '</div>';
+
+    html += '</div>';
+    return html;
+  }
+
+  /* ============================================================
+     SECTION 3: SORTABLEJS INITIALIZATION
+     ============================================================ */
+
+  function initSortable() {
+    // Destroy previous instances
+    for (var s = 0; s < AppState.sortableInstances.length; s++) {
+      AppState.sortableInstances[s].destroy();
+    }
+    AppState.sortableInstances = [];
+
+    var courses = AppState.courses;
+    for (var i = 0; i < courses.length; i++) {
+      var el = document.getElementById('lane-body-' + courses[i].CourseId);
+      if (!el) continue;
+      var instance = new Sortable(el, {
+        group: 'curriculum-units',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        draggable: '.unit-card',
+        filter: '.add-unit-btn, .lane-empty',
+        onEnd: function(evt) {
+          handleUnitMoved(evt);
+        }
+      });
+      AppState.sortableInstances.push(instance);
+    }
+  }
+
+  function handleUnitMoved(evt) {
+    var unitId = evt.item.getAttribute('data-unit-id');
+    var toEl = evt.to;
+    var toCourseId = toEl.getAttribute('data-course-id');
+    if (!unitId || !toCourseId) return;
+
+    var fromEl = evt.from;
+    var fromCourseId = fromEl.getAttribute('data-course-id');
+    var newIndex = evt.newIndex;
+
+    if (fromCourseId === toCourseId) {
+      // Reorder within same lane
+      var orderedIds = [];
+      var cards = toEl.querySelectorAll('.unit-card');
+      for (var i = 0; i < cards.length; i++) {
+        orderedIds.push(cards[i].getAttribute('data-unit-id'));
+      }
+
+      // Optimistic local update
+      var courseUnits = AppState.units[toCourseId] || [];
+      for (var j = 0; j < orderedIds.length; j++) {
+        for (var k = 0; k < courseUnits.length; k++) {
+          if (courseUnits[k].UnitId === orderedIds[j]) {
+            courseUnits[k].SortOrder = j + 1;
+            break;
+          }
+        }
+      }
+
+      google.script.run
+        .withSuccessHandler(function() { /* silent success */ })
+        .withFailureHandler(function(error) {
+          showError(error.message || 'Failed to reorder.');
+          loadBoard();
+        })
+        .reorderCurriculumUnits(toCourseId, orderedIds);
+    } else {
+      // Move between lanes
+      // Optimistic update: remove from old course, add to new
+      var unit = removeUnitFromState(fromCourseId, unitId);
+      if (unit) {
+        unit.CourseId = toCourseId;
+        unit.SortOrder = newIndex + 1;
+        if (!AppState.units[toCourseId]) AppState.units[toCourseId] = [];
+        AppState.units[toCourseId].splice(newIndex, 0, unit);
+      }
+
+      google.script.run
+        .withSuccessHandler(function() { /* silent success */ })
+        .withFailureHandler(function(error) {
+          showError(error.message || 'Failed to move unit.');
+          loadBoard();
+        })
+        .moveCurriculumUnit(unitId, toCourseId, newIndex + 1);
+    }
+  }
+
+  function removeUnitFromState(courseId, unitId) {
+    var courseUnits = AppState.units[courseId] || [];
+    for (var i = 0; i < courseUnits.length; i++) {
+      if (courseUnits[i].UnitId === unitId) {
+        return courseUnits.splice(i, 1)[0];
+      }
+    }
+    return null;
+  }
+
+  /* ============================================================
+     SECTION 4: FILTER HANDLERS
+     ============================================================ */
+
+  function handleFilterSchool(value) {
+    AppState.filterSchool = value;
+    renderApp();
+  }
+
+  function handleFilterTopicArea(value) {
+    AppState.filterTopicArea = value;
+    renderApp();
+  }
+
+  function handleFilterStatus(value) {
+    AppState.filterStatus = value;
+    renderApp();
+  }
+
+  function handleSearch(value) {
+    AppState.searchText = value;
+    // Debounce-like: just re-render board portion
+    var boardEl = document.querySelector('.app-container');
+    if (boardEl) renderApp();
+  }
+
+  /* ============================================================
+     SECTION 5: UNIT DETAIL MODAL
+     ============================================================ */
+
+  function openUnitDetail(unitId) {
+    var unit = findUnitById(unitId);
+    if (!unit) { showError('Unit not found.'); return; }
+
+    AppState.editingUnit = unit;
+    AppState.addingToCourseId = null;
+
+    var isAdmin = AppState.currentUser && AppState.currentUser.isAdmin;
+    var isAuthor = unit.CreatedBy === (AppState.currentUser ? AppState.currentUser.email : '');
+    var canEdit = isAdmin || (isAuthor && unit.Status === 'Draft');
+
+    document.getElementById('unitModalTitle').textContent = canEdit ? 'Edit Unit' : 'Unit Details';
+    document.getElementById('unitModalBody').innerHTML = renderUnitForm(unit, canEdit);
+    document.getElementById('unitSaveBtn').style.display = canEdit ? '' : 'none';
+
+    renderWorkflowButtons(unit, isAdmin, isAuthor);
+
+    getUnitModal().show();
+  }
+
+  function openAddUnit(courseId) {
+    AppState.editingUnit = null;
+    AppState.addingToCourseId = courseId;
+
+    document.getElementById('unitModalTitle').textContent = 'New Unit';
+    document.getElementById('unitModalBody').innerHTML = renderUnitForm(null, true);
+    document.getElementById('unitSaveBtn').style.display = '';
+    document.getElementById('unitWorkflowButtons').innerHTML = '';
+
+    getUnitModal().show();
+  }
+
+  function renderUnitForm(unit, canEdit) {
+    var u = unit || {};
+    var disabled = canEdit ? '' : ' disabled';
+    var html = '';
+
+    // Title + Duration row
+    html += '<div class="row mb-2">';
+    html += '<div class="col-8">';
+    html += '<label class="form-label form-label-sm">Title *</label>';
+    html += '<input type="text" id="unitTitle" class="form-control form-control-sm" value="' + escapeAttr(u.Title || '') + '"' + disabled + '>';
+    html += '</div>';
+    html += '<div class="col-4">';
+    html += '<label class="form-label form-label-sm">Duration (weeks)</label>';
+    html += '<input type="number" id="unitDuration" class="form-control form-control-sm" value="' + (u.Duration || '') + '" min="0"' + disabled + '>';
+    html += '</div>';
+    html += '</div>';
+
+    // Description
+    html += '<div class="mb-2">';
+    html += '<label class="form-label form-label-sm">Description</label>';
+    html += '<textarea id="unitDescription" class="form-control form-control-sm" rows="2"' + disabled + '>' + escapeHtml(u.Description || '') + '</textarea>';
+    html += '</div>';
+
+    // Topic Area + Topic Color
+    html += '<div class="row mb-2">';
+    html += '<div class="col-8">';
+    html += '<label class="form-label form-label-sm">Topic Area</label>';
+    html += '<input type="text" id="unitTopicArea" class="form-control form-control-sm" value="' + escapeAttr(u.TopicArea || '') + '" placeholder="e.g. Life Science, Chemistry"' + disabled + '>';
+    html += '</div>';
+    html += '<div class="col-4">';
+    html += '<label class="form-label form-label-sm">Topic Color</label>';
+    html += '<input type="color" id="unitTopicColor" class="form-control form-control-sm form-control-color" value="' + (u.TopicColor || '#dee2e6') + '"' + disabled + '>';
+    html += '</div>';
+    html += '</div>';
+
+    // Standards
+    html += '<div class="modal-section-title">Standards (one per line)</div>';
+    html += '<textarea id="unitStandards" class="form-control form-control-sm" rows="3" placeholder="e.g. NGSS: HS-LS1-1"' + disabled + '>' + jsonToLines(u.Standards) + '</textarea>';
+
+    // Essential Questions
+    html += '<div class="modal-section-title">Essential Questions (one per line)</div>';
+    html += '<textarea id="unitEssentialQuestions" class="form-control form-control-sm" rows="3" placeholder="One question per line"' + disabled + '>' + jsonToLines(u.EssentialQuestions) + '</textarea>';
+
+    // Resources (title|url per line)
+    html += '<div class="modal-section-title">Resources (title|url per line)</div>';
+    html += '<textarea id="unitResources" class="form-control form-control-sm" rows="3" placeholder="Resource Title|https://example.com"' + disabled + '>' + resourceJsonToLines(u.Resources) + '</textarea>';
+
+    // Assessments (title|type per line)
+    html += '<div class="modal-section-title">Assessments (title|type per line)</div>';
+    html += '<textarea id="unitAssessments" class="form-control form-control-sm" rows="3" placeholder="Unit Test|summative"' + disabled + '>' + assessmentJsonToLines(u.Assessments) + '</textarea>';
+
+    // Cross-curricular
+    html += '<div class="modal-section-title">Cross-Curricular Connections</div>';
+    html += '<input type="text" id="unitCrossCurricular" class="form-control form-control-sm" value="' + escapeAttr(u.CrossCurricular || '') + '" placeholder="e.g. Math: graphing, ELA: lab reports"' + disabled + '>';
+
+    // Prerequisites
+    html += '<div class="modal-section-title">Prerequisites</div>';
+    html += renderPrerequisiteSelect(u.Prerequisites, canEdit);
+
+    // Teacher Notes
+    html += '<div class="modal-section-title">Teacher Notes</div>';
+    html += '<textarea id="unitTeacherNotes" class="form-control form-control-sm" rows="2"' + disabled + '>' + escapeHtml(u.TeacherNotes || '') + '</textarea>';
+
+    // Metadata
+    if (unit) {
+      html += '<div class="unit-metadata">';
+      html += '<strong>Status:</strong> ' + escapeHtml(u.Status || 'Draft');
+      if (u.CreatedBy) html += ' &middot; <strong>Created by:</strong> ' + escapeHtml(getStaffName(u.CreatedBy));
+      if (u.CreatedDate) html += ' on ' + formatDate(u.CreatedDate);
+      if (u.LastEditedBy && u.LastEditedBy !== u.CreatedBy) {
+        html += ' &middot; <strong>Edited by:</strong> ' + escapeHtml(getStaffName(u.LastEditedBy)) + ' on ' + formatDate(u.LastEditedDate);
+      }
+      if (u.OriginalUnitId) html += ' &middot; <em>Edit copy of another unit</em>';
+      html += '</div>';
+    }
+
+    return html;
+  }
+
+  function renderPrerequisiteSelect(prereqJson, canEdit) {
+    var disabled = canEdit ? '' : ' disabled';
+    var selected = safeParseJson(prereqJson) || [];
+    var selectedMap = {};
+    for (var i = 0; i < selected.length; i++) { selectedMap[selected[i]] = true; }
+
+    // Gather all units as options
+    var html = '<select id="unitPrerequisites" class="form-select form-select-sm" multiple size="3"' + disabled + '>';
+    var allCourseIds = Object.keys(AppState.units);
+    for (var c = 0; c < allCourseIds.length; c++) {
+      var courseUnits = AppState.units[allCourseIds[c]] || [];
+      var courseName = getCourseNameById(allCourseIds[c]);
+      for (var u = 0; u < courseUnits.length; u++) {
+        var unit = courseUnits[u];
+        // Don't list the current unit as its own prerequisite
+        if (AppState.editingUnit && unit.UnitId === AppState.editingUnit.UnitId) continue;
+        var sel = selectedMap[unit.UnitId] ? ' selected' : '';
+        html += '<option value="' + unit.UnitId + '"' + sel + '>' + escapeHtml(courseName + ': ' + unit.Title) + '</option>';
+      }
+    }
+    html += '</select>';
+    return html;
+  }
+
+  function renderWorkflowButtons(unit, isAdmin, isAuthor) {
+    var html = '';
+
+    if (unit.Status === 'Draft') {
+      if (isAuthor || isAdmin) {
+        html += '<button class="btn btn-warning btn-sm" onclick="handleProposeUnit()" title="Submit for admin approval"><i class="bi bi-send"></i> Propose</button>';
+      }
+      if (isAdmin) {
+        html += '<button class="btn btn-success btn-sm" onclick="handleApproveUnit()" title="Approve directly"><i class="bi bi-check-lg"></i> Approve</button>';
+      }
+      if (isAuthor || isAdmin) {
+        html += '<button class="btn btn-outline-danger btn-sm" onclick="openDeleteConfirm()"><i class="bi bi-trash"></i></button>';
+      }
+    } else if (unit.Status === 'Proposed') {
+      if (isAdmin) {
+        html += '<button class="btn btn-success btn-sm" onclick="handleApproveUnit()"><i class="bi bi-check-lg"></i> Approve</button>';
+        html += '<button class="btn btn-outline-warning btn-sm" onclick="handleRejectUnit()"><i class="bi bi-arrow-return-left"></i> Reject</button>';
+      }
+    } else if (unit.Status === 'Approved') {
+      if (!isAdmin) {
+        html += '<button class="btn btn-info btn-sm" onclick="handleProposeEdit()"><i class="bi bi-pencil-square"></i> Propose Edit</button>';
+      }
+      if (isAdmin) {
+        html += '<button class="btn btn-outline-secondary btn-sm" onclick="handleArchiveUnit()"><i class="bi bi-archive"></i> Archive</button>';
+        html += '<button class="btn btn-outline-danger btn-sm" onclick="openDeleteConfirm()"><i class="bi bi-trash"></i></button>';
+      }
+    }
+
+    document.getElementById('unitWorkflowButtons').innerHTML = html;
+  }
+
+  /* ============================================================
+     SECTION 6: UNIT SAVE / CRUD
+     ============================================================ */
+
+  function handleSaveUnit() {
+    if (AppState.submitting) return;
+    AppState.submitting = true;
+
+    var title = document.getElementById('unitTitle').value.trim();
+    if (!title) { showError('Title is required.'); AppState.submitting = false; return; }
+
+    var data = {
+      title: title,
+      duration: Number(document.getElementById('unitDuration').value) || 0,
+      description: document.getElementById('unitDescription').value,
+      topicArea: document.getElementById('unitTopicArea').value.trim(),
+      topicColor: document.getElementById('unitTopicColor').value,
+      standards: linesToJsonString(document.getElementById('unitStandards').value),
+      essentialQuestions: linesToJsonString(document.getElementById('unitEssentialQuestions').value),
+      resources: parseResourceLines(document.getElementById('unitResources').value),
+      assessments: parseAssessmentLines(document.getElementById('unitAssessments').value),
+      crossCurricular: document.getElementById('unitCrossCurricular').value.trim(),
+      prerequisites: getSelectedPrerequisites(),
+      teacherNotes: document.getElementById('unitTeacherNotes').value
+    };
+
+    if (AppState.editingUnit) {
+      // Update existing
+      google.script.run
+        .withSuccessHandler(function(updated) {
+          AppState.submitting = false;
+          getUnitModal().hide();
+          showSuccess('Unit updated.');
+          updateUnitInState(updated);
+          renderApp();
+        })
+        .withFailureHandler(function(error) {
+          AppState.submitting = false;
+          showError(error.message || 'Failed to update unit.');
+        })
+        .updateCurriculumUnit(AppState.editingUnit.UnitId, data);
+    } else {
+      // Create new
+      data.courseId = AppState.addingToCourseId;
+      google.script.run
+        .withSuccessHandler(function(created) {
+          AppState.submitting = false;
+          getUnitModal().hide();
+          showSuccess('Unit created.');
+          addUnitToState(created);
+          renderApp();
+        })
+        .withFailureHandler(function(error) {
+          AppState.submitting = false;
+          showError(error.message || 'Failed to create unit.');
+        })
+        .createCurriculumUnit(data);
+    }
+  }
+
+  function openDeleteConfirm() {
+    if (!AppState.editingUnit) return;
+    AppState.pendingDeleteUnitId = AppState.editingUnit.UnitId;
+    document.getElementById('deleteConfirmBody').innerHTML = '<p class="mb-0">Are you sure you want to delete &ldquo;' + escapeHtml(AppState.editingUnit.Title) + '&rdquo;?</p>';
+    getDeleteConfirmModal().show();
+  }
+
+  function handleConfirmDelete() {
+    if (!AppState.pendingDeleteUnitId || AppState.submitting) return;
+    AppState.submitting = true;
+
+    google.script.run
+      .withSuccessHandler(function() {
+        AppState.submitting = false;
+        getDeleteConfirmModal().hide();
+        getUnitModal().hide();
+        showSuccess('Unit deleted.');
+        removeUnitFromStateById(AppState.pendingDeleteUnitId);
+        AppState.pendingDeleteUnitId = null;
+        renderApp();
+      })
+      .withFailureHandler(function(error) {
+        AppState.submitting = false;
+        showError(error.message || 'Failed to delete unit.');
+      })
+      .deleteCurriculumUnit(AppState.pendingDeleteUnitId);
+  }
+
+  /* ============================================================
+     SECTION 7: WORKFLOW HANDLERS
+     ============================================================ */
+
+  function handleProposeUnit() {
+    if (!AppState.editingUnit || AppState.submitting) return;
+    AppState.submitting = true;
+
+    google.script.run
+      .withSuccessHandler(function(updated) {
+        AppState.submitting = false;
+        getUnitModal().hide();
+        showSuccess('Unit proposed for approval.');
+        updateUnitInState(updated);
+        renderApp();
+      })
+      .withFailureHandler(function(error) {
+        AppState.submitting = false;
+        showError(error.message || 'Failed to propose unit.');
+      })
+      .proposeCurriculumUnit(AppState.editingUnit.UnitId);
+  }
+
+  function handleApproveUnit() {
+    if (!AppState.editingUnit || AppState.submitting) return;
+    AppState.submitting = true;
+
+    google.script.run
+      .withSuccessHandler(function(updated) {
+        AppState.submitting = false;
+        getUnitModal().hide();
+        showSuccess('Unit approved.');
+        // The approval may have merged into original — reload
+        loadBoard();
+      })
+      .withFailureHandler(function(error) {
+        AppState.submitting = false;
+        showError(error.message || 'Failed to approve unit.');
+      })
+      .approveCurriculumUnit(AppState.editingUnit.UnitId);
+  }
+
+  function handleRejectUnit() {
+    if (!AppState.editingUnit || AppState.submitting) return;
+    AppState.submitting = true;
+
+    google.script.run
+      .withSuccessHandler(function(updated) {
+        AppState.submitting = false;
+        getUnitModal().hide();
+        showSuccess('Unit returned to Draft.');
+        updateUnitInState(updated);
+        renderApp();
+      })
+      .withFailureHandler(function(error) {
+        AppState.submitting = false;
+        showError(error.message || 'Failed to reject unit.');
+      })
+      .rejectCurriculumUnit(AppState.editingUnit.UnitId);
+  }
+
+  function handleArchiveUnit() {
+    if (!AppState.editingUnit || AppState.submitting) return;
+    AppState.submitting = true;
+
+    google.script.run
+      .withSuccessHandler(function() {
+        AppState.submitting = false;
+        getUnitModal().hide();
+        showSuccess('Unit archived.');
+        removeUnitFromStateById(AppState.editingUnit.UnitId);
+        renderApp();
+      })
+      .withFailureHandler(function(error) {
+        AppState.submitting = false;
+        showError(error.message || 'Failed to archive unit.');
+      })
+      .archiveCurriculumUnit(AppState.editingUnit.UnitId);
+  }
+
+  function handleProposeEdit() {
+    if (!AppState.editingUnit || AppState.submitting) return;
+    AppState.submitting = true;
+
+    google.script.run
+      .withSuccessHandler(function(copy) {
+        AppState.submitting = false;
+        getUnitModal().hide();
+        showSuccess('Draft copy created. Edit it and propose when ready.');
+        addUnitToState(copy);
+        renderApp();
+        // Open the new draft for editing
+        setTimeout(function() { openUnitDetail(copy.UnitId); }, 300);
+      })
+      .withFailureHandler(function(error) {
+        AppState.submitting = false;
+        showError(error.message || 'Failed to create edit copy.');
+      })
+      .proposeEditToCurriculumUnit(AppState.editingUnit.UnitId);
+  }
+
+  /* ============================================================
+     SECTION 8: COURSE MANAGEMENT
+     ============================================================ */
+
+  function openCourseManager() {
+    renderCourseManagerBody();
+    getCourseManagerModal().show();
+  }
+
+  function renderCourseManagerBody() {
+    var html = '';
+    html += '<button class="btn btn-primary btn-sm mb-3" onclick="openCourseEdit(null)"><i class="bi bi-plus-circle"></i> Add Course</button>';
+
+    if (AppState.courses.length === 0) {
+      html += '<p class="text-muted">No courses yet.</p>';
+    } else {
+      for (var i = 0; i < AppState.courses.length; i++) {
+        var c = AppState.courses[i];
+        html += '<div class="course-list-item">';
+        html += '<div class="course-item-left">';
+        html += '<span class="course-color-swatch" style="background:' + (c.Color || '#6c757d') + ';"></span>';
+        html += '<div>';
+        html += '<div class="course-item-name">' + escapeHtml(c.Name) + '</div>';
+        html += '<div class="course-item-grade">' + escapeHtml(c.GradeLevel || '') + ' &middot; ' + escapeHtml(c.School || 'ALL') + '</div>';
+        html += '</div>';
+        html += '</div>';
+        html += '<button class="btn btn-outline-secondary btn-sm" onclick="openCourseEdit(\'' + c.CourseId + '\')"><i class="bi bi-pencil"></i></button>';
+        html += '</div>';
+      }
+    }
+
+    document.getElementById('courseManagerBody').innerHTML = html;
+  }
+
+  function openCourseEdit(courseId) {
+    if (courseId) {
+      var course = null;
+      for (var i = 0; i < AppState.courses.length; i++) {
+        if (AppState.courses[i].CourseId === courseId) { course = AppState.courses[i]; break; }
+      }
+      if (!course) { showError('Course not found.'); return; }
+      AppState.editingCourse = course;
+      document.getElementById('courseEditTitle').textContent = 'Edit Course';
+      document.getElementById('courseEditName').value = course.Name || '';
+      document.getElementById('courseEditGrade').value = course.GradeLevel || '';
+      document.getElementById('courseEditSchool').value = course.School || 'ALL';
+      document.getElementById('courseEditColor').value = course.Color || '#0d6efd';
+      document.getElementById('courseEditDesc').value = course.Description || '';
+      document.getElementById('courseDeleteBtn').style.display = '';
+    } else {
+      AppState.editingCourse = null;
+      document.getElementById('courseEditTitle').textContent = 'Add Course';
+      document.getElementById('courseEditName').value = '';
+      document.getElementById('courseEditGrade').value = '';
+      document.getElementById('courseEditSchool').value = 'ALL';
+      document.getElementById('courseEditColor').value = '#0d6efd';
+      document.getElementById('courseEditDesc').value = '';
+      document.getElementById('courseDeleteBtn').style.display = 'none';
+    }
+    getCourseEditModal().show();
+  }
+
+  function handleSaveCourse() {
+    if (AppState.submitting) return;
+    var name = document.getElementById('courseEditName').value.trim();
+    if (!name) { showError('Course name is required.'); return; }
+    AppState.submitting = true;
+
+    var data = {
+      name: name,
+      gradeLevel: document.getElementById('courseEditGrade').value.trim(),
+      school: document.getElementById('courseEditSchool').value,
+      color: document.getElementById('courseEditColor').value,
+      description: document.getElementById('courseEditDesc').value.trim()
+    };
+
+    if (AppState.editingCourse) {
+      google.script.run
+        .withSuccessHandler(function(updated) {
+          AppState.submitting = false;
+          getCourseEditModal().hide();
+          showSuccess('Course updated.');
+          loadBoard();
+        })
+        .withFailureHandler(function(error) {
+          AppState.submitting = false;
+          showError(error.message || 'Failed to update course.');
+        })
+        .updateCurriculumCourse(AppState.editingCourse.CourseId, data);
+    } else {
+      google.script.run
+        .withSuccessHandler(function(created) {
+          AppState.submitting = false;
+          getCourseEditModal().hide();
+          showSuccess('Course created.');
+          loadBoard();
+        })
+        .withFailureHandler(function(error) {
+          AppState.submitting = false;
+          showError(error.message || 'Failed to create course.');
+        })
+        .createCurriculumCourse(data);
+    }
+  }
+
+  function handleDeleteCourse() {
+    if (!AppState.editingCourse || AppState.submitting) return;
+    if (!confirm('Delete course "' + AppState.editingCourse.Name + '"? This cannot be undone.')) return;
+    AppState.submitting = true;
+
+    google.script.run
+      .withSuccessHandler(function() {
+        AppState.submitting = false;
+        getCourseEditModal().hide();
+        getCourseManagerModal().hide();
+        showSuccess('Course deleted.');
+        loadBoard();
+      })
+      .withFailureHandler(function(error) {
+        AppState.submitting = false;
+        showError(error.message || 'Failed to delete course.');
+      })
+      .deleteCurriculumCourse(AppState.editingCourse.CourseId);
+  }
+
+  /* ============================================================
+     SECTION 9: DATA RELOAD
+     ============================================================ */
+
+  function loadBoard() {
+    google.script.run
+      .withSuccessHandler(function(board) {
+        AppState.courses = board.courses || [];
+        AppState.units = board.units || {};
+        renderApp();
+        // Re-render course manager if open
+        var cmEl = document.getElementById('courseManagerModal');
+        if (cmEl && cmEl.classList.contains('show')) {
+          renderCourseManagerBody();
+        }
+      })
+      .withFailureHandler(function(err) {
+        showError('Failed to reload: ' + err.message);
+      })
+      .getCurriculumBoard();
+  }
+
+  /* ============================================================
+     SECTION 10: STATE HELPERS
+     ============================================================ */
+
+  function findUnitById(unitId) {
+    var courseIds = Object.keys(AppState.units);
+    for (var c = 0; c < courseIds.length; c++) {
+      var units = AppState.units[courseIds[c]] || [];
+      for (var u = 0; u < units.length; u++) {
+        if (units[u].UnitId === unitId) return units[u];
+      }
+    }
+    return null;
+  }
+
+  function updateUnitInState(updated) {
+    var courseIds = Object.keys(AppState.units);
+    for (var c = 0; c < courseIds.length; c++) {
+      var units = AppState.units[courseIds[c]] || [];
+      for (var u = 0; u < units.length; u++) {
+        if (units[u].UnitId === updated.UnitId) {
+          AppState.units[courseIds[c]][u] = updated;
+          return;
+        }
+      }
+    }
+    // If not found (maybe course changed), add to appropriate course
+    addUnitToState(updated);
+  }
+
+  function addUnitToState(unit) {
+    var courseId = unit.CourseId;
+    if (!AppState.units[courseId]) AppState.units[courseId] = [];
+    AppState.units[courseId].push(unit);
+    AppState.units[courseId].sort(function(a, b) { return (a.SortOrder || 0) - (b.SortOrder || 0); });
+  }
+
+  function removeUnitFromStateById(unitId) {
+    var courseIds = Object.keys(AppState.units);
+    for (var c = 0; c < courseIds.length; c++) {
+      var units = AppState.units[courseIds[c]] || [];
+      for (var u = 0; u < units.length; u++) {
+        if (units[u].UnitId === unitId) {
+          units.splice(u, 1);
+          return;
+        }
+      }
+    }
+  }
+
+  function getCourseNameById(courseId) {
+    for (var i = 0; i < AppState.courses.length; i++) {
+      if (AppState.courses[i].CourseId === courseId) return AppState.courses[i].Name;
+    }
+    return 'Unknown';
+  }
+
+  /* ============================================================
+     SECTION 11: JSON HELPERS
+     ============================================================ */
+
+  function safeParseJson(val) {
+    if (!val) return [];
+    if (typeof val !== 'string') return val;
+    try { return JSON.parse(val); } catch (e) { return []; }
+  }
+
+  function jsonToLines(jsonStr) {
+    var arr = safeParseJson(jsonStr);
+    if (!arr || arr.length === 0) return '';
+    return arr.join('\n');
+  }
+
+  function linesToJsonString(text) {
+    if (!text || !text.trim()) return '[]';
+    var lines = text.split('\n');
+    var result = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (line) result.push(line);
+    }
+    return JSON.stringify(result);
+  }
+
+  function resourceJsonToLines(jsonStr) {
+    var arr = safeParseJson(jsonStr);
+    if (!arr || arr.length === 0) return '';
+    var lines = [];
+    for (var i = 0; i < arr.length; i++) {
+      if (typeof arr[i] === 'object' && arr[i].title) {
+        lines.push(arr[i].title + (arr[i].url ? '|' + arr[i].url : ''));
+      } else if (typeof arr[i] === 'string') {
+        lines.push(arr[i]);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function parseResourceLines(text) {
+    if (!text || !text.trim()) return '[]';
+    var lines = text.split('\n');
+    var result = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      var parts = line.split('|');
+      result.push({ title: parts[0].trim(), url: (parts[1] || '').trim(), type: 'link' });
+    }
+    return JSON.stringify(result);
+  }
+
+  function assessmentJsonToLines(jsonStr) {
+    var arr = safeParseJson(jsonStr);
+    if (!arr || arr.length === 0) return '';
+    var lines = [];
+    for (var i = 0; i < arr.length; i++) {
+      if (typeof arr[i] === 'object' && arr[i].title) {
+        lines.push(arr[i].title + (arr[i].type ? '|' + arr[i].type : ''));
+      } else if (typeof arr[i] === 'string') {
+        lines.push(arr[i]);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function parseAssessmentLines(text) {
+    if (!text || !text.trim()) return '[]';
+    var lines = text.split('\n');
+    var result = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      var parts = line.split('|');
+      result.push({ title: parts[0].trim(), type: (parts[1] || 'formative').trim() });
+    }
+    return JSON.stringify(result);
+  }
+
+  function getSelectedPrerequisites() {
+    var sel = document.getElementById('unitPrerequisites');
+    if (!sel) return '[]';
+    var result = [];
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].selected) result.push(sel.options[i].value);
+    }
+    return JSON.stringify(result);
+  }
+
+  /* ============================================================
+     SECTION 12: UTILITY FUNCTIONS
+     ============================================================ */
+
+  function getStaffName(email) {
+    if (!email) return '';
+    for (var i = 0; i < AppState.staffList.length; i++) {
+      if (AppState.staffList[i].Email === email) return AppState.staffList[i].DisplayName;
+    }
+    var parts = email.split('@');
+    if (parts.length > 0) {
+      var name = parts[0];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+    return email;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function escapeAttr(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      var d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString();
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  function showError(msg) {
+    var el = document.getElementById('error-banner');
+    document.getElementById('error-text').textContent = msg;
+    el.style.display = 'block';
+    setTimeout(function() { el.style.display = 'none'; }, 6000);
+  }
+
+  function hideError() {
+    document.getElementById('error-banner').style.display = 'none';
+  }
+
+  function showSuccess(msg) {
+    var el = document.getElementById('success-banner');
+    document.getElementById('success-text').textContent = msg;
+    el.style.display = 'block';
+    setTimeout(function() { el.style.display = 'none'; }, 4000);
+  }
+
+  function hideSuccess() {
+    document.getElementById('success-banner').style.display = 'none';
+  }
+  </script>
+</body>
+</html>

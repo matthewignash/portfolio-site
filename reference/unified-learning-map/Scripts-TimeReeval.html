@@ -1,0 +1,238 @@
+<script>
+    // ================================================
+    //  TIME RE-EVALUATION POLLING (tre- prefix)
+    //  Auto-detects when time-gated branches become
+    //  available and triggers server-side unlock.
+    //  Follows notification polling pattern from
+    //  Scripts-NotifCenter.html.
+    // ================================================
+
+    /**
+     * Start polling for time branch changes.
+     * Called when a student opens a map in the builder.
+     */
+    function treStartPolling() {
+      // Guard: only for students, only when map has time branches
+      if (currentViewMode !== 'student') return;
+      if (!treHasTimeBranches()) return;
+
+      treActive = true;
+      treSessionStart = Date.now();
+      treCurrentInterval = TRE_FAST_INTERVAL;
+      treLastCheckState = {};
+
+      // Build initial state snapshot
+      treSnapshotCurrentState();
+      treScheduleNextCheck();
+    }
+
+    /**
+     * Stop polling. Called on map close, mode switch, or tab switch.
+     */
+    function treStopPolling() {
+      if (trePollingTimer) clearTimeout(trePollingTimer);
+      trePollingTimer = null;
+      treActive = false;
+      treLastCheckState = {};
+    }
+
+    /**
+     * Schedule the next poll tick. Mirrors ntfScheduleNextPoll pattern.
+     */
+    function treScheduleNextCheck() {
+      if (trePollingTimer) clearTimeout(trePollingTimer);
+      if (!treActive) return;
+
+      // Transition from fast to normal interval after TRE_FAST_DURATION
+      if (treSessionStart && (Date.now() - treSessionStart) > TRE_FAST_DURATION) {
+        if (treCurrentInterval < TRE_NORMAL_INTERVAL) {
+          treCurrentInterval = TRE_NORMAL_INTERVAL;
+        }
+      }
+
+      trePollingTimer = setTimeout(function() {
+        treCheckTimeBranches();
+        if (treActive) treScheduleNextCheck();
+      }, treCurrentInterval);
+    }
+
+    /**
+     * Core polling tick: client-side check, RPC only if state changed.
+     */
+    function treCheckTimeBranches() {
+      if (!currentMap || !currentMap.hexes || currentViewMode !== 'student') {
+        treStopPolling();
+        return;
+      }
+
+      var now = new Date();
+      var today = treFormatDate(now);
+      var anyChanged = false;
+
+      for (var h = 0; h < currentMap.hexes.length; h++) {
+        var hex = currentMap.hexes[h];
+        if (!hex.branches) continue;
+
+        for (var b = 0; b < hex.branches.length; b++) {
+          var branch = hex.branches[b];
+          if (!branch.condition || !branch.nextHexIds) continue;
+
+          // Extract time conditions (direct or from compound)
+          var timeConditions = treExtractTimeConditions(branch.condition);
+          if (timeConditions.length === 0) continue;
+
+          // Check if any target hex is still locked
+          var hasLockedTarget = false;
+          for (var t = 0; t < branch.nextHexIds.length; t++) {
+            if (!studentProgressData || !studentProgressData[branch.nextHexIds[t]]) {
+              hasLockedTarget = true;
+              break;
+            }
+          }
+          if (!hasLockedTarget) continue;
+
+          // Source hex must have progress (student has been here)
+          if (!studentProgressData || !studentProgressData[hex.id]) continue;
+
+          // Client-side time evaluation
+          var branchKey = hex.id + '|' + b;
+          var nowMet = treEvaluateTimeLocally(timeConditions, today);
+          var wasMet = treLastCheckState[branchKey] || false;
+
+          if (nowMet && !wasMet) {
+            anyChanged = true;
+          }
+          treLastCheckState[branchKey] = nowMet;
+        }
+      }
+
+      if (anyChanged) {
+        // Time condition changed! Call lightweight backend RPC
+        treCallReeval();
+        // Reset to fast interval since something changed
+        treCurrentInterval = TRE_FAST_INTERVAL;
+        treSessionStart = Date.now();
+      } else {
+        // No change — adaptive backoff
+        treCurrentInterval = Math.min(treCurrentInterval + 15000, TRE_MAX_INTERVAL);
+      }
+    }
+
+    /**
+     * Build initial snapshot of time branch states.
+     */
+    function treSnapshotCurrentState() {
+      if (!currentMap || !currentMap.hexes) return;
+      var today = treFormatDate(new Date());
+
+      for (var h = 0; h < currentMap.hexes.length; h++) {
+        var hex = currentMap.hexes[h];
+        if (!hex.branches) continue;
+
+        for (var b = 0; b < hex.branches.length; b++) {
+          var branch = hex.branches[b];
+          if (!branch.condition) continue;
+
+          var timeConditions = treExtractTimeConditions(branch.condition);
+          if (timeConditions.length === 0) continue;
+
+          var branchKey = hex.id + '|' + b;
+          treLastCheckState[branchKey] = treEvaluateTimeLocally(timeConditions, today);
+        }
+      }
+    }
+
+    /**
+     * Call backend RPC to re-evaluate and unlock time-gated hexes.
+     */
+    function treCallReeval() {
+      if (!currentMap || !currentMap.mapId) return;
+      var expectedMapId = currentMap.mapId;
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          // Stale-response guard
+          if (!currentMap || currentMap.mapId !== expectedMapId) return;
+
+          if (result && result.unlockedHexes && result.unlockedHexes.length > 0) {
+            // Reload progress and re-render grid
+            loadStudentMapProgress(function() {
+              renderHexGridInternal();
+              showUnlockNotification(result.unlockedHexes, 'time_unlock');
+              if (typeof lrdUpdateProgress === 'function') lrdUpdateProgress();
+            });
+          }
+        })
+        .withFailureHandler(function(err) {
+          // Non-fatal — will retry on next poll
+          if (typeof console !== 'undefined') console.log('Time re-eval error: ' + err);
+        })
+        .reevaluateTimeBranches(expectedMapId);
+    }
+
+    /**
+     * Extract time conditions from a condition object (direct or compound-nested).
+     */
+    function treExtractTimeConditions(condition) {
+      if (condition.type === 'time') return [condition];
+      if (condition.type === 'compound' && condition.conditions) {
+        var result = [];
+        for (var i = 0; i < condition.conditions.length; i++) {
+          if (condition.conditions[i].type === 'time') {
+            result.push(condition.conditions[i]);
+          }
+        }
+        return result;
+      }
+      return [];
+    }
+
+    /**
+     * Client-side time evaluation matching evaluateTimeCondition_ logic.
+     */
+    function treEvaluateTimeLocally(timeConditions, todayStr) {
+      for (var i = 0; i < timeConditions.length; i++) {
+        var tc = timeConditions[i];
+        if (tc.availableAfter && todayStr < tc.availableAfter) return false;
+        if (tc.availableBefore && todayStr > tc.availableBefore) return false;
+      }
+      return true;
+    }
+
+    /**
+     * Quick scan: does the current map have any time-gated branches?
+     */
+    function treHasTimeBranches() {
+      if (!currentMap || !currentMap.hexes) return false;
+      for (var h = 0; h < currentMap.hexes.length; h++) {
+        var hex = currentMap.hexes[h];
+        if (!hex.branches) continue;
+        for (var b = 0; b < hex.branches.length; b++) {
+          var cond = hex.branches[b].condition;
+          if (!cond) continue;
+          if (cond.type === 'time') return true;
+          if (cond.type === 'compound' && cond.conditions) {
+            for (var c = 0; c < cond.conditions.length; c++) {
+              if (cond.conditions[c].type === 'time') return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Format Date to YYYY-MM-DD string.
+     */
+    function treFormatDate(d) {
+      var y = d.getFullYear();
+      var m = ('0' + (d.getMonth() + 1)).slice(-2);
+      var day = ('0' + d.getDate()).slice(-2);
+      return y + '-' + m + '-' + day;
+    }
+
+    // Clean up polling timer on page unload
+    window.addEventListener('beforeunload', function() {
+      if (trePollingTimer) clearTimeout(trePollingTimer);
+    });
+</script>

@@ -1,0 +1,692 @@
+<script>
+// ================================================
+// FORMATIVE CHECK LOGGING (ES5)
+// fcl- prefix
+// ================================================
+
+// ================================================
+// MODAL LIFECYCLE
+// ================================================
+
+/**
+ * 1. openFclModal — Open the formative check modal
+ */
+function openFclModal(hexId, mapId) {
+  if (!hexId || !mapId) return;
+  fclCurrentHexId = String(hexId);
+  fclCurrentMapId = String(mapId);
+  fclModalMode = 'log';
+  fclStudentResults = {};
+  fclHistoryCache = [];
+  fclStudentSectionOpen = false;
+
+  // Set hex label in header
+  var hexLabel = '';
+  if (currentMap && currentMap.hexesJson) {
+    var hexes = typeof currentMap.hexesJson === 'string' ? JSON.parse(currentMap.hexesJson) : currentMap.hexesJson;
+    for (var i = 0; i < hexes.length; i++) {
+      if (String(hexes[i].id) === fclCurrentHexId) {
+        hexLabel = hexes[i].label || hexes[i].id;
+        break;
+      }
+    }
+  }
+  var labelEl = document.getElementById('fclHexLabel');
+  if (labelEl) labelEl.textContent = hexLabel || fclCurrentHexId;
+
+  // Populate class dropdown
+  var classSelect = document.getElementById('fclClassSelect');
+  if (classSelect) {
+    var html = '<option value="">-- Select Class --</option>';
+    var classes = classesData || [];
+    for (var c = 0; c < classes.length; c++) {
+      if (classes[c].status === 'removed' || classes[c].status === 'archived') continue;
+      html += '<option value="' + escapeHtml(String(classes[c].classId)) + '">' +
+              escapeHtml(classes[c].className || 'Untitled') + '</option>';
+    }
+    classSelect.innerHTML = html;
+    if (fclSelectedClassId) classSelect.value = fclSelectedClassId;
+  }
+
+  // Set default date to today
+  var dateInput = document.getElementById('fclDateInput');
+  if (dateInput) {
+    var today = new Date();
+    var yyyy = today.getFullYear();
+    var mm = String(today.getMonth() + 1);
+    if (mm.length < 2) mm = '0' + mm;
+    var dd = String(today.getDate());
+    if (dd.length < 2) dd = '0' + dd;
+    dateInput.value = yyyy + '-' + mm + '-' + dd;
+  }
+
+  // Pre-select last used strategy
+  fclRenderStrategyChips();
+
+  // Clear form fields
+  var topicInput = document.getElementById('fclTopicInput');
+  if (topicInput) topicInput.value = '';
+  var notesArea = document.getElementById('fclNotesArea');
+  if (notesArea) notesArea.value = '';
+  fclUpdateNotesCount();
+
+  // Reset student section
+  var studentBody = document.getElementById('fclStudentBody');
+  if (studentBody) studentBody.className = 'fcl-student-body';
+  var chevron = document.getElementById('fclStudentChevron');
+  if (chevron) chevron.className = 'fcl-student-toggle-chevron';
+  var studentList = document.getElementById('fclStudentList');
+  if (studentList) studentList.innerHTML = '';
+  var toggleCount = document.getElementById('fclStudentToggleCount');
+  if (toggleCount) toggleCount.textContent = '';
+
+  // Show log mode, hide history mode
+  var logView = document.getElementById('fclLogView');
+  var histView = document.getElementById('fclHistoryView');
+  if (logView) logView.style.display = 'block';
+  if (histView) histView.style.display = 'none';
+
+  // Update footer buttons
+  var saveBtn = document.getElementById('fclSaveBtn');
+  if (saveBtn) saveBtn.style.display = 'inline-block';
+  var modeLink = document.getElementById('fclModeLink');
+  if (modeLink) { modeLink.textContent = 'View History \u2192'; modeLink.onclick = function() { fclSwitchMode('history'); }; }
+
+  // Show modal
+  var overlay = document.getElementById('fclModalOverlay');
+  if (overlay) overlay.className = 'fcl-modal-overlay open';
+
+  // Load roster if class was previously selected
+  if (fclSelectedClassId) fclOnClassChange(fclSelectedClassId);
+}
+
+/**
+ * 2. closeFclModal — Close the modal
+ */
+function closeFclModal() {
+  var overlay = document.getElementById('fclModalOverlay');
+  if (overlay) overlay.className = 'fcl-modal-overlay';
+}
+
+/**
+ * 3. fclSwitchMode — Toggle log/history
+ */
+function fclSwitchMode(mode) {
+  fclModalMode = mode;
+  var logView = document.getElementById('fclLogView');
+  var histView = document.getElementById('fclHistoryView');
+  var saveBtn = document.getElementById('fclSaveBtn');
+  var modeLink = document.getElementById('fclModeLink');
+
+  if (mode === 'history') {
+    if (logView) logView.style.display = 'none';
+    if (histView) histView.style.display = 'block';
+    if (saveBtn) saveBtn.style.display = 'none';
+    if (modeLink) {
+      modeLink.textContent = '\u2190 Log New Check';
+      modeLink.onclick = function() { fclSwitchMode('log'); };
+    }
+    fclLoadHistory(fclCurrentHexId, fclCurrentMapId);
+  } else {
+    if (logView) logView.style.display = 'block';
+    if (histView) histView.style.display = 'none';
+    if (saveBtn) saveBtn.style.display = 'inline-block';
+    if (modeLink) {
+      modeLink.textContent = 'View History \u2192';
+      modeLink.onclick = function() { fclSwitchMode('history'); };
+    }
+  }
+}
+
+// ================================================
+// LOG MODE FUNCTIONS
+// ================================================
+
+/**
+ * 4. fclRenderStrategyChips — Render strategy selection chips
+ */
+function fclRenderStrategyChips() {
+  var container = document.getElementById('fclStrategyChips');
+  if (!container) return;
+  var strategies = ['Observation', 'Questioning', 'Think-Aloud', 'Whiteboard Responses',
+                    'Four Corners', 'Misconception Check', 'Self-Assessment',
+                    'Compare & Contrast Check', 'Reading for Meaning Check',
+                    'Reciprocal Learning Check', 'Jigsaw Check',
+                    'Graduated Difficulty Check', 'Teams Tournament Check', 'Other'];
+  var html = '';
+  for (var i = 0; i < strategies.length; i++) {
+    var isActive = (fclSelectedStrategy === strategies[i]) ? ' active' : '';
+    html += '<button class="fcl-strategy-chip' + isActive + '" onclick="fclSelectStrategy(\'' + escapeHtml(strategies[i]) + '\')">' +
+            escapeHtml(strategies[i]) + '</button>';
+  }
+  container.innerHTML = html;
+}
+
+/**
+ * 5. fclSelectStrategy — Select a strategy chip
+ */
+function fclSelectStrategy(type) {
+  fclSelectedStrategy = type;
+  fclRenderStrategyChips();
+}
+
+/**
+ * 6. fclToggleStudents — Expand/collapse student section
+ */
+function fclToggleStudents() {
+  fclStudentSectionOpen = !fclStudentSectionOpen;
+  var body = document.getElementById('fclStudentBody');
+  var chevron = document.getElementById('fclStudentChevron');
+  if (body) body.className = 'fcl-student-body' + (fclStudentSectionOpen ? ' open' : '');
+  if (chevron) chevron.className = 'fcl-student-toggle-chevron' + (fclStudentSectionOpen ? ' open' : '');
+}
+
+/**
+ * 7. fclOnClassChange — Load roster for selected class
+ */
+function fclOnClassChange(classId) {
+  fclSelectedClassId = classId;
+  fclStudentResults = {};
+
+  var studentList = document.getElementById('fclStudentList');
+  if (!studentList) return;
+
+  if (!classId) {
+    studentList.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px 0;">Select a class to tag students.</div>';
+    return;
+  }
+
+  studentList.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px 0;">Loading roster...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(roster) {
+      fclRosterCache = roster || [];
+      fclRenderStudentList(fclRosterCache);
+      var toggleCount = document.getElementById('fclStudentToggleCount');
+      if (toggleCount) toggleCount.textContent = '(' + fclRosterCache.length + ' students)';
+    })
+    .withFailureHandler(function(err) {
+      studentList.innerHTML = '<div style="color:#dc2626;font-size:12px;padding:8px 0;">Error: ' + escapeHtml(err.message) + '</div>';
+    })
+    .getClassRoster(classId);
+}
+
+/**
+ * 8. fclRenderStudentList — Render student rows with got-it/not-yet buttons
+ */
+function fclRenderStudentList(roster) {
+  var container = document.getElementById('fclStudentList');
+  if (!container) return;
+
+  if (!roster || roster.length === 0) {
+    container.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px 0;">No students enrolled in this class.</div>';
+    return;
+  }
+
+  var filter = document.getElementById('fclStudentFilter');
+  var query = filter ? filter.value.toLowerCase() : '';
+
+  var html = '';
+  for (var i = 0; i < roster.length; i++) {
+    var stu = roster[i];
+    var name = stu.studentName || stu.studentEmail || 'Unknown';
+    var email = stu.studentEmail || '';
+
+    if (query && name.toLowerCase().indexOf(query) === -1 && email.toLowerCase().indexOf(query) === -1) continue;
+
+    var gotItClass = fclStudentResults[email] === true ? ' got-it' : '';
+    var notYetClass = fclStudentResults[email] === false ? ' not-yet' : '';
+
+    html += '<div class="fcl-student-row">';
+    html += '<span class="fcl-student-name">' + escapeHtml(name) + '</span>';
+    html += '<button class="fcl-result-btn' + gotItClass + '" onclick="fclToggleResult(\'' + escapeHtml(email) + '\', true)">Got It</button>';
+    html += '<button class="fcl-result-btn' + notYetClass + '" onclick="fclToggleResult(\'' + escapeHtml(email) + '\', false)">Not Yet</button>';
+    html += '</div>';
+  }
+
+  if (!html) {
+    html = '<div style="color:#94a3b8;font-size:12px;padding:8px 0;">No matching students.</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+/**
+ * 9. fclFilterStudents — Filter student list by name
+ */
+function fclFilterStudents(query) {
+  fclRenderStudentList(fclRosterCache);
+}
+
+/**
+ * 10. fclToggleResult — Toggle a student's result
+ */
+function fclToggleResult(email, gotIt) {
+  // If clicking the same result again, clear it (back to unobserved)
+  if (fclStudentResults[email] === gotIt) {
+    delete fclStudentResults[email];
+  } else {
+    fclStudentResults[email] = gotIt;
+  }
+  fclRenderStudentList(fclRosterCache);
+}
+
+/**
+ * 11. fclUpdateNotesCount — Update character counter for notes
+ */
+function fclUpdateNotesCount() {
+  var area = document.getElementById('fclNotesArea');
+  var counter = document.getElementById('fclNotesCount');
+  if (area && counter) {
+    counter.textContent = (area.value || '').length + ' / 500';
+  }
+}
+
+/**
+ * 12. fclSaveCheck — Save the formative check
+ */
+function fclSaveCheck() {
+  if (!fclSelectedStrategy) {
+    showToast('Please select a strategy type.', 'error');
+    return;
+  }
+
+  var classId = fclSelectedClassId;
+  if (!classId) {
+    var classSelect = document.getElementById('fclClassSelect');
+    if (classSelect) classId = classSelect.value;
+  }
+  if (!classId) {
+    showToast('Please select a class.', 'error');
+    return;
+  }
+
+  var dateInput = document.getElementById('fclDateInput');
+  var topicInput = document.getElementById('fclTopicInput');
+  var notesArea = document.getElementById('fclNotesArea');
+
+  var studentResults = [];
+  var emails = Object.keys(fclStudentResults);
+  for (var i = 0; i < emails.length; i++) {
+    var email = emails[i];
+    var name = '';
+    for (var j = 0; j < fclRosterCache.length; j++) {
+      if (fclRosterCache[j].studentEmail === email) {
+        name = fclRosterCache[j].studentName || '';
+        break;
+      }
+    }
+    studentResults.push({
+      email: email,
+      name: name,
+      gotIt: fclStudentResults[email]
+    });
+  }
+
+  var checkData = {
+    checkDate: dateInput ? dateInput.value : '',
+    strategyType: fclSelectedStrategy,
+    topic: topicInput ? topicInput.value : '',
+    notes: notesArea ? notesArea.value : '',
+    studentResults: studentResults
+  };
+
+  var saveBtn = document.getElementById('fclSaveBtn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showToast('Formative check saved!', 'success');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Check'; }
+      // Clear form for next check but keep class + strategy
+      if (topicInput) topicInput.value = '';
+      if (notesArea) notesArea.value = '';
+      fclUpdateNotesCount();
+      fclStudentResults = {};
+      fclRenderStudentList(fclRosterCache);
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + err.message, 'error');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Check'; }
+    })
+    .saveFormativeCheck(fclCurrentMapId, fclCurrentHexId, classId, checkData);
+}
+
+// ================================================
+// HISTORY MODE FUNCTIONS
+// ================================================
+
+/**
+ * 13. fclLoadHistory — Load checks for current hex
+ */
+function fclLoadHistory(hexId, mapId) {
+  var container = document.getElementById('fclHistoryContent');
+  if (!container) return;
+
+  container.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:16px 0;text-align:center;">Loading history...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(checks) {
+      fclHistoryCache = checks || [];
+      fclRenderHistory(checks);
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = '<div style="color:#dc2626;font-size:13px;padding:16px 0;">Error: ' + escapeHtml(err.message) + '</div>';
+    })
+    .getFormativeChecksForHex(mapId, hexId);
+}
+
+/**
+ * 14. fclRenderHistory — Render timeline of checks
+ */
+function fclRenderHistory(checks) {
+  var container = document.getElementById('fclHistoryContent');
+  if (!container) return;
+
+  if (!checks || checks.length === 0) {
+    container.innerHTML = '<div class="fcl-no-checks">No formative checks recorded for this hex yet.</div>';
+    return;
+  }
+
+  var html = '<div class="fcl-history-list">';
+  for (var i = 0; i < checks.length; i++) {
+    var ck = checks[i];
+    html += '<div class="fcl-check-card">';
+    html += '<div class="fcl-check-header">';
+    html += '<span class="fcl-check-date">' + escapeHtml(ck.checkDate || '') + '</span>';
+    html += '<span class="fcl-check-strategy">' + escapeHtml(ck.strategyType || '') + '</span>';
+    html += '</div>';
+
+    if (ck.topic) {
+      html += '<div class="fcl-check-topic">' + escapeHtml(ck.topic) + '</div>';
+    }
+    if (ck.notes) {
+      html += '<div class="fcl-check-notes">' + escapeHtml(ck.notes) + '</div>';
+    }
+
+    // Results bar
+    var results = ck.studentResults || [];
+    if (results.length > 0) {
+      html += fclRenderResultsBar(results);
+    }
+
+    html += '<div class="fcl-check-actions">';
+    html += '<button class="fcl-check-delete-btn" onclick="fclDeleteCheck(\'' + escapeHtml(ck.checkId) + '\')">Delete</button>';
+    html += '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+/**
+ * 15. fclRenderResultsBar — Mini horizontal bar for student results
+ */
+function fclRenderResultsBar(results) {
+  var gotIt = 0;
+  var notYet = 0;
+  for (var i = 0; i < results.length; i++) {
+    if (results[i].gotIt) gotIt++;
+    else notYet++;
+  }
+  var total = results.length;
+  var gotPct = total > 0 ? Math.round((gotIt / total) * 100) : 0;
+  var notPct = total > 0 ? Math.round((notYet / total) * 100) : 0;
+
+  var html = '<div class="fcl-results-bar">';
+  if (gotPct > 0) html += '<div class="fcl-results-seg got-it" style="width:' + gotPct + '%"></div>';
+  if (notPct > 0) html += '<div class="fcl-results-seg not-yet" style="width:' + notPct + '%"></div>';
+  html += '</div>';
+  html += '<div class="fcl-results-legend">';
+  html += '<span class="got-it-label">' + gotIt + ' Got It</span>';
+  html += '<span class="not-yet-label">' + notYet + ' Not Yet</span>';
+  html += '</div>';
+  return html;
+}
+
+/**
+ * 16. fclDeleteCheck — Delete a check after confirmation
+ */
+function fclDeleteCheck(checkId) {
+  if (!confirm('Delete this formative check?')) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Check deleted.', 'success');
+      fclLoadHistory(fclCurrentHexId, fclCurrentMapId);
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    })
+    .deleteFormativeCheck(checkId);
+}
+
+// ================================================
+// PROGRESS TAB FUNCTIONS
+// ================================================
+
+/**
+ * 17. fclLoadMapChecks — Load all checks for a map (Progress sub-tab)
+ */
+function fclLoadMapChecks(mapId) {
+  var container = document.getElementById('formativeChecksContent');
+  if (!container) return;
+
+  if (!mapId) {
+    container.innerHTML = '<div class="fcl-empty"><div class="icon">&#128203;</div>' +
+      '<p>Select a class and map in Class Progress, then switch to Formative Checks.</p></div>';
+    return;
+  }
+
+  container.innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8;">Loading formative checks...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(grouped) {
+      fclRenderMapChecksView(grouped, mapId);
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = '<div class="fcl-empty"><div class="icon">&#9888;</div>' +
+        '<p>Error: ' + escapeHtml(err.message) + '</p></div>';
+    })
+    .getFormativeChecksForMap(mapId);
+}
+
+/**
+ * 18. fclRenderMapChecksView — Render grouped-by-hex timeline for Progress tab
+ */
+function fclRenderMapChecksView(grouped, mapId) {
+  var container = document.getElementById('formativeChecksContent');
+  if (!container) return;
+
+  var hexIds = Object.keys(grouped || {});
+  if (hexIds.length === 0) {
+    container.innerHTML = '<div class="fcl-empty"><div class="icon">&#128203;</div>' +
+      '<p>No formative checks recorded for this map yet.</p></div>';
+    return;
+  }
+
+  // Get hex labels from mapsData
+  var hexLabels = {};
+  for (var m = 0; m < mapsData.length; m++) {
+    if (String(mapsData[m].mapId) === String(mapId)) {
+      var hexes = mapsData[m].hexesJson;
+      if (typeof hexes === 'string') hexes = JSON.parse(hexes);
+      for (var h = 0; h < hexes.length; h++) {
+        hexLabels[String(hexes[h].id)] = hexes[h].label || hexes[h].id;
+      }
+      break;
+    }
+  }
+
+  // Summary stats
+  var totalChecks = 0;
+  var totalGotIt = 0;
+  var totalObserved = 0;
+  var mostCheckedHex = '';
+  var mostCheckedCount = 0;
+
+  for (var i = 0; i < hexIds.length; i++) {
+    var hChecks = grouped[hexIds[i]];
+    totalChecks += hChecks.length;
+    if (hChecks.length > mostCheckedCount) {
+      mostCheckedCount = hChecks.length;
+      mostCheckedHex = hexLabels[hexIds[i]] || hexIds[i];
+    }
+    for (var j = 0; j < hChecks.length; j++) {
+      var res = hChecks[j].studentResults || [];
+      for (var k = 0; k < res.length; k++) {
+        totalObserved++;
+        if (res[k].gotIt) totalGotIt++;
+      }
+    }
+  }
+
+  var gotItRate = totalObserved > 0 ? Math.round((totalGotIt / totalObserved) * 100) : 0;
+
+  var html = '<div class="fcl-map-checks-container">';
+
+  // Summary cards
+  html += '<div class="fcl-section-title">Overview <button class="csv-export-btn" onclick="csvExportFormativeChecks()" title="Export as CSV" aria-label="Export formative checks as CSV">&#128229; Export</button></div>';
+  html += '<div class="fcl-summary-cards">';
+  html += '<div class="fcl-summary-card"><div class="fcl-summary-card-label">Total Checks</div><div class="fcl-summary-card-value">' + totalChecks + '</div></div>';
+  html += '<div class="fcl-summary-card"><div class="fcl-summary-card-label">Most Checked</div><div class="fcl-summary-card-value" style="font-size:14px;">' + escapeHtml(mostCheckedHex) + '</div></div>';
+  html += '<div class="fcl-summary-card"><div class="fcl-summary-card-label">Got-It Rate</div><div class="fcl-summary-card-value">' + gotItRate + '%</div></div>';
+  html += '</div>';
+
+  // Students Needing Support (from progressDashboardData if available)
+  if (progressDashboardData && progressDashboardData.formativeCheckSummary) {
+    var notYetPatterns = progressDashboardData.formativeCheckSummary.studentNotYetPatterns || [];
+    if (notYetPatterns.length > 0) {
+      html += '<div class="fcl-section-title">Students Needing Support</div>';
+      html += '<div class="fcl-not-yet-list">';
+      for (var nyi = 0; nyi < notYetPatterns.length; nyi++) {
+        var pattern = notYetPatterns[nyi];
+        html += '<div class="fcl-not-yet-card">';
+        html += '<div class="fcl-not-yet-header">';
+        html += '<span class="fcl-not-yet-name">' + escapeHtml(pattern.name) + '</span>';
+        html += '<span class="fcl-not-yet-count">' + pattern.notYetCount + ' "not yet"</span>';
+        html += '</div>';
+        html += '<div class="fcl-not-yet-hexes">';
+        for (var nyh = 0; nyh < pattern.hexes.length; nyh++) {
+          var nyHex = pattern.hexes[nyh];
+          html += '<div class="fcl-not-yet-hex-item">';
+          html += '<span class="fcl-not-yet-hex-label">' + escapeHtml(nyHex.hexLabel) + '</span>';
+          html += '<span class="fcl-not-yet-hex-date">' + escapeHtml(nyHex.checkDate) + '</span>';
+          if (nyHex.topic) html += '<span class="fcl-not-yet-hex-topic">' + escapeHtml(nyHex.topic) + '</span>';
+          html += '</div>';
+        }
+        html += '</div></div>';
+      }
+      html += '</div>';
+    }
+  }
+
+  // Strategy Effectiveness Analysis
+  var strategyStats = {};
+  for (var si = 0; si < hexIds.length; si++) {
+    var sChecks = grouped[hexIds[si]];
+    for (var sj = 0; sj < sChecks.length; sj++) {
+      var sCk = sChecks[sj];
+      var strategy = sCk.strategyType || 'Unknown';
+      if (!strategyStats[strategy]) {
+        strategyStats[strategy] = { total: 0, gotIt: 0, observed: 0 };
+      }
+      strategyStats[strategy].total++;
+      var sRes = sCk.studentResults || [];
+      for (var sk = 0; sk < sRes.length; sk++) {
+        strategyStats[strategy].observed++;
+        if (sRes[sk].gotIt) strategyStats[strategy].gotIt++;
+      }
+    }
+  }
+
+  var strategyKeys = Object.keys(strategyStats);
+  if (strategyKeys.length > 0) {
+    // Sort by got-it rate ascending (worst first)
+    strategyKeys.sort(function(a, b) {
+      var ra = strategyStats[a].observed > 0 ? (strategyStats[a].gotIt / strategyStats[a].observed) : 0;
+      var rb = strategyStats[b].observed > 0 ? (strategyStats[b].gotIt / strategyStats[b].observed) : 0;
+      return ra - rb;
+    });
+
+    html += '<div class="fcl-section-title">Strategy Effectiveness</div>';
+    html += '<div class="fcl-strategy-bars">';
+    for (var sk2 = 0; sk2 < strategyKeys.length; sk2++) {
+      var strat = strategyKeys[sk2];
+      var stats = strategyStats[strat];
+      var sRate = stats.observed > 0 ? Math.round((stats.gotIt / stats.observed) * 100) : 0;
+      var barClass = sRate < 50 ? 'low' : (sRate < 70 ? 'mid' : 'high');
+
+      html += '<div class="fcl-strategy-row">';
+      html += '<div class="fcl-strategy-name">' + escapeHtml(strat) + ' <span class="fcl-strategy-uses">(' + stats.total + ' use' + (stats.total !== 1 ? 's' : '') + ')</span></div>';
+      html += '<div class="fcl-bar-container"><div class="fcl-bar-fill ' + barClass + '" style="width:' + sRate + '%"></div></div>';
+      html += '<div class="fcl-bar-value">' + sRate + '%</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Grouped by hex
+  html += '<div class="fcl-section-title">Checks by Hex</div>';
+
+  for (var g = 0; g < hexIds.length; g++) {
+    var hid = hexIds[g];
+    var checks = grouped[hid];
+    var label = hexLabels[hid] || hid;
+
+    html += '<div class="fcl-hex-group">';
+    html += '<div class="fcl-hex-group-title">' + escapeHtml(label) + ' <span class="fcl-hex-check-count">' + checks.length + ' check' + (checks.length !== 1 ? 's' : '') + '</span></div>';
+    html += '<div class="fcl-history-list">';
+
+    for (var ci = 0; ci < checks.length; ci++) {
+      var ck = checks[ci];
+      html += '<div class="fcl-check-card">';
+      html += '<div class="fcl-check-header">';
+      html += '<span class="fcl-check-date">' + escapeHtml(ck.checkDate || '') + '</span>';
+      html += '<span class="fcl-check-strategy">' + escapeHtml(ck.strategyType || '') + '</span>';
+      html += '</div>';
+      if (ck.topic) html += '<div class="fcl-check-topic">' + escapeHtml(ck.topic) + '</div>';
+      if (ck.notes) html += '<div class="fcl-check-notes">' + escapeHtml(ck.notes) + '</div>';
+      var results = ck.studentResults || [];
+      if (results.length > 0) html += fclRenderResultsBar(results);
+      html += '</div>';
+    }
+
+    html += '</div></div>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+/**
+ * CSV Export: Formative Checks — all checks for this map
+ */
+function csvExportFormativeChecks() {
+  if (!fclChecksCache) { showToast('No data to export', 'error'); return; }
+  var headers = ['Hex', 'Date', 'Strategy', 'Topic', 'Got It', 'Not Yet', 'Total Observed'];
+  var rows = [];
+  var hexIds = Object.keys(fclChecksCache);
+  for (var i = 0; i < hexIds.length; i++) {
+    var checks = fclChecksCache[hexIds[i]];
+    for (var j = 0; j < checks.length; j++) {
+      var chk = checks[j];
+      var gotIt = 0, notYet = 0;
+      var res = chk.studentResults || [];
+      for (var k = 0; k < res.length; k++) {
+        if (res[k].gotIt) gotIt++;
+        else notYet++;
+      }
+      rows.push([
+        chk.hexLabel || hexIds[i],
+        chk.checkDate || '',
+        chk.strategyType || '',
+        chk.topic || '',
+        gotIt, notYet, res.length
+      ]);
+    }
+  }
+  var mapTitle = currentMap ? (currentMap.title || 'map') : 'map';
+  csvExportData(headers, rows, 'formative-checks-' + mapTitle.replace(/[^a-zA-Z0-9]/g, '_') + '.csv');
+}
+</script>

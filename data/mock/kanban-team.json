@@ -1,0 +1,462 @@
+{
+  "staff": [
+    {
+      "id": "staff-001",
+      "email": "m.chen@school.edu",
+      "firstName": "Maria",
+      "lastName": "Chen",
+      "role": "admin",
+      "department": "Science Department",
+      "isActive": true
+    },
+    {
+      "id": "staff-002",
+      "email": "moses.crist@school.edu",
+      "firstName": "Warren",
+      "lastName": "Deckow",
+      "role": "teacher",
+      "department": "Biology",
+      "isActive": true
+    },
+    {
+      "id": "staff-003",
+      "email": "jennie.conn@school.edu",
+      "firstName": "Joey",
+      "lastName": "Mohr",
+      "role": "teacher",
+      "department": "Biology",
+      "isActive": true
+    },
+    {
+      "id": "staff-004",
+      "email": "virgil_boyle44@school.edu",
+      "firstName": "Suzanne",
+      "lastName": "Hahn",
+      "role": "teacher",
+      "department": "Physics",
+      "isActive": true
+    },
+    {
+      "id": "staff-005",
+      "email": "warren_tremblay92@school.edu",
+      "firstName": "Gail",
+      "lastName": "Shields",
+      "role": "teacher",
+      "department": "Chemistry",
+      "isActive": true
+    },
+    {
+      "id": "staff-006",
+      "email": "casey_yost19@school.edu",
+      "firstName": "Montana",
+      "lastName": "Herzog",
+      "role": "teacher",
+      "department": "Biology",
+      "isActive": true
+    },
+    {
+      "id": "staff-007",
+      "email": "erwin63@school.edu",
+      "firstName": "Miriam",
+      "lastName": "Russel",
+      "role": "teacher",
+      "department": "Physics",
+      "isActive": true
+    },
+    {
+      "id": "staff-008",
+      "email": "alfonso50@school.edu",
+      "firstName": "Olga",
+      "lastName": "Greenfelder",
+      "role": "teacher",
+      "department": "Biology",
+      "isActive": true
+    },
+    {
+      "id": "staff-009",
+      "email": "lorena53@school.edu",
+      "firstName": "Brett",
+      "lastName": "Schumm",
+      "role": "teacher",
+      "department": "General Science",
+      "isActive": true
+    },
+    {
+      "id": "staff-010",
+      "email": "jasmine_hauck@school.edu",
+      "firstName": "Wayne",
+      "lastName": "Kuphal",
+      "role": "teacher",
+      "department": "Chemistry",
+      "isActive": true
+    },
+    {
+      "id": "staff-011",
+      "email": "lula_gottlieb23@school.edu",
+      "firstName": "Deangelo",
+      "lastName": "Ferry",
+      "role": "teacher",
+      "department": "Earth Science",
+      "isActive": true
+    }
+  ],
+  "columns": [
+    {
+      "id": "col-t-01",
+      "boardId": "board-team-001",
+      "title": "To Do",
+      "position": 0,
+      "color": "#94a3b8",
+      "wipLimit": 8
+    },
+    {
+      "id": "col-t-02",
+      "boardId": "board-team-001",
+      "title": "In Progress",
+      "position": 1,
+      "color": "#3b82f6",
+      "wipLimit": 5
+    },
+    {
+      "id": "col-t-03",
+      "boardId": "board-team-001",
+      "title": "Review",
+      "position": 2,
+      "color": "#f59e0b",
+      "wipLimit": 4
+    },
+    {
+      "id": "col-t-04",
+      "boardId": "board-team-001",
+      "title": "Done",
+      "position": 3,
+      "color": "#22c55e",
+      "wipLimit": 0
+    }
+  ],
+  "cards": [
+    {
+      "id": "card-t-001",
+      "columnId": "col-t-01",
+      "title": "Update Year 10 Chemistry unit plan",
+      "description": "Commemoro audentia adhaero officiis spiculum acceptus doloremque calamitas similique ater studio crepusculum video apto confugo amplitudo vesper utpote.",
+      "priority": "low",
+      "dueDate": "2026-03-07",
+      "createdBy": "staff-005",
+      "createdAt": "2026-02-22T06:14:16.233Z",
+      "updatedAt": "2026-03-01T12:22:49.555Z",
+      "position": 0,
+      "assignee": "staff-008",
+      "cardType": "task",
+      "labels": [
+        "curriculum",
+        "chemistry"
+      ]
+    },
+    {
+      "id": "card-t-002",
+      "columnId": "col-t-01",
+      "title": "Align Biology assessments to new standards",
+      "description": "Velut recusandae confido conscendo sursum velit valens termes sapiente ago arx velociter pecto absque ambitus somnus abscido arto inflammatio.",
+      "priority": "medium",
+      "dueDate": "2026-03-07",
+      "createdBy": "staff-009",
+      "createdAt": "2026-02-19T03:26:41.633Z",
+      "updatedAt": "2026-02-28T08:13:57.745Z",
+      "position": 1,
+      "assignee": "staff-007",
+      "cardType": "task",
+      "labels": [
+        "curriculum",
+        "biology",
+        "assessment"
+      ]
+    },
+    {
+      "id": "card-t-003",
+      "columnId": "col-t-01",
+      "title": "Review IB Physics IA moderation samples",
+      "description": "Ulciscor solum minus aliquid corona celo careo voluptate crudelis vapulus quos theatrum desolo neque depromo autus.",
+      "priority": "medium",
+      "dueDate": "2026-03-20",
+      "createdBy": "staff-003",
+      "createdAt": "2026-02-10T08:54:57.261Z",
+      "updatedAt": "2026-02-16T19:06:38.429Z",
+      "position": 2,
+      "assignee": "staff-009",
+      "cardType": "task",
+      "labels": [
+        "curriculum",
+        "physics",
+        "IB"
+      ]
+    },
+    {
+      "id": "card-t-004",
+      "columnId": "col-t-01",
+      "title": "Draft semester 2 practical schedule",
+      "description": "Vergo corpus accendo vestrum cursus voco vix ultio claustrum creo ullus comes assentator iusto video subito molestiae alter possimus vulariter.",
+      "priority": "low",
+      "dueDate": null,
+      "createdBy": "staff-001",
+      "createdAt": "2026-02-08T13:36:58.568Z",
+      "updatedAt": "2026-02-21T08:42:59.069Z",
+      "position": 3,
+      "assignee": "staff-008",
+      "cardType": "project",
+      "labels": [
+        "planning",
+        "labs"
+      ]
+    },
+    {
+      "id": "card-t-005",
+      "columnId": "col-t-01",
+      "title": "Create shared resource folder for Earth Science",
+      "description": "Claudeo tolero tollo usque vereor dolorem desipio theologus sol subvenio theatrum validus.",
+      "priority": "medium",
+      "dueDate": null,
+      "createdBy": "staff-010",
+      "createdAt": "2026-02-24T03:56:51.968Z",
+      "updatedAt": "2026-02-27T13:52:50.743Z",
+      "position": 4,
+      "assignee": "staff-009",
+      "cardType": "task",
+      "labels": [
+        "resources",
+        "earth-science"
+      ]
+    },
+    {
+      "id": "card-t-006",
+      "columnId": "col-t-01",
+      "title": "Complete chemical inventory audit",
+      "description": "Officiis adaugeo adfero traho contigo antepono enim tepesco bibo qui ait.",
+      "priority": "low",
+      "dueDate": "2026-03-16",
+      "createdBy": "staff-002",
+      "createdAt": "2026-02-04T07:58:30.201Z",
+      "updatedAt": "2026-02-19T16:47:59.167Z",
+      "position": 5,
+      "assignee": "staff-007",
+      "cardType": "deadline",
+      "labels": [
+        "safety",
+        "compliance"
+      ]
+    },
+    {
+      "id": "card-t-007",
+      "columnId": "col-t-02",
+      "title": "Order replacement microscope lenses",
+      "description": "Commodi theatrum cerno decens aeternus acies vivo tubineus subito cunabula atavus aro carus inflammatio.",
+      "priority": "medium",
+      "dueDate": null,
+      "createdBy": "staff-006",
+      "createdAt": "2026-02-25T00:52:55.875Z",
+      "updatedAt": "2026-03-02T11:04:57.520Z",
+      "position": 0,
+      "assignee": "staff-008",
+      "cardType": "task",
+      "labels": [
+        "equipment",
+        "biology"
+      ]
+    },
+    {
+      "id": "card-t-008",
+      "columnId": "col-t-02",
+      "title": "Update lab safety signage for Building C",
+      "description": "Carmen constans tempora accedo ancilla adipisci adhaero umbra succedo demitto alter deprimo demergo.",
+      "priority": "low",
+      "dueDate": "2026-03-18",
+      "createdBy": "staff-004",
+      "createdAt": "2026-02-25T09:22:55.934Z",
+      "updatedAt": "2026-02-28T19:15:22.566Z",
+      "position": 1,
+      "assignee": "staff-011",
+      "cardType": "task",
+      "labels": [
+        "safety"
+      ]
+    },
+    {
+      "id": "card-t-009",
+      "columnId": "col-t-02",
+      "title": "Book external lab tech for Year 12 practicals",
+      "description": "Desolo umerus soluta ascisco aeneus sapiente acquiro occaecati vilicus necessitatibus cresco sed defungo in vilis creptio.",
+      "priority": "critical",
+      "dueDate": "2026-03-13",
+      "createdBy": "staff-005",
+      "createdAt": "2026-02-22T07:21:49.972Z",
+      "updatedAt": "2026-03-04T05:13:44.915Z",
+      "position": 2,
+      "assignee": "staff-008",
+      "cardType": "task",
+      "labels": [
+        "labs",
+        "booking"
+      ]
+    },
+    {
+      "id": "card-t-010",
+      "columnId": "col-t-02",
+      "title": "Prepare agenda for next department meeting",
+      "description": "Aequitas comis tutis acervus torrens cilicium angustus subiungo quo utpote tabesco thymbra cilicium atrocitas tandem timor.",
+      "priority": "critical",
+      "dueDate": "2026-03-07",
+      "createdBy": "staff-003",
+      "createdAt": "2026-02-06T06:39:24.342Z",
+      "updatedAt": "2026-02-17T09:48:06.824Z",
+      "position": 3,
+      "assignee": "staff-002",
+      "cardType": "action-item",
+      "labels": [
+        "meetings"
+      ]
+    },
+    {
+      "id": "card-t-011",
+      "columnId": "col-t-03",
+      "title": "Share notes from Science PD conference",
+      "description": "Curto tantillus tego amet veniam despecto trepide comitatus vehemens creta abstergo ventosus aliqua comis virga virga nam ratione dedico.",
+      "priority": "medium",
+      "dueDate": null,
+      "createdBy": "staff-005",
+      "createdAt": "2026-02-13T11:28:30.299Z",
+      "updatedAt": "2026-02-19T23:27:58.887Z",
+      "position": 0,
+      "assignee": "staff-009",
+      "cardType": "action-item",
+      "labels": [
+        "pd",
+        "meetings"
+      ]
+    },
+    {
+      "id": "card-t-012",
+      "columnId": "col-t-03",
+      "title": "Organise peer observation schedule (Term 2)",
+      "description": "Depulso adsuesco inflammatio decimus valens consequatur angelus aranea temptatio.",
+      "priority": "medium",
+      "dueDate": null,
+      "createdBy": "staff-008",
+      "createdAt": "2026-02-27T00:01:59.954Z",
+      "updatedAt": "2026-02-27T15:12:29.246Z",
+      "position": 1,
+      "assignee": "staff-009",
+      "cardType": "project",
+      "labels": [
+        "pd",
+        "observations"
+      ]
+    },
+    {
+      "id": "card-t-013",
+      "columnId": "col-t-03",
+      "title": "Plan Science Week activities",
+      "description": "Aggredior ago vos corrumpo correptius tonsor vinitor vos tardus coruscus agnosco tergiversatio labore curriculum ventus amoveo depromo.",
+      "priority": "low",
+      "dueDate": null,
+      "createdBy": "staff-001",
+      "createdAt": "2026-02-05T10:29:09.503Z",
+      "updatedAt": "2026-02-18T11:22:07.722Z",
+      "position": 2,
+      "assignee": "staff-009",
+      "cardType": "project",
+      "labels": [
+        "events",
+        "student-engagement"
+      ]
+    },
+    {
+      "id": "card-t-014",
+      "columnId": "col-t-04",
+      "title": "Recruit mentors for STEM club",
+      "description": "Nostrum vivo corrupti circumvenio ustilo caecus vix abundans volubilis adimpleo vallum eum vulgivagus aer iste volubilis eos.",
+      "priority": "medium",
+      "dueDate": "2026-03-03",
+      "createdBy": "staff-001",
+      "createdAt": "2026-02-06T18:42:55.778Z",
+      "updatedAt": "2026-02-25T04:46:51.908Z",
+      "position": 0,
+      "assignee": "staff-003",
+      "cardType": "task",
+      "labels": [
+        "student-engagement",
+        "stem"
+      ]
+    },
+    {
+      "id": "card-t-015",
+      "columnId": "col-t-04",
+      "title": "Submit field trip risk assessment — Botanic Gardens",
+      "description": "Cicuta virga validus defleo quam chirographum audeo delectus.",
+      "priority": "medium",
+      "dueDate": "2026-03-04",
+      "createdBy": "staff-005",
+      "createdAt": "2026-02-20T18:48:09.976Z",
+      "updatedAt": "2026-02-28T01:29:14.858Z",
+      "position": 1,
+      "assignee": "staff-008",
+      "cardType": "deadline",
+      "labels": [
+        "excursions",
+        "compliance"
+      ]
+    },
+    {
+      "id": "card-t-016",
+      "columnId": "col-t-04",
+      "title": "Coordinate guest speaker for Career Day",
+      "description": "Collum torqueo stillicidium ascisco vere traho vir surgo placeat cura vicissitudo usitas adipisci acquiro.",
+      "priority": "medium",
+      "dueDate": "2026-03-03",
+      "createdBy": "staff-001",
+      "createdAt": "2026-03-04T20:10:05.128Z",
+      "updatedAt": "2026-03-05T04:12:56.522Z",
+      "position": 2,
+      "assignee": "staff-011",
+      "cardType": "task",
+      "labels": [
+        "events"
+      ]
+    },
+    {
+      "id": "card-t-017",
+      "columnId": "col-t-04",
+      "title": "Compile semester 1 grade analysis report",
+      "description": "Turbo tum delicate cuppedia certus adstringo urbs torqueo xiphias vulnus itaque tenus vinco ulciscor carmen defendo aperio virtus pecto calco.",
+      "priority": "medium",
+      "dueDate": "2026-03-02",
+      "createdBy": "staff-011",
+      "createdAt": "2026-02-21T01:52:14.084Z",
+      "updatedAt": "2026-02-28T14:30:13.511Z",
+      "position": 3,
+      "assignee": "staff-003",
+      "cardType": "deadline",
+      "labels": [
+        "data",
+        "reporting"
+      ]
+    },
+    {
+      "id": "card-t-018",
+      "columnId": "col-t-04",
+      "title": "Review Year 9 standardised test results",
+      "description": "Eius ulterius ipsam laudantium utor culpo appello ad temeritas quam succurro benevolentia approbo accedo consequatur officia cruciamentum debitis.",
+      "priority": "high",
+      "dueDate": "2026-03-02",
+      "createdBy": "staff-004",
+      "createdAt": "2026-02-23T09:37:44.916Z",
+      "updatedAt": "2026-02-26T19:58:48.856Z",
+      "position": 4,
+      "assignee": "staff-003",
+      "cardType": "task",
+      "labels": [
+        "data",
+        "assessment"
+      ]
+    }
+  ]
+}

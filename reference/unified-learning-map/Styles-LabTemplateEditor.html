@@ -1,0 +1,384 @@
+<style>
+/* ============================================================================
+   Lab Template & Rubric Editor Styles
+   Prefix: lte-
+   ============================================================================ */
+
+/* Editor header */
+.lte-editor-header {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: center;
+}
+
+.lte-back-btn {
+  background: none;
+  border: none;
+  color: #0d9488;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.lte-back-btn:hover {
+  text-decoration: underline;
+  background: #f0fdfa;
+}
+.lte-back-btn:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+/* ---- Section / Criterion accordion ---- */
+
+.lte-item-list {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lte-item {
+  border-bottom: 1px solid #f1f5f9;
+}
+.lte-item:last-child {
+  border-bottom: none;
+}
+
+.lte-item-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.lte-item-header:hover {
+  background: #f8fafc;
+}
+.lte-item-header:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: -3px;
+}
+
+.lte-item-chevron {
+  font-size: 12px;
+  color: #94a3b8;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+.lte-collapsed .lte-item-chevron {
+  transform: rotate(-90deg);
+}
+
+.lte-item-title {
+  flex: 1;
+  font-weight: 500;
+  font-size: 13px;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lte-item-badge {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.lte-item-badge-required {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.lte-item-arrows {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.lte-item-arrow {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 1px 4px;
+  line-height: 1;
+}
+.lte-item-arrow:hover {
+  background: #f1f5f9;
+  color: #0d9488;
+  border-color: #0d9488;
+}
+
+.lte-item-remove {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.lte-item-remove:hover {
+  opacity: 1;
+  color: #ef4444;
+}
+.lte-item-remove:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+.lte-item-body {
+  padding: 14px;
+  border-top: 1px solid #e2e8f0;
+  background: #fafafa;
+}
+.lte-collapsed .lte-item-body {
+  display: none;
+}
+
+/* ---- Dimension chips ---- */
+
+.lte-dim-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lte-dim-chip {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #64748b;
+  background: #fff;
+  user-select: none;
+}
+.lte-dim-chip:hover {
+  border-color: #94a3b8;
+}
+.lte-dim-chip-active {
+  color: #fff;
+  border-color: transparent;
+}
+.lte-dim-chip:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+/* ---- Scaffold tabs ---- */
+
+.lte-scaffold-tabs {
+  display: flex;
+  flex-direction: row;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.lte-scaffold-tab {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #64748b;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.lte-scaffold-tab:hover {
+  color: #0d9488;
+}
+.lte-scaffold-tab-active {
+  color: #0d9488;
+  border-bottom-color: #0d9488;
+  font-weight: 600;
+}
+.lte-scaffold-tab:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: -1px;
+}
+
+.lte-scaffold-content {
+  padding: 10px 0;
+}
+
+.lte-scaffold-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.lte-scaffold-textarea {
+  min-height: 60px;
+  font-size: 12px;
+}
+
+/* ---- Level descriptors (rubric) ---- */
+
+.lte-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lte-level-row {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.lte-level-label {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.lte-level-textarea {
+  flex: 1;
+  min-height: 60px;
+  resize: vertical;
+}
+
+/* ---- Add card (+ Create) ---- */
+
+.lte-add-card {
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: center;
+  padding: 24px;
+  color: #64748b;
+  font-size: 13px;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+}
+.lte-add-card:hover {
+  border-color: #0d9488;
+  color: #0d9488;
+}
+.lte-add-card:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+/* ---- Card actions (edit/delete/duplicate links) ---- */
+
+.lte-card-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-top: 6px;
+  justify-content: flex-end;
+}
+
+.lte-card-action {
+  font-size: 12px;
+  cursor: pointer;
+  color: #64748b;
+  transition: color 0.15s;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.lte-card-action:hover {
+  color: #0d9488;
+}
+.lte-card-action-delete:hover {
+  color: #ef4444;
+}
+
+/* ---- Form rows ---- */
+
+.lte-form-row {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+}
+.lte-form-row > .lab-builder-field {
+  flex: 1;
+}
+
+.lte-form-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding-top: 6px;
+}
+.lte-form-toggle label {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- Add button (+ Add Section / + Add Criterion) ---- */
+
+.lte-add-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border: 1px dashed #0d9488;
+  border-radius: 6px;
+  background: none;
+  color: #0d9488;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+.lte-add-btn:hover {
+  background: #0d9488;
+  color: #fff;
+  border-color: #0d9488;
+}
+.lte-add-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.lte-add-btn:disabled:hover {
+  background: none;
+  color: #0d9488;
+}
+.lte-add-btn:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+.lte-item-arrow:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+.lte-card-action:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+</style>

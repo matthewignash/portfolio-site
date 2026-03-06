@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>School Admin Dashboard</title>
+
+  <!-- External Libraries (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+
+  <!-- App Styles -->
+  <?!= include('CSS_Styles') ?>
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="app-header__title">School Admin Dashboard</div>
+      <div class="app-header__user" id="header-user">
+        <span class="text-muted text-sm">Loading...</span>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-bar" id="tab-bar" role="tablist">
+      <!-- Tabs are rendered dynamically by App.renderTabBar() based on user role -->
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-content" id="main-content">
+
+      <!-- Module Containers — one per module, toggled by App.switchTab() -->
+      <div class="module-container" id="module-reporting"></div>
+      <div class="module-container" id="module-observations"></div>
+      <div class="module-container" id="module-kanban"></div>
+      <div class="module-container" id="module-growth_plans"></div>
+      <div class="module-container" id="module-projects"></div>
+      <div class="module-container" id="module-change_management"></div>
+      <div class="module-container" id="module-accreditation"></div>
+      <div class="module-container" id="module-meeting_minutes"></div>
+      <div class="module-container" id="module-pd"></div>
+      <div class="module-container" id="module-feedback"></div>
+      <div class="module-container" id="module-wellness"></div>
+
+    </main>
+
+  </div>
+
+  <!-- App Scripts (order matters: utils → api → components → modules → app) -->
+  <?!= include('JS_Utils') ?>
+  <?!= include('JS_Api') ?>
+  <?!= include('JS_Components') ?>
+
+  <!-- Bootstrap App namespace so modules can register before JS_App loads -->
+  <script>var App = { ModuleRegistry: {} };</script>
+
+  <!-- Module scripts (each registers itself in App.ModuleRegistry) -->
+  <!-- Phase 7: Reporting -->
+  <?!= include('Module_Reporting') ?>
+  <!-- Phase 1: Observations -->
+  <?!= include('Module_Observations') ?>
+  <!-- Phase 2: Kanban -->
+  <?!= include('Module_Kanban') ?>
+  <!-- Phase 3: Growth Plans -->
+  <?!= include('Module_GrowthPlans') ?>
+  <!-- Phase 4: Projects -->
+  <?!= include('Module_Projects') ?>
+  <!-- Phase 5: Change Management -->
+  <?!= include('Module_ChangeMgmt') ?>
+  <!-- Phase 6: Accreditation -->
+  <?!= include('Module_Accreditation') ?>
+  <!-- Meeting Minutes -->
+  <?!= include('Module_MeetingMinutes') ?>
+  <!-- PD Tracking -->
+  <?!= include('Module_PD') ?>
+  <!-- Staff Feedback & 360 Reviews -->
+  <?!= include('Module_Feedback') ?>
+  <!-- Staff Wellness & Workload -->
+  <?!= include('Module_Wellness') ?>
+
+  <!-- App controller (must be last — initializes everything) -->
+  <?!= include('JS_App') ?>
+</body>
+</html>

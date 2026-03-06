@@ -1,0 +1,358 @@
+<script>
+    // ================================================
+    // LESSON RUNDOWN SIDEBAR (lrd- prefix)
+    // Persistent sidebar showing map overview with
+    // hex entries, progress, and expandable detail.
+    // ================================================
+
+    function lrdToggleSidebar() {
+      var sidebar = document.getElementById('lrdSidebar');
+      if (!sidebar) return;
+
+      lrdSidebarOpen = !lrdSidebarOpen;
+      if (lrdSidebarOpen) {
+        sidebar.classList.add('active');
+        sidebar.style.display = 'flex';
+        lrdRenderSidebar();
+      } else {
+        sidebar.classList.remove('active');
+        sidebar.style.display = 'none';
+        lrdExpandedHexId = null;
+      }
+
+      // Update toggle button text
+      var btn = document.getElementById('lrdToggleBtn');
+      if (btn) {
+        btn.textContent = lrdSidebarOpen ? '📋 Hide Overview' : '📋 Overview';
+      }
+    }
+
+    /**
+     * Called from openMapInBuilder() when a map is loaded.
+     * Reads hexes, sorts by row->col, renders sidebar.
+     * Auto-opens in student mode if 3+ hexes.
+     */
+    function lrdOnMapLoad() {
+      var btn = document.getElementById('lrdToggleBtn');
+      if (!currentMap || !currentMap.hexes || currentMap.hexes.length === 0) {
+        if (btn) btn.style.display = 'none';
+        var sidebar = document.getElementById('lrdSidebar');
+        if (sidebar) { sidebar.style.display = 'none'; sidebar.classList.remove('active'); }
+        lrdSidebarOpen = false;
+        return;
+      }
+
+      // Show toggle button
+      if (btn) btn.style.display = '';
+
+      // Auto-open in student mode if 3+ hexes
+      if (currentViewMode === 'student' && currentMap.hexes.length >= 3 && !lrdSidebarOpen) {
+        lrdSidebarOpen = true;
+        var sidebar = document.getElementById('lrdSidebar');
+        if (sidebar) { sidebar.classList.add('active'); sidebar.style.display = 'flex'; }
+        if (btn) btn.textContent = '📋 Hide Overview';
+      }
+
+      if (lrdSidebarOpen) {
+        lrdRenderSidebar();
+      }
+    }
+
+    /**
+     * Render the full sidebar content — progress summary + hex list.
+     */
+    function lrdRenderSidebar() {
+      var body = document.getElementById('lrdSidebarBody');
+      if (!body || !currentMap || !currentMap.hexes) return;
+
+      // Sort hexes by row, then col (visual order)
+      var sortedHexes = currentMap.hexes.slice().sort(function(a, b) {
+        if (a.row !== b.row) return a.row - b.row;
+        return a.col - b.col;
+      });
+
+      // Compute progress
+      var total = sortedHexes.length;
+      var completed = 0;
+      for (var i = 0; i < sortedHexes.length; i++) {
+        var prog = studentProgressData ? studentProgressData[sortedHexes[i].id] : null;
+        var st = prog ? (prog.status || 'not_started') : 'not_started';
+        if (st === 'completed' || st === 'mastered') completed++;
+      }
+      var pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      var html = '';
+
+      // Progress summary bar
+      html += '<div class="lrd-progress-summary">';
+      html += '<span class="lrd-progress-text">' + completed + '/' + total + '</span>';
+      html += '<div class="lrd-progress-bar"><div class="lrd-progress-fill" style="width:' + pct + '%;"></div></div>';
+      html += '<span class="lrd-progress-text">' + pct + '%</span>';
+      html += '</div>';
+
+      // Hex entries
+      for (var h = 0; h < sortedHexes.length; h++) {
+        html += lrdRenderHexEntry(sortedHexes[h], h);
+      }
+
+      body.innerHTML = html;
+    }
+
+    /**
+     * Render a single hex entry (collapsed by default).
+     */
+    function lrdRenderHexEntry(hex, index) {
+      var progress = studentProgressData ? studentProgressData[hex.id] : null;
+      var status = progress ? (progress.status || 'not_started') : 'not_started';
+      // If no progress record exists, check if hex is locked
+      if (!progress && currentViewMode === 'student') {
+        status = 'locked';
+        // Check if any progress record started
+        if (studentProgressData && studentProgressData[hex.id]) {
+          status = studentProgressData[hex.id].status || 'not_started';
+        }
+      }
+
+      var isExpanded = (lrdExpandedHexId === hex.id);
+      var score = progress && progress.score && progress.maxScore
+        ? Math.round((progress.score / progress.maxScore) * 100) + '%'
+        : '';
+
+      var html = '<div class="lrd-hex-entry" data-lrd-hex-id="' + escapeHtml(hex.id) + '">';
+
+      // Header row (clickable)
+      html += '<div class="lrd-hex-header" onclick="lrdOnHexClick(\'' + escapeHtml(hex.id) + '\')">';
+      html += '<span class="lrd-hex-index">' + (index + 1) + '</span>';
+      html += '<span class="lrd-hex-icon">' + (hex.icon || '📚') + '</span>';
+      html += '<span class="lrd-hex-label">' + escapeHtml(hex.label || 'Hex') + '</span>';
+      if (score) {
+        html += '<span class="lrd-score-badge">' + score + '</span>';
+      }
+      html += '<span class="lrd-status-dot ' + status + '"></span>';
+      html += '<span class="lrd-hex-chevron' + (isExpanded ? ' expanded' : '') + '">&#9654;</span>';
+      html += '</div>';
+
+      // Detail section (expandable)
+      html += '<div class="lrd-hex-detail' + (isExpanded ? ' active' : '') + '" id="lrdDetail_' + escapeHtml(hex.id) + '">';
+      if (isExpanded) {
+        html += lrdRenderHexDetail(hex, progress);
+      }
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * Handle click on a hex entry — expand/collapse detail + scroll grid to hex.
+     */
+    function lrdOnHexClick(hexId) {
+      // Toggle expansion (accordion — one at a time)
+      if (lrdExpandedHexId === hexId) {
+        lrdExpandedHexId = null;
+      } else {
+        lrdExpandedHexId = hexId;
+      }
+
+      // Re-render to update expansion state
+      lrdRenderSidebar();
+
+      // Scroll grid to hex
+      lrdScrollToHex(hexId);
+    }
+
+    /**
+     * Expand a specific hex detail (called externally).
+     */
+    function lrdExpandHexDetail(hexId) {
+      lrdExpandedHexId = hexId;
+      lrdRenderSidebar();
+    }
+
+    /**
+     * Render hex-level detail content.
+     */
+    function lrdRenderHexDetail(hex, progress) {
+      var html = '';
+
+      // Learning objectives (first 200 chars of body content)
+      if (hex.inlineContent && hex.inlineContent.body) {
+        var bodyText = hex.inlineContent.body.replace(/<[^>]+>/g, '').trim();
+        if (bodyText.length > 0) {
+          var preview = bodyText.length > 200 ? bodyText.substring(0, 197) + '...' : bodyText;
+          html += '<div class="lrd-detail-section">';
+          html += '<div class="lrd-detail-label">Objectives</div>';
+          html += '<div class="lrd-detail-text">' + escapeHtml(preview) + '</div>';
+          html += '</div>';
+        }
+      }
+
+      // Vocabulary (max 8 terms)
+      if (hex.vocabulary && hex.vocabulary.length > 0) {
+        var maxTerms = 8;
+        html += '<div class="lrd-detail-section">';
+        html += '<div class="lrd-detail-label">Vocabulary</div>';
+        html += '<div class="lrd-vocab-chips">';
+        for (var v = 0; v < Math.min(hex.vocabulary.length, maxTerms); v++) {
+          var term = hex.vocabulary[v];
+          var termText = (typeof term === 'string') ? term : (term.term || term.word || '');
+          if (termText) {
+            html += '<span class="lrd-vocab-chip">' + escapeHtml(termText) + '</span>';
+          }
+        }
+        if (hex.vocabulary.length > maxTerms) {
+          html += '<span class="lrd-vocab-chip">+' + (hex.vocabulary.length - maxTerms) + ' more</span>';
+        }
+        html += '</div></div>';
+      }
+
+      // Estimated time
+      if (hex.estimatedMinutes > 0) {
+        html += '<div class="lrd-detail-section">';
+        html += '<div class="lrd-detail-label">Time</div>';
+        html += '<div class="lrd-detail-text">~' + hex.estimatedMinutes + ' min</div>';
+        html += '</div>';
+      }
+
+      // Resource config time (for resource hexes)
+      if (hex.type === 'resource' && hex.resourceConfig && hex.resourceConfig.estimatedTime > 0) {
+        html += '<div class="lrd-detail-section">';
+        html += '<div class="lrd-detail-label">Time</div>';
+        html += '<div class="lrd-detail-text">~' + hex.resourceConfig.estimatedTime + ' min</div>';
+        html += '</div>';
+      }
+
+      // SBAR domain badges
+      if (hex.curriculum && hex.curriculum.sbarDomains && hex.curriculum.sbarDomains.length > 0) {
+        html += '<div class="lrd-detail-section">';
+        html += '<div class="lrd-detail-label">SBAR</div>';
+        for (var s = 0; s < hex.curriculum.sbarDomains.length; s++) {
+          var domain = hex.curriculum.sbarDomains[s];
+          var domainLower = domain.toLowerCase();
+          html += '<span class="lrd-sbar-badge ' + escapeHtml(domainLower) + '">' + escapeHtml(domain) + '</span>';
+        }
+        html += '</div>';
+      }
+
+      // Connections (outgoing branches)
+      if (hex.branches && hex.branches.length > 0) {
+        var targets = [];
+        for (var b = 0; b < hex.branches.length; b++) {
+          var br = hex.branches[b];
+          if (br.nextHexIds) {
+            for (var n = 0; n < br.nextHexIds.length; n++) {
+              var tgt = findHexById(br.nextHexIds[n]);
+              if (tgt) targets.push(tgt.label || 'Hex');
+            }
+          }
+        }
+        if (targets.length > 0) {
+          html += '<div class="lrd-detail-section">';
+          html += '<div class="lrd-detail-label">Leads to</div>';
+          html += '<div class="lrd-detail-connections">' + targets.map(function(t) { return escapeHtml(t); }).join(', ') + '</div>';
+          html += '</div>';
+        }
+      }
+
+      // Link URL
+      if (hex.linkUrl && hex.linkUrl.trim() !== '') {
+        html += '<div class="lrd-detail-section">';
+        html += '<div class="lrd-detail-label">Resource</div>';
+        html += '<a href="' + escapeHtml(hex.linkUrl) + '" target="_blank" style="font-size:12px;color:#3b82f6;">Open link &rarr;</a>';
+        html += '</div>';
+      }
+
+      if (!html) {
+        html = '<div class="lrd-detail-text" style="font-style:italic;color:#94a3b8;">No additional details.</div>';
+      }
+
+      return html;
+    }
+
+    /**
+     * Scroll the hex grid to center the given hex and pulse-highlight it.
+     */
+    function lrdScrollToHex(hexId) {
+      var hexEl = document.querySelector('[data-hex-id="' + hexId + '"]');
+      var gridContainer = document.getElementById('gridContainer');
+      if (!hexEl || !gridContainer) return;
+
+      // Scroll hex into view
+      hexEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+
+      // Add highlight pulse
+      hexEl.classList.add('lrd-highlight-pulse');
+      setTimeout(function() {
+        hexEl.classList.remove('lrd-highlight-pulse');
+      }, 2000);
+    }
+
+    /**
+     * Update progress dots without full re-render.
+     * Called after renderHexGridInternal() to keep sidebar in sync.
+     */
+    function lrdUpdateProgress() {
+      if (!lrdSidebarOpen || !currentMap || !currentMap.hexes) return;
+
+      var entries = document.querySelectorAll('.lrd-hex-entry');
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i];
+        var hId = entry.getAttribute('data-lrd-hex-id');
+        if (!hId) continue;
+
+        var prog = studentProgressData ? studentProgressData[hId] : null;
+        var st = prog ? (prog.status || 'not_started') : 'not_started';
+
+        // Update status dot + detect newly unlocked
+        var dot = entry.querySelector('.lrd-status-dot');
+        if (dot) {
+          var prevClass = dot.className;
+          dot.className = 'lrd-status-dot ' + st;
+          // If was locked and now not_started, add unlock animation
+          if (prevClass.indexOf('locked') !== -1 && st === 'not_started') {
+            entry.classList.add('lrd-just-unlocked');
+            (function(el) {
+              setTimeout(function() { el.classList.remove('lrd-just-unlocked'); }, 3000);
+            })(entry);
+          }
+        }
+
+        // Update score badge
+        var scoreBadge = entry.querySelector('.lrd-score-badge');
+        if (prog && prog.score && prog.maxScore) {
+          var scoreText = Math.round((prog.score / prog.maxScore) * 100) + '%';
+          if (scoreBadge) {
+            scoreBadge.textContent = scoreText;
+          } else {
+            // Insert before status dot
+            var chevron = entry.querySelector('.lrd-hex-chevron');
+            if (chevron && dot) {
+              var newBadge = document.createElement('span');
+              newBadge.className = 'lrd-score-badge';
+              newBadge.textContent = scoreText;
+              dot.parentNode.insertBefore(newBadge, dot);
+            }
+          }
+        }
+      }
+
+      // Update progress summary bar
+      var total = currentMap.hexes.length;
+      var completed = 0;
+      for (var c = 0; c < currentMap.hexes.length; c++) {
+        var p = studentProgressData ? studentProgressData[currentMap.hexes[c].id] : null;
+        var pStatus = p ? (p.status || 'not_started') : 'not_started';
+        if (pStatus === 'completed' || pStatus === 'mastered') completed++;
+      }
+      var pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      var fillEl = document.querySelector('.lrd-progress-fill');
+      if (fillEl) fillEl.style.width = pct + '%';
+
+      var textEls = document.querySelectorAll('.lrd-progress-text');
+      if (textEls.length >= 2) {
+        textEls[0].textContent = completed + '/' + total;
+        textEls[1].textContent = pct + '%';
+      }
+    }
+</script>

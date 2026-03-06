@@ -1,0 +1,818 @@
+<script>
+    // ================================================
+    // STUDENT PORTFOLIO & GROWTH DASHBOARD (ES5)
+    // Story: Student Portfolio & Growth Dashboard
+    // ================================================
+
+    console.log('=== Scripts-Portfolio.html loaded ===');
+
+    var PF_RATING_LABELS = { 1: 'Beginning', 2: 'Developing', 3: 'Proficient', 4: 'Extending' };
+    var pfShowAllWeeks = false;
+
+    // E2: Bracket-adaptive text for EAL students
+    var PF_BRACKET_TEXT = {
+      low: {
+        sectionGrowth: '\uD83D\uDCC8 How You Are Growing',
+        sectionSkills: '\uD83C\uDFAF Your Skills',
+        sectionPortfolio: '\u2B50 My Best Work',
+        statStreak: 'Day Streak',
+        statCompleted: 'Done \u2705',
+        statThisWeek: 'This Week',
+        statAvgScore: 'Score \uD83C\uDFAF',
+        filterStarred: '\u2B50 Best',
+        filterByMap: '\uD83D\uDDFA Maps',
+        filterCompleted: '\u2705 Done',
+        filterMastered: '\uD83C\uDFC6 Best Score',
+        emptyFilter: 'Nothing here for this filter.',
+        emptyPortfolio: 'No items yet.',
+        emptyPortfolioHint: 'Finish activities and press the star to save them here.',
+        emptyGrowth: 'Finish activities to see how you are growing!',
+        emptySkills: 'No skills yet. Finish activities to see your skills!',
+        emptySkillsHint: 'Finish activities to see your skills here!',
+        btnInPortfolio: '\u2B50 Saved',
+        btnAddPortfolio: '\u2606 Save It'
+      }
+    };
+
+    function pfGetText(key, fallback) {
+      var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+      if (bracket && PF_BRACKET_TEXT[bracket] && PF_BRACKET_TEXT[bracket][key]) {
+        return PF_BRACKET_TEXT[bracket][key];
+      }
+      return fallback;
+    }
+
+    // ================================================
+    // SUB-NAV & ENTRY POINT
+    // ================================================
+
+    /**
+     * Toggle between My Progress and My Portfolio sub-views.
+     */
+    function pfSwitchSubNav(subView) {
+      var progressContent = document.getElementById('progressContent');
+      var pfContainer = document.getElementById('pfPortfolioContainer');
+      var classContainer = document.getElementById('classProgressContainer');
+      var exportBtn = document.getElementById('pfExportBtn');
+      var progressExport = document.getElementById('progressExportBtn');
+      var btns = document.querySelectorAll('#pfStudentSubNav .pf-subnav-btn');
+
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].className = 'pf-subnav-btn' + (btns[i].getAttribute('data-pf-view') === subView ? ' active' : '');
+      }
+
+      if (subView === 'portfolio') {
+        if (classContainer) classContainer.style.display = 'none';
+        if (progressContent) progressContent.style.display = 'none';
+        if (pfContainer) pfContainer.style.display = 'block';
+        if (exportBtn) exportBtn.style.display = 'inline-flex';
+        if (progressExport) progressExport.style.display = 'none';
+        if (!pfInitialized) {
+          pfLoadPortfolio();
+        }
+      } else {
+        if (classContainer) classContainer.style.display = 'block';
+        if (progressContent) progressContent.style.display = 'block';
+        if (pfContainer) pfContainer.style.display = 'none';
+        if (exportBtn) exportBtn.style.display = 'none';
+        if (progressExport && userData && userData.canEdit) progressExport.style.display = 'inline-flex';
+      }
+    }
+
+    /**
+     * Load portfolio data via RPC. Lazy-loads on first sub-nav click.
+     */
+    function pfLoadPortfolio() {
+      // If already loaded from batch, just render
+      if (pfInitialized && pfPortfolioData) {
+        renderPfDashboard();
+        return;
+      }
+      if (pfLoading) return;
+      pfLoading = true;
+
+      var container = document.getElementById('pfPortfolioContainer');
+      if (container) {
+        container.innerHTML = '<div class="pf-loading"><span class="loading-spinner"></span> Loading your portfolio...</div>';
+      }
+
+      // Determine if teacher is previewing a student
+      var targetEmail = null;
+      if (currentViewMode === 'student' && userData && userData.canEdit && previewStudentEmail) {
+        targetEmail = previewStudentEmail;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          pfLoading = false;
+          pfPortfolioData = data;
+          pfInitialized = true;
+          renderPfDashboard();
+        })
+        .withFailureHandler(function(err) {
+          pfLoading = false;
+          var container = document.getElementById('pfPortfolioContainer');
+          if (container) {
+            container.innerHTML = '<div class="pf-empty-state"><div class="pf-empty-icon">\u26A0\uFE0F</div>' +
+              '<div class="pf-empty-text">' + escapeHtml(friendlyError(err)) + '</div></div>';
+          }
+        })
+        .getStudentPortfolioData(targetEmail);
+    }
+
+    /**
+     * Reload portfolio data (after add/remove/update).
+     */
+    function pfReloadPortfolio() {
+      pfInitialized = false;
+      pfLoadPortfolio();
+    }
+
+    // ================================================
+    // DASHBOARD RENDERER (orchestrator)
+    // ================================================
+
+    function renderPfDashboard() {
+      var data = pfPortfolioData;
+      if (!data) return;
+
+      var html = '';
+
+      // Growth stats cards
+      html += renderPfGrowthStats(data);
+
+      // Growth message banner
+      if (data.growthMessage) {
+        html += renderPfGrowthMessage(data.growthMessage);
+      }
+
+      // Growth graph
+      html += '<div class="pf-section">';
+      html += '<div class="pf-section-title"><span>' + pfGetText('sectionGrowth', '\uD83D\uDCC8 Growth Timeline') + '</span>';
+      if (data.growthTimeline.length > 12) {
+        html += '<button class="pf-section-toggle" onclick="pfToggleAllWeeks()">' + (pfShowAllWeeks ? 'Show Recent' : 'Show All') + '</button>';
+      }
+      html += '</div>';
+      html += renderPfGrowthGraph(data.growthTimeline);
+      html += '</div>';
+
+      // Skill inventory
+      html += '<div class="pf-section">';
+      html += '<div class="pf-section-title"><span>' + pfGetText('sectionSkills', '\uD83C\uDFAF Skills & Standards') + '</span></div>';
+      html += renderPfSkillInventory(data.skillInventory);
+      html += '</div>';
+
+      // Portfolio items with filter bar
+      html += '<div class="pf-section">';
+      html += '<div class="pf-section-title"><span>' + pfGetText('sectionPortfolio', '\u2B50 My Portfolio') + '</span></div>';
+      html += renderPfFilterBar();
+      var filteredItems = pfApplyFilter(data.portfolioItems);
+      html += renderPfPortfolioPanel(filteredItems);
+      html += '</div>';
+
+      var container = document.getElementById('pfPortfolioContainer');
+      if (container) container.innerHTML = html;
+    }
+
+    // ================================================
+    // GROWTH STATS CARDS
+    // ================================================
+
+    function renderPfGrowthStats(data) {
+      var summary = data.summary || {};
+      var streak = data.streak || 0;
+      var timeline = data.growthTimeline || [];
+
+      // Compute this week vs last week
+      var thisWeekCount = 0;
+      var lastWeekCount = 0;
+      if (timeline.length >= 1) {
+        thisWeekCount = timeline[timeline.length - 1].completedCount || 0;
+      }
+      if (timeline.length >= 2) {
+        lastWeekCount = timeline[timeline.length - 2].completedCount || 0;
+      }
+
+      var growthRate = '';
+      var trendClass = '';
+      if (lastWeekCount > 0) {
+        var pctChange = Math.round(((thisWeekCount - lastWeekCount) / lastWeekCount) * 100);
+        if (pctChange > 0) {
+          growthRate = '+' + pctChange + '%';
+          trendClass = 'pf-stat-trend-up';
+        } else if (pctChange < 0) {
+          growthRate = pctChange + '%';
+          trendClass = 'pf-stat-trend-down';
+        } else {
+          growthRate = '0%';
+        }
+      } else if (thisWeekCount > 0) {
+        growthRate = 'New!';
+        trendClass = 'pf-stat-trend-up';
+      }
+
+      var html = '<div class="pf-stats-cards">';
+
+      // Streak
+      html += '<div class="pf-stat-card"><div class="pf-stat-icon">' + (streak > 0 ? '\uD83D\uDD25' : '\u23F3') + '</div>';
+      html += '<div class="pf-stat-value">' + streak + '</div>';
+      html += '<div class="pf-stat-label">' + pfGetText('statStreak', 'Day Streak') + '</div></div>';
+
+      // Completed
+      html += '<div class="pf-stat-card"><div class="pf-stat-icon">\u2705</div>';
+      html += '<div class="pf-stat-value">' + (summary.totalCompleted || 0) + '</div>';
+      html += '<div class="pf-stat-label">' + pfGetText('statCompleted', 'Hexes Completed') + '</div>';
+      html += '<div class="pf-stat-sub">of ' + (summary.totalHexes || 0) + ' total</div></div>';
+
+      // This week
+      html += '<div class="pf-stat-card"><div class="pf-stat-icon">\uD83D\uDCC5</div>';
+      html += '<div class="pf-stat-value">' + thisWeekCount + '</div>';
+      html += '<div class="pf-stat-label">' + pfGetText('statThisWeek', 'This Week') + '</div>';
+      if (growthRate) {
+        html += '<div class="pf-stat-sub ' + trendClass + '">' + escapeHtml(growthRate) + ' vs last week</div>';
+      }
+      html += '</div>';
+
+      // Avg Score
+      html += '<div class="pf-stat-card"><div class="pf-stat-icon">\uD83C\uDFAF</div>';
+      html += '<div class="pf-stat-value">' + (summary.overallAvgScore || 0) + '%</div>';
+      html += '<div class="pf-stat-label">' + pfGetText('statAvgScore', 'Avg Score') + '</div></div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // GROWTH MESSAGE BANNER
+    // ================================================
+
+    function renderPfGrowthMessage(message) {
+      return '<div class="pf-growth-banner"><span class="pf-growth-icon">\uD83C\uDF31</span><span>' + escapeHtml(message) + '</span></div>';
+    }
+
+    // ================================================
+    // GROWTH GRAPH (pure CSS bar chart)
+    // ================================================
+
+    function renderPfGrowthGraph(timeline) {
+      if (!timeline || timeline.length === 0) {
+        return '<div class="pf-empty-state"><div class="pf-empty-icon">\uD83D\uDCC8</div>' +
+          '<div class="pf-empty-text">' + pfGetText('emptyGrowth', 'No completion data yet. Complete hexes to see your growth!') + '</div></div>';
+      }
+
+      var displayWeeks = timeline;
+      if (!pfShowAllWeeks && timeline.length > 12) {
+        displayWeeks = timeline.slice(timeline.length - 12);
+      }
+
+      // Find max completions in a week for scaling
+      var maxCount = 1;
+      for (var i = 0; i < displayWeeks.length; i++) {
+        if (displayWeeks[i].completedCount > maxCount) {
+          maxCount = displayWeeks[i].completedCount;
+        }
+      }
+
+      var maxBarHeight = 100;  // pixels
+      var html = '<div class="pf-graph-container"><div class="pf-graph-bars">';
+
+      for (var w = 0; w < displayWeeks.length; w++) {
+        var week = displayWeeks[w];
+        var barHeight = Math.max(4, Math.round((week.completedCount / maxCount) * maxBarHeight));
+        var weekLabel = pfFormatWeekLabel(week.weekStart);
+
+        html += '<div class="pf-graph-bar">';
+        html += '<div class="pf-graph-bar-count">' + week.completedCount + '</div>';
+        html += '<div class="pf-graph-bar-fill" style="height:' + barHeight + 'px;">';
+        html += '<div class="pf-graph-dot" title="Cumulative: ' + week.cumulativeCount + '"></div>';
+        html += '</div>';
+        html += '<div class="pf-graph-bar-label">' + escapeHtml(weekLabel) + '</div>';
+        html += '</div>';
+      }
+
+      html += '</div></div>';
+
+      // Legend
+      html += '<div class="pf-graph-legend">';
+      html += '<span><span class="pf-graph-legend-dot blue"></span>Weekly completions</span>';
+      html += '<span><span class="pf-graph-legend-dot green"></span>Cumulative total</span>';
+      html += '</div>';
+
+      return html;
+    }
+
+    function pfFormatWeekLabel(weekStart) {
+      if (!weekStart) return '';
+      var parts = weekStart.split('-');
+      if (parts.length < 3) return weekStart;
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var monthIdx = parseInt(parts[1], 10) - 1;
+      return months[monthIdx] + ' ' + parseInt(parts[2], 10);
+    }
+
+    function pfToggleAllWeeks() {
+      pfShowAllWeeks = !pfShowAllWeeks;
+      renderPfDashboard();
+    }
+
+    // ================================================
+    // SKILL INVENTORY
+    // ================================================
+
+    function renderPfSkillInventory(skills) {
+      if (!skills || skills.length === 0) {
+        return '<div class="pf-empty-state"><div class="pf-empty-icon">\uD83C\uDFAF</div>' +
+          '<div class="pf-empty-text">' + pfGetText('emptySkills', 'No standards data available yet.') + '</div>' +
+          '<div class="pf-empty-hint">' + pfGetText('emptySkillsHint', 'Complete hexes that are linked to standards to see your skill inventory.') + '</div></div>';
+      }
+
+      // Group by framework
+      var frameworks = {};
+      var frameworkOrder = [];
+      for (var i = 0; i < skills.length; i++) {
+        var fw = skills[i].framework || 'Other';
+        if (!frameworks[fw]) {
+          frameworks[fw] = [];
+          frameworkOrder.push(fw);
+        }
+        frameworks[fw].push(skills[i]);
+      }
+
+      var html = '';
+      for (var f = 0; f < frameworkOrder.length; f++) {
+        var fwName = frameworkOrder[f];
+        var fwSkills = frameworks[fwName];
+        var isOpen = pfExpandedFrameworks[fwName] !== false;  // Default open
+
+        html += '<div class="pf-skill-section">';
+        html += '<div class="pf-skill-header" role="button" tabindex="0" aria-expanded="' + (isOpen ? 'true' : 'false') + '" onclick="pfToggleFramework(\'' + escapeHtml(fwName).replace(/'/g, "\\'") + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();pfToggleFramework(\'' + escapeHtml(fwName).replace(/'/g, "\\'") + '\');}">';
+        html += '<span class="pf-skill-framework">' + escapeHtml(fwName) + '</span>';
+        html += '<span style="display:flex;align-items:center;gap:8px;">';
+        html += '<span class="pf-skill-header-count">' + fwSkills.length + ' standard' + (fwSkills.length !== 1 ? 's' : '') + '</span>';
+        html += '<span class="pf-skill-chevron' + (isOpen ? ' open' : '') + '">\u25B6</span>';
+        html += '</span></div>';
+
+        html += '<div class="pf-skill-body' + (isOpen ? ' open' : '') + '">';
+        for (var s = 0; s < fwSkills.length; s++) {
+          var skill = fwSkills[s];
+          html += '<div class="pf-skill-bar-row">';
+          html += '<div class="pf-skill-bar-label" title="' + escapeHtml(skill.description) + '">' + escapeHtml(skill.code) + '</div>';
+          html += '<div class="pf-skill-bar-container">';
+          html += '<div class="pf-skill-bar-fill ' + skill.masteryLevel + '" style="width:' + skill.avgScore + '%;"></div>';
+          html += '</div>';
+          html += '<div class="pf-skill-bar-value">' + skill.avgScore + '%</div>';
+          html += '<div class="pf-skill-bar-hexcount">' + skill.hexCount + ' hex' + (skill.hexCount !== 1 ? 'es' : '') + '</div>';
+          html += '</div>';
+        }
+        html += '</div></div>';
+      }
+
+      return html;
+    }
+
+    function pfToggleFramework(fwName) {
+      if (pfExpandedFrameworks[fwName] === false) {
+        pfExpandedFrameworks[fwName] = true;
+      } else {
+        pfExpandedFrameworks[fwName] = false;
+      }
+      renderPfDashboard();
+    }
+
+    // ================================================
+    // PORTFOLIO FILTER
+    // ================================================
+
+    function renderPfFilterBar() {
+      var filters = [
+        { key: 'all', label: 'All' },
+        { key: 'highlighted', label: pfGetText('filterStarred', '\u2B50 Starred') },
+        { key: 'by_map', label: pfGetText('filterByMap', '\uD83D\uDDFA By Map') },
+        { key: 'completed', label: pfGetText('filterCompleted', '\u2705 Completed') },
+        { key: 'mastered', label: pfGetText('filterMastered', '\uD83C\uDFC6 Mastered') }
+      ];
+      var html = '<div class="pf-filter-bar">';
+      for (var i = 0; i < filters.length; i++) {
+        var active = pfFilterMode === filters[i].key ? ' active' : '';
+        html += '<button class="pf-filter-chip' + active + '" onclick="pfSetFilter(\'' + filters[i].key + '\')" aria-label="Filter: ' + filters[i].label + '">' + filters[i].label + '</button>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function pfApplyFilter(items) {
+      if (!items || items.length === 0) return items;
+      if (pfFilterMode === 'all') return items;
+      if (pfFilterMode === 'highlighted') {
+        return items.filter(function(item) { return item.isHighlight; });
+      }
+      if (pfFilterMode === 'completed') {
+        return items.filter(function(item) { return item.status === 'completed' || item.status === 'mastered'; });
+      }
+      if (pfFilterMode === 'mastered') {
+        return items.filter(function(item) { return item.status === 'mastered'; });
+      }
+      // by_map: return all items (grouped rendering handled separately)
+      return items;
+    }
+
+    function pfSetFilter(mode) {
+      pfFilterMode = mode;
+      renderPfDashboard();
+    }
+
+    // ================================================
+    // PORTFOLIO PANEL
+    // ================================================
+
+    function renderPfPortfolioPanel(items) {
+      if (!items || items.length === 0) {
+        if (pfFilterMode !== 'all') {
+          return '<div class="pf-filter-empty">' + pfGetText('emptyFilter', 'No items match this filter.') + '</div>';
+        }
+        return '<div class="pf-empty-state"><div class="pf-empty-icon">\u2B50</div>' +
+          '<div class="pf-empty-text">' + pfGetText('emptyPortfolio', 'Your portfolio is empty.') + '</div>' +
+          '<div class="pf-empty-hint">' + pfGetText('emptyPortfolioHint', 'Add items from your learning maps by clicking the star icon on completed hexes.') + '</div></div>';
+      }
+
+      // By Map grouping mode
+      if (pfFilterMode === 'by_map') {
+        return renderPfByMapGrouped(items);
+      }
+
+      var html = '<div class="pf-portfolio-list">';
+      for (var i = 0; i < items.length; i++) {
+        html += renderPfPortfolioCard(items[i], i, items.length);
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function renderPfByMapGrouped(items) {
+      // Group by mapTitle
+      var groups = {};
+      var groupOrder = [];
+      for (var i = 0; i < items.length; i++) {
+        var mapKey = items[i].mapTitle || 'Unknown Map';
+        if (!groups[mapKey]) {
+          groups[mapKey] = [];
+          groupOrder.push(mapKey);
+        }
+        groups[mapKey].push(items[i]);
+      }
+
+      var html = '';
+      var globalIdx = 0;
+      for (var g = 0; g < groupOrder.length; g++) {
+        var groupName = groupOrder[g];
+        var groupItems = groups[groupName];
+        html += '<div class="pf-group-header">\uD83D\uDDFA ' + escapeHtml(groupName) + ' (' + groupItems.length + ')</div>';
+        html += '<div class="pf-portfolio-list">';
+        for (var j = 0; j < groupItems.length; j++) {
+          html += renderPfPortfolioCard(groupItems[j], globalIdx, items.length);
+          globalIdx++;
+        }
+        html += '</div>';
+      }
+      return html;
+    }
+
+    function renderPfPortfolioCard(item, index, total) {
+      var highlightClass = item.isHighlight ? ' highlight' : '';
+      var scorePct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
+
+      var html = '<div class="pf-portfolio-card' + highlightClass + '">';
+
+      // Icon
+      html += '<div class="pf-portfolio-icon">' + (item.hexIcon || '\uD83D\uDD37') + '</div>';
+
+      // Body
+      html += '<div class="pf-portfolio-body">';
+      html += '<div class="pf-portfolio-label">' + escapeHtml(item.hexLabel) + '</div>';
+      html += '<div class="pf-portfolio-map">' + escapeHtml(item.mapTitle) + '</div>';
+
+      // Meta badges
+      html += '<div class="pf-portfolio-meta">';
+      html += '<span class="pf-portfolio-badge pf-badge-score">' + scorePct + '%</span>';
+      html += '<span class="pf-portfolio-badge pf-badge-status">' + escapeHtml(item.status) + '</span>';
+      if (item.selfAssessRating > 0) {
+        html += '<span class="pf-portfolio-badge pf-badge-rating">' + (PF_RATING_LABELS[item.selfAssessRating] || '') + '</span>';
+      }
+      html += '</div>';
+
+      // Goal
+      if (item.selfAssessGoal) {
+        html += '<div class="pf-portfolio-goal">\uD83C\uDFAF <strong>Goal:</strong> ' + escapeHtml(item.selfAssessGoal) + '</div>';
+      }
+
+      // Note (portfolio or self-assessment)
+      var note = item.portfolioNote || item.selfAssessNote || '';
+      if (note) {
+        html += '<div class="pf-portfolio-note">"' + escapeHtml(note) + '"</div>';
+      }
+
+      // Evidence links
+      var evidence = item.selfAssessEvidence || [];
+      if (evidence.length > 0) {
+        html += '<div class="pf-portfolio-evidence">';
+        for (var e = 0; e < evidence.length; e++) {
+          var ev = evidence[e];
+          if (ev.url) {
+            html += '<a href="' + escapeHtml(ev.url) + '" target="_blank" rel="noopener">\uD83D\uDD17 ' + escapeHtml(ev.label || 'Evidence') + '</a>';
+          }
+        }
+        html += '</div>';
+      }
+
+      // Actions
+      html += '<div class="pf-portfolio-actions">';
+      html += '<button class="pf-portfolio-action-btn star' + (item.isHighlight ? ' active' : '') + '" onclick="pfToggleHighlight(\'' + item.portfolioId + '\')">' + (item.isHighlight ? pfGetText('btnInPortfolio', '\u2B50 Starred') : pfGetText('btnAddPortfolio', '\u2606 Star')) + '</button>';
+      html += '<button class="pf-portfolio-action-btn" onclick="pfEditNote(\'' + item.portfolioId + '\', this)">\u270F\uFE0F Note</button>';
+      if (index > 0) {
+        html += '<button class="pf-portfolio-action-btn" onclick="pfMoveItem(' + index + ', -1)">\u2191</button>';
+      }
+      if (index < total - 1) {
+        html += '<button class="pf-portfolio-action-btn" onclick="pfMoveItem(' + index + ', 1)">\u2193</button>';
+      }
+      html += '<button class="pf-portfolio-action-btn danger" onclick="pfRemoveItem(\'' + item.portfolioId + '\')">\u2715</button>';
+      html += '</div>';
+
+      html += '</div></div>';
+      return html;
+    }
+
+    // ================================================
+    // PORTFOLIO ACTIONS
+    // ================================================
+
+    function pfToggleHighlight(portfolioId) {
+      if (!pfPortfolioData) return;
+      var items = pfPortfolioData.portfolioItems;
+      var currentHighlight = false;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].portfolioId === portfolioId) {
+          currentHighlight = items[i].isHighlight;
+          break;
+        }
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          for (var i = 0; i < pfPortfolioData.portfolioItems.length; i++) {
+            if (pfPortfolioData.portfolioItems[i].portfolioId === portfolioId) {
+              pfPortfolioData.portfolioItems[i].isHighlight = !currentHighlight;
+              break;
+            }
+          }
+          renderPfDashboard();
+        })
+        .withFailureHandler(function(err) {
+          showToast(friendlyError(err), 'error');
+        })
+        .updatePortfolioItem(portfolioId, { isHighlight: !currentHighlight });
+    }
+
+    function pfMoveItem(index, direction) {
+      if (!pfPortfolioData) return;
+      var items = pfPortfolioData.portfolioItems;
+      var newIndex = index + direction;
+      if (newIndex < 0 || newIndex >= items.length) return;
+
+      // Swap in local data
+      var temp = items[index];
+      items[index] = items[newIndex];
+      items[newIndex] = temp;
+
+      // Update displayOrder
+      var orderData = [];
+      for (var i = 0; i < items.length; i++) {
+        items[i].displayOrder = i;
+        orderData.push({ portfolioId: items[i].portfolioId, displayOrder: i });
+      }
+
+      renderPfDashboard();
+
+      google.script.run
+        .withFailureHandler(function(err) {
+          showToast(friendlyError(err), 'error');
+        })
+        .savePortfolioOrder(orderData);
+    }
+
+    function pfRemoveItem(portfolioId) {
+      if (!confirm('Remove this item from your portfolio?')) return;
+
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Removed from portfolio', 'success');
+          pfReloadPortfolio();
+        })
+        .withFailureHandler(function(err) {
+          showToast(friendlyError(err), 'error');
+        })
+        .removeFromPortfolio(portfolioId);
+    }
+
+    function pfEditNote(portfolioId, btnEl) {
+      // Find the card container
+      var card = btnEl.closest('.pf-portfolio-card');
+      if (!card) return;
+
+      // Find current note
+      var currentNote = '';
+      if (pfPortfolioData) {
+        for (var i = 0; i < pfPortfolioData.portfolioItems.length; i++) {
+          if (pfPortfolioData.portfolioItems[i].portfolioId === portfolioId) {
+            currentNote = pfPortfolioData.portfolioItems[i].portfolioNote || '';
+            break;
+          }
+        }
+      }
+
+      // Check if edit is already open
+      var existing = card.querySelector('.pf-note-edit');
+      if (existing) {
+        existing.parentNode.removeChild(existing);
+        return;
+      }
+
+      // Insert inline editor
+      var editDiv = document.createElement('div');
+      editDiv.className = 'pf-note-edit';
+      editDiv.innerHTML = '<textarea class="pf-note-input" maxlength="300" placeholder="Add a portfolio note...">' + escapeHtml(currentNote) + '</textarea>' +
+        '<div style="display:flex;flex-direction:column;gap:4px;">' +
+        '<button class="pf-note-save" onclick="pfSaveNote(\'' + portfolioId + '\', this)">Save</button>' +
+        '<button class="pf-note-cancel" onclick="this.closest(\'.pf-note-edit\').remove()">Cancel</button>' +
+        '</div>';
+
+      var body = card.querySelector('.pf-portfolio-body');
+      if (body) body.appendChild(editDiv);
+
+      // Focus
+      var textarea = editDiv.querySelector('textarea');
+      if (textarea) textarea.focus();
+    }
+
+    function pfSaveNote(portfolioId, btnEl) {
+      var editDiv = btnEl.closest('.pf-note-edit');
+      var textarea = editDiv ? editDiv.querySelector('textarea') : null;
+      if (!textarea) return;
+
+      var note = textarea.value.substring(0, 300);
+
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Note saved', 'success');
+          // Update local data
+          if (pfPortfolioData) {
+            for (var i = 0; i < pfPortfolioData.portfolioItems.length; i++) {
+              if (pfPortfolioData.portfolioItems[i].portfolioId === portfolioId) {
+                pfPortfolioData.portfolioItems[i].portfolioNote = note;
+                break;
+              }
+            }
+          }
+          renderPfDashboard();
+        })
+        .withFailureHandler(function(err) {
+          showToast(friendlyError(err), 'error');
+        })
+        .updatePortfolioItem(portfolioId, { portfolioNote: note });
+    }
+
+    // ================================================
+    // ADD/REMOVE FROM PORTFOLIO (hex modal integration)
+    // ================================================
+
+    /**
+     * Toggle a hex in/out of the portfolio. Called from student hex modal.
+     */
+    function pfTogglePortfolioItem(mapId, hexId) {
+      if (!pfPortfolioData) {
+        // Portfolio data not loaded yet — add directly
+        pfAddToPortfolio(mapId, hexId);
+        return;
+      }
+
+      // Check if already in portfolio
+      var existing = null;
+      for (var i = 0; i < pfPortfolioData.portfolioItems.length; i++) {
+        var item = pfPortfolioData.portfolioItems[i];
+        if (String(item.mapId) === String(mapId) && String(item.hexId) === String(hexId)) {
+          existing = item;
+          break;
+        }
+      }
+
+      if (existing) {
+        pfRemoveFromPortfolioByHex(existing.portfolioId, mapId, hexId);
+      } else {
+        pfAddToPortfolio(mapId, hexId);
+      }
+    }
+
+    function pfAddToPortfolio(mapId, hexId) {
+      var btn = document.getElementById('pfAddBtn_' + hexId);
+      if (btn) { btn.innerHTML = '\u23F3 Adding...'; btn.disabled = true; }
+
+      google.script.run
+        .withSuccessHandler(function(portfolioId) {
+          showToast('Added to portfolio!', 'success');
+          if (btn) {
+            btn.innerHTML = pfGetText('btnInPortfolio', '\u2B50 In Portfolio');
+            btn.className = 'pf-add-btn in-portfolio';
+            btn.disabled = false;
+          }
+          // Invalidate cached data so it reloads next time
+          pfInitialized = false;
+        })
+        .withFailureHandler(function(err) {
+          showToast(friendlyError(err), 'error');
+          if (btn) {
+            btn.innerHTML = pfGetText('btnAddPortfolio', '\u2606 Add to Portfolio');
+            btn.className = 'pf-add-btn';
+            btn.disabled = false;
+          }
+        })
+        .addToPortfolio(mapId, hexId, '');
+    }
+
+    function pfRemoveFromPortfolioByHex(portfolioId, mapId, hexId) {
+      var btn = document.getElementById('pfAddBtn_' + hexId);
+      if (btn) { btn.innerHTML = '\u23F3 Removing...'; btn.disabled = true; }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Removed from portfolio', 'success');
+          if (btn) {
+            btn.innerHTML = pfGetText('btnAddPortfolio', '\u2606 Add to Portfolio');
+            btn.className = 'pf-add-btn';
+            btn.disabled = false;
+          }
+          pfInitialized = false;
+        })
+        .withFailureHandler(function(err) {
+          showToast(friendlyError(err), 'error');
+          if (btn) {
+            btn.innerHTML = pfGetText('btnInPortfolio', '\u2B50 In Portfolio');
+            btn.className = 'pf-add-btn in-portfolio';
+            btn.disabled = false;
+          }
+        })
+        .removeFromPortfolio(portfolioId);
+    }
+
+    /**
+     * Check if a hex is currently in the portfolio.
+     */
+    function pfIsInPortfolio(mapId, hexId) {
+      if (!pfPortfolioData || !pfPortfolioData.portfolioItems) return false;
+      for (var i = 0; i < pfPortfolioData.portfolioItems.length; i++) {
+        var item = pfPortfolioData.portfolioItems[i];
+        if (String(item.mapId) === String(mapId) && String(item.hexId) === String(hexId)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Render the "Add to Portfolio" button for the student hex modal.
+     * Returns HTML string.
+     */
+    function renderPfAddButton(mapId, hexId) {
+      var inPortfolio = pfIsInPortfolio(mapId, hexId);
+      var cls = 'pf-add-btn' + (inPortfolio ? ' in-portfolio' : '');
+      var label = inPortfolio ? pfGetText('btnInPortfolio', '\u2B50 In Portfolio') : pfGetText('btnAddPortfolio', '\u2606 Add to Portfolio');
+      return '<button id="pfAddBtn_' + escapeHtml(hexId) + '" class="' + cls + '" onclick="pfTogglePortfolioItem(\'' +
+        escapeHtml(mapId) + '\', \'' + escapeHtml(hexId) + '\')">' + label + '</button>';
+    }
+
+    // ================================================
+    // EXPORT TO GOOGLE DOC
+    // ================================================
+
+    function pfExportToDoc() {
+      var btn = document.getElementById('pfExportBtn');
+      if (btn) { btn.innerHTML = '\u23F3 Exporting...'; btn.disabled = true; }
+
+      var targetEmail = null;
+      if (currentViewMode === 'student' && userData && userData.canEdit && previewStudentEmail) {
+        targetEmail = previewStudentEmail;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(url) {
+          if (btn) { btn.innerHTML = '\uD83D\uDCE4 Export to Google Doc'; btn.disabled = false; }
+          showToast('Portfolio exported! Opening document...', 'success');
+          if (url) {
+            window.open(url, '_blank');
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.innerHTML = '\uD83D\uDCE4 Export to Google Doc'; btn.disabled = false; }
+          showToast(friendlyError(err), 'error');
+        })
+        .exportPortfolioToDoc(targetEmail);
+    }
+</script>

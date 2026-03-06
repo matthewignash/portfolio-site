@@ -1,0 +1,414 @@
+<style>
+/* ============================================================================
+   ATL Toolkit Styles (atl- prefix)
+   IB Approaches to Learning — student planner integration
+   ============================================================================ */
+
+/* --- Toolkit Panel (inside planner view) --- */
+.atl-toolkit-panel {
+  margin-top: 20px;
+  border-top: 2px solid #e5e7eb;
+  padding-top: 16px;
+}
+.atl-toolkit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.atl-toolkit-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+.atl-toolkit-toggle {
+  font-size: 12px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  transition: background 0.15s;
+}
+.atl-toolkit-toggle:hover {
+  background: #f3f4f6;
+}
+
+/* --- Deadline Timeline --- */
+.atl-timeline {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 0 12px;
+  scrollbar-width: thin;
+}
+.atl-timeline-item {
+  flex: 0 0 auto;
+  min-width: 100px;
+  max-width: 140px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-size: 12px;
+  cursor: default;
+}
+.atl-timeline-item.overdue {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+.atl-timeline-item.today {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+.atl-timeline-item.this-week {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.atl-timeline-item.later {
+  border-color: #e5e7eb;
+  background: #f9fafb;
+}
+.atl-timeline-label {
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.atl-timeline-date {
+  color: #6b7280;
+  font-size: 12px;
+}
+.atl-timeline-icon {
+  margin-right: 4px;
+}
+
+/* --- Contextual Tips --- */
+.atl-tips-section {
+  margin-bottom: 16px;
+}
+.atl-tip-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  position: relative;
+}
+.atl-tip-card.overdue {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.atl-tip-card.manyDue {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+.atl-tip-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 1px;
+}
+.atl-tip-content {
+  flex: 1;
+}
+.atl-tip-category {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 2px;
+  letter-spacing: 0.5px;
+}
+.atl-tip-text {
+  color: #374151;
+}
+.atl-tip-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 14px;
+  color: #9ca3af;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 2px;
+  line-height: 1;
+}
+.atl-tip-dismiss:hover {
+  color: #374151;
+}
+.atl-tip-dismiss:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* --- Server Tips --- */
+.atl-server-tips-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin: 12px 0 6px;
+}
+.atl-tip-card.server {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+/* --- ATL Self-Tracker --- */
+.atl-tracker-section {
+  margin-bottom: 16px;
+}
+.atl-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 10px;
+}
+.atl-category-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.atl-category-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.atl-category-card:hover {
+  border-color: #a78bfa;
+  box-shadow: 0 1px 4px rgba(124, 58, 237, 0.08);
+}
+.atl-category-card.expanded {
+  border-color: #8b5cf6;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.12);
+}
+.atl-cat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.atl-cat-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1f2937;
+}
+.atl-cat-chevron {
+  font-size: 12px;
+  color: #9ca3af;
+  transition: transform 0.2s;
+}
+.atl-category-card.expanded .atl-cat-chevron {
+  transform: rotate(180deg);
+}
+.atl-cat-summary {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+.atl-cat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e5e7eb;
+}
+.atl-cat-dot.rated-1 { background: #fca5a5; }
+.atl-cat-dot.rated-2 { background: #fbbf24; }
+.atl-cat-dot.rated-3 { background: #34d399; }
+.atl-cat-dot.rated-4 { background: #6366f1; }
+.atl-cat-snippet {
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Expanded Category Detail --- */
+.atl-cat-detail {
+  display: none;
+  margin-top: 10px;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 10px;
+}
+.atl-category-card.expanded .atl-cat-detail {
+  display: block;
+}
+.atl-subskill-row {
+  margin-bottom: 12px;
+}
+.atl-subskill-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+
+/* Rating buttons (reuse sa- pattern) */
+.atl-rating-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.atl-rating-btn {
+  flex: 1;
+  padding: 5px 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  text-align: center;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1.2;
+}
+.atl-rating-btn:hover {
+  border-color: #8b5cf6;
+  color: #7c3aed;
+}
+.atl-rating-btn.selected {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Reflection + Goal inputs */
+.atl-input-group {
+  margin-top: 6px;
+}
+.atl-input-label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+.atl-textarea {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  resize: vertical;
+  min-height: 36px;
+  max-height: 80px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.atl-textarea:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+}
+.atl-char-count {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: right;
+  margin-top: 1px;
+}
+
+.atl-save-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.atl-save-btn:hover {
+  background: #6d28d9;
+}
+.atl-save-btn:disabled {
+  background: #c4b5fd;
+  cursor: not-allowed;
+}
+
+/* --- Term Selector --- */
+.atl-term-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.atl-term-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+.atl-term-select {
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #fff;
+}
+
+/* --- Weekly Check-In Card --- */
+.atl-checkin-card {
+  padding: 12px;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.atl-checkin-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5b21b6;
+  margin-bottom: 4px;
+}
+.atl-checkin-prompt {
+  font-size: 12px;
+  color: #6d28d9;
+  line-height: 1.4;
+}
+
+/* --- No Data State --- */
+.atl-empty-state {
+  text-align: center;
+  padding: 24px 16px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+.atl-empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+/* --- Saving Toast --- */
+.atl-saving-indicator {
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+  margin-top: 4px;
+}
+.atl-saved-indicator {
+  font-size: 12px;
+  color: #059669;
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* D-CSS: Emoji labels for low WIDA bracket */
+.atl-emoji-labels .atl-rating-btn {
+  font-size: 14px;
+  padding: 10px 12px;
+}
+</style>

@@ -1,0 +1,410 @@
+<script>
+// ============================================================================
+// PBL DASHBOARD — pbl- prefix
+// Iteration analytics, peer feedback analytics, phase progress swimlane
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+var pblDashboardData = null;     // Raw data from getPBLDashboardData
+var pblComputedData = null;      // Computed analytics
+var pblInitialized = false;
+var pblDataLoading = false;
+
+// ================================================
+// LOAD PBL DASHBOARD DATA
+// ================================================
+
+function pblLoadDashboard() {
+  var container = document.getElementById('pblInsightsContent');
+  if (!container) return;
+
+  // Check if class + map selected
+  if (!progressSelectedClassId || !progressSelectedMapId) {
+    container.innerHTML = '<div class="pbl-empty"><div class="icon">&#128202;</div><p>Select a class and map in Class Progress, then switch to PBL Insights.</p></div>';
+    return;
+  }
+
+  // If data already loaded for this class+map, just render
+  if (pblDashboardData && pblDashboardData._classId === progressSelectedClassId && pblDashboardData._mapId === progressSelectedMapId) {
+    pblRenderDashboard();
+    return;
+  }
+
+  if (pblDataLoading) return;
+  pblDataLoading = true;
+  container.innerHTML = '<div class="pbl-loading">Loading PBL insights...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      pblDataLoading = false;
+      data._classId = progressSelectedClassId;
+      data._mapId = progressSelectedMapId;
+      pblDashboardData = data;
+      pblComputedData = pblComputeAnalytics(data);
+      pblInitialized = true;
+      pblRenderDashboard();
+    })
+    .withFailureHandler(function(err) {
+      pblDataLoading = false;
+      container.innerHTML = '<div class="pbl-empty"><div class="icon">&#9888;</div><p>Error loading PBL data: ' + escapeHtml(err.message) + '</p></div>';
+    })
+    .getPBLDashboardData(progressSelectedClassId, progressSelectedMapId);
+}
+
+// ================================================
+// COMPUTE ANALYTICS
+// ================================================
+
+function pblComputeAnalytics(data) {
+  var iterations = data.iterations || [];
+  var feedback = data.feedback || [];
+  var hexes = data.hexes || [];
+  var students = data.students || [];
+
+  // -- Iteration Stats --
+  var totalIterations = iterations.length;
+  var approvedCount = 0;
+  var revisionCount = 0;
+  var checkpointMap = {};  // hexId -> { total: N, students: { email: count } }
+  var studentIterations = {};  // email -> count
+
+  for (var i = 0; i < iterations.length; i++) {
+    var it = iterations[i];
+    if (it.status === 'approved') approvedCount++;
+    if (it.status === 'revision_requested') revisionCount++;
+
+    if (!checkpointMap[it.hexId]) checkpointMap[it.hexId] = { total: 0, students: {} };
+    checkpointMap[it.hexId].total++;
+    if (!checkpointMap[it.hexId].students[it.studentEmail]) checkpointMap[it.hexId].students[it.studentEmail] = 0;
+    checkpointMap[it.hexId].students[it.studentEmail]++;
+
+    if (!studentIterations[it.studentEmail]) studentIterations[it.studentEmail] = 0;
+    studentIterations[it.studentEmail]++;
+  }
+
+  var checkpointHexIds = [];
+  for (var h = 0; h < hexes.length; h++) {
+    if (hexes[h].isCheckpoint) checkpointHexIds.push(hexes[h].id);
+  }
+
+  var avgIterationsPerCheckpoint = checkpointHexIds.length > 0 ? (totalIterations / checkpointHexIds.length) : 0;
+  var revisionRate = totalIterations > 0 ? Math.round((revisionCount / totalIterations) * 100) : 0;
+
+  // Per-checkpoint stats
+  var checkpointStats = [];
+  for (var ci = 0; ci < checkpointHexIds.length; ci++) {
+    var cpId = checkpointHexIds[ci];
+    var cpData = checkpointMap[cpId] || { total: 0, students: {} };
+    var cpHex = null;
+    for (var ch = 0; ch < hexes.length; ch++) {
+      if (hexes[ch].id === cpId) { cpHex = hexes[ch]; break; }
+    }
+    var uniqueStudents = 0;
+    for (var sk in cpData.students) {
+      if (cpData.students.hasOwnProperty(sk)) uniqueStudents++;
+    }
+    checkpointStats.push({
+      hexId: cpId,
+      label: cpHex ? (cpHex.label || cpId) : cpId,
+      totalIterations: cpData.total,
+      uniqueStudents: uniqueStudents,
+      avgPerStudent: uniqueStudents > 0 ? (cpData.total / uniqueStudents).toFixed(1) : '0'
+    });
+  }
+
+  // Student x checkpoint heatmap
+  var heatmapStudents = [];
+  for (var si = 0; si < students.length; si++) {
+    var sEmail = students[si].email;
+    var row = { email: sEmail, name: students[si].name || sEmail, cells: {} };
+    for (var cpi = 0; cpi < checkpointHexIds.length; cpi++) {
+      var cpId2 = checkpointHexIds[cpi];
+      var cpData2 = checkpointMap[cpId2];
+      row.cells[cpId2] = (cpData2 && cpData2.students[sEmail]) ? cpData2.students[sEmail] : 0;
+    }
+    heatmapStudents.push(row);
+  }
+
+  // -- Peer Feedback Stats --
+  var totalFeedback = feedback.length;
+  var helpfulCount = 0;
+  var criteriaScores = {};  // criterion -> { total, count }
+  var reviewersMap = {};    // email -> count given
+
+  for (var fi = 0; fi < feedback.length; fi++) {
+    var fb = feedback[fi];
+    if (fb.isHelpful) helpfulCount++;
+    if (fb.reviewerEmail) {
+      if (!reviewersMap[fb.reviewerEmail]) reviewersMap[fb.reviewerEmail] = 0;
+      reviewersMap[fb.reviewerEmail]++;
+    }
+    var ratings = fb.ratings || [];
+    for (var ri = 0; ri < ratings.length; ri++) {
+      var rKey = ratings[ri].criterion || 'Unknown';
+      if (!criteriaScores[rKey]) criteriaScores[rKey] = { total: 0, count: 0 };
+      criteriaScores[rKey].total += (ratings[ri].rating || 0);
+      criteriaScores[rKey].count++;
+    }
+  }
+
+  var reviewerCount = 0;
+  for (var rk in reviewersMap) {
+    if (reviewersMap.hasOwnProperty(rk)) reviewerCount++;
+  }
+  var completionRate = students.length > 0 ? Math.round((reviewerCount / students.length) * 100) : 0;
+  var avgHelpfulness = totalFeedback > 0 ? Math.round((helpfulCount / totalFeedback) * 100) : 0;
+
+  var criteriaEffectiveness = [];
+  for (var ck in criteriaScores) {
+    if (criteriaScores.hasOwnProperty(ck)) {
+      var cs = criteriaScores[ck];
+      criteriaEffectiveness.push({
+        criterion: ck,
+        avg: cs.count > 0 ? (cs.total / cs.count).toFixed(1) : '0',
+        count: cs.count
+      });
+    }
+  }
+
+  // -- Phase Progress (Swimlane) --
+  var phases = data.phases || [];
+  var phaseHexMap = {};  // phaseId -> [hexId]
+  for (var ph = 0; ph < hexes.length; ph++) {
+    if (hexes[ph].designPhase) {
+      if (!phaseHexMap[hexes[ph].designPhase]) phaseHexMap[hexes[ph].designPhase] = [];
+      phaseHexMap[hexes[ph].designPhase].push(hexes[ph].id);
+    }
+  }
+
+  var progress = data.progress || {};
+  var swimlaneStudents = [];
+  for (var sli = 0; sli < students.length; sli++) {
+    var stEmail = students[sli].email;
+    var stProgress = progress[stEmail] || {};
+    var phaseRow = { email: stEmail, name: students[sli].name || stEmail, phases: {} };
+    for (var pi = 0; pi < phases.length; pi++) {
+      var pId = phases[pi].id;
+      var pHexIds = phaseHexMap[pId] || [];
+      var pDone = 0;
+      var pTotal = pHexIds.length;
+      var pActive = false;
+      for (var phi = 0; phi < pHexIds.length; phi++) {
+        var hexProg = stProgress[pHexIds[phi]];
+        if (hexProg) {
+          var hStatus = hexProg.status || 'not_started';
+          if (hStatus === 'completed' || hStatus === 'mastered') pDone++;
+          else if (hStatus === 'in_progress') pActive = true;
+        }
+      }
+      phaseRow.phases[pId] = pDone >= pTotal && pTotal > 0 ? 'done' : (pActive || pDone > 0 ? 'active' : 'pending');
+    }
+    swimlaneStudents.push(phaseRow);
+  }
+
+  return {
+    totalIterations: totalIterations,
+    approvedCount: approvedCount,
+    revisionCount: revisionCount,
+    revisionRate: revisionRate,
+    avgIterationsPerCheckpoint: avgIterationsPerCheckpoint.toFixed(1),
+    checkpointStats: checkpointStats,
+    checkpointHexIds: checkpointHexIds,
+    heatmapStudents: heatmapStudents,
+    totalFeedback: totalFeedback,
+    helpfulCount: helpfulCount,
+    reviewerCount: reviewerCount,
+    completionRate: completionRate,
+    avgHelpfulness: avgHelpfulness,
+    criteriaEffectiveness: criteriaEffectiveness,
+    phases: phases,
+    swimlaneStudents: swimlaneStudents
+  };
+}
+
+// ================================================
+// RENDER DASHBOARD
+// ================================================
+
+function pblRenderDashboard() {
+  var container = document.getElementById('pblInsightsContent');
+  if (!container || !pblComputedData) return;
+
+  var d = pblComputedData;
+
+  // Check for empty data
+  if (d.totalIterations === 0 && d.totalFeedback === 0 && d.phases.length === 0) {
+    container.innerHTML = '<div class="pbl-empty"><div class="icon">&#128202;</div><p>No PBL activity found for this map. Enable checkpoints and peer feedback on hexes to see insights here.</p></div>';
+    return;
+  }
+
+  var html = '';
+
+  // Summary cards
+  html += pblRenderSummaryCards(d);
+
+  // Iteration Analytics
+  if (d.totalIterations > 0) {
+    html += '<div class="pbl-section-title">&#128640; Iteration Analytics</div>';
+    html += pblRenderCheckpointTable(d);
+    if (d.heatmapStudents.length > 0 && d.checkpointHexIds.length > 0) {
+      html += pblRenderIterationHeatmap(d);
+    }
+  }
+
+  // Peer Feedback Analytics
+  if (d.totalFeedback > 0) {
+    html += '<div class="pbl-section-title">&#128172; Peer Feedback Analytics</div>';
+    html += pblRenderPeerFeedbackStats(d);
+  }
+
+  // Phase Progress Swimlane
+  if (d.phases.length > 0) {
+    html += '<div class="pbl-section-title">&#127912; Phase Progress</div>';
+    html += pblRenderPhaseSwimlane(d);
+  }
+
+  container.innerHTML = html;
+}
+
+// ================================================
+// RENDER SECTIONS
+// ================================================
+
+function pblRenderSummaryCards(d) {
+  var html = '<div class="pbl-summary-cards">';
+
+  html += '<div class="pbl-summary-card"><div class="pbl-summary-card-value">' + d.totalIterations + '</div><div class="pbl-summary-card-label">Total Iterations</div></div>';
+
+  var revClass = d.revisionRate > 50 ? 'pbl-card-red' : (d.revisionRate > 25 ? 'pbl-card-amber' : 'pbl-card-green');
+  html += '<div class="pbl-summary-card ' + revClass + '"><div class="pbl-summary-card-value">' + d.revisionRate + '%</div><div class="pbl-summary-card-label">Revision Rate</div></div>';
+
+  html += '<div class="pbl-summary-card pbl-card-blue"><div class="pbl-summary-card-value">' + d.totalFeedback + '</div><div class="pbl-summary-card-label">Peer Reviews</div></div>';
+
+  var compClass = d.completionRate >= 70 ? 'pbl-card-green' : (d.completionRate >= 40 ? 'pbl-card-amber' : 'pbl-card-red');
+  html += '<div class="pbl-summary-card ' + compClass + '"><div class="pbl-summary-card-value">' + d.completionRate + '%</div><div class="pbl-summary-card-label">Review Completion</div></div>';
+
+  html += '<div class="pbl-summary-card"><div class="pbl-summary-card-value">' + d.avgIterationsPerCheckpoint + '</div><div class="pbl-summary-card-label">Avg per Checkpoint</div></div>';
+
+  var helpClass = d.avgHelpfulness >= 50 ? 'pbl-card-green' : 'pbl-card-amber';
+  html += '<div class="pbl-summary-card ' + helpClass + '"><div class="pbl-summary-card-value">' + d.avgHelpfulness + '%</div><div class="pbl-summary-card-label">Helpful Rate</div></div>';
+
+  html += '</div>';
+  return html;
+}
+
+function pblRenderCheckpointTable(d) {
+  if (d.checkpointStats.length === 0) return '';
+
+  var html = '<table class="pbl-checkpoint-table">';
+  html += '<thead><tr><th>Checkpoint</th><th>Students</th><th>Total Iterations</th><th>Avg per Student</th></tr></thead>';
+  html += '<tbody>';
+  for (var i = 0; i < d.checkpointStats.length; i++) {
+    var cp = d.checkpointStats[i];
+    html += '<tr>';
+    html += '<td>' + escapeHtml(cp.label) + '</td>';
+    html += '<td>' + cp.uniqueStudents + '</td>';
+    html += '<td>' + cp.totalIterations + '</td>';
+    html += '<td>' + cp.avgPerStudent + '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+function pblRenderIterationHeatmap(d) {
+  var html = '<div class="pbl-heatmap-scroll">';
+  html += '<table class="pbl-heatmap-table">';
+
+  // Header
+  html += '<thead><tr><th>Student</th>';
+  for (var ci = 0; ci < d.checkpointStats.length; ci++) {
+    html += '<th>' + escapeHtml(d.checkpointStats[ci].label) + '</th>';
+  }
+  html += '</tr></thead>';
+
+  // Body
+  html += '<tbody>';
+  for (var si = 0; si < d.heatmapStudents.length; si++) {
+    var s = d.heatmapStudents[si];
+    html += '<tr>';
+    html += '<td class="pbl-student-col">' + escapeHtml(s.name) + '</td>';
+    for (var ci2 = 0; ci2 < d.checkpointHexIds.length; ci2++) {
+      var count = s.cells[d.checkpointHexIds[ci2]] || 0;
+      var heatClass = count === 0 ? 'pbl-heat-none' : (count === 1 ? 'pbl-heat-low' : (count === 2 ? 'pbl-heat-mid' : (count <= 4 ? 'pbl-heat-high' : 'pbl-heat-vhigh')));
+      html += '<td class="' + heatClass + '">' + (count > 0 ? count : '-') + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function pblRenderPeerFeedbackStats(d) {
+  var html = '<div class="pbl-peer-stats">';
+
+  // Reviews overview card
+  html += '<div class="pbl-peer-card">';
+  html += '<div class="pbl-peer-card-header">Review Activity</div>';
+  html += '<div class="pbl-peer-bar-row">';
+  html += '<span class="pbl-peer-bar-label">Given</span>';
+  html += '<div class="pbl-peer-bar-container"><div class="pbl-peer-bar-fill pbl-bar-blue" style="width:' + d.completionRate + '%;"></div></div>';
+  html += '<span class="pbl-peer-bar-value">' + d.reviewerCount + '</span>';
+  html += '</div>';
+  html += '<div class="pbl-peer-bar-row">';
+  html += '<span class="pbl-peer-bar-label">Helpful</span>';
+  html += '<div class="pbl-peer-bar-container"><div class="pbl-peer-bar-fill pbl-bar-green" style="width:' + d.avgHelpfulness + '%;"></div></div>';
+  html += '<span class="pbl-peer-bar-value">' + d.avgHelpfulness + '%</span>';
+  html += '</div>';
+  html += '</div>';
+
+  // Criteria effectiveness card
+  if (d.criteriaEffectiveness.length > 0) {
+    html += '<div class="pbl-peer-card">';
+    html += '<div class="pbl-peer-card-header">Criteria Avg Ratings</div>';
+    for (var ci = 0; ci < d.criteriaEffectiveness.length; ci++) {
+      var ce = d.criteriaEffectiveness[ci];
+      var pct = (parseFloat(ce.avg) / 4) * 100;
+      var barClass = pct >= 75 ? 'pbl-bar-green' : (pct >= 50 ? 'pbl-bar-blue' : 'pbl-bar-amber');
+      html += '<div class="pbl-peer-bar-row">';
+      html += '<span class="pbl-peer-bar-label">' + escapeHtml(ce.criterion) + '</span>';
+      html += '<div class="pbl-peer-bar-container"><div class="pbl-peer-bar-fill ' + barClass + '" style="width:' + pct + '%;"></div></div>';
+      html += '<span class="pbl-peer-bar-value">' + ce.avg + '/4</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function pblRenderPhaseSwimlane(d) {
+  if (d.swimlaneStudents.length === 0 || d.phases.length === 0) return '';
+
+  var html = '<div class="pbl-swimlane-scroll">';
+  html += '<table class="pbl-swimlane-table">';
+
+  // Header: phases
+  html += '<thead><tr><th>Student</th>';
+  for (var pi = 0; pi < d.phases.length; pi++) {
+    html += '<th style="color:' + escapeHtml(d.phases[pi].color || '#475569') + ';">' + escapeHtml(d.phases[pi].label) + '</th>';
+  }
+  html += '</tr></thead>';
+
+  // Body: student rows with phase dots
+  html += '<tbody>';
+  for (var si = 0; si < d.swimlaneStudents.length; si++) {
+    var s = d.swimlaneStudents[si];
+    html += '<tr>';
+    html += '<td class="pbl-student-col">' + escapeHtml(s.name) + '</td>';
+    for (var pi2 = 0; pi2 < d.phases.length; pi2++) {
+      var pStatus = s.phases[d.phases[pi2].id] || 'pending';
+      var dotClass = pStatus === 'done' ? 'pbl-dot-done' : (pStatus === 'active' ? 'pbl-dot-active' : 'pbl-dot-pending');
+      html += '<td><span class="pbl-phase-dot ' + dotClass + '" title="' + pStatus + '"></span></td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
+</script>

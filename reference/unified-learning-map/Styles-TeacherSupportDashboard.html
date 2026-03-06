@@ -1,0 +1,487 @@
+<style>
+/* ================================================
+   TEACHER SUPPORT DASHBOARD STYLES (tsd- prefix)
+   E3-S2: Strategy usage analytics for teachers
+   ================================================ */
+
+/* Container */
+.tsd-container {
+  padding: 20px 24px;
+}
+
+/* Section titles */
+.tsd-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 24px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tsd-section-title:first-child {
+  margin-top: 0;
+}
+
+/* ---- 1. Summary Cards ---- */
+.tsd-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.tsd-summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.tsd-summary-card.success {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.tsd-summary-card.alert {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.tsd-summary-card.danger {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.tsd-summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+
+.tsd-summary-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.tsd-summary-value.success { color: #16a34a; }
+.tsd-summary-value.alert { color: #d97706; }
+.tsd-summary-value.danger { color: #dc2626; }
+
+.tsd-summary-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+/* ---- 2. Student Usage List ---- */
+.tsd-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tsd-student-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  border-left: 3px solid #cbd5e1;
+}
+
+.tsd-student-card.has-profile {
+  border-left-color: #3b82f6;
+}
+
+.tsd-student-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tsd-student-header:hover {
+  background: #f1f5f9;
+}
+
+.tsd-student-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.tsd-profile-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.tsd-profile-badge.iep {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.tsd-profile-badge.wida {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #93c5fd;
+}
+
+.tsd-profile-badge.eal {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #86efac;
+}
+
+.tsd-profile-badge.plan504 {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fcd34d;
+}
+
+.tsd-profile-badge.other {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.tsd-no-profile {
+  font-size: 10px;
+  color: #94a3b8;
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+.tsd-usage-stat {
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.tsd-usage-stat.high {
+  color: #16a34a;
+  background: #f0fdf4;
+}
+
+.tsd-usage-stat.mid {
+  color: #d97706;
+  background: #fffbeb;
+}
+
+.tsd-usage-stat.low {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.tsd-student-chevron {
+  font-size: 12px;
+  color: #94a3b8;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.tsd-student-chevron.open {
+  transform: rotate(90deg);
+}
+
+/* Strategy chips */
+.tsd-strategy-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 14px 10px 14px;
+}
+
+.tsd-strategy-chip {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tsd-strategy-chip.used {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.tsd-strategy-chip.assigned {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px dashed #cbd5e1;
+}
+
+/* Expandable per-hex detail */
+.tsd-student-detail {
+  display: none;
+  padding: 0 14px 12px 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.tsd-student-detail.open {
+  display: block;
+}
+
+.tsd-hex-strategy-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12px;
+}
+
+.tsd-hex-strategy-row:last-child {
+  border-bottom: none;
+}
+
+.tsd-hex-label {
+  font-weight: 600;
+  color: #334155;
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.tsd-hex-strategies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.tsd-hex-chip {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* ---- 3. Strategy Effectiveness ---- */
+.tsd-effectiveness-section {
+  margin-bottom: 8px;
+}
+
+.tsd-eff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tsd-eff-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 50px;
+  align-items: center;
+  gap: 12px;
+}
+
+.tsd-eff-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tsd-eff-users {
+  font-size: 11px;
+  font-weight: 400;
+  color: #94a3b8;
+  display: block;
+}
+
+.tsd-eff-bar-container {
+  height: 22px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.tsd-eff-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+
+.tsd-eff-bar-fill.above {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.tsd-eff-bar-fill.at {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.tsd-eff-bar-fill.below {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.tsd-eff-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  text-align: right;
+}
+
+.tsd-eff-vs-class {
+  font-size: 10px;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.tsd-eff-vs-class.above { color: #16a34a; }
+.tsd-eff-vs-class.at { color: #d97706; }
+.tsd-eff-vs-class.below { color: #dc2626; }
+
+/* ---- 4. Strategy-Hex Heatmap ---- */
+.tsd-heatmap-container {
+  overflow-x: auto;
+  margin-bottom: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.tsd-heatmap {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tsd-heatmap th {
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 8px 10px;
+  text-align: center;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+
+.tsd-heatmap th:first-child {
+  text-align: left;
+  min-width: 160px;
+}
+
+.tsd-heatmap td {
+  padding: 6px 10px;
+  text-align: center;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tsd-heatmap td:first-child {
+  text-align: left;
+  font-weight: 500;
+  color: #334155;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tsd-heatmap-cell {
+  display: inline-block;
+  width: 28px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.tsd-heatmap-cell.none {
+  background: #f1f5f9;
+  color: #cbd5e1;
+}
+
+.tsd-heatmap-cell.low {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.tsd-heatmap-cell.mid {
+  background: #93c5fd;
+  color: #1e3a8a;
+}
+
+.tsd-heatmap-cell.high {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+/* ---- Empty / Loading States ---- */
+.tsd-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.tsd-empty .icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.tsd-empty p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.tsd-loading {
+  padding: 40px 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.tsd-no-data-note {
+  font-size: 13px;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 16px 0;
+  text-align: center;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .tsd-container { padding: 16px; }
+  .tsd-summary-cards { grid-template-columns: repeat(2, 1fr); }
+  .tsd-eff-row { grid-template-columns: 140px 1fr 50px; }
+}
+
+@media (max-width: 640px) {
+  .tsd-container { padding: 12px; }
+  .tsd-summary-cards { grid-template-columns: 1fr; }
+  .tsd-eff-row { grid-template-columns: 120px 1fr 40px; }
+  .tsd-eff-name { font-size: 12px; }
+  .tsd-heatmap-container { display: none; }
+  .tsd-student-header { flex-wrap: wrap; gap: 6px; }
+  .tsd-strategy-chip { font-size: 10px; padding: 2px 6px; }
+}
+</style>

@@ -1,0 +1,1146 @@
+<script>
+// ============================================================================
+// CORNELL NOTES — Frontend (ES5)
+// Stories 1 (per-hex), 3 (notebook browser), 4 (export), 5 (progressive summarization)
+// ============================================================================
+
+// ---- STORY 1: PER-HEX CORNELL NOTES ----
+
+/**
+ * Render the Cornell Notes section in the student hex modal.
+ * Called from openStudentHexPanel after supports section.
+ *
+ * @param {string} hexId
+ * @param {Object} hex - Hex object with label, sbarDomains, etc.
+ * @param {Object} progress - Student progress for this hex
+ * @returns {string} HTML string
+ */
+function renderCornellNotesSection(hexId, hex, progress) {
+  var html = '<div class="cn-section">';
+  html += '<div class="cn-section-title">';
+  html += '<span class="cn-section-title-icon">&#128221;</span> My Notes';
+  html += '<button class="cn-star-toggle' + (cnCurrentNote && (cnCurrentNote.isStarred === true || cnCurrentNote.isStarred === 'true') ? ' cn-starred' : '') + '" ';
+  html += 'id="cnStarBtn" onclick="cnToggleStar(\'' + escapeHtml(hexId) + '\')" title="Star as Intermediate Packet">';
+  html += '&#9733;</button>';
+  html += '</div>';
+
+  // Prompt tip with SBAR-based suggestions
+  html += cnRenderPromptTip(hex);
+
+  // Cornell layout: cues (left) + notes (right)
+  var cues = cnCurrentNote ? (cnCurrentNote.cues || []) : [];
+  var notesContent = cnCurrentNote ? (cnCurrentNote.notesContent || '') : '';
+  var summaryContent = cnCurrentNote ? (cnCurrentNote.summaryContent || '') : '';
+
+  cnCueCount = cues.length || 0;
+
+  html += '<div class="cn-cornell-layout">';
+
+  // Cue column (left)
+  html += '<div class="cn-cue-column">';
+  html += '<div class="cn-cue-header">Cues &amp; Questions</div>';
+  html += '<div class="cn-cue-list" id="cnCueList">';
+  if (cues.length > 0) {
+    for (var i = 0; i < cues.length; i++) {
+      html += cnRenderCueItem(i, cues[i]);
+    }
+  } else {
+    html += cnRenderCueItem(0, '');
+    cnCueCount = 1;
+  }
+  html += '</div>';
+  html += '<button class="cn-add-cue-btn" onclick="cnAddCue()" id="cnAddCueBtn">+ Add Cue</button>';
+  html += '</div>';
+
+  // Notes column (right)
+  html += '<div class="cn-notes-column">';
+  html += '<div class="cn-notes-header">Notes</div>';
+  html += '<textarea class="cn-notes-area" id="cnNotesArea" maxlength="5000" ';
+  html += 'placeholder="Your notes from the lesson, reading, or activity..." ';
+  html += 'oninput="cnUpdateNoteCharCount(); cnUpdateWordCount()">';
+  html += escapeHtml(notesContent);
+  html += '</textarea>';
+  html += '<div class="cn-meta-row">';
+  html += '<span class="cn-word-count" id="cnWordCount">' + cnCountWords(notesContent) + ' words</span>';
+  html += '<span class="cn-char-count" id="cnNoteCharCount">' + notesContent.length + '/5000</span>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>'; // end cn-cornell-layout
+
+  // Summary section (bottom)
+  html += '<div class="cn-summary-section">';
+  html += '<div class="cn-summary-header">Summary</div>';
+  html += '<textarea class="cn-summary-area" id="cnSummaryArea" maxlength="1000" ';
+  html += 'placeholder="In your own words, what is the main takeaway?" ';
+  html += 'oninput="cnUpdateSummaryCharCount()">';
+  html += escapeHtml(summaryContent);
+  html += '</textarea>';
+  html += '<div class="cn-meta-row">';
+  html += '<span></span>';
+  html += '<span class="cn-char-count" id="cnSummaryCharCount">' + summaryContent.length + '/1000</span>';
+  html += '</div>';
+  html += '</div>';
+
+  // Progressive summarization section (Story 5)
+  if (cnCurrentNote && cnCurrentNote.notesContent && cnCurrentNote.noteId) {
+    html += cnRenderDistillSection(cnCurrentNote);
+  }
+
+  // Save row
+  html += '<div class="cn-save-row">';
+  html += '<button class="cn-save-btn" onclick="cnSaveNote(\'' + escapeHtml(hexId) + '\')">Save Notes</button>';
+  html += '<span class="cn-save-status" id="cnSaveStatus">Saved!</span>';
+  html += '</div>';
+
+  html += '</div>'; // end cn-section
+  return html;
+}
+
+/**
+ * Render a single cue input item.
+ */
+function cnRenderCueItem(index, value) {
+  var html = '<div class="cn-cue-item" id="cnCueItem_' + index + '">';
+  html += '<input class="cn-cue-input" type="text" maxlength="200" ';
+  html += 'placeholder="Question or keyword..." ';
+  html += 'value="' + escapeHtml(value) + '" ';
+  html += 'id="cnCueInput_' + index + '">';
+  html += '<button class="cn-cue-remove" onclick="cnRemoveCue(' + index + ')" title="Remove">&times;</button>';
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Add a new empty cue input. Max 10.
+ */
+function cnAddCue() {
+  if (cnCueCount >= 10) return;
+  var list = document.getElementById('cnCueList');
+  if (!list) return;
+  var div = document.createElement('div');
+  div.innerHTML = cnRenderCueItem(cnCueCount, '');
+  list.appendChild(div.firstChild);
+  cnCueCount++;
+  // Focus the new input
+  var newInput = document.getElementById('cnCueInput_' + (cnCueCount - 1));
+  if (newInput) newInput.focus();
+  // Hide add button at max
+  if (cnCueCount >= 10) {
+    var btn = document.getElementById('cnAddCueBtn');
+    if (btn) btn.style.display = 'none';
+  }
+}
+
+/**
+ * Remove a cue input and re-index remaining cues.
+ */
+function cnRemoveCue(index) {
+  // Collect all current cue values
+  var cues = cnCollectCues();
+  if (cues.length <= 1) return; // keep at least one
+  cues.splice(index, 1);
+
+  // Re-render cue list
+  var list = document.getElementById('cnCueList');
+  if (!list) return;
+  var html = '';
+  for (var i = 0; i < cues.length; i++) {
+    html += cnRenderCueItem(i, cues[i]);
+  }
+  list.innerHTML = html;
+  cnCueCount = cues.length;
+
+  // Show add button if under max
+  var btn = document.getElementById('cnAddCueBtn');
+  if (btn && cnCueCount < 10) btn.style.display = '';
+}
+
+/**
+ * Collect all cue values from the DOM.
+ */
+function cnCollectCues() {
+  var cues = [];
+  for (var i = 0; i < cnCueCount; i++) {
+    var input = document.getElementById('cnCueInput_' + i);
+    if (input) {
+      cues.push(input.value.trim());
+    }
+  }
+  return cues;
+}
+
+/**
+ * Apply a cue suggestion — fill next empty cue slot.
+ */
+function cnApplyCueSuggestion(text) {
+  // Find first empty cue slot
+  for (var i = 0; i < cnCueCount; i++) {
+    var input = document.getElementById('cnCueInput_' + i);
+    if (input && !input.value.trim()) {
+      input.value = text;
+      return;
+    }
+  }
+  // All slots filled — add new one if possible
+  if (cnCueCount < 10) {
+    cnAddCue();
+    var newInput = document.getElementById('cnCueInput_' + (cnCueCount - 1));
+    if (newInput) newInput.value = text;
+  }
+}
+
+/**
+ * Update notes character counter.
+ */
+function cnUpdateNoteCharCount() {
+  var area = document.getElementById('cnNotesArea');
+  var counter = document.getElementById('cnNoteCharCount');
+  if (!area || !counter) return;
+  var len = area.value.length;
+  counter.textContent = len + '/5000';
+  counter.className = 'cn-char-count';
+  if (len >= 4500) counter.className += ' cn-at-limit';
+  else if (len >= 4000) counter.className += ' cn-near-limit';
+}
+
+/**
+ * Update summary character counter.
+ */
+function cnUpdateSummaryCharCount() {
+  var area = document.getElementById('cnSummaryArea');
+  var counter = document.getElementById('cnSummaryCharCount');
+  if (!area || !counter) return;
+  var len = area.value.length;
+  counter.textContent = len + '/1000';
+  counter.className = 'cn-char-count';
+  if (len >= 900) counter.className += ' cn-at-limit';
+  else if (len >= 800) counter.className += ' cn-near-limit';
+}
+
+/**
+ * Update word count display.
+ */
+function cnUpdateWordCount() {
+  var area = document.getElementById('cnNotesArea');
+  var display = document.getElementById('cnWordCount');
+  if (!area || !display) return;
+  display.textContent = cnCountWords(area.value) + ' words';
+}
+
+/**
+ * Count words in text.
+ */
+function cnCountWords(text) {
+  var trimmed = (text || '').trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
+}
+
+/**
+ * Save the Cornell Note via RPC.
+ */
+function cnSaveNote(hexId) {
+  var cues = cnCollectCues().filter(function(c) { return c !== ''; });
+  var notesArea = document.getElementById('cnNotesArea');
+  var summaryArea = document.getElementById('cnSummaryArea');
+  var notes = notesArea ? notesArea.value : '';
+  var summary = summaryArea ? summaryArea.value : '';
+
+  if (!notes.trim() && !summary.trim() && cues.length === 0) {
+    return; // nothing to save
+  }
+
+  var saveBtn = document.getElementById('cnSaveBtn');
+  if (saveBtn) { /* button is class-targeted, not id, but we can use the btn variable */ }
+
+  var noteData = { cues: cues, notes: notes, summary: summary };
+  var expectedMapId = currentMap ? currentMap.mapId : '';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      cnCurrentNote = result;
+      if (cnCurrentNote) {
+        cnCurrentNote.cues = cues;
+      }
+      var status = document.getElementById('cnSaveStatus');
+      if (status) {
+        status.classList.add('cn-visible');
+        setTimeout(function() { status.classList.remove('cn-visible'); }, 2000);
+      }
+      // Invalidate notebook cache
+      cnNotebookData = null;
+    })
+    .withFailureHandler(function(err) {
+      showToast(friendlyError(err), 'error');
+    })
+    .saveStudentNote(expectedMapId, hexId, noteData);
+}
+
+/**
+ * Toggle star on current note.
+ */
+function cnToggleStar(hexId) {
+  if (!cnCurrentNote || !cnCurrentNote.noteId) {
+    // Note not yet saved — save first
+    showToast('Please save your notes first before starring.', 'info');
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      cnCurrentNote.isStarred = result.isStarred;
+      var btn = document.getElementById('cnStarBtn');
+      if (btn) {
+        if (result.isStarred) {
+          btn.classList.add('cn-starred');
+        } else {
+          btn.classList.remove('cn-starred');
+        }
+      }
+      // Invalidate notebook cache
+      cnNotebookData = null;
+    })
+    .withFailureHandler(function(err) {
+      showToast(friendlyError(err), 'error');
+    })
+    .toggleNoteStarred(cnCurrentNote.noteId);
+}
+
+// WIDA-leveled sentence frames for EAL students (added to cue suggestions when profile exists)
+var CN_SENTENCE_FRAMES = {
+  low: [    // WIDA levels 1-2 (Entering/Emerging) — simple frames
+    'I see that...',
+    'This is about...',
+    'The main idea is...',
+    'I notice that...',
+    'This is similar to...'
+  ],
+  mid: [    // WIDA levels 3-4 (Developing/Expanding) — causal/connective frames
+    'I noticed that... because...',
+    'This connects to... because...',
+    'The evidence shows that...',
+    'One important detail is...',
+    'I can compare this to...'
+  ],
+  high: [   // WIDA levels 5-6 (Bridging/Reaching) — analytical frames
+    'The significance of this is...',
+    'This challenges the assumption that...',
+    'Drawing on the evidence, I would argue...',
+    'This concept extends to... in that...'
+  ]
+};
+
+/**
+ * Generate contextual cue suggestions based on hex SBAR domains and type.
+ */
+function cnGenerateCueSuggestions(hex) {
+  var suggestions = [];
+  var sbar = (hex.sbarDomains || '').toUpperCase();
+
+  // Use shared SBAR_QUESTION_CUES constant (from Scripts-Core.html)
+  if (typeof SBAR_QUESTION_CUES !== 'undefined') {
+    if (sbar.indexOf('KU') >= 0 && SBAR_QUESTION_CUES.KU) {
+      for (var ki = 0; ki < SBAR_QUESTION_CUES.KU.length; ki++) { suggestions.push(SBAR_QUESTION_CUES.KU[ki]); }
+    }
+    if (sbar.indexOf('TT') >= 0 && SBAR_QUESTION_CUES.TT) {
+      for (var ti = 0; ti < SBAR_QUESTION_CUES.TT.length; ti++) { suggestions.push(SBAR_QUESTION_CUES.TT[ti]); }
+    }
+    if (sbar.indexOf('C') >= 0 && SBAR_QUESTION_CUES.C) {
+      for (var ci = 0; ci < SBAR_QUESTION_CUES.C.length; ci++) { suggestions.push(SBAR_QUESTION_CUES.C[ci]); }
+    }
+  }
+
+  // AISC competency-based cue suggestions
+  var comps = (hex.curriculum && hex.curriculum.competencies) ? hex.curriculum.competencies : [];
+  if (comps.indexOf('criticalThinkers') >= 0) {
+    suggestions.push('What evidence supports this?');
+    suggestions.push('What assumptions are being made?');
+  }
+  if (comps.indexOf('resilientLearners') >= 0) {
+    suggestions.push('What was challenging and how did you work through it?');
+  }
+  if (comps.indexOf('skillfulCommunicators') >= 0) {
+    suggestions.push('How would you explain this to a younger student?');
+  }
+  if (comps.indexOf('effectiveCollaborators') >= 0) {
+    suggestions.push("What did you learn from a classmate's perspective?");
+  }
+  if (comps.indexOf('digitalNavigators') >= 0) {
+    suggestions.push('What tools or technology helped you learn this?');
+  }
+  if (comps.indexOf('changeMakers') >= 0) {
+    suggestions.push('How could this knowledge be used to make a difference?');
+  }
+
+  // Default suggestions always included
+  if (suggestions.length === 0) {
+    suggestions.push('What did I learn?');
+    suggestions.push('What was confusing?');
+    suggestions.push('What do I want to remember?');
+    suggestions.push('How does this connect to what I already know?');
+  }
+
+  // EAL sentence frames based on WIDA level (appended after question cues)
+  if (typeof sstProfileData !== 'undefined' && sstProfileData && sstProfileData.widaOverallLevel > 0) {
+    var wLvl = sstProfileData.widaOverallLevel;
+    var bracket = wLvl <= 2 ? 'low' : (wLvl <= 4 ? 'mid' : 'high');
+    var frames = CN_SENTENCE_FRAMES[bracket] || [];
+    for (var f = 0; f < frames.length; f++) {
+      suggestions.push(frames[f]);
+    }
+  }
+
+  return suggestions;
+}
+
+/**
+ * Render the prompt tip with clickable cue suggestions.
+ */
+function cnRenderPromptTip(hex) {
+  var suggestions = cnGenerateCueSuggestions(hex);
+  var hexType = (hex.type || 'core');
+  var tipText = 'Try these cue questions for your notes:';
+
+  if (hexType === 'core') {
+    tipText = 'For this core concept, try these cue questions:';
+  } else if (hexType === 'extension') {
+    tipText = 'For this extension activity, consider:';
+  } else if (hexType === 'assessment') {
+    tipText = 'After this assessment, reflect on:';
+  }
+
+  // Split question cues from sentence frames (frames end with '...')
+  var questionSugs = [];
+  var frameSugs = [];
+  for (var s = 0; s < suggestions.length; s++) {
+    var sug = suggestions[s];
+    if (sug.length > 3 && sug.substring(sug.length - 3) === '...') {
+      frameSugs.push(sug);
+    } else {
+      questionSugs.push(sug);
+    }
+  }
+
+  var html = '<div class="cn-prompt-tip">';
+  html += '<div class="cn-prompt-tip-title">' + escapeHtml(tipText) + '</div>';
+  html += '<div class="cn-cue-suggestions">';
+  for (var i = 0; i < questionSugs.length; i++) {
+    html += '<span class="cn-cue-suggestion" onclick="cnApplyCueSuggestion(\'' + escapeHtml(questionSugs[i]).replace(/'/g, "\\'") + '\')">';
+    html += escapeHtml(questionSugs[i]);
+    html += '</span>';
+  }
+  html += '</div>';
+
+  // Sentence frames — distinct teal group for EAL students
+  if (frameSugs.length > 0) {
+    html += '<div class="cn-frame-label">\u270F\uFE0F Sentence starters to help you write:</div>';
+    html += '<div class="cn-cue-suggestions">';
+    for (var f = 0; f < frameSugs.length; f++) {
+      html += '<span class="cn-cue-suggestion cn-frame" onclick="cnApplyCueSuggestion(\'' + escapeHtml(frameSugs[f]).replace(/'/g, "\\'") + '\')">';
+      html += escapeHtml(frameSugs[f]);
+      html += '</span>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Load note for a hex on modal open. Called from openStudentHexPanel integration.
+ */
+function cnLoadNoteForHex(mapId, hexId, callback) {
+  cnCurrentNote = null;
+  cnCueCount = 0;
+  google.script.run
+    .withSuccessHandler(function(note) {
+      cnCurrentNote = note;
+      if (callback) callback(note);
+    })
+    .withFailureHandler(function(err) {
+      cnCurrentNote = null;
+      if (callback) callback(null);
+    })
+    .getStudentNote(mapId, hexId);
+}
+
+
+// ---- STORY 5: PROGRESSIVE SUMMARIZATION ----
+
+/**
+ * Render the distillation section below notes.
+ */
+function cnRenderDistillSection(note) {
+  var lastLayer = parseInt(note.lastLayerApplied, 10) || 1;
+  var html = '<div class="cn-distill-section">';
+
+  // Header with layer progress
+  html += '<div class="cn-distill-header">';
+  html += '<span style="font-size:12px;font-weight:600;color:#475569;">Progressive Summarization</span>';
+  html += cnRenderLayerProgress(lastLayer);
+  html += '</div>';
+
+  // If in distillation mode, show interactive panel
+  if (cnDistillMode) {
+    html += cnRenderDistillPanel(note);
+  } else {
+    // Show distill button + any existing distilled content
+    html += '<button class="cn-distill-btn" onclick="cnStartDistillation()">Distill Your Notes</button>';
+
+    if (note.distilledContent) {
+      html += '<div class="cn-distilled-view">';
+      html += '<div class="cn-distilled-label">Distilled Insight (Layer 4)</div>';
+      html += '<div class="cn-distilled-text">' + escapeHtml(note.distilledContent) + '</div>';
+      html += '</div>';
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Render layer progress stepper.
+ */
+function cnRenderLayerProgress(lastLayer) {
+  var labels = ['Capture', 'Bold', 'Highlight', 'Summarize'];
+  var html = '<div class="cn-layer-stepper">';
+  for (var i = 0; i < 4; i++) {
+    if (i > 0) html += '<div class="cn-layer-connector"></div>';
+    var cls = 'cn-layer-step';
+    if (i + 1 <= lastLayer) cls += ' cn-step-done';
+    if (i + 1 === lastLayer + 1 && lastLayer < 4) cls += ' cn-step-active';
+    html += '<div class="' + cls + '">';
+    html += (i + 1 <= lastLayer ? '&#10003; ' : '') + labels[i];
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Start distillation mode.
+ */
+function cnStartDistillation() {
+  cnDistillMode = true;
+  // Split notes into sentences
+  var notesArea = document.getElementById('cnNotesArea');
+  var notesText = notesArea ? notesArea.value : (cnCurrentNote ? cnCurrentNote.notesContent : '');
+  cnDistillSentences = cnSplitSentences(notesText);
+
+  // Load existing bold/highlight if any
+  if (cnCurrentNote) {
+    cnDistillBold = {};
+    cnDistillHighlight = {};
+    var bi = cnCurrentNote.boldIndices || safeJsonParse(cnCurrentNote.boldIndicesJson, []);
+    var hi = cnCurrentNote.highlightIndices || safeJsonParse(cnCurrentNote.highlightIndicesJson, []);
+    for (var b = 0; b < bi.length; b++) cnDistillBold[bi[b]] = true;
+    for (var h = 0; h < hi.length; h++) cnDistillHighlight[hi[h]] = true;
+    cnDistillSummary = cnCurrentNote.distilledContent || '';
+  }
+
+  // Re-render the distill section
+  cnReRenderDistillSection();
+}
+
+/**
+ * Split text into sentences for distillation.
+ */
+function cnSplitSentences(text) {
+  if (!text || !text.trim()) return [];
+  // Split on sentence-ending punctuation followed by whitespace, or newlines
+  // Uses replace+split instead of lookbehind (not supported in Safari/ES5)
+  var normalized = text.replace(/([.!?])\s+/g, '$1\n');
+  var raw = normalized.split(/\n+/);
+  var sentences = [];
+  for (var i = 0; i < raw.length; i++) {
+    var s = raw[i].trim();
+    if (s) sentences.push(s);
+  }
+  return sentences;
+}
+
+/**
+ * Safe JSON parse for frontend (ES5).
+ */
+function safeJsonParse(str, fallback) {
+  if (!str) return fallback || [];
+  try { return JSON.parse(str); } catch(e) { return fallback || []; }
+}
+
+/**
+ * Re-render just the distill section in the DOM.
+ */
+function cnReRenderDistillSection() {
+  var container = document.querySelector('.cn-distill-section');
+  if (!container) return;
+  container.outerHTML = cnRenderDistillSection(cnCurrentNote);
+}
+
+/**
+ * Render the interactive distillation panel.
+ */
+function cnRenderDistillPanel(note) {
+  var html = '';
+  var boldCount = Object.keys(cnDistillBold).length;
+  var highlightCount = Object.keys(cnDistillHighlight).length;
+
+  // Instructions
+  if (boldCount === 0) {
+    html += '<div class="cn-distill-prompt">Step 2: Click sentences to mark the most important ones (bold).</div>';
+  } else if (highlightCount === 0) {
+    html += '<div class="cn-distill-prompt">Step 3: From the bolded sentences, click to highlight the key insights.</div>';
+  } else {
+    html += '<div class="cn-distill-prompt">Step 4: Write a 1-2 sentence summary of the core insight.</div>';
+  }
+
+  // Sentence list
+  html += '<div class="cn-sentence-list">';
+  for (var i = 0; i < cnDistillSentences.length; i++) {
+    var cls = 'cn-sentence-item';
+    if (cnDistillHighlight[i]) cls += ' cn-highlight';
+    else if (cnDistillBold[i]) cls += ' cn-bold';
+    html += '<div class="' + cls + '" onclick="cnToggleSentence(' + i + ')">';
+    html += escapeHtml(cnDistillSentences[i]);
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Layer 4: Executive summary input
+  if (boldCount > 0) {
+    html += '<div class="cn-distill-prompt" style="margin-top:12px;">Distilled Insight (in your own words):</div>';
+    html += '<textarea class="cn-distill-input" id="cnDistillInput" maxlength="500" ';
+    html += 'placeholder="In 1-2 sentences, what is the core insight from these notes?">';
+    html += escapeHtml(cnDistillSummary);
+    html += '</textarea>';
+    html += '<div class="cn-meta-row">';
+    html += '<span></span>';
+    html += '<span class="cn-char-count" id="cnDistillCharCount">' + (cnDistillSummary || '').length + '/500</span>';
+    html += '</div>';
+  }
+
+  // Save/Cancel buttons
+  html += '<div class="cn-distill-save-row">';
+  html += '<button class="cn-save-btn" onclick="cnSaveDistillation()">Save Distillation</button>';
+  html += '<button class="cn-distill-btn" onclick="cnCancelDistillation()">Cancel</button>';
+  html += '<span class="cn-save-status" id="cnDistillSaveStatus">Saved!</span>';
+  html += '</div>';
+
+  return html;
+}
+
+/**
+ * Toggle a sentence between normal/bold/highlight states.
+ */
+function cnToggleSentence(index) {
+  if (cnDistillHighlight[index]) {
+    // Already highlighted — remove highlight (back to bold)
+    delete cnDistillHighlight[index];
+  } else if (cnDistillBold[index]) {
+    // Bold — promote to highlight
+    cnDistillHighlight[index] = true;
+  } else {
+    // Normal — make bold
+    cnDistillBold[index] = true;
+  }
+  cnReRenderDistillSection();
+}
+
+/**
+ * Save distillation layers via RPC.
+ */
+function cnSaveDistillation() {
+  if (!cnCurrentNote || !cnCurrentNote.noteId) {
+    showToast('Please save your notes first.', 'info');
+    return;
+  }
+
+  var distillInput = document.getElementById('cnDistillInput');
+  var distilled = distillInput ? distillInput.value : cnDistillSummary;
+
+  var boldIndices = [];
+  var highlightIndices = [];
+  var keys, k;
+  keys = Object.keys(cnDistillBold);
+  for (k = 0; k < keys.length; k++) boldIndices.push(parseInt(keys[k], 10));
+  keys = Object.keys(cnDistillHighlight);
+  for (k = 0; k < keys.length; k++) highlightIndices.push(parseInt(keys[k], 10));
+
+  var layers = {
+    boldIndices: boldIndices,
+    highlightIndices: highlightIndices,
+    distilled: distilled
+  };
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      cnCurrentNote = result;
+      cnCurrentNote.boldIndices = boldIndices;
+      cnCurrentNote.highlightIndices = highlightIndices;
+      cnDistillMode = false;
+      cnReRenderDistillSection();
+      var status = document.getElementById('cnDistillSaveStatus');
+      if (status) {
+        status.classList.add('cn-visible');
+        setTimeout(function() { status.classList.remove('cn-visible'); }, 2000);
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast(friendlyError(err), 'error');
+    })
+    .saveNoteLayers(cnCurrentNote.noteId, layers);
+}
+
+/**
+ * Cancel distillation mode.
+ */
+function cnCancelDistillation() {
+  cnDistillMode = false;
+  cnReRenderDistillSection();
+}
+
+
+// ---- STORY 3: NOTEBOOK BROWSER (PARA) ----
+
+/**
+ * Toggle the notebook panel in the Planner view.
+ */
+function cnToggleNotebook() {
+  var panel = document.getElementById('cnNotebookPanel');
+  var btn = document.getElementById('cnNotebookToggleBtn');
+  if (!panel) return;
+
+  if (panel.style.display === 'none' || !panel.style.display) {
+    panel.style.display = 'block';
+    if (btn) btn.classList.add('cn-active');
+    if (!cnNotebookLoaded) {
+      cnNotebookLoaded = true;
+      cnLoadNotebook();
+    }
+  } else {
+    panel.style.display = 'none';
+    if (btn) btn.classList.remove('cn-active');
+  }
+}
+
+/**
+ * Load all student notes for the notebook browser.
+ */
+function cnLoadNotebook() {
+  var panel = document.getElementById('cnNotebookPanel');
+  if (panel) panel.innerHTML = '<div class="cn-notebook-empty">Loading notes...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(notes) {
+      cnNotebookData = notes || [];
+      cnRenderNotebook();
+    })
+    .withFailureHandler(function(err) {
+      if (panel) panel.innerHTML = '<div class="cn-notebook-empty">' + escapeHtml(friendlyError(err)) + '</div>';
+    })
+    .getAllStudentNotes();
+}
+
+/**
+ * Render the notebook browser.
+ */
+function cnRenderNotebook() {
+  var panel = document.getElementById('cnNotebookPanel');
+  if (!panel) return;
+
+  var notes = cnNotebookData || [];
+  if (notes.length === 0) {
+    panel.innerHTML = '<div class="cn-notebook-header">' +
+      '<div class="cn-notebook-title">My Notebook</div></div>' +
+      '<div class="cn-notebook-empty">No notes yet. Open a hex and start taking Cornell Notes!</div>';
+    return;
+  }
+
+  var grouped = cnGroupByPara(notes);
+  var html = '';
+
+  // Header with export button
+  html += '<div class="cn-notebook-header">';
+  html += '<div class="cn-notebook-title">My Notebook</div>';
+  html += '<div class="cn-notebook-actions">';
+  html += '<button class="cn-export-btn" onclick="cnExportAllNotes()">Export All to Doc</button>';
+  html += '</div>';
+  html += '</div>';
+
+  // Search
+  html += '<input class="cn-notebook-search" id="cnNotebookSearch" type="text" ';
+  html += 'placeholder="Search your notes..." oninput="cnSearchNotes()">';
+
+  // Layout: PARA nav + content
+  html += '<div class="cn-notebook-layout">';
+
+  // PARA nav sidebar
+  html += '<div class="cn-para-nav">';
+  var sections = [
+    { key: 'projects', label: 'Projects', icon: '&#128640;', cssClass: 'cn-para-projects' },
+    { key: 'areas', label: 'Areas', icon: '&#128218;', cssClass: 'cn-para-areas' },
+    { key: 'resources', label: 'Resources', icon: '&#11088;', cssClass: 'cn-para-resources' },
+    { key: 'archive', label: 'Archive', icon: '&#128451;', cssClass: 'cn-para-archive' }
+  ];
+  for (var s = 0; s < sections.length; s++) {
+    var sec = sections[s];
+    var count = grouped[sec.key] ? grouped[sec.key].length : 0;
+    var isActive = cnParaSection === sec.key;
+    html += '<button class="cn-para-btn ' + sec.cssClass + (isActive ? ' cn-active' : '') + '" ';
+    html += 'onclick="cnSwitchParaSection(\'' + sec.key + '\')">';
+    html += '<span>' + sec.icon + '</span> ' + sec.label;
+    html += '<span class="cn-para-count">' + count + '</span>';
+    html += '</button>';
+  }
+  html += '</div>';
+
+  // Content area
+  html += '<div class="cn-notebook-content" id="cnNotebookContent">';
+  html += cnRenderParaContent(grouped);
+  html += '</div>';
+
+  html += '</div>'; // end cn-notebook-layout
+
+  // Export success container
+  html += '<div id="cnExportResult"></div>';
+
+  panel.innerHTML = html;
+}
+
+/**
+ * Group notes into PARA categories using mapsData and plannerData.
+ */
+function cnGroupByPara(notes) {
+  var projects = [];
+  var areas = [];
+  var resources = [];
+  var archive = [];
+
+  // Build map completion status from available data
+  var mapCompletion = {};
+  if (typeof plannerData !== 'undefined' && plannerData && plannerData.tasks) {
+    // Use planner tasks to determine map completion
+    var mapTasks = {};
+    for (var t = 0; t < plannerData.tasks.length; t++) {
+      var task = plannerData.tasks[t];
+      var mid = String(task.mapId);
+      if (!mapTasks[mid]) mapTasks[mid] = { total: 0, done: 0 };
+      mapTasks[mid].total++;
+      if (task.status === 'completed' || task.status === 'mastered') {
+        mapTasks[mid].done++;
+      }
+    }
+    var mtKeys = Object.keys(mapTasks);
+    for (var mk = 0; mk < mtKeys.length; mk++) {
+      var mt = mapTasks[mtKeys[mk]];
+      mapCompletion[mtKeys[mk]] = mt.total > 0 && mt.done >= mt.total;
+    }
+  }
+
+  // Build map-to-course lookup
+  var mapCourse = {};
+  if (typeof mapsData !== 'undefined' && mapsData) {
+    for (var m = 0; m < mapsData.length; m++) {
+      mapCourse[String(mapsData[m].mapId)] = mapsData[m].courseId || '';
+    }
+  }
+
+  for (var i = 0; i < notes.length; i++) {
+    var note = notes[i];
+    var nMid = String(note.mapId);
+
+    // Starred = Resources
+    if (note.isStarred === true || note.isStarred === 'true') {
+      resources.push(note);
+    }
+
+    // Completed map = Archive, else Project
+    if (mapCompletion[nMid]) {
+      archive.push(note);
+    } else {
+      projects.push(note);
+    }
+  }
+
+  // Areas: group project notes by course
+  // (areas is a different view of projects, grouped by course)
+  var byCourse = {};
+  for (var p = 0; p < projects.length; p++) {
+    var cid = mapCourse[String(projects[p].mapId)] || 'uncategorized';
+    if (!byCourse[cid]) byCourse[cid] = [];
+    byCourse[cid].push(projects[p]);
+  }
+  var courseKeys = Object.keys(byCourse);
+  for (var ck = 0; ck < courseKeys.length; ck++) {
+    areas = areas.concat(byCourse[courseKeys[ck]]);
+  }
+
+  return {
+    projects: projects,
+    areas: areas,
+    resources: resources,
+    archive: archive
+  };
+}
+
+/**
+ * Switch visible PARA section.
+ */
+function cnSwitchParaSection(section) {
+  cnParaSection = section;
+  cnRenderNotebook();
+}
+
+/**
+ * Render content for the active PARA section.
+ */
+function cnRenderParaContent(grouped) {
+  var notes = grouped[cnParaSection] || [];
+  var searchQuery = '';
+  var searchEl = document.getElementById('cnNotebookSearch');
+  if (searchEl) searchQuery = searchEl.value.toLowerCase().trim();
+
+  // Filter by search
+  if (searchQuery) {
+    notes = notes.filter(function(n) {
+      var content = ((n.notesContent || '') + ' ' + (n.summaryContent || '') + ' ' +
+        (n.cues || []).join(' ')).toLowerCase();
+      return content.indexOf(searchQuery) >= 0;
+    });
+  }
+
+  if (notes.length === 0) {
+    return '<div class="cn-notebook-empty">No notes in this section' +
+      (searchQuery ? ' matching "' + escapeHtml(searchQuery) + '"' : '') + '.</div>';
+  }
+
+  // Group by map
+  var byMap = {};
+  var mapOrder = [];
+  for (var i = 0; i < notes.length; i++) {
+    var mid = String(notes[i].mapId);
+    if (!byMap[mid]) {
+      byMap[mid] = [];
+      mapOrder.push(mid);
+    }
+    byMap[mid].push(notes[i]);
+  }
+
+  // Get map titles
+  var mapTitles = {};
+  if (typeof mapsData !== 'undefined' && mapsData) {
+    for (var m = 0; m < mapsData.length; m++) {
+      mapTitles[String(mapsData[m].mapId)] = mapsData[m].title || 'Untitled Map';
+    }
+  }
+
+  // Get hex labels
+  var hexLabels = {};
+  if (typeof mapsData !== 'undefined' && mapsData) {
+    for (var mi = 0; mi < mapsData.length; mi++) {
+      var hexes = safeJsonParse(mapsData[mi].hexesJson, []);
+      for (var h = 0; h < hexes.length; h++) {
+        hexLabels[String(mapsData[mi].mapId) + '_' + String(hexes[h].id)] = hexes[h].label || 'Hex';
+      }
+    }
+  }
+
+  var html = '';
+  for (var mo = 0; mo < mapOrder.length; mo++) {
+    var mapId = mapOrder[mo];
+    var mapNotes = byMap[mapId];
+    var mapTitle = mapTitles[mapId] || 'Map';
+
+    html += '<div class="cn-map-group">';
+    html += '<div class="cn-map-group-header" onclick="cnToggleMapGroup(this)">';
+    html += '<span class="cn-map-group-title">' + escapeHtml(mapTitle) + '</span>';
+    html += '<span class="cn-map-group-count">' + mapNotes.length + ' note' + (mapNotes.length !== 1 ? 's' : '') + '</span>';
+    if (cnParaSection !== 'resources') {
+      html += '<button class="cn-export-btn" onclick="event.stopPropagation(); cnExportMapNotes(\'' + escapeHtml(mapId) + '\')" style="margin-left:8px;">Export</button>';
+    }
+    html += '</div>';
+    html += '<div class="cn-map-group-body">';
+
+    for (var n = 0; n < mapNotes.length; n++) {
+      var note = mapNotes[n];
+      var hexLabel = hexLabels[String(note.mapId) + '_' + String(note.hexId)] || 'Hex';
+      var preview = (note.notesContent || '').substring(0, 80);
+      if ((note.notesContent || '').length > 80) preview += '...';
+      var cueCount = (note.cues || []).length;
+      var wc = parseInt(note.wordCount, 10) || 0;
+      var isStarred = note.isStarred === true || note.isStarred === 'true';
+      var dateStr = note.updatedAt ? note.updatedAt.substring(0, 10) : '';
+
+      html += '<div class="cn-note-card" onclick="cnToggleNoteDetail(\'' + escapeHtml(note.noteId) + '\')">';
+      html += '<span class="cn-note-card-label">' + escapeHtml(hexLabel) + '</span>';
+      html += '<span class="cn-note-card-preview">' + escapeHtml(preview) + '</span>';
+      html += '<div class="cn-note-card-meta">';
+      if (cueCount > 0) html += '<span class="cn-note-card-badge">' + cueCount + ' cues</span>';
+      html += '<span class="cn-note-card-badge">' + wc + 'w</span>';
+      html += '<span class="cn-note-card-star' + (isStarred ? ' cn-starred' : '') + '">&#9733;</span>';
+      html += '<span class="cn-note-card-date">' + escapeHtml(dateStr) + '</span>';
+      html += '</div>';
+      html += '</div>';
+
+      // Detail panel (hidden by default)
+      if (cnExpandedNoteId === note.noteId) {
+        html += cnRenderNoteDetailPanel(note, hexLabel);
+      }
+    }
+
+    html += '</div>'; // end map-group-body
+    html += '</div>'; // end map-group
+  }
+
+  return html;
+}
+
+/**
+ * Toggle map group collapse.
+ */
+function cnToggleMapGroup(headerEl) {
+  var group = headerEl.parentElement;
+  if (group) group.classList.toggle('cn-collapsed');
+}
+
+/**
+ * Toggle note detail in notebook browser.
+ */
+function cnToggleNoteDetail(noteId) {
+  if (cnExpandedNoteId === noteId) {
+    cnExpandedNoteId = null;
+  } else {
+    cnExpandedNoteId = noteId;
+  }
+  // Re-render content only
+  var content = document.getElementById('cnNotebookContent');
+  if (content && cnNotebookData) {
+    var grouped = cnGroupByPara(cnNotebookData);
+    content.innerHTML = cnRenderParaContent(grouped);
+  }
+}
+
+/**
+ * Render expanded note detail in notebook.
+ */
+function cnRenderNoteDetailPanel(note, hexLabel) {
+  var html = '<div class="cn-note-detail">';
+  // Cues as chips
+  var cues = note.cues || [];
+  if (cues.length > 0) {
+    html += '<div class="cn-note-detail-cues">';
+    for (var c = 0; c < cues.length; c++) {
+      html += '<span class="cn-note-detail-cue-chip">' + escapeHtml(cues[c]) + '</span>';
+    }
+    html += '</div>';
+  }
+  // Notes body
+  if (note.notesContent) {
+    html += '<div class="cn-note-detail-body">' + escapeHtml(note.notesContent) + '</div>';
+  }
+  // Summary
+  if (note.summaryContent) {
+    html += '<div class="cn-note-detail-summary">' + escapeHtml(note.summaryContent) + '</div>';
+  }
+  // Distilled
+  if (note.distilledContent) {
+    html += '<div class="cn-distilled-view" style="margin-top:8px;">';
+    html += '<div class="cn-distilled-label">Distilled Insight</div>';
+    html += '<div class="cn-distilled-text">' + escapeHtml(note.distilledContent) + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Search notes in notebook browser.
+ */
+function cnSearchNotes() {
+  var content = document.getElementById('cnNotebookContent');
+  if (content && cnNotebookData) {
+    var grouped = cnGroupByPara(cnNotebookData);
+    content.innerHTML = cnRenderParaContent(grouped);
+  }
+}
+
+
+// ---- STORY 4: EXPORT ----
+
+/**
+ * Export all notes for a specific map to Google Doc.
+ */
+function cnExportMapNotes(mapId) {
+  var resultEl = document.getElementById('cnExportResult');
+  if (resultEl) resultEl.innerHTML = '<div class="cn-notebook-empty">Creating Google Doc...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(docUrl) {
+      cnShowExportSuccess(docUrl);
+    })
+    .withFailureHandler(function(err) {
+      if (resultEl) resultEl.innerHTML = '<div class="cn-notebook-empty" style="color:#ef4444;">' + escapeHtml(friendlyError(err)) + '</div>';
+    })
+    .exportNotesToDoc(mapId);
+}
+
+/**
+ * Export starred notes to Google Doc.
+ */
+function cnExportStarredNotes() {
+  var resultEl = document.getElementById('cnExportResult');
+  if (resultEl) resultEl.innerHTML = '<div class="cn-notebook-empty">Creating Google Doc...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(docUrl) {
+      cnShowExportSuccess(docUrl);
+    })
+    .withFailureHandler(function(err) {
+      if (resultEl) resultEl.innerHTML = '<div class="cn-notebook-empty" style="color:#ef4444;">' + escapeHtml(friendlyError(err)) + '</div>';
+    })
+    .exportStarredNotesToDoc();
+}
+
+/**
+ * Export all notes (PARA structure) to Google Doc.
+ */
+function cnExportAllNotes() {
+  var resultEl = document.getElementById('cnExportResult');
+  if (resultEl) resultEl.innerHTML = '<div class="cn-notebook-empty">Creating Google Doc...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(docUrl) {
+      cnShowExportSuccess(docUrl);
+    })
+    .withFailureHandler(function(err) {
+      if (resultEl) resultEl.innerHTML = '<div class="cn-notebook-empty" style="color:#ef4444;">' + escapeHtml(friendlyError(err)) + '</div>';
+    })
+    .exportAllNotesToDoc();
+}
+
+/**
+ * Show export success with NotebookLM instructions.
+ */
+function cnShowExportSuccess(docUrl) {
+  var resultEl = document.getElementById('cnExportResult');
+  if (!resultEl) return;
+
+  var html = '<div class="cn-export-success">';
+  html += '<div class="cn-export-success-title">Notes Exported Successfully!</div>';
+  html += '<div class="cn-export-steps">';
+  html += 'Your notes have been exported to a Google Doc. To use with NotebookLM:';
+  html += '<ol>';
+  html += '<li>Open the Doc link below</li>';
+  html += '<li>Go to <strong>notebooklm.google.com</strong></li>';
+  html += '<li>Create a new notebook (or open an existing one)</li>';
+  html += '<li>Click <strong>"Add source"</strong> and select the Google Doc</li>';
+  html += '</ol>';
+  html += '</div>';
+  html += '<a class="cn-export-link" href="' + escapeHtml(docUrl) + '" target="_blank">Open Google Doc</a>';
+  html += '</div>';
+
+  resultEl.innerHTML = html;
+}
+</script>

@@ -1,0 +1,693 @@
+<script>
+    /* ================================================
+       QUICK POLLS / EXIT TICKETS
+       Prefix: qp-
+       ================================================ */
+
+    // ---- Constants ----
+    var QP_STUDENT_POLL_INTERVAL = 10000;     // 10 seconds
+    var QP_STUDENT_POLL_SLOW = 20000;         // 20 seconds
+    var QP_STUDENT_SLOW_THRESHOLD = 300000;   // 5 minutes
+    var QP_TEACHER_REFRESH_INTERVAL = 5000;   // 5 seconds
+    var QP_MAX_OPTIONS = 5;
+    var QP_MIN_OPTIONS = 2;
+
+    // ================================================
+    //  STORY 2 — Teacher Poll Creator
+    // ================================================
+
+    function qpOpenCreator() {
+      if (currentViewMode !== 'teacher') {
+        showToast('Polls are available in teacher view', 'error');
+        return;
+      }
+      qpCreatorOpen = true;
+      qpCreatorView = 'create';
+      qpSelectedType = 'mc';
+      qpOptions = ['', ''];
+      qpCorrectIndex = -1;
+      qpSelectedClassId = (classesData && classesData.length > 0) ? String(classesData[0].classId) : '';
+
+      // Check if there is already an active poll for selected class
+      qpCheckExistingActivePoll();
+
+      var overlay = document.getElementById('qpOverlay');
+      if (overlay) {
+        overlay.classList.add('active');
+        qpRenderCreator();
+      }
+    }
+
+    function qpCloseCreator() {
+      qpCreatorOpen = false;
+      if (qpRefreshTimer) { clearTimeout(qpRefreshTimer); qpRefreshTimer = null; }
+      var overlay = document.getElementById('qpOverlay');
+      if (overlay) overlay.classList.remove('active');
+      qpActivePollId = null;
+      qpActivePollData = null;
+      qpHistoryCache = [];
+    }
+
+    function qpCheckExistingActivePoll() {
+      if (!qpSelectedClassId) return;
+      var expectedClassId = String(qpSelectedClassId);
+      google.script.run
+        .withSuccessHandler(function(poll) {
+          if (String(qpSelectedClassId) !== expectedClassId) return;
+          if (poll && poll.status === 'active') {
+            qpActivePollId = poll.pollId;
+            qpActivePollData = poll;
+            qpCreatorView = 'active';
+            if (qpCreatorOpen) qpRenderCreator();
+          }
+        })
+        .withFailureHandler(function() { /* silent */ })
+        .getActivePollForStudent(expectedClassId);
+    }
+
+    function qpSwitchView(view) {
+      qpCreatorView = view;
+      if (view === 'history') {
+        qpLoadHistory();
+      } else {
+        qpRenderCreator();
+      }
+    }
+
+    function qpRenderCreator() {
+      var overlay = document.getElementById('qpOverlay');
+      if (!overlay) return;
+
+      var html = '<div class="qp-modal">';
+      html += '<div class="qp-header">';
+      html += '<span class="qp-title">\uD83D\uDCCA Quick Poll</span>';
+      html += '<div class="qp-view-tabs">';
+      html += '<button type="button" class="qp-view-tab' + (qpCreatorView === 'create' ? ' active' : '') + '" onclick="qpSwitchView(\'create\')">Create</button>';
+      html += '<button type="button" class="qp-view-tab' + (qpCreatorView === 'active' ? ' active' : '') + '"' + (qpActivePollId ? '' : ' disabled') + ' onclick="qpSwitchView(\'active\')">Live</button>';
+      html += '<button type="button" class="qp-view-tab' + (qpCreatorView === 'history' ? ' active' : '') + '" onclick="qpSwitchView(\'history\')">History</button>';
+      html += '</div>';
+      html += '<button type="button" class="qp-close" onclick="qpCloseCreator()" aria-label="Close poll creator">&times;</button>';
+      html += '</div>';
+
+      html += '<div class="qp-body">';
+      if (qpCreatorView === 'create') {
+        html += qpRenderCreateView();
+      } else if (qpCreatorView === 'active') {
+        html += qpRenderActiveView();
+      } else {
+        html += qpRenderHistoryView();
+      }
+      html += '</div>';
+      html += '</div>';
+
+      overlay.innerHTML = html;
+
+      if (qpCreatorView === 'active' && qpActivePollId) {
+        qpStartResultsRefresh();
+      }
+    }
+
+    // ---- Create View ----
+
+    function qpRenderCreateView() {
+      var html = '';
+
+      // Class selector
+      html += '<div class="qp-field">';
+      html += '<label class="qp-label" for="qpClassSelect">Class</label>';
+      html += '<select class="qp-select" id="qpClassSelect" onchange="qpOnClassChange(this.value)" aria-label="Select class">';
+      for (var i = 0; i < classesData.length; i++) {
+        var c = classesData[i];
+        html += '<option value="' + escapeHtml(String(c.classId)) + '"' + (String(c.classId) === qpSelectedClassId ? ' selected' : '') + '>' + escapeHtml(c.className || c.name || 'Class') + '</option>';
+      }
+      html += '</select>';
+      html += '</div>';
+
+      // Question
+      html += '<div class="qp-field">';
+      html += '<label class="qp-label" for="qpQuestionInput">Question</label>';
+      html += '<textarea class="qp-textarea" id="qpQuestionInput" maxlength="300" rows="3" placeholder="Type your question here..." oninput="qpUpdateCharCount(this, \'qpCharCount\')" aria-label="Poll question"></textarea>';
+      html += '<span class="qp-char-count" id="qpCharCount">0 / 300</span>';
+      html += '</div>';
+
+      // Type toggle
+      html += '<div class="qp-field">';
+      html += '<label class="qp-label">Type</label>';
+      html += '<div class="qp-type-toggle">';
+      html += '<button type="button" class="qp-type-btn' + (qpSelectedType === 'mc' ? ' active' : '') + '" onclick="qpSetType(\'mc\')">Multiple Choice</button>';
+      html += '<button type="button" class="qp-type-btn' + (qpSelectedType === 'open' ? ' active' : '') + '" onclick="qpSetType(\'open\')">Open-Ended</button>';
+      html += '</div>';
+      html += '</div>';
+
+      // MC options
+      if (qpSelectedType === 'mc') {
+        html += '<div class="qp-field" id="qpOptionsArea">';
+        html += '<label class="qp-label">Options</label>';
+        for (var o = 0; o < qpOptions.length; o++) {
+          html += '<div class="qp-option-row">';
+          html += '<input type="radio" name="qpCorrect" value="' + o + '"' + (qpCorrectIndex === o ? ' checked' : '') + ' onchange="qpSetCorrect(' + o + ')" title="Mark as correct answer" aria-label="Mark option ' + (o + 1) + ' as correct">';
+          html += '<input type="text" class="qp-option-input" maxlength="100" value="' + escapeHtml(qpOptions[o]) + '" placeholder="Option ' + (o + 1) + '" oninput="qpUpdateOption(' + o + ', this.value)" aria-label="Option ' + (o + 1) + '">';
+          if (qpOptions.length > QP_MIN_OPTIONS) {
+            html += '<button type="button" class="qp-option-remove" onclick="qpRemoveOption(' + o + ')" aria-label="Remove option ' + (o + 1) + '">&times;</button>';
+          }
+          html += '</div>';
+        }
+        if (qpOptions.length < QP_MAX_OPTIONS) {
+          html += '<button type="button" class="qp-add-option" onclick="qpAddOption()">+ Add Option</button>';
+        }
+        html += '<div class="qp-hint">Click the radio button to mark the correct answer (optional)</div>';
+        html += '</div>';
+      }
+
+      // Settings
+      html += '<div class="qp-settings">';
+      html += '<label class="qp-setting-row"><input type="checkbox" id="qpShowResults" checked> Show results to students after responding</label>';
+      html += '<label class="qp-setting-row"><input type="checkbox" id="qpAnonymous"> Anonymous responses</label>';
+      html += '</div>';
+
+      // Launch button
+      html += '<div class="qp-footer">';
+      html += '<button type="button" class="qp-launch-btn" onclick="qpLaunchPoll()">\uD83D\uDE80 Launch Poll</button>';
+      html += '</div>';
+
+      return html;
+    }
+
+    function qpOnClassChange(classId) {
+      qpSelectedClassId = String(classId);
+      qpCheckExistingActivePoll();
+    }
+
+    function qpSetType(type) {
+      qpSelectedType = type;
+      qpRenderCreator();
+    }
+
+    function qpUpdateOption(index, value) {
+      qpOptions[index] = value;
+    }
+
+    function qpAddOption() {
+      if (qpOptions.length < QP_MAX_OPTIONS) {
+        qpOptions.push('');
+        qpRenderCreator();
+      }
+    }
+
+    function qpRemoveOption(index) {
+      if (qpOptions.length > QP_MIN_OPTIONS) {
+        qpOptions.splice(index, 1);
+        if (qpCorrectIndex === index) {
+          qpCorrectIndex = -1;
+        } else if (qpCorrectIndex > index) {
+          qpCorrectIndex--;
+        }
+        qpRenderCreator();
+      }
+    }
+
+    function qpSetCorrect(index) {
+      qpCorrectIndex = index;
+    }
+
+    function qpUpdateCharCount(textarea, countId) {
+      var countEl = document.getElementById(countId);
+      if (countEl) countEl.textContent = textarea.value.length + ' / 300';
+    }
+
+    function qpLaunchPoll() {
+      var questionEl = document.getElementById('qpQuestionInput');
+      var pollText = questionEl ? questionEl.value.trim() : '';
+      if (!pollText) {
+        showToast('Please enter a question', 'error');
+        return;
+      }
+
+      // Read current option values from DOM (in case user typed but didn't trigger oninput)
+      if (qpSelectedType === 'mc') {
+        var optionInputs = document.querySelectorAll('.qp-option-input');
+        for (var i = 0; i < optionInputs.length; i++) {
+          qpOptions[i] = optionInputs[i].value;
+        }
+        // Validate at least 2 non-empty options
+        var validCount = 0;
+        for (var j = 0; j < qpOptions.length; j++) {
+          if (qpOptions[j].trim()) validCount++;
+        }
+        if (validCount < 2) {
+          showToast('Please provide at least 2 options', 'error');
+          return;
+        }
+      }
+
+      var showResultsEl = document.getElementById('qpShowResults');
+      var anonEl = document.getElementById('qpAnonymous');
+
+      var pollData = {
+        pollText: pollText,
+        pollType: qpSelectedType,
+        options: qpSelectedType === 'mc' ? qpOptions.filter(function(o) { return o.trim() !== ''; }) : [],
+        correctOptionIndex: qpSelectedType === 'mc' ? qpCorrectIndex : -1,
+        showResults: showResultsEl ? showResultsEl.checked : true,
+        anonymousResults: anonEl ? anonEl.checked : false,
+        mapId: (currentMap && currentMap.mapId) ? currentMap.mapId : '',
+        hexId: selectedHexId || ''
+      };
+
+      var expectedClassId = String(qpSelectedClassId);
+      showToast('Launching poll...', 'info');
+
+      google.script.run
+        .withSuccessHandler(function(poll) {
+          if (String(qpSelectedClassId) !== expectedClassId) return;
+          qpActivePollId = poll.pollId;
+          qpActivePollData = poll;
+          qpCreatorView = 'active';
+          showToast('Poll launched!', 'success');
+          if (qpCreatorOpen) qpRenderCreator();
+        })
+        .withFailureHandler(function(err) {
+          showToast(escapeHtml(friendlyError(err)), 'error');
+        })
+        .createQuickPoll(expectedClassId, pollData);
+    }
+
+    // ---- Active View ----
+
+    function qpRenderActiveView() {
+      if (!qpActivePollData) {
+        return '<div class="qp-empty">No active poll. Create one from the Create tab.</div>';
+      }
+      var p = qpActivePollData;
+      var html = '';
+
+      html += '<div class="qp-active-question">' + escapeHtml(p.pollText) + '</div>';
+      html += '<div class="qp-active-meta">';
+      html += '<span class="qp-active-type">' + (p.pollType === 'mc' ? 'Multiple Choice' : 'Open-Ended') + '</span>';
+      html += '<span class="qp-active-count" id="qpRespondentCount">' + (p.respondentCount || 0) + ' responses</span>';
+      html += '</div>';
+
+      // Results area
+      html += '<div class="qp-results" id="qpResultsArea">';
+      html += qpRenderResultBars(p, null);
+      html += '</div>';
+
+      // Close button
+      html += '<div class="qp-footer">';
+      html += '<button type="button" class="qp-close-poll-btn" onclick="qpClosePoll()">Close Poll</button>';
+      html += '</div>';
+
+      return html;
+    }
+
+    function qpRenderResultBars(poll, summary) {
+      if (!poll) return '';
+      var html = '';
+
+      if (poll.pollType === 'mc') {
+        var options = poll.options || [];
+        var counts = (summary && summary.optionCounts) ? summary.optionCounts : [];
+        var total = (summary && summary.totalResponses) ? summary.totalResponses : 0;
+
+        for (var i = 0; i < options.length; i++) {
+          var count = (counts[i] || 0);
+          var pct = total > 0 ? Math.round((count / total) * 100) : 0;
+          var isCorrect = (parseInt(poll.correctOptionIndex, 10) === i);
+          html += '<div class="qp-result-row' + (isCorrect ? ' qp-result-correct' : '') + '">';
+          html += '<span class="qp-result-label">' + escapeHtml(options[i]) + (isCorrect ? ' \u2713' : '') + '</span>';
+          html += '<div class="qp-result-bar"><div class="qp-result-fill" style="width:' + pct + '%;"></div></div>';
+          html += '<span class="qp-result-count">' + count + ' (' + pct + '%)</span>';
+          html += '</div>';
+        }
+      } else {
+        // Open-ended: show response cards
+        if (summary && summary.totalResponses !== undefined) {
+          html += '<div class="qp-open-count">' + summary.totalResponses + ' responses</div>';
+        }
+        // Full responses loaded via refresh
+      }
+      return html;
+    }
+
+    function qpStartResultsRefresh() {
+      if (qpRefreshTimer) clearTimeout(qpRefreshTimer);
+      qpRefreshResultsTick();
+    }
+
+    function qpRefreshResultsTick() {
+      var pjmPollActive = (typeof pjmIsOpen !== 'undefined' && pjmIsOpen && typeof pjmCurrentView !== 'undefined' && pjmCurrentView === 'poll');
+      if ((!qpCreatorOpen && !pjmPollActive) || !qpActivePollId) return;
+      var expectedPollId = String(qpActivePollId);
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          var stillPjmPoll = (typeof pjmIsOpen !== 'undefined' && pjmIsOpen && typeof pjmCurrentView !== 'undefined' && pjmCurrentView === 'poll');
+          if ((!qpCreatorOpen && !stillPjmPoll) || String(qpActivePollId) !== expectedPollId) return;
+          if (!data) return;
+
+          // Update respondent count
+          var countEl = document.getElementById('qpRespondentCount');
+          if (countEl && data.poll) {
+            countEl.textContent = (data.poll.respondentCount || 0) + ' responses';
+          }
+
+          // Update results area
+          var area = document.getElementById('qpResultsArea');
+          if (area && data.poll) {
+            var html = '';
+            if (data.poll.pollType === 'mc') {
+              html = qpRenderResultBars(data.poll, data.summary);
+            } else {
+              // Open-ended: show response cards
+              html = '<div class="qp-open-responses">';
+              var responses = data.responses || [];
+              for (var i = 0; i < responses.length; i++) {
+                var r = responses[i];
+                html += '<div class="qp-open-response-card">';
+                if (r.studentEmail && !data.poll.anonymousResults) {
+                  html += '<span class="qp-open-response-author">' + escapeHtml(r.studentEmail.split('@')[0]) + '</span>';
+                }
+                html += '<span class="qp-open-response-text">' + escapeHtml(r.responseText) + '</span>';
+                html += '</div>';
+              }
+              if (responses.length === 0) {
+                html += '<div class="qp-empty">No responses yet</div>';
+              }
+              html += '</div>';
+            }
+            area.innerHTML = html;
+          }
+
+          // Update shared poll data for projector view
+          if (data.poll) {
+            qpActivePollData = data.poll;
+            if (data.summary) qpActivePollData.results = data.summary;
+          }
+
+          // Re-render projector poll view if active
+          if (stillPjmPoll && typeof pjmRenderPollView === 'function') {
+            pjmRenderPollView();
+          }
+
+          qpRefreshTimer = setTimeout(qpRefreshResultsTick, QP_TEACHER_REFRESH_INTERVAL);
+        })
+        .withFailureHandler(function() {
+          qpRefreshTimer = setTimeout(qpRefreshResultsTick, QP_TEACHER_REFRESH_INTERVAL);
+        })
+        .getPollResults(expectedPollId);
+    }
+
+    function qpClosePoll() {
+      if (!qpActivePollId) return;
+      var expectedPollId = String(qpActivePollId);
+      google.script.run
+        .withSuccessHandler(function() {
+          if (String(qpActivePollId) !== expectedPollId) return;
+          showToast('Poll closed', 'success');
+          if (qpRefreshTimer) { clearTimeout(qpRefreshTimer); qpRefreshTimer = null; }
+          qpActivePollId = null;
+          qpActivePollData = null;
+          qpCreatorView = 'create';
+          if (qpCreatorOpen) qpRenderCreator();
+        })
+        .withFailureHandler(function(err) {
+          showToast(escapeHtml(friendlyError(err)), 'error');
+        })
+        .closePoll(expectedPollId);
+    }
+
+    // ---- History View ----
+
+    function qpLoadHistory() {
+      if (!qpSelectedClassId) {
+        qpHistoryCache = [];
+        qpRenderCreator();
+        return;
+      }
+      var expectedClassId = String(qpSelectedClassId);
+      google.script.run
+        .withSuccessHandler(function(polls) {
+          if (String(qpSelectedClassId) !== expectedClassId) return;
+          qpHistoryCache = polls || [];
+          if (qpCreatorOpen) qpRenderCreator();
+        })
+        .withFailureHandler(function() {
+          qpHistoryCache = [];
+          if (qpCreatorOpen) qpRenderCreator();
+        })
+        .getTeacherPollHistory(expectedClassId, 10);
+    }
+
+    function qpRenderHistoryView() {
+      if (qpHistoryCache.length === 0) {
+        return '<div class="qp-empty">No previous polls for this class</div>';
+      }
+      var html = '<div class="qp-history-list">';
+      for (var i = 0; i < qpHistoryCache.length; i++) {
+        var p = qpHistoryCache[i];
+        var typeLabel = p.pollType === 'mc' ? 'MC' : 'Open';
+        var dateStr = qpFormatDate(p.closedAt || p.createdAt);
+        html += '<div class="qp-history-item">';
+        html += '<div class="qp-history-text">' + escapeHtml(p.pollText) + '</div>';
+        html += '<div class="qp-history-meta">';
+        html += '<span class="qp-history-type">' + typeLabel + '</span>';
+        html += '<span class="qp-history-responses">' + p.respondentCount + ' responses</span>';
+        html += '<span class="qp-history-date">' + escapeHtml(dateStr) + '</span>';
+        html += '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function qpFormatDate(isoStr) {
+      if (!isoStr) return '';
+      try {
+        var d = new Date(isoStr);
+        var now = new Date();
+        var diffMs = now - d;
+        if (diffMs < 60000) return 'Just now';
+        if (diffMs < 3600000) return Math.floor(diffMs / 60000) + 'm ago';
+        if (diffMs < 86400000) return Math.floor(diffMs / 3600000) + 'h ago';
+        if (diffMs < 172800000) return 'Yesterday';
+        return d.toLocaleDateString();
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // ================================================
+    //  STORY 3 — Student Poll Responder + Bottom Bar
+    // ================================================
+
+    function qpStudentStartPolling() {
+      if (typeof currentViewMode === 'undefined' || currentViewMode !== 'student') return;
+      if (!classesData || classesData.length === 0) return;
+      qpStudentPolling = true;
+      qpStudentClassIndex = 0;
+      qpStudentNoPollSince = Date.now();
+      qpStudentScheduleNext();
+    }
+
+    function qpStudentStopPolling() {
+      qpStudentPolling = false;
+      if (qpStudentPollTimer) { clearTimeout(qpStudentPollTimer); qpStudentPollTimer = null; }
+      qpStudentHideBar();
+    }
+
+    function qpStudentScheduleNext() {
+      if (!qpStudentPolling) return;
+      if (qpStudentPollTimer) clearTimeout(qpStudentPollTimer);
+      var interval = QP_STUDENT_POLL_INTERVAL;
+      if (qpStudentNoPollSince && (Date.now() - qpStudentNoPollSince) > QP_STUDENT_SLOW_THRESHOLD) {
+        interval = QP_STUDENT_POLL_SLOW;
+      }
+      qpStudentPollTimer = setTimeout(function() {
+        qpStudentPollTick();
+      }, interval);
+    }
+
+    function qpStudentPollTick() {
+      if (!qpStudentPolling || !classesData || classesData.length === 0) return;
+      var cls = classesData[qpStudentClassIndex];
+      qpStudentClassIndex = (qpStudentClassIndex + 1) % classesData.length;
+      if (!cls || !cls.classId) { qpStudentScheduleNext(); return; }
+
+      var expectedClassId = String(cls.classId);
+      google.script.run
+        .withSuccessHandler(function(poll) {
+          if (!qpStudentPolling) return;
+          if (poll && poll.pollId) {
+            qpStudentNoPollSince = null;
+            // New poll or changed poll
+            if (!qpStudentActivePollId || String(qpStudentActivePollId) !== String(poll.pollId)) {
+              qpStudentActivePollId = String(poll.pollId);
+              qpStudentActivePollData = poll;
+              qpStudentResponded = poll.hasResponded || false;
+              qpStudentShowBar(poll);
+            } else if (poll.hasResponded && !qpStudentResponded) {
+              // Student just responded from another tab/device
+              qpStudentResponded = true;
+              qpStudentShowBar(poll);
+            }
+          } else {
+            // No active poll
+            if (qpStudentNoPollSince === null) qpStudentNoPollSince = Date.now();
+            if (qpStudentActivePollId) {
+              qpStudentActivePollId = null;
+              qpStudentActivePollData = null;
+              qpStudentResponded = false;
+              qpStudentHideBar();
+            }
+          }
+          qpStudentScheduleNext();
+        })
+        .withFailureHandler(function() {
+          qpStudentScheduleNext();
+        })
+        .getActivePollForStudent(expectedClassId);
+    }
+
+    function qpStudentShowBar(poll) {
+      var bar = document.getElementById('qpStudentBar');
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'qpStudentBar';
+        bar.className = 'qp-student-bar';
+        bar.setAttribute('role', 'complementary');
+        bar.setAttribute('aria-label', 'Quick Poll');
+        bar.setAttribute('aria-live', 'polite');
+        document.body.appendChild(bar);
+      }
+
+      var html = '';
+      html += '<div class="qp-student-question">' + escapeHtml(poll.pollText) + '</div>';
+
+      if (qpStudentResponded) {
+        html += '<div class="qp-student-responded">';
+        html += '<span class="qp-student-check">\u2713</span> Response submitted';
+        html += '</div>';
+        // Show results if enabled
+        if (poll.showResults && poll.pollType === 'mc' && poll.results) {
+          html += '<div class="qp-student-results">';
+          var options = poll.options || [];
+          var counts = poll.results.optionCounts || [];
+          var total = poll.results.totalResponses || 0;
+          for (var i = 0; i < options.length; i++) {
+            var count = counts[i] || 0;
+            var pct = total > 0 ? Math.round((count / total) * 100) : 0;
+            var isCorrect = (poll.correctOptionIndex === i);
+            html += '<div class="qp-student-result-row' + (isCorrect ? ' qp-result-correct' : '') + '">';
+            html += '<span class="qp-student-result-label">' + escapeHtml(options[i]) + (isCorrect ? ' \u2713' : '') + '</span>';
+            html += '<div class="qp-result-bar"><div class="qp-result-fill" style="width:' + pct + '%;"></div></div>';
+            html += '<span class="qp-result-count">' + pct + '%</span>';
+            html += '</div>';
+          }
+          html += '</div>';
+        }
+      } else {
+        // Response inputs
+        if (poll.pollType === 'mc') {
+          html += '<div class="qp-student-options">';
+          var opts = poll.options || [];
+          for (var o = 0; o < opts.length; o++) {
+            html += '<button type="button" class="qp-student-option" data-index="' + o + '" onclick="qpStudentSelectOption(this, ' + o + ')" aria-label="Option: ' + escapeHtml(opts[o]) + '">' + escapeHtml(opts[o]) + '</button>';
+          }
+          html += '</div>';
+          html += '<button type="button" class="qp-student-submit" id="qpStudentSubmitBtn" onclick="qpStudentSubmit()" disabled aria-disabled="true">Submit</button>';
+        } else {
+          html += '<textarea class="qp-student-textarea" id="qpStudentTextarea" maxlength="500" rows="2" placeholder="Type your answer..." oninput="qpStudentUpdateCharCount()" aria-label="Your response"></textarea>';
+          html += '<div class="qp-student-textarea-footer">';
+          html += '<span class="qp-student-char-count" id="qpStudentCharCount">0 / 500</span>';
+          html += '<button type="button" class="qp-student-submit" id="qpStudentSubmitBtn" onclick="qpStudentSubmit()">Submit</button>';
+          html += '</div>';
+        }
+      }
+
+      bar.innerHTML = html;
+      bar.style.display = 'block';
+      // Trigger slide-up animation
+      setTimeout(function() { bar.classList.add('qp-bar-visible'); }, 10);
+    }
+
+    function qpStudentHideBar() {
+      var bar = document.getElementById('qpStudentBar');
+      if (bar) {
+        bar.classList.remove('qp-bar-visible');
+        setTimeout(function() {
+          if (bar) bar.style.display = 'none';
+        }, 300);
+      }
+    }
+
+    var qpStudentSelectedOption = -1;
+
+    function qpStudentSelectOption(btnEl, index) {
+      qpStudentSelectedOption = index;
+      // Remove active from all
+      var buttons = document.querySelectorAll('.qp-student-option');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].classList.remove('active');
+      }
+      btnEl.classList.add('active');
+      // Enable submit
+      var submitBtn = document.getElementById('qpStudentSubmitBtn');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.setAttribute('aria-disabled', 'false');
+      }
+    }
+
+    function qpStudentUpdateCharCount() {
+      var ta = document.getElementById('qpStudentTextarea');
+      var countEl = document.getElementById('qpStudentCharCount');
+      if (ta && countEl) countEl.textContent = ta.value.length + ' / 500';
+    }
+
+    function qpStudentSubmit() {
+      if (!qpStudentActivePollId) return;
+      var submitBtn = document.getElementById('qpStudentSubmitBtn');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.setAttribute('aria-disabled', 'true');
+      }
+
+      var responseData = {};
+      if (qpStudentActivePollData && qpStudentActivePollData.pollType === 'mc') {
+        if (qpStudentSelectedOption < 0) {
+          showToast('Please select an option', 'error');
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.setAttribute('aria-disabled', 'false'); }
+          return;
+        }
+        responseData.selectedOptionIndex = qpStudentSelectedOption;
+      } else {
+        var ta = document.getElementById('qpStudentTextarea');
+        var text = ta ? ta.value.trim() : '';
+        if (!text) {
+          showToast('Please enter a response', 'error');
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.setAttribute('aria-disabled', 'false'); }
+          return;
+        }
+        responseData.responseText = text;
+      }
+
+      var expectedPollId = String(qpStudentActivePollId);
+      google.script.run
+        .withSuccessHandler(function() {
+          if (String(qpStudentActivePollId) !== expectedPollId) return;
+          qpStudentResponded = true;
+          showToast('Response submitted!', 'success');
+          // Re-render bar to show responded state
+          if (qpStudentActivePollData) {
+            qpStudentActivePollData.hasResponded = true;
+            qpStudentShowBar(qpStudentActivePollData);
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast(escapeHtml(friendlyError(err)), 'error');
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.setAttribute('aria-disabled', 'false'); }
+        })
+        .submitPollResponse(expectedPollId, responseData);
+    }
+
+</script>

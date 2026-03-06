@@ -1,0 +1,236 @@
+<style>
+/* ============================================================================
+   PEER FEEDBACK — pfb- prefix
+   Review form, received/given feedback cards, rating buttons
+   ============================================================================ */
+
+/* Section header */
+.pfb-section-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 16px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* Review form */
+.pfb-review-form {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.pfb-review-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0369a1;
+  margin-bottom: 12px;
+}
+.pfb-peer-name {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+/* Criterion card */
+.pfb-criterion {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.pfb-criterion-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+/* Rating buttons (1-4) */
+.pfb-rating-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.pfb-rating-btn {
+  flex: 1;
+  padding: 6px 0;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  color: #64748b;
+}
+.pfb-rating-btn:hover { border-color: #93c5fd; background: #f0f9ff; }
+.pfb-rating-btn.pfb-selected { border-color: #3b82f6; background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+.pfb-rating-btn[data-rating="1"].pfb-selected { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+.pfb-rating-btn[data-rating="2"].pfb-selected { border-color: #f59e0b; background: #fffbeb; color: #b45309; }
+.pfb-rating-btn[data-rating="3"].pfb-selected { border-color: #10b981; background: #ecfdf5; color: #059669; }
+.pfb-rating-btn[data-rating="4"].pfb-selected { border-color: #059669; background: #d1fae5; color: #047857; }
+
+.pfb-criterion-comment {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-top: 6px;
+  box-sizing: border-box;
+}
+
+/* Comment + Submit */
+.pfb-comment-field {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  min-height: 50px;
+  resize: vertical;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+.pfb-submit-btn {
+  width: 100%;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #0ea5e9;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.pfb-submit-btn:hover { background: #0284c7; }
+.pfb-submit-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* Received Feedback Card */
+.pfb-feedback-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.pfb-feedback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.pfb-reviewer-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+}
+.pfb-anonymous-badge {
+  font-size: 10px;
+  background: #f1f5f9;
+  color: #64748b;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.pfb-feedback-date {
+  font-size: 10px;
+  color: #94a3b8;
+}
+.pfb-rating-display {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.pfb-rating-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+}
+.pfb-rating-chip.pfb-high { background: #d1fae5; color: #065f46; }
+.pfb-rating-chip.pfb-mid { background: #fef3c7; color: #92400e; }
+.pfb-rating-chip.pfb-low { background: #fef2f2; color: #991b1b; }
+.pfb-feedback-comment {
+  font-size: 12px;
+  color: #475569;
+  font-style: italic;
+  margin-top: 6px;
+}
+.pfb-helpful-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+  cursor: pointer;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: #fff;
+  transition: all 0.15s;
+}
+.pfb-helpful-toggle:hover { background: #f0fdf4; border-color: #86efac; }
+.pfb-helpful-toggle.pfb-marked { background: #d1fae5; border-color: #10b981; color: #065f46; }
+
+/* Review Peer Button */
+.pfb-review-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #0ea5e9;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pfb-review-btn:hover { background: #e0f2fe; }
+
+/* Empty state */
+.pfb-empty {
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* Hex editor config section */
+.pfb-hex-section {
+  display: none;
+  padding: 12px 0;
+  border-top: 1px solid #e2e8f0;
+}
+.pfb-hex-section.pfb-visible { display: block; }
+.pfb-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.pfb-criterion-editor {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+.pfb-criterion-editor .editor-input {
+  flex: 1;
+  min-width: 0;
+}
+</style>

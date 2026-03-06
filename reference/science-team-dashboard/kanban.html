@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Board</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f5f6f8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .app-container {
+      margin: 0 auto;
+      padding: 12px 16px;
+    }
+
+    /* Header */
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .app-header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0;
+      color: #1a1a2e;
+    }
+
+    .header-controls {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    /* Error banner */
+    .error-banner {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    /* Success banner */
+    .success-banner {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    /* Loading spinner */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 0;
+      color: #6c757d;
+    }
+
+    .loading-container .spinner-border {
+      width: 2.5rem;
+      height: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .filter-bar select {
+      font-size: 0.78rem;
+      max-width: 150px;
+    }
+
+    .filter-bar .btn {
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    .filter-bar .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .filter-bar .filter-spacer {
+      flex: 1;
+    }
+
+    /* Board container */
+    .board-container {
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+
+    .board {
+      display: flex;
+      gap: 12px;
+      min-height: 400px;
+      align-items: flex-start;
+    }
+
+    /* Column */
+    .kanban-column {
+      min-width: 240px;
+      max-width: 240px;
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .column-header {
+      padding: 8px 12px;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f8f9fa;
+      border-radius: 8px 8px 0 0;
+      position: relative;
+    }
+
+    .column-header .column-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #333;
+    }
+
+    .column-color-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .column-count {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #6c757d;
+      white-space: nowrap;
+    }
+
+    .column-count.wip-exceeded {
+      color: #dc3545;
+      font-weight: 700;
+    }
+
+    .column-actions-btn {
+      background: none;
+      border: none;
+      color: #adb5bd;
+      padding: 2px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      line-height: 1;
+      visibility: hidden;
+    }
+
+    .column-header:hover .column-actions-btn {
+      visibility: visible;
+    }
+
+    .column-actions-btn:hover {
+      background: #e9ecef;
+      color: #333;
+    }
+
+    /* Column body - card list */
+    .column-body {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 450px;
+      padding: 6px;
+      min-height: 60px;
+    }
+
+    .column-body.sortable-ghost-parent {
+      background: #f0f4ff;
+    }
+
+    /* Card */
+    .kanban-card {
+      background: #fff;
+      border: 1px solid #e9ecef;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+      position: relative;
+    }
+
+    .kanban-card:last-child {
+      margin-bottom: 0;
+    }
+
+    .kanban-card:hover {
+      border-color: #c5cdd8;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    .kanban-card.overdue {
+      border-left: 3px solid #dc3545;
+    }
+
+    .kanban-card.done-card {
+      opacity: 0.55;
+    }
+
+    .kanban-card.sortable-ghost {
+      opacity: 0.4;
+      background: #e8f0fe;
+    }
+
+    .kanban-card.sortable-chosen {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    /* Card header: type badge + priority */
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .card-type-badge {
+      font-size: 0.62rem;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .card-type-badge.project { background: #cfe2ff; color: #084298; }
+    .card-type-badge.task { background: #d1f2eb; color: #0b5345; }
+    .card-type-badge.action-item { background: #e8daef; color: #6c3483; }
+    .card-type-badge.deadline { background: #fadbd8; color: #922b21; }
+
+    .card-title {
+      font-size: 0.83rem;
+      color: #333;
+      line-height: 1.3;
+      word-break: break-word;
+      margin-bottom: 4px;
+    }
+
+    .card-title.done {
+      text-decoration: line-through;
+      color: #999;
+    }
+
+    /* Card footer: assignee + due date */
+    .card-footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .card-assignee {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.7rem;
+      color: #6c757d;
+    }
+
+    .card-avatar {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.55rem;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .card-assignee-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 80px;
+    }
+
+    .assignee-badge {
+      font-size: 0.65rem;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: #cfe2ff;
+      color: #084298;
+      white-space: nowrap;
+    }
+
+    .card-due {
+      font-size: 0.68rem;
+      color: #6c757d;
+      white-space: nowrap;
+    }
+
+    .card-due.overdue {
+      color: #dc3545;
+      font-weight: 600;
+    }
+
+    /* Card labels */
+    .card-labels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 4px;
+    }
+
+    .card-label {
+      font-size: 0.6rem;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: #f0f0f0;
+      color: #666;
+    }
+
+    /* Priority dot */
+    .priority-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .priority-dot.low { background: #adb5bd; }
+    .priority-dot.normal { background: #0d6efd; }
+    .priority-dot.high { background: #fd7e14; }
+    .priority-dot.urgent { background: #dc3545; }
+
+    /* Compact card */
+    .kanban-card.compact {
+      padding: 5px 8px;
+    }
+
+    .kanban-card.compact .card-top,
+    .kanban-card.compact .card-footer-row,
+    .kanban-card.compact .card-labels {
+      display: none;
+    }
+
+    .kanban-card.compact .card-title {
+      margin-bottom: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.8rem;
+    }
+
+    /* Add card button at bottom of column */
+    .add-card-btn {
+      padding: 6px 12px;
+      border-top: 1px solid #eee;
+      text-align: center;
+    }
+
+    .add-card-btn button {
+      font-size: 0.75rem;
+      color: #6c757d;
+      background: none;
+      border: 1px dashed #ccc;
+      border-radius: 4px;
+      padding: 4px 12px;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.1s ease;
+    }
+
+    .add-card-btn button:hover {
+      background: #f0f4ff;
+      color: #0d6efd;
+      border-color: #0d6efd;
+    }
+
+    /* Empty column state */
+    .column-empty {
+      text-align: center;
+      padding: 20px 10px;
+      color: #ccc;
+      font-size: 0.78rem;
+    }
+
+    .column-empty i {
+      font-size: 1.5rem;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    /* Modal small label */
+    .modal .form-label {
+      font-size: 0.8rem;
+      margin-bottom: 2px;
+    }
+
+    /* Card history in modal */
+    .card-history {
+      margin-top: 12px;
+      border-top: 1px solid #eee;
+      padding-top: 8px;
+    }
+
+    .card-history h6 {
+      font-size: 0.78rem;
+      color: #6c757d;
+      margin-bottom: 6px;
+    }
+
+    .history-item {
+      font-size: 0.72rem;
+      color: #888;
+      padding: 3px 0;
+      border-bottom: 1px solid #f5f5f5;
+    }
+
+    .history-item:last-child {
+      border-bottom: none;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Error Banner -->
+  <div class="app-container">
+    <div id="error-banner" class="alert alert-danger error-banner alert-dismissible" role="alert">
+      <span id="error-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideError()"></button>
+    </div>
+    <div id="success-banner" class="alert alert-success success-banner alert-dismissible" role="alert">
+      <span id="success-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideSuccess()"></button>
+    </div>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div id="loading-spinner" class="loading-container">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <div>Loading board...</div>
+  </div>
+
+  <!-- Main App (hidden until loaded) -->
+  <div id="app-content" class="app-container" style="display: none;">
+
+    <!-- Header -->
+    <div class="app-header">
+      <h1><i class="bi bi-kanban"></i> Kanban Board</h1>
+      <div id="header-controls" class="header-controls"></div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div id="filter-bar" class="filter-bar"></div>
+
+    <!-- Board -->
+    <div class="board-container">
+      <div id="board" class="board"></div>
+    </div>
+  </div>
+
+  <!-- Card Detail / Edit Modal -->
+  <div class="modal fade" id="cardModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title" id="cardModalTitle">Card Details</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Title</label>
+            <input type="text" id="card-title" class="form-control form-control-sm">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Description</label>
+            <textarea id="card-description" class="form-control form-control-sm" rows="2"></textarea>
+          </div>
+          <div class="row">
+            <div class="col-6 mb-2">
+              <label class="form-label small mb-1">Card Type</label>
+              <select id="card-type" class="form-select form-select-sm">
+                <option value="Project">Project</option>
+                <option value="Task">Task</option>
+                <option value="Action Item">Action Item</option>
+                <option value="Deadline">Deadline</option>
+              </select>
+            </div>
+            <div class="col-6 mb-2">
+              <label class="form-label small mb-1">Priority</label>
+              <select id="card-priority" class="form-select form-select-sm">
+                <option value="Low">Low</option>
+                <option value="Normal">Normal</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-6 mb-2">
+              <label class="form-label small mb-1">Assignee</label>
+              <select id="card-assignee" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-6 mb-2">
+              <label class="form-label small mb-1">Due Date</label>
+              <input type="date" id="card-due-date" class="form-control form-control-sm">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Labels <span class="text-muted">(comma-separated)</span></label>
+            <input type="text" id="card-labels" class="form-control form-control-sm" placeholder="e.g. Lab, Safety, IB">
+          </div>
+          <div id="card-history-container"></div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" id="delete-card-btn" class="btn btn-sm btn-outline-danger me-auto" onclick="handleDeleteCardFromModal()" style="display:none;">Delete</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="save-card-btn" class="btn btn-sm btn-primary" onclick="handleSaveCard()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title">Delete Card</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <p class="mb-0 small">Are you sure you want to delete this card? This cannot be undone.</p>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="confirm-delete-btn" class="btn btn-sm btn-danger" onclick="confirmDeleteCard()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column Management Modal -->
+  <div class="modal fade" id="columnModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title" id="columnModalTitle">Add Column</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Title</label>
+            <input type="text" id="column-title" class="form-control form-control-sm">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Color</label>
+            <input type="color" id="column-color" class="form-control form-control-sm form-control-color" value="#0d6efd" style="width:50px;height:30px;">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">WIP Limit <span class="text-muted">(0 = unlimited)</span></label>
+            <input type="number" id="column-wip" class="form-control form-control-sm" value="0" min="0">
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="save-column-btn" class="btn btn-sm btn-primary" onclick="handleSaveColumn()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
+  <script>
+  /* ============================================================
+     SECTION 2: APPLICATION STATE & CONFIGURATION
+     ============================================================ */
+
+  var AppState = {
+    currentUser: null,
+    columns: [],
+    cards: [],
+    isLoading: true,
+    filterAssignee: '',
+    filterType: '',
+    filterLabel: '',
+    compactMode: false,
+    editingCard: null,
+    pendingDeleteCard: null,
+    editingColumn: null,
+    submitting: false,
+    addingToColumnId: null,
+    staffList: []
+  };
+
+  var sortableInstances = [];
+
+  /* ============================================================
+     SECTION 3: HELPER FUNCTIONS
+     ============================================================ */
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function formatRelativeTime(timestamp) {
+    if (!timestamp) return { relative: '', full: '' };
+    var now = new Date();
+    var date = new Date(timestamp);
+    var diffSeconds = Math.floor((now - date) / 1000);
+    var relative;
+    if (diffSeconds < 60) { relative = 'just now'; }
+    else if (diffSeconds < 3600) { var m = Math.floor(diffSeconds / 60); relative = m === 1 ? '1 minute ago' : m + ' minutes ago'; }
+    else if (diffSeconds < 86400) { var h = Math.floor(diffSeconds / 3600); relative = h === 1 ? '1 hour ago' : h + ' hours ago'; }
+    else if (diffSeconds < 604800) { var d = Math.floor(diffSeconds / 86400); relative = d === 1 ? '1 day ago' : d + ' days ago'; }
+    else { relative = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    var full = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return { relative: relative, full: full };
+  }
+
+  function getInitials(name) {
+    if (!name) return '?';
+    var parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  function getAvatarColor(email) {
+    var hash = 0;
+    for (var i = 0; i < email.length; i++) {
+      hash = email.charCodeAt(i) + ((hash << 5) - hash);
+      hash = hash & hash;
+    }
+    return 'hsl(' + (Math.abs(hash) % 360) + ', 55%, 45%)';
+  }
+
+  function isOverdue(card) {
+    if (!card.dueDate) return false;
+    var doneCol = getColumnByTitle('Done');
+    if (doneCol && card.columnId === doneCol.columnId) return false;
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var due = new Date(card.dueDate + 'T00:00:00');
+    return due < today;
+  }
+
+  function formatDueDate(dateStr) {
+    if (!dateStr) return { display: '', isOverdue: false };
+    var due = new Date(dateStr + 'T00:00:00');
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+    var display;
+    if (diffDays === 0) display = 'Today';
+    else if (diffDays === 1) display = 'Tomorrow';
+    else if (diffDays === -1) display = 'Yesterday';
+    else if (diffDays > 1 && diffDays <= 7) display = 'In ' + diffDays + ' days';
+    else display = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { display: display, isOverdue: due < today };
+  }
+
+  function getPriorityDot(priority) {
+    var cls = (priority || 'Normal').toLowerCase();
+    return '<span class="priority-dot ' + cls + '" title="' + escapeHtml(priority) + '"></span>';
+  }
+
+  function getAssigneeName(email) {
+    if (!email || email === 'ALL') return 'Everyone';
+    for (var i = 0; i < AppState.staffList.length; i++) {
+      if (AppState.staffList[i].Email === email) return AppState.staffList[i].DisplayName;
+    }
+    var parts = email.split('@');
+    if (parts.length > 0) {
+      var name = parts[0];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+    return email;
+  }
+
+  function getColumnByTitle(title) {
+    for (var i = 0; i < AppState.columns.length; i++) {
+      if (AppState.columns[i].title === title) return AppState.columns[i];
+    }
+    return null;
+  }
+
+  function getColumnById(columnId) {
+    for (var i = 0; i < AppState.columns.length; i++) {
+      if (AppState.columns[i].columnId === columnId) return AppState.columns[i];
+    }
+    return null;
+  }
+
+  function getCardTypeBadgeClass(cardType) {
+    if (cardType === 'Project') return 'project';
+    if (cardType === 'Task') return 'task';
+    if (cardType === 'Action Item') return 'action-item';
+    if (cardType === 'Deadline') return 'deadline';
+    return 'task';
+  }
+
+  function getCardsForColumn(columnId) {
+    var cards = [];
+    var allCards = getFilteredCards();
+    for (var i = 0; i < allCards.length; i++) {
+      if (allCards[i].columnId === columnId) cards.push(allCards[i]);
+    }
+    cards.sort(function(a, b) { return a.sortOrder - b.sortOrder; });
+    return cards;
+  }
+
+  function getUnfilteredCardsForColumn(columnId) {
+    var cards = [];
+    for (var i = 0; i < AppState.cards.length; i++) {
+      if (AppState.cards[i].columnId === columnId) cards.push(AppState.cards[i]);
+    }
+    return cards;
+  }
+
+  function getFilteredCards() {
+    var cards = AppState.cards;
+    var result = [];
+    for (var i = 0; i < cards.length; i++) {
+      var c = cards[i];
+      if (AppState.filterAssignee && c.assignee !== AppState.filterAssignee) continue;
+      if (AppState.filterType && c.cardType !== AppState.filterType) continue;
+      if (AppState.filterLabel) {
+        var labels = c.labels ? c.labels.split(',') : [];
+        var found = false;
+        for (var j = 0; j < labels.length; j++) {
+          if (labels[j].trim() === AppState.filterLabel) { found = true; break; }
+        }
+        if (!found) continue;
+      }
+      result.push(c);
+    }
+    return result;
+  }
+
+  function extractAllLabels() {
+    var labelsMap = {};
+    for (var i = 0; i < AppState.cards.length; i++) {
+      if (AppState.cards[i].labels) {
+        var parts = AppState.cards[i].labels.split(',');
+        for (var j = 0; j < parts.length; j++) {
+          var lbl = parts[j].trim();
+          if (lbl) labelsMap[lbl] = true;
+        }
+      }
+    }
+    return Object.keys(labelsMap).sort();
+  }
+
+  /* ============================================================
+     SECTION 4: RENDERING FUNCTIONS
+     ============================================================ */
+
+  function renderApp() {
+    var spinner = document.getElementById('loading-spinner');
+    var content = document.getElementById('app-content');
+
+    if (AppState.isLoading) {
+      spinner.style.display = 'flex';
+      content.style.display = 'none';
+      return;
+    }
+
+    spinner.style.display = 'none';
+    content.style.display = 'block';
+
+    renderHeaderControls();
+    renderFilterBar();
+    renderBoard();
+  }
+
+  function renderHeaderControls() {
+    var container = document.getElementById('header-controls');
+    var isAdmin = AppState.currentUser && AppState.currentUser.isAdmin;
+    var html = '';
+
+    if (isAdmin) {
+      html += '<button class="btn btn-outline-secondary btn-sm" onclick="handleAddColumn()" title="Add column"><i class="bi bi-plus-lg"></i> Column</button>';
+      html += '<button class="btn btn-outline-secondary btn-sm" onclick="handleBulkArchiveDone()" title="Archive all Done cards"><i class="bi bi-archive"></i> Archive Done</button>';
+    }
+
+    container.innerHTML = html;
+  }
+
+  function renderFilterBar() {
+    var container = document.getElementById('filter-bar');
+    var html = '';
+
+    html += '<div class="filter-group">';
+
+    // Assignee filter
+    html += '<select class="form-select form-select-sm" onchange="handleFilterAssignee(this.value)">';
+    html += '<option value=""' + (!AppState.filterAssignee ? ' selected' : '') + '>All Assignees</option>';
+    html += '<option value="ALL"' + (AppState.filterAssignee === 'ALL' ? ' selected' : '') + '>Everyone</option>';
+    for (var i = 0; i < AppState.staffList.length; i++) {
+      var s = AppState.staffList[i];
+      var sel = AppState.filterAssignee === s.Email ? ' selected' : '';
+      html += '<option value="' + escapeHtml(s.Email) + '"' + sel + '>' + escapeHtml(s.DisplayName) + '</option>';
+    }
+    html += '</select>';
+
+    // Type filter
+    html += '<select class="form-select form-select-sm" onchange="handleFilterType(this.value)">';
+    html += '<option value=""' + (!AppState.filterType ? ' selected' : '') + '>All Types</option>';
+    var types = ['Project', 'Task', 'Action Item', 'Deadline'];
+    for (var t = 0; t < types.length; t++) {
+      var tsel = AppState.filterType === types[t] ? ' selected' : '';
+      html += '<option value="' + types[t] + '"' + tsel + '>' + types[t] + '</option>';
+    }
+    html += '</select>';
+
+    // Label filter
+    var labels = extractAllLabels();
+    html += '<select class="form-select form-select-sm" onchange="handleFilterLabel(this.value)">';
+    html += '<option value=""' + (!AppState.filterLabel ? ' selected' : '') + '>All Labels</option>';
+    for (var l = 0; l < labels.length; l++) {
+      var lsel = AppState.filterLabel === labels[l] ? ' selected' : '';
+      html += '<option value="' + escapeHtml(labels[l]) + '"' + lsel + '>' + escapeHtml(labels[l]) + '</option>';
+    }
+    html += '</select>';
+
+    html += '</div>';
+
+    html += '<div class="filter-spacer"></div>';
+
+    // Compact toggle
+    var compactClass = AppState.compactMode ? 'btn-primary' : 'btn-outline-secondary';
+    html += '<button class="btn ' + compactClass + ' btn-sm" onclick="handleToggleCompact()" title="Compact mode"><i class="bi bi-layout-text-sidebar-reverse"></i></button>';
+
+    container.innerHTML = html;
+  }
+
+  function renderBoard() {
+    // Destroy existing SortableJS instances
+    for (var s = 0; s < sortableInstances.length; s++) {
+      sortableInstances[s].destroy();
+    }
+    sortableInstances = [];
+
+    var container = document.getElementById('board');
+    var columns = AppState.columns;
+    var html = '';
+
+    for (var i = 0; i < columns.length; i++) {
+      html += renderColumn(columns[i]);
+    }
+
+    container.innerHTML = html;
+
+    // Initialize SortableJS on each column body
+    initSortable();
+  }
+
+  function renderColumn(column) {
+    var cards = getCardsForColumn(column.columnId);
+    var unfilteredCards = getUnfilteredCardsForColumn(column.columnId);
+    var count = unfilteredCards.length;
+    var isAdmin = AppState.currentUser && AppState.currentUser.isAdmin;
+
+    var countLabel = '' + count;
+    var countClass = 'column-count';
+    if (column.wipLimit > 0) {
+      countLabel = count + '/' + column.wipLimit;
+      if (count > column.wipLimit) countClass += ' wip-exceeded';
+    }
+
+    var html = '<div class="kanban-column" data-column-id="' + column.columnId + '">';
+
+    // Header
+    html += '<div class="column-header">';
+    html += '<div class="column-title">';
+    html += '<span class="column-color-dot" style="background:' + escapeHtml(column.color) + ';"></span>';
+    html += escapeHtml(column.title);
+    html += '</div>';
+    html += '<div style="display:flex;align-items:center;gap:4px;">';
+    html += '<span class="' + countClass + '">' + countLabel + '</span>';
+    if (isAdmin) {
+      html += '<div class="dropdown">';
+      html += '<button class="column-actions-btn" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>';
+      html += '<ul class="dropdown-menu dropdown-menu-end">';
+      html += '<li><a class="dropdown-item small" href="#" onclick="handleEditColumn(\'' + column.columnId + '\'); return false;"><i class="bi bi-pencil me-2"></i>Edit Column</a></li>';
+      html += '<li><hr class="dropdown-divider"></li>';
+      html += '<li><a class="dropdown-item small text-danger" href="#" onclick="handleDeleteColumn(\'' + column.columnId + '\'); return false;"><i class="bi bi-trash me-2"></i>Delete Column</a></li>';
+      html += '</ul></div>';
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // Body (card list)
+    html += '<div class="column-body" id="col-body-' + column.columnId + '">';
+    if (cards.length === 0) {
+      html += '<div class="column-empty"><i class="bi bi-inbox"></i>No cards</div>';
+    }
+    for (var c = 0; c < cards.length; c++) {
+      html += renderCard(cards[c], column);
+    }
+    html += '</div>';
+
+    // Add card button
+    html += '<div class="add-card-btn">';
+    html += '<button onclick="handleAddCard(\'' + column.columnId + '\')"><i class="bi bi-plus"></i> Add Card</button>';
+    html += '</div>';
+
+    html += '</div>';
+    return html;
+  }
+
+  function renderCard(card, column) {
+    var overdue = isOverdue(card);
+    var isDone = column && column.title === 'Done';
+    var compact = AppState.compactMode;
+
+    var classes = 'kanban-card';
+    if (overdue) classes += ' overdue';
+    if (isDone) classes += ' done-card';
+    if (compact) classes += ' compact';
+
+    var html = '<div class="' + classes + '" data-card-id="' + card.cardId + '" onclick="handleCardClick(\'' + card.cardId + '\')">';
+
+    if (compact) {
+      // Compact: priority dot + title
+      html += '<div class="card-title">';
+      html += getPriorityDot(card.priority);
+      html += '<span>' + escapeHtml(card.title) + '</span>';
+      html += '</div>';
+    } else {
+      // Top row: type badge + priority
+      html += '<div class="card-top">';
+      html += '<span class="card-type-badge ' + getCardTypeBadgeClass(card.cardType) + '">' + escapeHtml(card.cardType) + '</span>';
+      html += getPriorityDot(card.priority);
+      html += '</div>';
+
+      // Title
+      html += '<div class="card-title' + (isDone ? ' done' : '') + '">' + escapeHtml(card.title) + '</div>';
+
+      // Footer: assignee + due date
+      html += '<div class="card-footer-row">';
+
+      // Assignee
+      if (card.assignee === 'ALL') {
+        html += '<span class="assignee-badge">Everyone</span>';
+      } else {
+        var name = getAssigneeName(card.assignee);
+        var color = getAvatarColor(card.assignee);
+        html += '<div class="card-assignee">';
+        html += '<span class="card-avatar" style="background:' + color + ';">' + getInitials(name) + '</span>';
+        html += '<span class="card-assignee-name">' + escapeHtml(name) + '</span>';
+        html += '</div>';
+      }
+
+      // Due date
+      if (card.dueDate) {
+        var dueFmt = formatDueDate(card.dueDate);
+        var dueClass = 'card-due' + (overdue ? ' overdue' : '');
+        html += '<span class="' + dueClass + '"><i class="bi bi-calendar3"></i> ' + escapeHtml(dueFmt.display) + (overdue ? ' !' : '') + '</span>';
+      }
+
+      html += '</div>'; // end footer-row
+
+      // Labels
+      if (card.labels) {
+        var labelArr = card.labels.split(',');
+        html += '<div class="card-labels">';
+        for (var l = 0; l < labelArr.length; l++) {
+          var lbl = labelArr[l].trim();
+          if (lbl) html += '<span class="card-label">' + escapeHtml(lbl) + '</span>';
+        }
+        html += '</div>';
+      }
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  /* ============================================================
+     SECTION 5: SORTABLEJS INITIALIZATION
+     ============================================================ */
+
+  function initSortable() {
+    var columns = AppState.columns;
+    for (var i = 0; i < columns.length; i++) {
+      var el = document.getElementById('col-body-' + columns[i].columnId);
+      if (!el) continue;
+      var instance = new Sortable(el, {
+        group: 'kanban-cards',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        draggable: '.kanban-card',
+        filter: '.column-empty',
+        onEnd: function(evt) {
+          handleCardMoved(evt);
+        }
+      });
+      sortableInstances.push(instance);
+    }
+  }
+
+  function handleCardMoved(evt) {
+    var cardId = evt.item.getAttribute('data-card-id');
+    var toColumnEl = evt.to;
+    var toColumnId = null;
+
+    // Find column id from the body element id
+    var bodyId = toColumnEl.id; // col-body-col_X
+    if (bodyId && bodyId.indexOf('col-body-') === 0) {
+      toColumnId = bodyId.replace('col-body-', '');
+    }
+
+    if (!cardId || !toColumnId) return;
+
+    var newIndex = evt.newIndex;
+
+    // Update local state optimistically
+    for (var i = 0; i < AppState.cards.length; i++) {
+      if (AppState.cards[i].cardId === cardId) {
+        AppState.cards[i].columnId = toColumnId;
+        AppState.cards[i].sortOrder = newIndex;
+        break;
+      }
+    }
+
+    // Call server
+    google.script.run
+      .withSuccessHandler(function() {
+        // Refresh column counts without full re-render
+        renderBoard();
+      })
+      .withFailureHandler(function(error) {
+        showError(error.message || 'Failed to move card.');
+        loadBoard();
+      })
+      .moveCard(cardId, toColumnId, newIndex);
+  }
+
+  /* ============================================================
+     SECTION 6: EVENT HANDLERS
+     ============================================================ */
+
+  function handleFilterAssignee(value) {
+    AppState.filterAssignee = value;
+    renderBoard();
+  }
+
+  function handleFilterType(value) {
+    AppState.filterType = value;
+    renderBoard();
+  }
+
+  function handleFilterLabel(value) {
+    AppState.filterLabel = value;
+    renderBoard();
+  }
+
+  function handleToggleCompact() {
+    AppState.compactMode = !AppState.compactMode;
+    renderFilterBar();
+    renderBoard();
+  }
+
+  function handleCardClick(cardId) {
+    var card = null;
+    for (var i = 0; i < AppState.cards.length; i++) {
+      if (AppState.cards[i].cardId === cardId) { card = AppState.cards[i]; break; }
+    }
+    if (!card) return;
+
+    var isAdmin = AppState.currentUser && AppState.currentUser.isAdmin;
+    var canEdit = isAdmin || card.createdBy === AppState.currentUser.email || card.assignee === AppState.currentUser.email;
+
+    AppState.editingCard = card;
+    AppState.addingToColumnId = null;
+
+    document.getElementById('cardModalTitle').textContent = canEdit ? 'Edit Card' : 'Card Details';
+    document.getElementById('card-title').value = card.title || '';
+    document.getElementById('card-title').disabled = !canEdit;
+    document.getElementById('card-description').value = card.description || '';
+    document.getElementById('card-description').disabled = !canEdit;
+    document.getElementById('card-type').value = card.cardType || 'Task';
+    document.getElementById('card-type').disabled = !canEdit;
+    document.getElementById('card-priority').value = card.priority || 'Normal';
+    document.getElementById('card-priority').disabled = !canEdit;
+    document.getElementById('card-due-date').value = card.dueDate || '';
+    document.getElementById('card-due-date').disabled = !canEdit;
+    document.getElementById('card-labels').value = card.labels || '';
+    document.getElementById('card-labels').disabled = !canEdit;
+
+    // Populate assignee from staff list
+    var assigneeSelect = document.getElementById('card-assignee');
+    var aHtml = '<option value="ALL"' + (card.assignee === 'ALL' ? ' selected' : '') + '>Everyone</option>';
+    var seenAssignees = {};
+    for (var j = 0; j < AppState.staffList.length; j++) {
+      var s = AppState.staffList[j];
+      seenAssignees[s.Email] = true;
+      var sel = card.assignee === s.Email ? ' selected' : '';
+      aHtml += '<option value="' + escapeHtml(s.Email) + '"' + sel + '>' + escapeHtml(s.DisplayName) + '</option>';
+    }
+    // Ensure current assignee is always included (even if not in staff list)
+    if (card.assignee && card.assignee !== 'ALL' && !seenAssignees[card.assignee]) {
+      aHtml += '<option value="' + escapeHtml(card.assignee) + '" selected>' + escapeHtml(getAssigneeName(card.assignee)) + '</option>';
+    }
+    assigneeSelect.innerHTML = aHtml;
+    assigneeSelect.disabled = !canEdit;
+
+    // Show/hide buttons
+    document.getElementById('save-card-btn').style.display = canEdit ? '' : 'none';
+    document.getElementById('delete-card-btn').style.display = canEdit ? '' : 'none';
+
+    // Load history
+    var historyContainer = document.getElementById('card-history-container');
+    historyContainer.innerHTML = '<div class="card-history"><h6><i class="bi bi-clock-history"></i> History</h6><div class="text-muted" style="font-size:0.72rem;">Loading...</div></div>';
+
+    google.script.run
+      .withSuccessHandler(function(history) {
+        renderCardHistory(history);
+      })
+      .withFailureHandler(function() {
+        historyContainer.innerHTML = '';
+      })
+      .getCardHistory(cardId);
+
+    var modal = new bootstrap.Modal(document.getElementById('cardModal'));
+    modal.show();
+  }
+
+  function renderCardHistory(history) {
+    var container = document.getElementById('card-history-container');
+    if (!history || history.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    var html = '<div class="card-history"><h6><i class="bi bi-clock-history"></i> History</h6>';
+    for (var i = 0; i < history.length; i++) {
+      var h = history[i];
+      var actor = getAssigneeName(h.actor);
+      var time = formatRelativeTime(h.timestamp);
+      var desc = '';
+      if (h.action === 'created') {
+        var toCol = getColumnById(h.toColumn);
+        desc = escapeHtml(actor) + ' created card in ' + (toCol ? escapeHtml(toCol.title) : 'unknown');
+      } else if (h.action === 'moved') {
+        var from = getColumnById(h.fromColumn);
+        var to = getColumnById(h.toColumn);
+        desc = escapeHtml(actor) + ' moved from ' + (from ? escapeHtml(from.title) : '?') + ' to ' + (to ? escapeHtml(to.title) : '?');
+      } else if (h.action === 'edited') {
+        desc = escapeHtml(actor) + ' edited card';
+      } else {
+        desc = escapeHtml(actor) + ' ' + escapeHtml(h.action);
+      }
+      html += '<div class="history-item">' + desc + ' &middot; ' + escapeHtml(time.relative) + '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  function handleSaveCard() {
+    var title = document.getElementById('card-title').value.trim();
+    if (!title) { showError('Card title is required.'); return; }
+
+    var data = {
+      title: title,
+      description: document.getElementById('card-description').value,
+      cardType: document.getElementById('card-type').value,
+      assignee: document.getElementById('card-assignee').value,
+      dueDate: document.getElementById('card-due-date').value || null,
+      priority: document.getElementById('card-priority').value,
+      labels: document.getElementById('card-labels').value
+    };
+
+    var btn = document.getElementById('save-card-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    if (AppState.addingToColumnId) {
+      // Creating new card
+      data.columnId = AppState.addingToColumnId;
+      var cardsInCol = getUnfilteredCardsForColumn(AppState.addingToColumnId);
+      data.sortOrder = cardsInCol.length + 1;
+
+      google.script.run
+        .withSuccessHandler(function() {
+          btn.disabled = false;
+          btn.innerHTML = 'Save';
+          AppState.addingToColumnId = null;
+          var modal = bootstrap.Modal.getInstance(document.getElementById('cardModal'));
+          if (modal) modal.hide();
+          loadBoard();
+        })
+        .withFailureHandler(function(error) {
+          btn.disabled = false;
+          btn.innerHTML = 'Save';
+          showError(error.message || 'Failed to create card.');
+        })
+        .createCard(data);
+    } else if (AppState.editingCard) {
+      // Updating existing card
+      google.script.run
+        .withSuccessHandler(function() {
+          btn.disabled = false;
+          btn.innerHTML = 'Save';
+          AppState.editingCard = null;
+          var modal = bootstrap.Modal.getInstance(document.getElementById('cardModal'));
+          if (modal) modal.hide();
+          loadBoard();
+        })
+        .withFailureHandler(function(error) {
+          btn.disabled = false;
+          btn.innerHTML = 'Save';
+          showError(error.message || 'Failed to save changes.');
+        })
+        .updateCard(AppState.editingCard.cardId, data);
+    }
+  }
+
+  function handleAddCard(columnId) {
+    AppState.addingToColumnId = columnId;
+    AppState.editingCard = null;
+
+    var col = getColumnById(columnId);
+    document.getElementById('cardModalTitle').textContent = 'New Card' + (col ? ' in ' + col.title : '');
+    document.getElementById('card-title').value = '';
+    document.getElementById('card-title').disabled = false;
+    document.getElementById('card-description').value = '';
+    document.getElementById('card-description').disabled = false;
+    document.getElementById('card-type').value = 'Task';
+    document.getElementById('card-type').disabled = false;
+    document.getElementById('card-priority').value = 'Normal';
+    document.getElementById('card-priority').disabled = false;
+    document.getElementById('card-due-date').value = '';
+    document.getElementById('card-due-date').disabled = false;
+    document.getElementById('card-labels').value = '';
+    document.getElementById('card-labels').disabled = false;
+
+    var assigneeSelect = document.getElementById('card-assignee');
+    var aHtml = '<option value="ALL" selected>Everyone</option>';
+    for (var j = 0; j < AppState.staffList.length; j++) {
+      var s = AppState.staffList[j];
+      aHtml += '<option value="' + escapeHtml(s.Email) + '">' + escapeHtml(s.DisplayName) + '</option>';
+    }
+    assigneeSelect.innerHTML = aHtml;
+    assigneeSelect.disabled = false;
+
+    document.getElementById('save-card-btn').style.display = '';
+    document.getElementById('delete-card-btn').style.display = 'none';
+    document.getElementById('card-history-container').innerHTML = '';
+
+    var modal = new bootstrap.Modal(document.getElementById('cardModal'));
+    modal.show();
+  }
+
+  function handleDeleteCardFromModal() {
+    if (!AppState.editingCard) return;
+    AppState.pendingDeleteCard = AppState.editingCard;
+
+    var cardModal = bootstrap.Modal.getInstance(document.getElementById('cardModal'));
+    if (cardModal) cardModal.hide();
+
+    setTimeout(function() {
+      var deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+      deleteModal.show();
+    }, 300);
+  }
+
+  function confirmDeleteCard() {
+    if (!AppState.pendingDeleteCard) return;
+    var cardId = AppState.pendingDeleteCard.cardId;
+
+    var btn = document.getElementById('confirm-delete-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    google.script.run
+      .withSuccessHandler(function() {
+        btn.disabled = false;
+        btn.innerHTML = 'Delete';
+        AppState.pendingDeleteCard = null;
+        AppState.editingCard = null;
+        var modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+        if (modal) modal.hide();
+        loadBoard();
+      })
+      .withFailureHandler(function(error) {
+        btn.disabled = false;
+        btn.innerHTML = 'Delete';
+        showError(error.message || 'Failed to delete card.');
+      })
+      .archiveCard(cardId);
+  }
+
+  function handleBulkArchiveDone() {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        showSuccess(result.archived + ' card(s) archived from Done.');
+        loadBoard();
+      })
+      .withFailureHandler(function(error) {
+        showError(error.message || 'Failed to archive cards.');
+      })
+      .bulkArchiveDone();
+  }
+
+  // Column management
+  function handleAddColumn() {
+    AppState.editingColumn = null;
+    document.getElementById('columnModalTitle').textContent = 'Add Column';
+    document.getElementById('column-title').value = '';
+    document.getElementById('column-color').value = '#0d6efd';
+    document.getElementById('column-wip').value = '0';
+    var modal = new bootstrap.Modal(document.getElementById('columnModal'));
+    modal.show();
+  }
+
+  function handleEditColumn(columnId) {
+    var col = getColumnById(columnId);
+    if (!col) return;
+    AppState.editingColumn = col;
+    document.getElementById('columnModalTitle').textContent = 'Edit Column';
+    document.getElementById('column-title').value = col.title;
+    document.getElementById('column-color').value = col.color;
+    document.getElementById('column-wip').value = col.wipLimit || 0;
+    var modal = new bootstrap.Modal(document.getElementById('columnModal'));
+    modal.show();
+  }
+
+  function handleSaveColumn() {
+    var title = document.getElementById('column-title').value.trim();
+    if (!title) { showError('Column title is required.'); return; }
+
+    var color = document.getElementById('column-color').value;
+    var wipLimit = parseInt(document.getElementById('column-wip').value) || 0;
+
+    var btn = document.getElementById('save-column-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    if (AppState.editingColumn) {
+      google.script.run
+        .withSuccessHandler(function() {
+          btn.disabled = false;
+          btn.innerHTML = 'Save';
+          AppState.editingColumn = null;
+          var modal = bootstrap.Modal.getInstance(document.getElementById('columnModal'));
+          if (modal) modal.hide();
+          loadBoard();
+        })
+        .withFailureHandler(function(error) {
+          btn.disabled = false;
+          btn.innerHTML = 'Save';
+          showError(error.message || 'Failed to update column.');
+        })
+        .updateColumn(AppState.editingColumn.columnId, { title: title, color: color, wipLimit: wipLimit });
+    } else {
+      google.script.run
+        .withSuccessHandler(function() {
+          btn.disabled = false;
+          btn.innerHTML = 'Save';
+          var modal = bootstrap.Modal.getInstance(document.getElementById('columnModal'));
+          if (modal) modal.hide();
+          loadBoard();
+        })
+        .withFailureHandler(function(error) {
+          btn.disabled = false;
+          btn.innerHTML = 'Save';
+          showError(error.message || 'Failed to create column.');
+        })
+        .createColumn({ title: title, color: color, wipLimit: wipLimit });
+    }
+  }
+
+  function handleDeleteColumn(columnId) {
+    google.script.run
+      .withSuccessHandler(function() {
+        showSuccess('Column deleted.');
+        loadBoard();
+      })
+      .withFailureHandler(function(error) {
+        showError(error.message || 'Failed to delete column.');
+      })
+      .deleteColumn(columnId);
+  }
+
+
+  /* ============================================================
+     SECTION 7: ERROR HANDLING & UTILITIES
+     ============================================================ */
+
+  function showError(message) {
+    var banner = document.getElementById('error-banner');
+    document.getElementById('error-message').textContent = message;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 5000);
+  }
+
+  function hideError() {
+    document.getElementById('error-banner').style.display = 'none';
+  }
+
+  function showSuccess(message) {
+    var banner = document.getElementById('success-banner');
+    document.getElementById('success-message').textContent = message;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 3000);
+  }
+
+  function hideSuccess() {
+    document.getElementById('success-banner').style.display = 'none';
+  }
+
+  /* ============================================================
+     SECTION 8: INITIALIZATION
+     ============================================================ */
+
+  var loadCount = 0;
+
+  function checkLoaded() {
+    loadCount++;
+    if (loadCount >= 3) {
+      AppState.isLoading = false;
+      renderApp();
+    }
+  }
+
+  function loadCurrentUser() {
+    google.script.run
+      .withSuccessHandler(function(user) {
+        AppState.currentUser = user;
+        if (AppState.isLoading) checkLoaded();
+        else renderApp();
+      })
+      .withFailureHandler(function(error) {
+        showError('Failed to identify user.');
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getCurrentUser();
+  }
+
+  function loadBoard() {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        AppState.columns = data.columns;
+        AppState.cards = data.cards;
+        if (AppState.isLoading) checkLoaded();
+        else renderApp();
+      })
+      .withFailureHandler(function(error) {
+        showError('Failed to load board.');
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getBoard();
+  }
+
+  // Boot
+  function loadStaff() {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        AppState.staffList = data || [];
+        if (AppState.isLoading) checkLoaded();
+        else renderApp();
+      })
+      .withFailureHandler(function() {
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getStaff();
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    loadCurrentUser();
+    loadBoard();
+    loadStaff();
+  });
+
+  </script>
+</body>
+</html>

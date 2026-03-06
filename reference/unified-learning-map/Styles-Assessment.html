@@ -1,0 +1,998 @@
+<style>
+/* ================================================
+   EMBEDDED FORMATIVE ASSESSMENT STYLES (efa- prefix)
+   ================================================ */
+
+/* ---- Builder Modal ---- */
+.efa-builder-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 260;
+  justify-content: center;
+  align-items: center;
+}
+
+.efa-builder-overlay.open {
+  display: flex;
+}
+
+.efa-builder-modal {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 700px;
+  width: 92%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+
+.efa-builder-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.efa-builder-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  flex: 1;
+}
+
+.efa-builder-hex-label {
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.efa-close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.efa-close-btn:hover { color: #475569; }
+
+.efa-builder-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  min-height: 0;
+}
+
+.efa-builder-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+/* ---- Settings Panel ---- */
+.efa-settings-panel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.efa-form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.efa-form-row:last-child { margin-bottom: 0; }
+
+.efa-form-group {
+  flex: 1;
+}
+
+.efa-form-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.efa-form-group input,
+.efa-form-group textarea,
+.efa-form-group select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e293b;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.efa-form-group textarea {
+  resize: vertical;
+  min-height: 50px;
+  font-family: inherit;
+}
+
+/* ---- Question Toolbar ---- */
+.efa-q-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.efa-q-toolbar-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.efa-add-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.efa-add-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.efa-add-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+  background: #eef2ff;
+}
+
+/* ---- Question List ---- */
+.efa-q-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.efa-q-item {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.efa-q-item.collapsed .efa-q-body { display: none; }
+
+.efa-q-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.efa-q-header:hover { background: #f1f5f9; }
+
+.efa-q-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #667eea;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.efa-q-type-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.efa-q-type-badge.mc { background: #dbeafe; color: #2563eb; }
+.efa-q-type-badge.sa { background: #d1fae5; color: #059669; }
+.efa-q-type-badge.match { background: #fef3c7; color: #d97706; }
+.efa-q-type-badge.order { background: #fce7f3; color: #db2777; }
+
+.efa-q-prompt-preview {
+  flex: 1;
+  font-size: 13px;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.efa-q-points {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.efa-q-chevron {
+  font-size: 10px;
+  color: #94a3b8;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.efa-q-item:not(.collapsed) .efa-q-chevron {
+  transform: rotate(90deg);
+}
+
+.efa-q-body {
+  padding: 12px 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.efa-q-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
+.efa-q-action-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.efa-q-action-btn:hover { border-color: #94a3b8; }
+
+.efa-q-action-btn.danger {
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.efa-q-action-btn.danger:hover { background: #fef2f2; }
+
+/* ---- MC Option Editor ---- */
+.efa-mc-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.efa-mc-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.efa-mc-option.correct {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.efa-mc-correct-radio {
+  flex-shrink: 0;
+}
+
+.efa-mc-option-text {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.efa-mc-option-explain {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.efa-mc-remove-opt {
+  background: none;
+  border: none;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+/* ---- Short Answer Editor ---- */
+.efa-sa-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.efa-sa-answer-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.efa-sa-answer-input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.efa-sa-keywords {
+  margin-top: 8px;
+}
+
+.efa-sa-keyword-label {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+/* ---- Matching Editor ---- */
+.efa-match-pairs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.efa-match-pair {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.efa-match-input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.efa-match-arrow {
+  color: #94a3b8;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* ---- Ordering Editor ---- */
+.efa-order-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.efa-order-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.efa-order-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.efa-order-input {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.efa-reorder-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.efa-reorder-btn:hover { background: #f1f5f9; }
+.efa-reorder-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ---- Builder Save Button ---- */
+.efa-save-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.efa-save-btn:hover { background: #5a6fd6; }
+.efa-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.efa-preview-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  background: #fff;
+  color: #667eea;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.efa-preview-btn:hover { background: #eef2ff; }
+
+.efa-preview-btn.active {
+  background: #667eea;
+  color: #fff;
+}
+
+/* ---- Remove / Add Row Buttons ---- */
+.efa-remove-btn {
+  background: none;
+  border: none;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+
+.efa-add-row-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px dashed #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+.efa-add-row-btn:hover { border-color: #667eea; color: #667eea; }
+
+/* ---- Empty Question State ---- */
+.efa-q-empty {
+  text-align: center;
+  padding: 30px 16px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.efa-q-empty .icon { font-size: 32px; margin-bottom: 8px; }
+
+/* ---- Student Assessment Taking ---- */
+.efa-take-container {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid #e2e8f0;
+}
+
+.efa-take-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.efa-take-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.efa-take-info {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.efa-take-question {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.efa-take-q-number {
+  font-size: 11px;
+  font-weight: 700;
+  color: #667eea;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+
+.efa-take-q-prompt {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.efa-take-q-points {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+/* MC Student View */
+.efa-take-mc-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.efa-take-mc-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.efa-take-mc-option:hover { border-color: #667eea; background: #eef2ff; }
+.efa-take-mc-option.selected { border-color: #667eea; background: #eef2ff; }
+
+.efa-take-mc-radio {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.efa-take-mc-text {
+  font-size: 13px;
+  color: #1e293b;
+}
+
+/* SA Student View */
+.efa-take-sa-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+/* Matching Student View */
+.efa-take-match-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.efa-take-match-row:last-child { border-bottom: none; }
+
+.efa-take-match-left {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.efa-take-match-select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+/* Ordering Student View */
+.efa-take-order-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.efa-take-order-text {
+  flex: 1;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.efa-take-order-btns {
+  display: flex;
+  gap: 4px;
+}
+
+/* ---- Results Display ---- */
+.efa-results-container {
+  margin-top: 16px;
+}
+
+.efa-results-summary {
+  text-align: center;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.efa-results-summary.passed {
+  background: #f0fdf4;
+  border: 1px solid #22c55e;
+}
+
+.efa-results-summary.failed {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+}
+
+.efa-results-score {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.efa-results-label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.efa-results-label.passed { color: #16a34a; }
+.efa-results-label.failed { color: #dc2626; }
+
+.efa-results-attempts {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 6px;
+}
+
+.efa-results-question {
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.efa-results-question.correct {
+  border-left: 3px solid #22c55e;
+}
+
+.efa-results-question.incorrect {
+  border-left: 3px solid #dc2626;
+}
+
+.efa-results-question.partial {
+  border-left: 3px solid #f59e0b;
+}
+
+.efa-results-q-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.efa-results-q-icon {
+  font-size: 14px;
+}
+
+.efa-results-q-prompt {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+}
+
+.efa-results-q-score {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.efa-results-q-detail {
+  font-size: 12px;
+  color: #64748b;
+  padding-left: 22px;
+  line-height: 1.4;
+}
+
+.efa-results-q-explain {
+  font-size: 12px;
+  color: #475569;
+  background: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-top: 4px;
+  margin-left: 22px;
+}
+
+/* ---- Submit / Retry Buttons ---- */
+.efa-submit-btn {
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.efa-submit-btn:hover { background: #5a6fd6; }
+.efa-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.efa-retry-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  background: #f59e0b;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.efa-retry-btn:hover { background: #d97706; }
+
+.efa-retry-info {
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
+  margin-top: 6px;
+}
+
+/* ---- Teacher Results Dashboard ---- */
+.efa-teacher-results {
+  margin-top: 12px;
+}
+
+.efa-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.efa-stats-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.efa-stats-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.efa-stats-card-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.efa-question-analytics {
+  margin-bottom: 14px;
+}
+
+.efa-qa-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.efa-qa-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.efa-qa-label {
+  width: 60px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.efa-qa-bar-container {
+  flex: 1;
+  height: 14px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.efa-qa-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.efa-qa-bar-fill.high { background: #22c55e; }
+.efa-qa-bar-fill.mid { background: #f59e0b; }
+.efa-qa-bar-fill.low { background: #dc2626; }
+
+.efa-qa-value {
+  width: 40px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ---- Hex Badge ---- */
+.efa-hex-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #667eea;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* ---- Assessment Info in Editor Panel ---- */
+.efa-editor-info {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.efa-editor-info span {
+  font-weight: 600;
+  color: #667eea;
+}
+
+/* ---- Timer Display ---- */
+.efa-timer {
+  font-size: 14px;
+  font-weight: 700;
+  color: #dc2626;
+  text-align: center;
+  padding: 6px;
+  background: #fef2f2;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.efa-timer.warning { color: #d97706; background: #fffbeb; }
+
+/* ---- Preview Mode Indicator ---- */
+.efa-preview-banner {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  text-align: center;
+}
+
+/* ---- Assessment Complete Badge (in content modal) ---- */
+.efa-completed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  border: 1px solid #22c55e;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.efa-no-retries {
+  text-align: center;
+  padding: 16px;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .efa-builder-modal { max-width: 95%; }
+  .efa-form-row { flex-direction: column; gap: 8px; }
+  .efa-add-buttons { flex-wrap: wrap; }
+  .efa-stats-cards { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .efa-builder-modal {
+    max-width: 100%;
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    height: 100vh;
+  }
+  .efa-add-buttons { gap: 4px; }
+  .efa-add-btn { padding: 4px 6px; font-size: 10px; }
+  .efa-q-header { gap: 6px; }
+  .efa-mc-option { flex-wrap: wrap; }
+  .efa-match-pair { flex-direction: column; gap: 4px; }
+  .efa-stats-cards { grid-template-columns: 1fr; }
+  .efa-take-match-row { flex-direction: column; gap: 4px; }
+}
+</style>

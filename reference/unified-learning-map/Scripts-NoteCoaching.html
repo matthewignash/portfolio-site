@@ -1,0 +1,353 @@
+<script>
+// ============================================================================
+// NOTE COACHING DASHBOARD — Teacher View (ES5)
+// 7th sub-tab in Progress: "Note Insights"
+// Shows student note-taking quality and completion as formative signals.
+// ============================================================================
+
+/**
+ * Load the Note Coaching dashboard.
+ * Called from switchProgressSubNav('noteInsights').
+ */
+function cncLoadDashboard() {
+  var content = document.getElementById('noteInsightsContent');
+  if (!content) return;
+
+  // Check if class and map are selected
+  if (!progressSelectedClassId || !progressSelectedMapId) {
+    content.innerHTML = '<div class="cnc-empty"><div class="icon">&#128221;</div>' +
+      '<p>Select a class and map in Class Progress, then switch to Note Insights to see student note-taking analytics.</p></div>';
+    return;
+  }
+
+  // Use cache if available and class hasn't changed
+  if (cncComputedData && cncInitialized) {
+    cncRenderDashboard(cncComputedData);
+    return;
+  }
+
+  content.innerHTML = '<div class="cnc-loading">Loading note insights...</div>';
+
+  var expectedClassId = progressSelectedClassId;
+  var expectedMapId = progressSelectedMapId;
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      // Stale-response guard
+      if (progressSelectedClassId !== expectedClassId || progressSelectedMapId !== expectedMapId) return;
+      cncComputedData = data;
+      cncInitialized = true;
+      cncRenderDashboard(data);
+    })
+    .withFailureHandler(function(err) {
+      if (progressSelectedClassId !== expectedClassId || progressSelectedMapId !== expectedMapId) return;
+      content.innerHTML = '<div class="cnc-empty"><div class="icon">&#9888;</div>' +
+        '<p>Error loading note insights: ' + escapeHtml(err.message || String(err)) + '</p></div>';
+    })
+    .getClassNoteStats(progressSelectedClassId, progressSelectedMapId);
+}
+
+/**
+ * Render the full dashboard.
+ */
+function cncRenderDashboard(data) {
+  var content = document.getElementById('noteInsightsContent');
+  if (!content) return;
+
+  if (!data || !data.students || data.students.length === 0) {
+    content.innerHTML = '<div class="cnc-empty"><div class="icon">&#128221;</div>' +
+      '<p>No students found for this class. Ensure students are enrolled and the map is assigned.</p></div>';
+    return;
+  }
+
+  var html = '';
+
+  // Summary cards
+  html += cncRenderSummaryCards(data.summary);
+
+  // Top cue cloud
+  if (data.summary.topCues && data.summary.topCues.length > 0) {
+    html += '<div class="cnc-section-title">Most Common Cues</div>';
+    html += cncRenderCueCloud(data.summary.topCues);
+  }
+
+  // Hex heatmap (skip on small datasets)
+  var hexIds = data.perHexStats ? Object.keys(data.perHexStats) : [];
+  if (hexIds.length > 0 && hexIds.length <= 30) {
+    html += '<div class="cnc-section-title">Notes by Hex</div>';
+    html += cncRenderHexHeatmap(data.perHexStats);
+  }
+
+  // Student list
+  html += '<div class="cnc-section-title">Student Note-Taking (' + data.students.length + ' students)</div>';
+  html += cncRenderStudentList(data.students);
+
+  content.innerHTML = html;
+}
+
+/**
+ * Render 4 summary stat cards.
+ */
+function cncRenderSummaryCards(summary) {
+  var html = '<div class="cnc-summary-cards">';
+
+  // Note-Taking Rate
+  var rateColor = summary.noteTakingRate >= 70 ? 'cnc-green' : (summary.noteTakingRate >= 40 ? 'cnc-amber' : 'cnc-red');
+  html += '<div class="cnc-summary-card">';
+  html += '<div class="cnc-summary-value ' + rateColor + '">' + summary.noteTakingRate + '%</div>';
+  html += '<div class="cnc-summary-label">Note-Taking Rate</div>';
+  html += '</div>';
+
+  // Avg Words / Note
+  html += '<div class="cnc-summary-card">';
+  html += '<div class="cnc-summary-value">' + summary.avgWordCount + '</div>';
+  html += '<div class="cnc-summary-label">Avg Words / Note</div>';
+  html += '</div>';
+
+  // Summary Completion Rate
+  var summColor = summary.summaryCompletionRate >= 70 ? 'cnc-green' : (summary.summaryCompletionRate >= 40 ? 'cnc-amber' : 'cnc-red');
+  html += '<div class="cnc-summary-card">';
+  html += '<div class="cnc-summary-value ' + summColor + '">' + summary.summaryCompletionRate + '%</div>';
+  html += '<div class="cnc-summary-label">Summary Completion</div>';
+  html += '</div>';
+
+  // Avg Notes / Student
+  html += '<div class="cnc-summary-card">';
+  html += '<div class="cnc-summary-value">' + summary.avgNotesPerStudent + '</div>';
+  html += '<div class="cnc-summary-label">Avg Notes / Student</div>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Render cue cloud from top cues.
+ */
+function cncRenderCueCloud(topCues) {
+  if (!topCues || topCues.length === 0) return '';
+
+  var maxCount = topCues[0].count || 1;
+  var html = '<div class="cnc-cue-cloud">';
+  for (var i = 0; i < topCues.length; i++) {
+    var cue = topCues[i];
+    var ratio = cue.count / maxCount;
+    var sizeClass = ratio > 0.66 ? 'cnc-size-3' : (ratio > 0.33 ? 'cnc-size-2' : 'cnc-size-1');
+    html += '<span class="cnc-cue-tag ' + sizeClass + '">' + escapeHtml(cue.text) + ' (' + cue.count + ')</span>';
+  }
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Render hex heatmap showing note counts per hex.
+ */
+function cncRenderHexHeatmap(perHexStats) {
+  var hexIds = Object.keys(perHexStats);
+  if (hexIds.length === 0) return '';
+
+  // Get hex labels from mapsData
+  var hexLabels = {};
+  if (typeof mapsData !== 'undefined' && mapsData && progressSelectedMapId) {
+    for (var m = 0; m < mapsData.length; m++) {
+      if (String(mapsData[m].mapId) === String(progressSelectedMapId)) {
+        var hexes = [];
+        try { hexes = JSON.parse(mapsData[m].hexesJson || '[]'); } catch(e) {}
+        for (var h = 0; h < hexes.length; h++) {
+          hexLabels[String(hexes[h].id)] = hexes[h].label || 'Hex';
+        }
+        break;
+      }
+    }
+  }
+
+  var html = '<div class="cnc-hex-heatmap">';
+  html += '<table class="cnc-heatmap-table">';
+  html += '<thead><tr><th>Hex</th><th>Notes</th><th>Avg Words</th></tr></thead>';
+  html += '<tbody>';
+
+  for (var i = 0; i < hexIds.length; i++) {
+    var hid = hexIds[i];
+    var stat = perHexStats[hid];
+    var label = hexLabels[hid] || 'Hex ' + hid;
+    var heatClass = 'cnc-heat-none';
+    if (stat.noteCount >= 5) heatClass = 'cnc-heat-high';
+    else if (stat.noteCount >= 3) heatClass = 'cnc-heat-mid';
+    else if (stat.noteCount >= 1) heatClass = 'cnc-heat-low';
+
+    html += '<tr>';
+    html += '<td>' + escapeHtml(label) + '</td>';
+    html += '<td><span class="cnc-heatmap-cell ' + heatClass + '">' + stat.noteCount + '</span></td>';
+    html += '<td>' + (stat.avgWordCount || 0) + '</td>';
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Render student list sorted by fewest notes first (coaching priority).
+ */
+function cncRenderStudentList(students) {
+  // Sort: fewest notes first, then by name
+  var sorted = students.slice().sort(function(a, b) {
+    if (a.noteCount !== b.noteCount) return a.noteCount - b.noteCount;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  var html = '<div class="cnc-student-list">';
+
+  for (var i = 0; i < sorted.length; i++) {
+    var s = sorted[i];
+    var pct = s.totalHexes > 0 ? Math.round(s.noteCount / s.totalHexes * 100) : 0;
+
+    // Word count quality badge
+    var wcClass = 'cnc-low';
+    var wcLabel = 'Low';
+    if (s.avgWordCount >= 200) { wcClass = 'cnc-good'; wcLabel = s.avgWordCount + 'w avg'; }
+    else if (s.avgWordCount >= 100) { wcClass = 'cnc-ok'; wcLabel = s.avgWordCount + 'w avg'; }
+    else if (s.avgWordCount > 0) { wcLabel = s.avgWordCount + 'w avg'; }
+    else { wcLabel = 'No notes'; }
+
+    var isExpanded = cncExpandedStudents[s.email];
+
+    html += '<div class="cnc-student-card" onclick="cncToggleStudentDetail(\'' + escapeHtml(s.email) + '\')">';
+
+    html += '<div class="cnc-student-row">';
+    html += '<span class="cnc-student-name">' + escapeHtml(s.name || s.email) + '</span>';
+
+    // Progress bar: notes / total hexes
+    html += '<div class="cnc-progress-bar-container" title="' + s.noteCount + ' of ' + s.totalHexes + ' hexes have notes">';
+    html += '<div class="cnc-progress-bar-fill" style="width:' + pct + '%;"></div>';
+    html += '</div>';
+
+    // Metrics
+    html += '<div class="cnc-student-metrics">';
+    html += '<span class="cnc-metric-badge ' + wcClass + '">' + escapeHtml(wcLabel) + '</span>';
+    html += '<span class="cnc-metric-text">' + s.noteCount + '/' + s.totalHexes + '</span>';
+    html += '<span class="cnc-metric-text">' + s.hasSummaryPct + '% summ</span>';
+    if (s.starredCount > 0) {
+      html += '<span class="cnc-metric-text" style="color:#f59e0b;">&#9733;' + s.starredCount + '</span>';
+    }
+    if (s.lastNoteAt) {
+      html += '<span class="cnc-last-note">' + escapeHtml(s.lastNoteAt.substring(0, 10)) + '</span>';
+    }
+    html += '</div>';
+
+    html += '</div>'; // end cnc-student-row
+
+    // Expanded detail: show note previews
+    if (isExpanded) {
+      html += '<div class="cnc-student-detail" id="cncDetail_' + escapeHtml(s.email) + '">';
+      if (cncExpandedStudents[s.email] === 'loading') {
+        html += '<div class="cnc-loading">Loading notes...</div>';
+      } else if (Array.isArray(cncExpandedStudents[s.email])) {
+        var notes = cncExpandedStudents[s.email];
+        if (notes.length === 0) {
+          html += '<div class="cnc-loading">No notes for this student.</div>';
+        }
+        for (var n = 0; n < notes.length; n++) {
+          html += cncRenderNotePreview(notes[n]);
+        }
+      }
+      html += '</div>';
+    }
+
+    html += '</div>'; // end cnc-student-card
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Toggle expanded student detail, lazy-loading notes.
+ */
+function cncToggleStudentDetail(email) {
+  if (cncExpandedStudents[email]) {
+    delete cncExpandedStudents[email];
+    cncRenderDashboard(cncComputedData);
+    return;
+  }
+
+  // Mark as loading
+  cncExpandedStudents[email] = 'loading';
+  cncRenderDashboard(cncComputedData);
+
+  var expectedEmail = email;
+  var expectedMapId = progressSelectedMapId;
+
+  google.script.run
+    .withSuccessHandler(function(notes) {
+      if (cncExpandedStudents[expectedEmail] !== 'loading') return;
+      cncExpandedStudents[expectedEmail] = notes || [];
+      cncRenderDashboard(cncComputedData);
+    })
+    .withFailureHandler(function(err) {
+      if (cncExpandedStudents[expectedEmail] !== 'loading') return;
+      cncExpandedStudents[expectedEmail] = [];
+      cncRenderDashboard(cncComputedData);
+    })
+    .getStudentNotesForMap(email, expectedMapId);
+}
+
+/**
+ * Render a single note preview in teacher view.
+ */
+function cncRenderNotePreview(note) {
+  // Get hex label
+  var hexLabel = 'Hex';
+  if (typeof mapsData !== 'undefined' && mapsData && progressSelectedMapId) {
+    for (var m = 0; m < mapsData.length; m++) {
+      if (String(mapsData[m].mapId) === String(progressSelectedMapId)) {
+        var hexes = [];
+        try { hexes = JSON.parse(mapsData[m].hexesJson || '[]'); } catch(e) {}
+        for (var h = 0; h < hexes.length; h++) {
+          if (String(hexes[h].id) === String(note.hexId)) {
+            hexLabel = hexes[h].label || 'Hex';
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  var cues = note.cues || [];
+  var wc = parseInt(note.wordCount, 10) || 0;
+
+  var html = '<div class="cnc-note-preview">';
+  html += '<div class="cnc-note-preview-header">';
+  html += '<span class="cnc-note-preview-hex">' + escapeHtml(hexLabel) + '</span>';
+  html += '<span class="cnc-note-preview-meta">' + wc + ' words' + (cues.length > 0 ? ' / ' + cues.length + ' cues' : '') + '</span>';
+  if (note.isStarred === true || note.isStarred === 'true') {
+    html += '<span style="color:#f59e0b;">&#9733;</span>';
+  }
+  html += '</div>';
+
+  // Cues as chips
+  if (cues.length > 0) {
+    html += '<div class="cnc-note-preview-cues">';
+    for (var c = 0; c < cues.length; c++) {
+      html += '<span class="cnc-note-preview-cue">' + escapeHtml(cues[c]) + '</span>';
+    }
+    html += '</div>';
+  }
+
+  // Notes body (truncated)
+  if (note.notesContent) {
+    var body = note.notesContent.length > 200 ? note.notesContent.substring(0, 200) + '...' : note.notesContent;
+    html += '<div class="cnc-note-preview-body">' + escapeHtml(body) + '</div>';
+  }
+
+  // Summary
+  if (note.summaryContent) {
+    html += '<div class="cnc-note-preview-summary">' + escapeHtml(note.summaryContent) + '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+</script>

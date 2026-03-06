@@ -1,0 +1,1191 @@
+<script>
+/* ===== Student Study Dashboard (ssd-) ===== */
+/* ES5 only — no const, let, =>, template literals, .includes() */
+
+var SSD_RETRY_COUNT = 0;
+var SSD_MAX_RETRIES = 12;
+
+/* ---------- Strategy definitions ---------- */
+var SSD_STRATEGIES = [
+  {
+    icon: '📝',
+    name: 'Cornell Notes',
+    desc: 'Structured note-taking with cues and summaries',
+    action: 'cnToggleNotebook',
+    actionLabel: 'Open Notebook'
+  },
+  {
+    icon: '⏱️',
+    name: 'Pomodoro Timer',
+    desc: 'Focused study sessions with timed breaks',
+    action: 'ctdOpenTimer',
+    actionLabel: 'Start Timer'
+  },
+  {
+    icon: '📊',
+    name: 'Self-Assessment',
+    desc: 'Rate your confidence on each activity',
+    action: null,
+    actionLabel: 'Built into each hex'
+  },
+  {
+    icon: '🎯',
+    name: 'ATL Skills',
+    desc: 'Track your approaches to learning',
+    action: 'switchToPlanner',
+    actionLabel: 'View in Planner'
+  },
+  {
+    icon: '📂',
+    name: 'Portfolio',
+    desc: 'Curate your best work and evidence',
+    action: 'switchToProgress',
+    actionLabel: 'View Portfolio'
+  },
+  {
+    icon: '🔄',
+    name: 'Spaced Review',
+    desc: 'Review completed topics at optimal intervals',
+    action: 'scrollToReview',
+    actionLabel: 'View Due Reviews'
+  }
+];
+
+// C6: Strategy key mapping — index in SSD_STRATEGIES to key name
+var SSD_STRATEGY_KEYS = ['cornell', 'pomodoro', 'selfAssess', 'atl', 'portfolio', 'review'];
+
+// C6: Bracket-to-recommended strategy mapping
+var SSD_BRACKET_RECOMMENDED = {
+  low: ['cornell', 'selfAssess', 'review'],
+  mid: ['cornell', 'pomodoro', 'atl', 'review'],
+  high: ['pomodoro', 'atl', 'portfolio']
+};
+
+// E4: Bracket-adaptive text for EAL students
+var SSD_BRACKET_TEXT = {
+  low: {
+    statCompleted: 'Done \u2705',
+    statStreak: 'Streak \uD83D\uDD25',
+    statStreakSub: 'days',
+    statStreakStart: 'Start today!',
+    statLastStudy: 'Last Time',
+    statMapsActive: 'Maps \uD83D\uDCCB',
+    statWeeklyGoal: 'This Week',
+    welcomeFallback: 'What do you want to learn today? Pick one below.',
+    groupUpNext: 'Working On \uD83D\uDCDD',
+    groupPending: 'Waiting \u23F3',
+    groupReady: 'Start These \u25B6\uFE0F',
+    groupCompleted: 'Done \u2705',
+    reviewEmpty: '\u2705 All done for now! Great job!',
+    reviewTitle: '\uD83D\uDCC5 Review These \uD83D\uDD04',
+    recsTitle: 'Try These Next',
+    strategyTitle: 'Study Tools \uD83D\uDEE0\uFE0F',
+    strategyRec: 'Try this!',
+    goalCelebration: '\uD83C\uDF89 Weekly goal reached! Great work!',
+    goalsTitle: 'My Goals \uD83C\uDFAF',
+    goalsThisWeek: 'This Week',
+    goalsHexGoals: 'Activity Goals',
+    goalsSkillGoals: 'Skill Goals',
+    goalsEmpty: 'No goals yet. Keep going! \uD83D\uDCAA',
+    goalsAddPlaceholder: 'Add a new goal...',
+    goalsAddBtn: 'Add'
+  }
+};
+
+function ssdGetText(key, fallback) {
+  var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+  if (bracket && SSD_BRACKET_TEXT[bracket] && SSD_BRACKET_TEXT[bracket][key]) {
+    return SSD_BRACKET_TEXT[bracket][key];
+  }
+  return fallback;
+}
+
+/* ---------- Story 1: Dashboard shell + stats ---------- */
+
+function ssdRenderDashboard() {
+  var viewEl = document.getElementById('studyDashView');
+  var container = viewEl ? (viewEl.querySelector('.scroll-container') || viewEl) : null;
+  if (!container) return;
+
+  // Data guard — progressDashboardData may not be loaded yet
+  if (!progressDashboardData || !progressDashboardData.maps) {
+    SSD_RETRY_COUNT++;
+    if (SSD_RETRY_COUNT <= SSD_MAX_RETRIES) {
+      container.innerHTML = '<div class="ssd-loading">Loading your study data...</div>';
+      setTimeout(ssdRenderDashboard, 500);
+      return;
+    }
+    // Max retries exceeded — reset counter so future tab visits can retry
+    SSD_RETRY_COUNT = 0;
+    container.innerHTML =
+      '<div class="ssd-empty">' +
+        '<div class="ssd-empty-icon">\uD83D\uDE80</div>' +
+        '<div class="ssd-empty-title">Getting Things Ready</div>' +
+        '<div class="ssd-empty-text">Your teacher is setting up your learning maps. Check back soon!</div>' +
+      '</div>';
+    return;
+  }
+
+  SSD_RETRY_COUNT = 0;
+  ssdLoadWeeklyGoal();
+
+  var maps = progressDashboardData.maps;
+  if (!maps || maps.length === 0) {
+    container.innerHTML =
+      '<div class="ssd-empty">' +
+        '<div class="ssd-empty-icon">\uD83D\uDCDA</div>' +
+        '<div class="ssd-empty-title">No Maps Yet</div>' +
+        '<div class="ssd-empty-text">Your learning maps will appear here once your teacher assigns them. In the meantime, explore your Planner to get familiar with the tools.</div>' +
+        '<button class="ssd-empty-action" onclick="ssdSwitchToTab(\'planner\')" type="button">Go to Planner</button>' +
+      '</div>';
+    return;
+  }
+
+  // Build layout
+  var html =
+    '<div class="ssd-layout">' +
+      '<div class="ssd-main">' +
+        ssdRenderWelcome() +
+        ssdRenderReviewSection(maps) +
+        ssdRenderStats(maps) +
+        '<div id="ssdTopicNav">' +
+          ssdRenderTopicNav(maps) +
+        '</div>' +
+      '</div>' +
+      '<div class="ssd-side">' +
+        ssdRenderGoalDashboard(maps) +
+        ssdRenderRecommendations(maps) +
+        ssdRenderStrategyPicker() +
+      '</div>' +
+    '</div>';
+
+  container.innerHTML = html;
+
+  // Auto-select first in-progress map
+  if (!ssdSelectedMapId) {
+    var autoMap = ssdFindFirstActiveMap(maps);
+    if (autoMap) {
+      ssdSelectedMapId = autoMap.mapId;
+    } else if (maps.length > 0) {
+      ssdSelectedMapId = maps[0].mapId;
+    }
+  }
+
+  ssdRenderHexListOnly(maps);
+}
+
+function ssdRenderWelcome() {
+  var msg = '';
+  var streakHtml = '';
+
+  // Growth message from celebrations
+  if (typeof celData !== 'undefined' && celData && celData.growthMessage) {
+    msg = escapeHtml(celData.growthMessage);
+  } else {
+    msg = ssdGetText('welcomeFallback', 'Ready to study? Pick a topic below to get started.');
+  }
+
+  // Streak inline
+  if (typeof celData !== 'undefined' && celData && celData.streak && celData.streak > 0) {
+    streakHtml = '<span class="ssd-welcome-streak">🔥 ' + celData.streak + ' day streak!</span>';
+  }
+
+  return '<div class="ssd-welcome">' +
+    '<p class="ssd-welcome-msg">' + msg + streakHtml + '</p>' +
+  '</div>';
+}
+
+function ssdRenderStats(maps) {
+  var stats = ssdComputeAggregateStats(maps);
+
+  // Streak color
+  var streakClass = 'ssd-streak-gray';
+  if (stats.streak >= 7) streakClass = 'ssd-streak-red';
+  else if (stats.streak >= 3) streakClass = 'ssd-streak-amber';
+
+  return '<div class="ssd-stats">' +
+    '<div class="ssd-stat-card">' +
+      '<div class="ssd-stat-value">' + stats.completedHexes + '/' + stats.totalHexes + '</div>' +
+      '<div class="ssd-stat-label">' + ssdGetText('statCompleted', 'Hexes Completed') + '</div>' +
+      '<div class="ssd-stat-sub">' + stats.completionPct + '%</div>' +
+    '</div>' +
+    '<div class="ssd-stat-card">' +
+      '<div class="ssd-stat-value ' + streakClass + '">' + (stats.streak > 0 ? '🔥 ' + stats.streak : '—') + '</div>' +
+      '<div class="ssd-stat-label">' + ssdGetText('statStreak', 'Current Streak') + '</div>' +
+      '<div class="ssd-stat-sub">' + (stats.streak > 0 ? ssdGetText('statStreakSub', 'days') : ssdGetText('statStreakStart', 'Start studying!')) + '</div>' +
+    '</div>' +
+    '<div class="ssd-stat-card">' +
+      '<div class="ssd-stat-value">' + stats.lastStudyLabel + '</div>' +
+      '<div class="ssd-stat-label">' + ssdGetText('statLastStudy', 'Last Study Date') + '</div>' +
+    '</div>' +
+    '<div class="ssd-stat-card">' +
+      '<div class="ssd-stat-value">' + stats.activeMaps + '</div>' +
+      '<div class="ssd-stat-label">' + ssdGetText('statMapsActive', 'Maps Active') + '</div>' +
+      '<div class="ssd-stat-sub">of ' + maps.length + ' total</div>' +
+    '</div>' +
+    ssdRenderWeeklyGoalCard() +
+  '</div>';
+}
+
+function ssdComputeAggregateStats(maps) {
+  var totalHexes = 0;
+  var completedHexes = 0;
+  var activeMaps = 0;
+  var latestDate = null;
+  var i, m;
+
+  for (i = 0; i < maps.length; i++) {
+    m = maps[i];
+    totalHexes += (m.totalHexes || 0);
+
+    var sc = m.statusCounts || {};
+    completedHexes += (sc.completed || 0) + (sc.mastered || 0);
+
+    if (m.percentComplete > 0 && m.percentComplete < 100) {
+      activeMaps++;
+    }
+
+    // Find most recent activity
+    if (m.recentActivity && m.recentActivity.length > 0) {
+      for (var j = 0; j < m.recentActivity.length; j++) {
+        var act = m.recentActivity[j];
+        if (act.completedAt) {
+          var d = new Date(act.completedAt);
+          if (!isNaN(d.getTime()) && (!latestDate || d > latestDate)) {
+            latestDate = d;
+          }
+        }
+      }
+    }
+  }
+
+  var completionPct = totalHexes > 0 ? Math.round((completedHexes / totalHexes) * 100) : 0;
+
+  // Streak from celData
+  var streak = 0;
+  if (typeof celData !== 'undefined' && celData && celData.streak) {
+    streak = celData.streak;
+  }
+
+  // Last study date
+  var lastStudyLabel = '—';
+  if (latestDate) {
+    lastStudyLabel = ssdFormatRelativeDate(latestDate);
+  }
+
+  return {
+    totalHexes: totalHexes,
+    completedHexes: completedHexes,
+    completionPct: completionPct,
+    streak: streak,
+    activeMaps: activeMaps,
+    lastStudyLabel: lastStudyLabel
+  };
+}
+
+function ssdFormatRelativeDate(date) {
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  var diffDays = Math.round((today - target) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return diffDays + 'd ago';
+  if (diffDays < 30) return Math.floor(diffDays / 7) + 'w ago';
+  return Math.floor(diffDays / 30) + 'mo ago';
+}
+
+function ssdFindFirstActiveMap(maps) {
+  for (var i = 0; i < maps.length; i++) {
+    if (maps[i].percentComplete > 0 && maps[i].percentComplete < 100) {
+      return maps[i];
+    }
+  }
+  return null;
+}
+
+/* ---------- Story 2: Topic navigator ---------- */
+
+function ssdRenderTopicNav(maps) {
+  return '<div class="ssd-section-title">Your Topics</div>' +
+    ssdRenderMapChips(maps) +
+    '<div id="ssdHexList"></div>';
+}
+
+function ssdRenderMapChips(maps) {
+  var html = '<div class="ssd-map-chips">';
+  for (var i = 0; i < maps.length; i++) {
+    var m = maps[i];
+    var title = escapeHtml(m.mapTitle || 'Untitled');
+    if (title.length > 25) title = title.substring(0, 25) + '...';
+    var isActive = (String(m.mapId) === String(ssdSelectedMapId));
+    html += '<div class="ssd-map-chip' + (isActive ? ' active' : '') + '" ' +
+      'onclick="ssdSelectMap(\'' + escapeHtml(String(m.mapId)) + '\')" ' +
+      'role="button" tabindex="0" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ssdSelectMap(\'' + escapeHtml(String(m.mapId)) + '\');}">' +
+      title +
+      '<span class="ssd-map-chip-pct">' + Math.round(m.percentComplete || 0) + '%</span>' +
+    '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function ssdSelectMap(mapId) {
+  ssdSelectedMapId = String(mapId);
+  var maps = progressDashboardData ? progressDashboardData.maps : [];
+
+  // Re-render chips to update active state
+  var navEl = document.getElementById('ssdTopicNav');
+  if (navEl) {
+    navEl.innerHTML = ssdRenderTopicNav(maps);
+  }
+
+  ssdRenderHexListOnly(maps);
+}
+
+function ssdRenderHexListOnly(maps) {
+  var listEl = document.getElementById('ssdHexList');
+  if (!listEl) return;
+
+  if (!ssdSelectedMapId) {
+    listEl.innerHTML = '<div class="ssd-no-hexes">Select a map above to see topics.</div>';
+    return;
+  }
+
+  // Find selected map
+  var selectedMap = null;
+  for (var i = 0; i < maps.length; i++) {
+    if (String(maps[i].mapId) === String(ssdSelectedMapId)) {
+      selectedMap = maps[i];
+      break;
+    }
+  }
+
+  if (!selectedMap || !selectedMap.hexDetails || selectedMap.hexDetails.length === 0) {
+    listEl.innerHTML = '<div class="ssd-no-hexes">No activities found for this map.</div>';
+    return;
+  }
+
+  var groups = ssdBuildHexGroups(selectedMap.hexDetails);
+  var html = '<div class="ssd-hex-groups">';
+
+  // Up Next (in_progress)
+  if (groups.upNext.length > 0) {
+    html += ssdRenderHexGroup(ssdGetText('groupUpNext', 'Up Next'), groups.upNext, 'up-next', groups.upNext.length, false);
+  }
+
+  // Pending Review (submitted, awaiting teacher approval)
+  if (groups.pending.length > 0) {
+    html += ssdRenderHexGroup(ssdGetText('groupPending', 'Pending Review'), groups.pending, 'pending', groups.pending.length, false);
+  }
+
+  // Ready to Start (not_started)
+  if (groups.readyToStart.length > 0) {
+    html += ssdRenderHexGroup(ssdGetText('groupReady', 'Ready to Start'), groups.readyToStart, 'ready', groups.readyToStart.length, false);
+  }
+
+  // Completed (completed + mastered) — collapsed by default
+  if (groups.completed.length > 0) {
+    var isCollapsed = !ssdExpandedHexes[String(ssdSelectedMapId)];
+    html += ssdRenderHexGroup(ssdGetText('groupCompleted', 'Completed'), groups.completed, 'completed', groups.completed.length, isCollapsed);
+  }
+
+  html += '</div>';
+  listEl.innerHTML = html;
+}
+
+function ssdBuildHexGroups(hexDetails) {
+  var upNext = [];
+  var pending = [];
+  var readyToStart = [];
+  var completed = [];
+
+  for (var i = 0; i < hexDetails.length; i++) {
+    var h = hexDetails[i];
+    var status = h.status || 'not_started';
+
+    if (status === 'in_progress') {
+      upNext.push(h);
+    } else if (status === 'pending') {
+      pending.push(h);
+    } else if (status === 'not_started') {
+      readyToStart.push(h);
+    } else if (status === 'completed' || status === 'mastered') {
+      completed.push(h);
+    }
+  }
+
+  return {
+    upNext: upNext,
+    pending: pending,
+    readyToStart: readyToStart,
+    completed: completed
+  };
+}
+
+function ssdRenderHexGroup(title, hexes, groupKey, count, isCollapsed) {
+  var collapsible = (groupKey === 'completed');
+  var chevronHtml = '';
+  var headerAttrs = '';
+
+  if (collapsible) {
+    chevronHtml = '<span class="ssd-group-chevron' + (isCollapsed ? ' collapsed' : '') + '">▼</span>';
+    headerAttrs = ' role="button" tabindex="0" ' +
+      'onclick="ssdToggleCompletedSection()" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ssdToggleCompletedSection();}" ' +
+      'aria-expanded="' + (!isCollapsed) + '"';
+  }
+
+  var html = '<div class="ssd-hex-group ssd-group-' + groupKey + '">' +
+    '<div class="ssd-group-header"' + headerAttrs + '>' +
+      '<span class="ssd-group-title">' + escapeHtml(title) + '</span>' +
+      '<span class="ssd-group-badge">' + count + '</span>' +
+      chevronHtml +
+    '</div>' +
+    '<div class="ssd-group-body' + (isCollapsed ? ' collapsed' : '') + '">';
+
+  for (var i = 0; i < hexes.length; i++) {
+    html += ssdRenderHexItem(hexes[i]);
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function ssdRenderHexItem(hex) {
+  var icon = escapeHtml(hex.icon || '⬡');
+  var label = escapeHtml(hex.label || 'Untitled');
+  var type = escapeHtml(hex.type || 'core');
+  var status = hex.status || 'not_started';
+  var statusLabel = escapeHtml(status.replace(/_/g, ' '));
+  var scoreHtml = '';
+
+  if (hex.score !== null && hex.score !== undefined && hex.maxScore) {
+    var score = Number(hex.score);
+    var maxScore = Number(hex.maxScore);
+    if (!isNaN(score) && !isNaN(maxScore)) {
+      scoreHtml = '<span class="ssd-hex-score">' + score + '/' + maxScore + '</span>';
+    }
+  }
+
+  var mapId = escapeHtml(String(ssdSelectedMapId));
+  var hexId = escapeHtml(String(hex.hexId));
+
+  return '<div class="ssd-hex-item" ' +
+    'onclick="ssdOnHexClick(\'' + mapId + '\',\'' + hexId + '\')" ' +
+    'role="button" tabindex="0" ' +
+    'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ssdOnHexClick(\'' + mapId + '\',\'' + hexId + '\');}">' +
+    '<span class="ssd-hex-icon">' + icon + '</span>' +
+    '<div class="ssd-hex-info">' +
+      '<div class="ssd-hex-label">' + label + '</div>' +
+      '<div class="ssd-hex-type">' + type + '</div>' +
+    '</div>' +
+    '<span class="ssd-hex-status ' + status + '" aria-label="' + statusLabel + '"></span>' +
+    '<span class="ssd-hex-status-label">' + statusLabel + '</span>' +
+    scoreHtml +
+  '</div>';
+}
+
+function ssdToggleCompletedSection() {
+  var key = String(ssdSelectedMapId);
+  if (ssdExpandedHexes[key]) {
+    delete ssdExpandedHexes[key];
+  } else {
+    ssdExpandedHexes[key] = true;
+  }
+
+  var maps = progressDashboardData ? progressDashboardData.maps : [];
+  ssdRenderHexListOnly(maps);
+}
+
+function ssdOnHexClick(mapId, hexId) {
+  // Navigate: switch to builder tab → open map → open hex
+  var btns = document.querySelectorAll('.tab');
+  for (var i = 0; i < btns.length; i++) {
+    if (btns[i].getAttribute('data-view') === 'builder') {
+      switchTab(btns[i]);
+      break;
+    }
+  }
+
+  if (typeof openMapInBuilder === 'function') {
+    openMapInBuilder(String(mapId));
+    setTimeout(function() {
+      if (typeof handleHexClick === 'function') {
+        handleHexClick(String(hexId));
+      }
+    }, 300);
+  }
+}
+
+/* ---------- Story 3: Strategy picker ---------- */
+
+function ssdRenderStrategyPicker() {
+  // C6: Resolve bracket for strategy recommendations
+  var ssdBracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+  var recKeys = (ssdBracket && SSD_BRACKET_RECOMMENDED[ssdBracket]) ? SSD_BRACKET_RECOMMENDED[ssdBracket] : null;
+
+  // Build render order — recommended strategies first when bracket active
+  var indices = [];
+  for (var idx = 0; idx < SSD_STRATEGIES.length; idx++) { indices.push(idx); }
+  if (recKeys) {
+    indices.sort(function(a, b) {
+      var aRec = recKeys.indexOf(SSD_STRATEGY_KEYS[a]) !== -1 ? 0 : 1;
+      var bRec = recKeys.indexOf(SSD_STRATEGY_KEYS[b]) !== -1 ? 0 : 1;
+      return aRec - bRec;
+    });
+  }
+
+  var html = '<div class="ssd-strategy-section">' +
+    '<div class="ssd-strategy-title">' + ssdGetText('strategyTitle', 'Study Strategies') + '</div>' +
+    '<div class="ssd-strategy-grid">';
+
+  for (var j = 0; j < indices.length; j++) {
+    var i = indices[j];
+    var s = SSD_STRATEGIES[i];
+    var sKey = SSD_STRATEGY_KEYS[i] || '';
+    var isRec = recKeys && recKeys.indexOf(sKey) !== -1;
+    var disabledClass = s.disabled ? ' ssd-strategy-disabled' : '';
+    var recClass = isRec ? ' ssd-strategy-recommended' : '';
+    var clickAttr = '';
+
+    if (!s.disabled && s.action) {
+      clickAttr = ' onclick="ssdOnStrategyAction(\'' + s.action + '\')"';
+    }
+
+    html += '<div class="ssd-strategy-card' + disabledClass + recClass + '"' + clickAttr +
+      ((!s.disabled && s.action) ? ' role="button" tabindex="0" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ssdOnStrategyAction(\'' + s.action + '\');}"' : '') + '>' +
+      '<span class="ssd-strategy-icon">' + s.icon + '</span>' +
+      '<div class="ssd-strategy-info">' +
+        '<div class="ssd-strategy-name">' + escapeHtml(s.name) + '</div>' +
+        '<div class="ssd-strategy-desc">' + escapeHtml(s.desc) + '</div>' +
+        (isRec ? '<div class="ssd-strategy-rec-badge">' + ssdGetText('strategyRec', 'Recommended for you') + '</div>' : '') +
+        '<div class="ssd-strategy-action">' + escapeHtml(s.actionLabel) + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function ssdSwitchToTab(viewName) {
+  var btns = document.querySelectorAll('.tab');
+  for (var i = 0; i < btns.length; i++) {
+    if (btns[i].getAttribute('data-view') === viewName) {
+      switchTab(btns[i]);
+      return;
+    }
+  }
+}
+
+function ssdOnStrategyAction(actionType) {
+  if (actionType === 'cnToggleNotebook') {
+    if (typeof cnToggleNotebook === 'function') {
+      ssdSwitchToTab('planner');
+      setTimeout(function() {
+        if (typeof cnToggleNotebook === 'function') {
+          cnToggleNotebook();
+        }
+      }, 200);
+    } else {
+      if (typeof showToast === 'function') showToast('Notebook not available yet.');
+    }
+  } else if (actionType === 'ctdOpenTimer') {
+    if (typeof ctdOpenTimer === 'function') {
+      ctdOpenTimer();
+    } else {
+      if (typeof showToast === 'function') showToast('Timer not available.');
+    }
+  } else if (actionType === 'switchToPlanner') {
+    ssdSwitchToTab('planner');
+  } else if (actionType === 'switchToProgress') {
+    ssdSwitchToTab('progress');
+  } else if (actionType === 'scrollToReview') {
+    var reviewSection = document.getElementById('ssdReviewSection');
+    if (reviewSection) {
+      reviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      if (typeof showToast === 'function') showToast('No reviews due right now!');
+    }
+  }
+}
+
+
+/* ========== Story B1: Spaced Review Engine ========== */
+
+var SSD_REVIEW_INTERVALS = [1, 3, 7, 14, 30]; // days
+var SSD_REVIEW_TOLERANCE = 1; // day
+// ssdShowAllReview state var declared in Scripts-Core.html
+
+function ssdComputeReviewItems(maps) {
+  var items = [];
+  var now = new Date();
+  var todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  for (var m = 0; m < maps.length; m++) {
+    var map = maps[m];
+    var hexDetails = map.hexDetails || [];
+
+    for (var h = 0; h < hexDetails.length; h++) {
+      var hex = hexDetails[h];
+      var status = hex.status || 'not_started';
+      if (status !== 'completed' && status !== 'mastered') continue;
+
+      var completedAt = hex.completedAt;
+      if (!completedAt) continue;
+
+      var completedDate = new Date(completedAt);
+      if (isNaN(completedDate.getTime())) continue;
+
+      var completedMs = new Date(completedDate.getFullYear(), completedDate.getMonth(), completedDate.getDate()).getTime();
+      var daysSince = Math.floor((todayMs - completedMs) / (1000 * 60 * 60 * 24));
+
+      // Check if this hex is due for review at any interval
+      for (var iv = 0; iv < SSD_REVIEW_INTERVALS.length; iv++) {
+        var interval = SSD_REVIEW_INTERVALS[iv];
+        var diff = daysSince - interval;
+
+        // Due if within tolerance window: diff >= -tolerance and diff <= tolerance
+        if (diff >= -SSD_REVIEW_TOLERANCE && diff <= SSD_REVIEW_TOLERANCE) {
+          var urgency = 0; // 0=due today, negative=overdue, positive=upcoming
+          if (diff > 0) urgency = -1; // overdue
+          if (diff < 0) urgency = 1; // upcoming (tomorrow)
+
+          items.push({
+            hexId: hex.hexId,
+            hexLabel: hex.label || 'Untitled',
+            hexIcon: hex.icon || '⬡',
+            mapId: map.mapId,
+            mapTitle: map.mapTitle || 'Untitled',
+            daysSince: daysSince,
+            interval: interval,
+            urgency: urgency,
+            score: hex.score,
+            maxScore: hex.maxScore
+          });
+          break; // Only match first interval
+        }
+      }
+    }
+  }
+
+  // Sort: overdue first, then due today, then upcoming
+  items.sort(function(a, b) {
+    if (a.urgency !== b.urgency) return a.urgency - b.urgency;
+    return a.daysSince - b.daysSince;
+  });
+
+  return items;
+}
+
+function ssdRenderReviewSection(maps) {
+  var items = ssdComputeReviewItems(maps);
+
+  if (items.length === 0) {
+    return '<div class="ssd-review-section" id="ssdReviewSection">' +
+      '<div class="ssd-review-empty">' + ssdGetText('reviewEmpty', '✅ Nothing due for review — great job staying on top of things!') + '</div>' +
+    '</div>';
+  }
+
+  var showCount = ssdShowAllReview ? items.length : Math.min(items.length, 3);
+
+  var html = '<div class="ssd-review-section" id="ssdReviewSection">' +
+    '<div class="ssd-section-title">' + ssdGetText('reviewTitle', '📅 Due for Review') + '</div>';
+
+  for (var i = 0; i < showCount; i++) {
+    var item = items[i];
+    var scoreHtml = '';
+    if (item.score !== null && item.score !== undefined && item.maxScore) {
+      var s = Number(item.score);
+      var ms = Number(item.maxScore);
+      if (!isNaN(s) && !isNaN(ms)) {
+        scoreHtml = '<span class="ssd-review-score">' + s + '/' + ms + '</span>';
+      }
+    }
+
+    var urgencyClass = item.urgency < 0 ? ' ssd-review-overdue' : (item.urgency === 0 ? ' ssd-review-today' : '');
+
+    html += '<div class="ssd-review-card' + urgencyClass + '" ' +
+      'onclick="ssdOnHexClick(\'' + escapeHtml(String(item.mapId)) + '\',\'' + escapeHtml(String(item.hexId)) + '\')" ' +
+      'role="button" tabindex="0" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ssdOnHexClick(\'' + escapeHtml(String(item.mapId)) + '\',\'' + escapeHtml(String(item.hexId)) + '\');}">' +
+      '<span class="ssd-review-icon">' + escapeHtml(item.hexIcon) + '</span>' +
+      '<div class="ssd-review-info">' +
+        '<div class="ssd-review-label">' + escapeHtml(item.hexLabel) + '</div>' +
+        '<div class="ssd-review-meta">' + escapeHtml(item.mapTitle) + ' · ' + item.daysSince + 'd ago</div>' +
+      '</div>' +
+      scoreHtml +
+      '<span class="ssd-review-arrow">→</span>' +
+    '</div>';
+  }
+
+  if (items.length > 3) {
+    html += '<button type="button" class="ssd-review-toggle" onclick="ssdToggleShowAllReview()">' +
+      (ssdShowAllReview ? 'Show fewer' : 'Show all ' + items.length + ' items') +
+    '</button>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function ssdToggleShowAllReview() {
+  ssdShowAllReview = !ssdShowAllReview;
+  var maps = progressDashboardData ? progressDashboardData.maps : [];
+  var reviewEl = document.getElementById('ssdReviewSection');
+  if (reviewEl) {
+    var tempDiv = document.createElement('div');
+    tempDiv.innerHTML = ssdRenderReviewSection(maps);
+    var newSection = tempDiv.firstChild;
+    reviewEl.parentNode.replaceChild(newSection, reviewEl);
+  }
+}
+
+
+/* ========== Story B2: Study Recommendations + Focus Picks ========== */
+
+function ssdComputeRecommendations(maps) {
+  var recs = [];
+
+  var lowestScoreHex = null;
+  var lowestScorePct = 101;
+  var stalledHex = null;
+  var stalledDaysAgo = 0;
+  var nextStartHex = null;
+
+  var now = new Date();
+
+  for (var m = 0; m < maps.length; m++) {
+    var map = maps[m];
+    var hexDetails = map.hexDetails || [];
+
+    for (var h = 0; h < hexDetails.length; h++) {
+      var hex = hexDetails[h];
+      var status = hex.status || 'not_started';
+
+      // 1. Review — lowest-scored completed hex (< 70%)
+      if (status === 'completed' || status === 'mastered') {
+        if (hex.score !== null && hex.score !== undefined && hex.maxScore) {
+          var scorePct = Math.round((Number(hex.score) / Number(hex.maxScore)) * 100);
+          if (!isNaN(scorePct) && scorePct < 70 && scorePct < lowestScorePct) {
+            lowestScorePct = scorePct;
+            lowestScoreHex = { hex: hex, map: map, scorePct: scorePct };
+          }
+        }
+      }
+
+      // 2. Continue — stalled in-progress hex (no update in 7+ days)
+      if (status === 'in_progress' && hex.updatedAt) {
+        var updated = new Date(hex.updatedAt);
+        if (!isNaN(updated.getTime())) {
+          var daysAgo = Math.floor((now.getTime() - updated.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysAgo >= 7 && daysAgo > stalledDaysAgo) {
+            stalledDaysAgo = daysAgo;
+            stalledHex = { hex: hex, map: map, daysAgo: daysAgo };
+          }
+        }
+      }
+
+      // 3. Start — first not-started hex on an active map
+      if (status === 'not_started' && !nextStartHex && map.percentComplete > 0 && map.percentComplete < 100) {
+        nextStartHex = { hex: hex, map: map };
+      }
+    }
+  }
+
+  if (lowestScoreHex) {
+    recs.push({
+      type: 'review',
+      emoji: '🔄',
+      prefix: 'Review',
+      label: lowestScoreHex.hex.label || 'Untitled',
+      detail: 'Score: ' + lowestScoreHex.scorePct + '% — try again to improve',
+      mapId: lowestScoreHex.map.mapId,
+      hexId: lowestScoreHex.hex.hexId
+    });
+  }
+
+  if (stalledHex) {
+    recs.push({
+      type: 'continue',
+      emoji: '⚡',
+      prefix: 'Continue',
+      label: stalledHex.hex.label || 'Untitled',
+      detail: 'Last updated ' + stalledHex.daysAgo + 'd ago — pick up where you left off',
+      mapId: stalledHex.map.mapId,
+      hexId: stalledHex.hex.hexId
+    });
+  }
+
+  if (nextStartHex) {
+    recs.push({
+      type: 'start',
+      emoji: '🎯',
+      prefix: 'Start',
+      label: nextStartHex.hex.label || 'Untitled',
+      detail: 'Next up on ' + (nextStartHex.map.mapTitle || 'your map'),
+      mapId: nextStartHex.map.mapId,
+      hexId: nextStartHex.hex.hexId
+    });
+  }
+
+  return recs;
+}
+
+function ssdRenderRecommendations(maps) {
+  var recs = ssdComputeRecommendations(maps);
+
+  if (recs.length === 0) return '';
+
+  var html = '<div class="ssd-recs-section">' +
+    '<div class="ssd-strategy-title">' + ssdGetText('recsTitle', 'What to Study Next') + '</div>';
+
+  for (var i = 0; i < recs.length; i++) {
+    var r = recs[i];
+    html += '<div class="ssd-rec-card ssd-rec-' + r.type + '" ' +
+      'onclick="ssdOnHexClick(\'' + escapeHtml(String(r.mapId)) + '\',\'' + escapeHtml(String(r.hexId)) + '\')" ' +
+      'role="button" tabindex="0" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ssdOnHexClick(\'' + escapeHtml(String(r.mapId)) + '\',\'' + escapeHtml(String(r.hexId)) + '\');}">' +
+      '<span class="ssd-rec-emoji">' + r.emoji + '</span>' +
+      '<div class="ssd-rec-info">' +
+        '<div class="ssd-rec-prefix">' + escapeHtml(r.prefix) + '</div>' +
+        '<div class="ssd-rec-label">' + escapeHtml(r.label) + '</div>' +
+        '<div class="ssd-rec-detail">' + escapeHtml(r.detail) + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+
+/* ========== Story B3: Weekly Study Goal + Progress Ring ========== */
+
+function ssdComputeWeeklyProgress() {
+  var now = new Date();
+  // Find Monday of current week
+  var dayOfWeek = now.getDay();
+  var diffToMonday = (dayOfWeek === 0) ? 6 : (dayOfWeek - 1);
+  var monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday);
+  var mondayMs = monday.getTime();
+
+  var count = 0;
+  var maps = progressDashboardData ? progressDashboardData.maps : [];
+
+  for (var m = 0; m < maps.length; m++) {
+    var hexDetails = maps[m].hexDetails || [];
+    for (var h = 0; h < hexDetails.length; h++) {
+      var hex = hexDetails[h];
+      if ((hex.status === 'completed' || hex.status === 'mastered') && hex.completedAt) {
+        var cDate = new Date(hex.completedAt);
+        if (!isNaN(cDate.getTime()) && cDate.getTime() >= mondayMs) {
+          count++;
+        }
+      }
+    }
+  }
+
+  return count;
+}
+
+function ssdLoadWeeklyGoal() {
+  var key = 'ssdWeeklyGoal_';
+  if (typeof userData !== 'undefined' && userData && userData.email) {
+    key += userData.email;
+  }
+  try {
+    var saved = localStorage.getItem(key);
+    if (saved) {
+      var parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 20) {
+        ssdWeeklyGoal = parsed;
+      }
+    }
+  } catch (e) { /* ignore localStorage errors */ }
+}
+
+function ssdSaveWeeklyGoal(goal) {
+  ssdWeeklyGoal = goal;
+  var key = 'ssdWeeklyGoal_';
+  if (typeof userData !== 'undefined' && userData && userData.email) {
+    key += userData.email;
+  }
+  try {
+    localStorage.setItem(key, String(goal));
+  } catch (e) { /* ignore localStorage errors */ }
+}
+
+function ssdSetWeeklyGoal() {
+  // Show inline input instead of prompt() which is blocked in cross-origin iframes
+  var card = document.getElementById('ssdGoalCard');
+  if (!card) return;
+
+  card.innerHTML =
+    '<label class="ssd-stat-label" for="ssdGoalInput" style="margin-bottom:6px;">Weekly Goal (1-20)</label>' +
+    '<input type="number" id="ssdGoalInput" class="ssd-goal-input" min="1" max="20" value="' + ssdWeeklyGoal + '" ' +
+      'onkeydown="if(event.key===\'Enter\'){ssdConfirmWeeklyGoal();}" ' +
+      'style="width:60px;text-align:center;font-size:16px;padding:6px;border:1px solid #14b8a6;border-radius:6px;outline:none;">' +
+    '<div style="margin-top:6px;display:flex;gap:6px;justify-content:center;">' +
+      '<button type="button" onclick="ssdConfirmWeeklyGoal()" style="font-size:12px;color:#fff;background:#14b8a6;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;">Save</button>' +
+      '<button type="button" onclick="ssdRenderDashboard()" style="font-size:12px;color:#64748b;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:4px 12px;cursor:pointer;">Cancel</button>' +
+    '</div>';
+
+  var inp = document.getElementById('ssdGoalInput');
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+function ssdConfirmWeeklyGoal() {
+  var inp = document.getElementById('ssdGoalInput');
+  if (!inp) return;
+  var parsed = parseInt(inp.value, 10);
+  if (isNaN(parsed) || parsed < 1 || parsed > 20) {
+    if (typeof showToast === 'function') showToast('Please enter a number between 1 and 20.', 'error');
+    return;
+  }
+  ssdSaveWeeklyGoal(parsed);
+  ssdGoalCelebrated = false;
+
+  // Re-render the full dashboard
+  ssdRenderDashboard();
+}
+
+function ssdRenderWeeklyGoalCard() {
+  var completed = ssdComputeWeeklyProgress();
+  var goal = ssdWeeklyGoal;
+  var pct = goal > 0 ? Math.min(Math.round((completed / goal) * 100), 100) : 0;
+
+  // Ring color
+  var ringColor = '#cbd5e1'; // gray at 0
+  if (pct >= 100) {
+    ringColor = '#22c55e'; // green when met
+  } else if (pct > 0) {
+    ringColor = '#14b8a6'; // teal in progress
+  }
+
+  var ringStyle = 'background: conic-gradient(' + ringColor + ' ' + pct + '%, #e2e8f0 ' + pct + '%);';
+
+  var actionLabel = completed === 0 && goal === 5 ? 'Set Goal' : 'Change';
+
+  // Goal met celebration (once per session)
+  if (completed >= goal && !ssdGoalCelebrated && completed > 0) {
+    ssdGoalCelebrated = true;
+    setTimeout(function() {
+      if (typeof showToast === 'function') showToast(ssdGetText('goalCelebration', '🎉 Weekly goal reached! Great work!'), 'success');
+    }, 500);
+  }
+
+  return '<div class="ssd-stat-card ssd-goal-card" id="ssdGoalCard">' +
+    '<div class="ssd-goal-ring" style="' + ringStyle + '">' +
+      '<div class="ssd-goal-ring-inner">' +
+        '<span class="ssd-goal-ring-text">' + completed + '/' + goal + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ssd-stat-label">' + ssdGetText('statWeeklyGoal', 'Weekly Goal') + '</div>' +
+    '<div class="ssd-goal-action" onclick="ssdSetWeeklyGoal()" role="button" tabindex="0" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ssdSetWeeklyGoal();}">' +
+      actionLabel +
+    '</div>' +
+  '</div>';
+}
+
+
+/* ========== Story 2.3: Unified Goal Dashboard ========== */
+
+/**
+ * Collect goals from 4 sources into grouped structure.
+ * @param {Array} maps - progressDashboardData.maps
+ * @returns {Object} { thisWeek: [], hexGoals: [], skillGoals: [] }
+ */
+function ssdCollectGoals(maps) {
+  var thisWeek = [];
+  var hexGoals = [];
+  var skillGoals = [];
+
+  // Source 1: Weekly goal
+  if (typeof ssdWeeklyGoal !== 'undefined' && ssdWeeklyGoal > 0) {
+    var weeklyCompleted = ssdComputeWeeklyProgress();
+    thisWeek.push({
+      text: 'Complete ' + ssdWeeklyGoal + ' activities this week',
+      progress: weeklyCompleted + '/' + ssdWeeklyGoal,
+      source: 'weekly',
+      done: weeklyCompleted >= ssdWeeklyGoal
+    });
+  }
+
+  // Source 2: Custom tasks (non-completed)
+  if (typeof stlTasksData !== 'undefined' && stlTasksData) {
+    for (var t = 0; t < stlTasksData.length; t++) {
+      var task = stlTasksData[t];
+      if (!task.isCompleted) {
+        thisWeek.push({
+          text: task.title || '',
+          progress: task.dueDate ? String(task.dueDate).substring(0, 10) : '',
+          source: 'task',
+          done: false
+        });
+      }
+    }
+  }
+
+  // Source 3: Self-assess goals from hex details
+  if (maps) {
+    for (var m = 0; m < maps.length; m++) {
+      var hexDetails = maps[m].hexDetails || [];
+      for (var h = 0; h < hexDetails.length; h++) {
+        var hex = hexDetails[h];
+        if (hex.selfAssessGoal && (hex.status === 'in_progress' || hex.status === 'completed' || hex.status === 'mastered')) {
+          hexGoals.push({
+            text: hex.selfAssessGoal,
+            progress: hex.label || '',
+            source: 'self-assess',
+            done: hex.status === 'mastered'
+          });
+        }
+      }
+    }
+  }
+
+  // Source 4: ATL skill goals (non-empty goalNote)
+  if (typeof atlSelectedRatings !== 'undefined' && atlSelectedRatings) {
+    var atlKeys = Object.keys(atlSelectedRatings);
+    for (var a = 0; a < atlKeys.length; a++) {
+      var ratingData = atlSelectedRatings[atlKeys[a]];
+      if (ratingData && ratingData.goalNote) {
+        var parts = atlKeys[a].split('.');
+        var catName = parts[0] || '';
+        // Try to resolve friendly category name
+        if (typeof atlFramework !== 'undefined' && atlFramework && atlFramework[catName]) {
+          catName = atlFramework[catName].label || catName;
+        }
+        skillGoals.push({
+          text: ratingData.goalNote,
+          progress: catName,
+          source: 'atl',
+          done: false
+        });
+      }
+    }
+  }
+
+  return { thisWeek: thisWeek, hexGoals: hexGoals.slice(0, 5), skillGoals: skillGoals };
+}
+
+/**
+ * Render goal dashboard card for Study Dashboard side panel.
+ * Returns empty string if 0 goals.
+ */
+function ssdRenderGoalDashboard(maps) {
+  var goals = ssdCollectGoals(maps);
+  var totalGoals = goals.thisWeek.length + goals.hexGoals.length + goals.skillGoals.length;
+
+  if (totalGoals === 0) return '';
+
+  var html = '<div class="ssd-goals-section">' +
+    '<div class="ssd-goals-title">' + ssdGetText('goalsTitle', '\uD83C\uDFAF My Goals') + '</div>';
+
+  // This Week group
+  if (goals.thisWeek.length > 0) {
+    html += '<div class="ssd-goal-group">' +
+      '<div class="ssd-goal-group-label">' + ssdGetText('goalsThisWeek', 'This Week') + '</div>';
+    for (var i = 0; i < goals.thisWeek.length; i++) {
+      html += ssdRenderGoalItem(goals.thisWeek[i]);
+    }
+    html += '</div>';
+  }
+
+  // Hex Goals group
+  if (goals.hexGoals.length > 0) {
+    html += '<div class="ssd-goal-group">' +
+      '<div class="ssd-goal-group-label">' + ssdGetText('goalsHexGoals', 'Hex Goals') + '</div>';
+    for (var j = 0; j < goals.hexGoals.length; j++) {
+      html += ssdRenderGoalItem(goals.hexGoals[j]);
+    }
+    html += '</div>';
+  }
+
+  // Skill Goals group
+  if (goals.skillGoals.length > 0) {
+    html += '<div class="ssd-goal-group">' +
+      '<div class="ssd-goal-group-label">' + ssdGetText('goalsSkillGoals', 'Skill Goals') + '</div>';
+    for (var k = 0; k < goals.skillGoals.length; k++) {
+      html += ssdRenderGoalItem(goals.skillGoals[k]);
+    }
+    html += '</div>';
+  }
+
+  // Add goal inline input
+  html += '<div class="ssd-goal-add">' +
+    '<input type="text" id="ssdNewGoalInput" class="ssd-goal-input" maxlength="150" ' +
+      'placeholder="' + ssdGetText('goalsAddPlaceholder', 'Add a new goal...') + '" ' +
+      'onkeydown="if(event.key===\'Enter\'){event.preventDefault();ssdAddGoalAsTask();}">' +
+    '<button type="button" class="ssd-goal-add-btn" onclick="ssdAddGoalAsTask()" ' +
+      'aria-label="Add goal">+</button>' +
+  '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Render a single goal item row.
+ */
+function ssdRenderGoalItem(goal) {
+  var doneClass = goal.done ? ' ssd-goal-done' : '';
+
+  var badgeColors = {
+    weekly: '#3b82f6',
+    task: '#8b5cf6',
+    'self-assess': '#14b8a6',
+    atl: '#f59e0b'
+  };
+  var badgeColor = badgeColors[goal.source] || '#94a3b8';
+  var badgeLabel = goal.source === 'weekly' ? 'Weekly' :
+                   goal.source === 'task' ? 'Task' :
+                   goal.source === 'self-assess' ? 'Hex' :
+                   goal.source === 'atl' ? 'ATL' : '';
+
+  return '<div class="ssd-goal-item' + doneClass + '">' +
+    '<span class="ssd-goal-badge" style="background:' + badgeColor + '">' + escapeHtml(badgeLabel) + '</span>' +
+    '<span class="ssd-goal-text">' + escapeHtml(goal.text) + '</span>' +
+    (goal.progress ? '<span class="ssd-goal-progress">' + escapeHtml(goal.progress) + '</span>' : '') +
+  '</div>';
+}
+
+/**
+ * Add a new goal as a student custom task via createStudentTask RPC.
+ */
+function ssdAddGoalAsTask() {
+  var input = document.getElementById('ssdNewGoalInput');
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+
+  input.disabled = true;
+  var expectedMapId = ssdSelectedMapId;
+
+  google.script.run
+    .withSuccessHandler(function(newTask) {
+      input.disabled = false;
+      input.value = '';
+      if (ssdSelectedMapId !== expectedMapId) return;
+      // Push to stlTasksData so goal appears immediately
+      if (typeof stlTasksData !== 'undefined' && stlTasksData && newTask) {
+        stlTasksData.push(newTask);
+      }
+      // Re-render dashboard
+      if (typeof ssdRenderDashboard === 'function') ssdRenderDashboard();
+      if (typeof showToast === 'function') showToast('Goal added!', 'success');
+    })
+    .withFailureHandler(function(err) {
+      input.disabled = false;
+      if (typeof showToast === 'function') {
+        showToast(typeof friendlyError === 'function' ? friendlyError(err) : 'Could not save goal', 'error');
+      }
+    })
+    .createStudentTask({ title: text });
+}
+</script>

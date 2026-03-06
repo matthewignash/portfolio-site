@@ -1,0 +1,1185 @@
+<script>
+/**
+ * Module_PD.html — Professional Development Tracking
+ *
+ * Registers as App.ModuleRegistry.pd.
+ * Mixed-access: all users see Catalog + My PD; admins also see PD Reporting.
+ *
+ * Views: Catalog (card grid), Offering Detail, My PD, PD Reporting (admin).
+ */
+
+App.ModuleRegistry.pd = {
+
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      isAdmin: App.getUser() && App.getUser().isAdmin,
+      offerings: [],
+      stats: null,
+      myPD: null,
+      currentOffering: null,
+      filters: { category: '', status: '', search: '' },
+      myRegistrations: {},     // offering_id → registration
+      view: 'catalog'
+    };
+
+    // ── DOM Refs ──
+    var subNav, viewContainer;
+
+    // ── Category labels ──
+    var CATEGORY_LABELS = {
+      workshop: 'Workshop', course: 'Course', conference: 'Conference',
+      webinar: 'Webinar', coaching: 'Coaching', book_study: 'Book Study', other: 'Other'
+    };
+
+    var ACTIVITY_ICONS = {
+      offering_created: '\uD83D\uDCDD', offering_updated: '\u270F\uFE0F',
+      offering_published: '\uD83D\uDE80', offering_completed: '\u2705',
+      offering_cancelled: '\u274C', registered: '\u2795', waitlisted: '\u23F3',
+      cancelled_registration: '\uD83D\uDEAB', attendance_marked: '\uD83D\uDCCB',
+      reflection_added: '\uD83D\uDCAD', reflection_updated: '\u270F\uFE0F',
+      evidence_linked: '\uD83D\uDD17'
+    };
+
+    // ── Build Layout ──
+    function buildLayout() {
+      container.innerHTML = '';
+      subNav = ClientUtils.el('nav', { className: 'sub-nav' });
+      viewContainer = ClientUtils.el('div', { className: 'relative' });
+      container.appendChild(subNav);
+      container.appendChild(viewContainer);
+    }
+
+    function buildSubNav(active) {
+      subNav.innerHTML = '';
+      var tabs = [{ key: 'catalog', label: 'Catalog' }];
+      if (state.isAdmin) {
+        tabs.push({ key: 'pd_reporting', label: 'PD Reporting' });
+      } else {
+        tabs.push({ key: 'my_pd', label: 'My PD' });
+      }
+      tabs.forEach(function(t) {
+        var btn = ClientUtils.el('button', {
+          className: 'sub-nav__item' + (active === t.key ? ' sub-nav__item--active' : ''),
+          onClick: function() { switchView(t.key); }
+        }, [t.label]);
+        subNav.appendChild(btn);
+      });
+    }
+
+    function switchView(view) {
+      state.view = view;
+      buildSubNav(view);
+      viewContainer.innerHTML = '';
+      switch (view) {
+        case 'catalog':      loadCatalog(); break;
+        case 'my_pd':        loadMyPD(); break;
+        case 'pd_reporting': loadPDReporting(); break;
+        default:             loadCatalog();
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Catalog View
+    // ═══════════════════════════════════════════════
+
+    async function loadCatalog() {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        var results = await Promise.all([
+          state.isAdmin ? ServerAPI.getPDStats() : ServerAPI.getMyPDSummary(),
+          ServerAPI.getPDOverview({}),
+          state.isAdmin ? Promise.resolve(null) : ServerAPI.getMyPDRegistrations()
+        ]);
+        state.stats = results[0];
+        var overview = results[1];
+        state.offerings = overview.offerings || [];
+
+        // Build registration lookup for teachers
+        if (!state.isAdmin && results[2]) {
+          state.myRegistrations = {};
+          results[2].forEach(function(r) {
+            if (r.status !== 'cancelled') {
+              state.myRegistrations[r.offeringId] = r;
+            }
+          });
+        }
+
+        LoadingSpinner.hide(viewContainer);
+        renderCatalogView();
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load catalog: ' + (err.message || err));
+      }
+    }
+
+    function renderCatalogView() {
+      viewContainer.innerHTML = '';
+
+      // Stats
+      renderStats();
+
+      // Toolbar: filters + new button
+      var toolbar = ClientUtils.el('div', { className: 'pd-filter-bar' });
+
+      var catSelect = ClientUtils.el('select', { onChange: function(e) {
+        state.filters.category = e.target.value; applyFilters();
+      }});
+      catSelect.innerHTML = '<option value="">All Categories</option>';
+      Object.keys(CATEGORY_LABELS).forEach(function(k) {
+        catSelect.innerHTML += '<option value="' + k + '">' + CATEGORY_LABELS[k] + '</option>';
+      });
+      catSelect.value = state.filters.category;
+      toolbar.appendChild(catSelect);
+
+      if (state.isAdmin) {
+        var statusSelect = ClientUtils.el('select', { onChange: function(e) {
+          state.filters.status = e.target.value; applyFilters();
+        }});
+        statusSelect.innerHTML = '<option value="">All Statuses</option><option value="draft">Draft</option><option value="published">Published</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>';
+        statusSelect.value = state.filters.status;
+        toolbar.appendChild(statusSelect);
+      }
+
+      var searchInput = ClientUtils.el('input', {
+        type: 'text', placeholder: 'Search offerings...', value: state.filters.search,
+        onInput: function(e) { state.filters.search = e.target.value; applyFilters(); }
+      });
+      toolbar.appendChild(searchInput);
+
+      toolbar.appendChild(ClientUtils.el('div', { style: 'flex:1' }));
+
+      if (state.isAdmin) {
+        toolbar.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-primary btn-sm',
+          onClick: function() { showOfferingModal(); }
+        }, ['+ New Offering']));
+      }
+      viewContainer.appendChild(toolbar);
+
+      // Card grid
+      var grid = ClientUtils.el('div', { className: 'pd-catalog', id: 'pd-catalog-grid' });
+      viewContainer.appendChild(grid);
+      applyFilters();
+    }
+
+    function renderStats() {
+      var grid = ClientUtils.el('div', { className: 'pd-stats-grid' });
+      if (state.isAdmin && state.stats) {
+        var cards = [
+          { value: state.stats.totalOfferings || 0, label: 'Total Offerings' },
+          { value: state.stats.publishedCount || 0, label: 'Published' },
+          { value: state.stats.completedCount || 0, label: 'Completed' },
+          { value: state.stats.avgRating ? state.stats.avgRating + '/5' : '--', label: 'Avg Rating' }
+        ];
+        cards.forEach(function(c) {
+          var card = ClientUtils.el('div', { className: 'pd-stat-card' }, [
+            ClientUtils.el('div', { className: 'pd-stat-value' }, [String(c.value)]),
+            ClientUtils.el('div', { className: 'pd-stat-label' }, [c.label])
+          ]);
+          grid.appendChild(card);
+        });
+      } else if (!state.isAdmin && state.stats) {
+        var teacherCards = [
+          { value: state.stats.attended || 0, label: 'Sessions Attended' },
+          { value: state.stats.totalCreditHours || 0, label: 'Credit Hours' },
+          { value: state.stats.reflectionCount || 0, label: 'Reflections' },
+          { value: state.stats.avgRating ? state.stats.avgRating + '/5' : '--', label: 'Avg Rating Given' }
+        ];
+        teacherCards.forEach(function(c) {
+          var card = ClientUtils.el('div', { className: 'pd-stat-card' }, [
+            ClientUtils.el('div', { className: 'pd-stat-value' }, [String(c.value)]),
+            ClientUtils.el('div', { className: 'pd-stat-label' }, [c.label])
+          ]);
+          grid.appendChild(card);
+        });
+      }
+      viewContainer.appendChild(grid);
+    }
+
+    function applyFilters() {
+      var grid = document.getElementById('pd-catalog-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      var filtered = state.offerings.filter(function(o) {
+        if (state.filters.category && o.category !== state.filters.category) return false;
+        if (state.filters.status && o.status !== state.filters.status) return false;
+        if (state.filters.search) {
+          var term = state.filters.search.toLowerCase();
+          var hay = (o.title + ' ' + (o.description || '') + ' ' + (o.relatedTags || '')).toLowerCase();
+          if (hay.indexOf(term) === -1) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        grid.appendChild(ClientUtils.el('div', { className: 'pd-empty' }, [
+          ClientUtils.el('div', { className: 'pd-empty-icon' }, ['\uD83D\uDCDA']),
+          ClientUtils.el('div', {}, ['No PD offerings match your filters.'])
+        ]));
+        return;
+      }
+
+      filtered.forEach(function(o) {
+        grid.appendChild(renderOfferingCard(o));
+      });
+    }
+
+    function renderOfferingCard(o) {
+      var card = ClientUtils.el('div', { className: 'pd-offering-card', onClick: function() {
+        loadOfferingDetail(o.id);
+      }});
+
+      // Header: title + badges
+      var header = ClientUtils.el('div', { className: 'pd-offering-header' });
+      header.appendChild(ClientUtils.el('span', { className: 'pd-offering-title' }, [ClientUtils.escapeHtml(o.title)]));
+      header.appendChild(ClientUtils.el('span', { className: 'pd-category-badge pd-cat--' + o.category }, [CATEGORY_LABELS[o.category] || o.category]));
+      header.appendChild(ClientUtils.el('span', { className: 'pd-category-badge pd-status--' + o.status }, [o.status]));
+      card.appendChild(header);
+
+      // Body: meta info
+      var body = ClientUtils.el('div', { className: 'pd-offering-body' });
+      var meta = ClientUtils.el('div', { className: 'pd-offering-meta' });
+
+      meta.appendChild(metaItem('\uD83D\uDCC5', ClientUtils.formatDate(o.sessionDate) + (o.startTime ? ' \u2022 ' + o.startTime + (o.endTime ? '-' + o.endTime : '') : '')));
+      if (o.location) meta.appendChild(metaItem('\uD83D\uDCCD', o.location));
+      meta.appendChild(metaItem('\uD83D\uDC64', o.facilitatorName));
+      if (o.creditHours) meta.appendChild(metaItem('\u23F0', o.creditHours + ' credit ' + ClientUtils.pluralize(o.creditHours, 'hour', 'hours')));
+
+      body.appendChild(meta);
+
+      // Capacity bar
+      if (o.maxCapacity > 0) {
+        var pct = Math.min(100, Math.round((o.registeredCount / o.maxCapacity) * 100));
+        var fillClass = pct >= 100 ? 'pd-capacity-fill--full' : (pct >= 75 ? 'pd-capacity-fill--medium' : 'pd-capacity-fill--low');
+        body.appendChild(ClientUtils.el('div', { className: 'pd-capacity-bar' }, [
+          ClientUtils.el('div', { className: 'pd-capacity-fill ' + fillClass, style: 'width:' + pct + '%' })
+        ]));
+        body.appendChild(ClientUtils.el('div', { className: 'pd-capacity-text' }, [o.registeredCount + '/' + o.maxCapacity + ' registered']));
+      }
+
+      card.appendChild(body);
+
+      // Footer: register button (for teachers)
+      var footer = ClientUtils.el('div', { className: 'pd-offering-footer' });
+      if (!state.isAdmin && o.status === 'published') {
+        var myReg = state.myRegistrations[o.id];
+        if (myReg) {
+          var statusText = myReg.status === 'registered' ? 'Registered \u2713' : (myReg.status === 'waitlisted' ? 'Waitlisted' : myReg.status);
+          footer.appendChild(ClientUtils.el('span', { className: 'pd-category-badge pd-reg--' + myReg.status }, [statusText]));
+        } else {
+          var isFull = o.maxCapacity > 0 && o.registeredCount >= o.maxCapacity;
+          footer.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm ' + (isFull ? 'btn-outline' : 'btn-primary'),
+            onClick: function(e) {
+              e.stopPropagation();
+              registerForOffering(o.id);
+            }
+          }, [isFull ? 'Join Waitlist' : 'Register']));
+        }
+      }
+      if (o.registeredCount > 0 || o.attendedCount > 0) {
+        footer.appendChild(ClientUtils.el('span', { className: 'text-muted text-sm' }, [
+          o.attendedCount > 0 ? o.attendedCount + ' attended' : o.registeredCount + ' registered'
+        ]));
+      }
+      card.appendChild(footer);
+
+      return card;
+    }
+
+    function metaItem(icon, text) {
+      return ClientUtils.el('div', { className: 'pd-offering-meta-item' }, [
+        ClientUtils.el('span', { className: 'pd-offering-meta-icon' }, [icon]),
+        ClientUtils.el('span', {}, [text])
+      ]);
+    }
+
+    async function registerForOffering(offeringId) {
+      try {
+        await ServerAPI.registerForPD(offeringId);
+        Toast.success('Registered successfully!');
+        loadCatalog();
+      } catch (err) {
+        Toast.error('Registration failed: ' + (err.message || err));
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Offering Detail View
+    // ═══════════════════════════════════════════════
+
+    async function loadOfferingDetail(offeringId) {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        state.currentOffering = await ServerAPI.getPDOfferingDetail(offeringId);
+        LoadingSpinner.hide(viewContainer);
+        renderDetailView();
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load offering: ' + (err.message || err));
+      }
+    }
+
+    function renderDetailView() {
+      viewContainer.innerHTML = '';
+      var o = state.currentOffering;
+      if (!o) return;
+
+      // Back link
+      viewContainer.appendChild(ClientUtils.el('button', {
+        className: 'btn btn-sm btn-outline', style: 'margin-bottom:var(--space-md)',
+        onClick: function() { switchView('catalog'); }
+      }, ['\u2190 Back to Catalog']));
+
+      // Header
+      var header = ClientUtils.el('div', { className: 'pd-detail-header' });
+      var headerLeft = ClientUtils.el('div');
+      headerLeft.appendChild(ClientUtils.el('div', { className: 'pd-detail-title' }, [ClientUtils.escapeHtml(o.title)]));
+      var badges = ClientUtils.el('div', { className: 'pd-detail-badges' });
+      badges.appendChild(ClientUtils.el('span', { className: 'pd-category-badge pd-cat--' + o.category }, [CATEGORY_LABELS[o.category] || o.category]));
+      badges.appendChild(ClientUtils.el('span', { className: 'pd-category-badge pd-status--' + o.status }, [o.status]));
+      if (o.recurrence && o.recurrence !== 'none') {
+        badges.appendChild(ClientUtils.el('span', { className: 'pd-category-badge' }, ['\uD83D\uDD01 ' + o.recurrence]));
+      }
+      headerLeft.appendChild(badges);
+      header.appendChild(headerLeft);
+
+      // Admin actions
+      if (state.isAdmin) {
+        var actions = ClientUtils.el('div', { className: 'pd-detail-actions' });
+        actions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-sm btn-outline', onClick: function() { showOfferingModal(o); }
+        }, ['Edit']));
+
+        if (o.status === 'draft') {
+          actions.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm btn-primary', onClick: function() { updateStatus(o.id, 'published'); }
+          }, ['Publish']));
+        }
+        if (o.status === 'published') {
+          actions.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm btn-secondary', onClick: function() { updateStatus(o.id, 'completed'); }
+          }, ['Mark Completed']));
+          actions.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm btn-outline', style: 'color:#991b1b', onClick: function() { updateStatus(o.id, 'cancelled'); }
+          }, ['Cancel']));
+        }
+
+        actions.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-sm btn-outline', style: 'color:#991b1b',
+          onClick: function() { deleteOffering(o.id); }
+        }, ['Delete']));
+        header.appendChild(actions);
+      }
+      viewContainer.appendChild(header);
+
+      // Description
+      if (o.description) {
+        var descSection = ClientUtils.el('div', { style: 'margin-bottom:var(--space-lg);color:var(--text-muted);line-height:1.6;font-size:var(--text-sm)' });
+        descSection.textContent = o.description;
+        viewContainer.appendChild(descSection);
+      }
+
+      // Meta grid
+      var metaGrid = ClientUtils.el('div', { className: 'pd-detail-meta' });
+      metaGrid.appendChild(metaField('Date', ClientUtils.formatDate(o.sessionDate)));
+      metaGrid.appendChild(metaField('Time', (o.startTime || '--') + (o.endTime ? ' - ' + o.endTime : '')));
+      metaGrid.appendChild(metaField('Location', o.location || '--'));
+      metaGrid.appendChild(metaField('Facilitator', o.facilitatorName));
+      metaGrid.appendChild(metaField('Capacity', o.maxCapacity > 0 ? o.registeredCount + '/' + o.maxCapacity : 'Unlimited'));
+      metaGrid.appendChild(metaField('Credit Hours', o.creditHours > 0 ? String(o.creditHours) : '--'));
+      viewContainer.appendChild(metaGrid);
+
+      // Related standards tags
+      if (o.relatedStandards && o.relatedStandards.length > 0) {
+        var tagsSection = ClientUtils.el('div', { style: 'margin-bottom:var(--space-lg)' });
+        tagsSection.appendChild(ClientUtils.el('div', { className: 'pd-meta-label', style: 'margin-bottom:var(--space-xs)' }, ['Related Standards']));
+        var tagsContainer = ClientUtils.el('div', { className: 'pd-tags' });
+        o.relatedStandards.forEach(function(std) {
+          tagsContainer.appendChild(ClientUtils.el('span', { className: 'pd-tag pd-standard-tag' }, [
+            '#' + std.number + ' ' + std.shortName
+          ]));
+        });
+        tagsSection.appendChild(tagsContainer);
+        viewContainer.appendChild(tagsSection);
+      }
+
+      // Tags
+      if (o.relatedTags) {
+        var tagList = o.relatedTags.split(',').map(function(t) { return t.trim(); }).filter(Boolean);
+        if (tagList.length > 0) {
+          var tagDiv = ClientUtils.el('div', { className: 'pd-tags', style: 'margin-bottom:var(--space-lg)' });
+          tagList.forEach(function(t) {
+            tagDiv.appendChild(ClientUtils.el('span', { className: 'pd-tag' }, [t]));
+          });
+          viewContainer.appendChild(tagDiv);
+        }
+      }
+
+      // Teacher registration section
+      if (!state.isAdmin && o.status === 'published') {
+        renderMyRegistrationSection(o);
+      }
+
+      // Registrants section (admin)
+      if (state.isAdmin && o.registrations && o.registrations.length > 0) {
+        renderRegistrantsSection(o);
+      }
+
+      // Reflections
+      renderReflectionsSection(o);
+
+      // Activity log (admin)
+      if (state.isAdmin && o.activity && o.activity.length > 0) {
+        renderActivitySection(o.activity);
+      }
+    }
+
+    function metaField(label, value) {
+      return ClientUtils.el('div', { className: 'pd-meta-item' }, [
+        ClientUtils.el('div', { className: 'pd-meta-label' }, [label]),
+        ClientUtils.el('div', { className: 'pd-meta-value' }, [value || '--'])
+      ]);
+    }
+
+    function renderMyRegistrationSection(o) {
+      var myReg = o.registrations.filter(function(r) {
+        var user = App.getUser();
+        return user && r.staffId === user.id && r.status !== 'cancelled';
+      });
+
+      var section = ClientUtils.el('div', { className: 'pd-section' });
+      section.appendChild(ClientUtils.el('div', { className: 'pd-section-title' }, ['My Registration']));
+
+      if (myReg.length > 0) {
+        var reg = myReg[0];
+        var row = ClientUtils.el('div', { style: 'display:flex;align-items:center;gap:var(--space-md)' });
+        row.appendChild(ClientUtils.el('span', { className: 'pd-category-badge pd-reg--' + reg.status }, [reg.status]));
+        if (reg.status === 'registered' || reg.status === 'waitlisted') {
+          row.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm btn-outline', style: 'color:#991b1b',
+            onClick: function() { cancelMyRegistration(reg.id, o.id); }
+          }, ['Cancel Registration']));
+        }
+        section.appendChild(row);
+      } else {
+        var isFull = o.maxCapacity > 0 && o.registeredCount >= o.maxCapacity;
+        section.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-sm ' + (isFull ? 'btn-outline' : 'btn-primary'),
+          onClick: function() { registerForOffering(o.id).then(function() { loadOfferingDetail(o.id); }); }
+        }, [isFull ? 'Join Waitlist' : 'Register']));
+      }
+      viewContainer.appendChild(section);
+    }
+
+    async function cancelMyRegistration(regId, offeringId) {
+      if (!confirm('Cancel your registration?')) return;
+      try {
+        await ServerAPI.cancelPDRegistration(regId);
+        Toast.success('Registration cancelled.');
+        loadOfferingDetail(offeringId);
+      } catch (err) {
+        Toast.error('Error: ' + (err.message || err));
+      }
+    }
+
+    function renderRegistrantsSection(o) {
+      var section = ClientUtils.el('div', { className: 'pd-section' });
+      var titleRow = ClientUtils.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-md)' });
+      titleRow.appendChild(ClientUtils.el('div', { className: 'pd-section-title', style: 'margin-bottom:0' }, ['Registrants (' + o.registrations.length + ')']));
+
+      if (o.status === 'published' || o.status === 'completed') {
+        titleRow.appendChild(ClientUtils.el('button', {
+          className: 'btn btn-sm btn-secondary',
+          onClick: function() { showAttendanceModal(o); }
+        }, ['Mark Attendance']));
+      }
+      section.appendChild(titleRow);
+
+      var columns = [
+        { key: 'staffName', label: 'Name' },
+        { key: 'status', label: 'Status', render: function(r) {
+          return '<span class="pd-category-badge pd-reg--' + r.status + '">' + r.status + '</span>';
+        }},
+        { key: 'registeredAt', label: 'Registered', render: function(r) {
+          return r.registeredAt ? ClientUtils.timeAgo(r.registeredAt) : '--';
+        }},
+        { key: 'creditHoursEarned', label: 'Credits', render: function(r) {
+          return r.creditHoursEarned > 0 ? String(r.creditHoursEarned) : '--';
+        }}
+      ];
+
+      DataTable.render(section, {
+        columns: columns,
+        data: o.registrations,
+        pageSize: 10,
+        sortable: true
+      });
+      viewContainer.appendChild(section);
+    }
+
+    function showAttendanceModal(o) {
+      var registeredList = o.registrations.filter(function(r) {
+        return r.status === 'registered' || r.status === 'attended';
+      });
+
+      var body = '<div class="pd-attendance-list">';
+      registeredList.forEach(function(r) {
+        var checked = r.status === 'attended' ? ' checked' : '';
+        body += '<div class="pd-attendance-item">' +
+          '<input type="checkbox" data-staff-id="' + r.staffId + '"' + checked + '>' +
+          '<span>' + ClientUtils.escapeHtml(r.staffName) + '</span>' +
+          '</div>';
+      });
+      body += '</div>';
+
+      Modal.open('Mark Attendance', body, [
+        { label: 'Cancel', className: 'btn btn-outline', onClick: function() { Modal.close(); } },
+        { label: 'Save Attendance', className: 'btn btn-primary', onClick: async function() {
+          var checkboxes = Modal.getBody().querySelectorAll('input[type="checkbox"]');
+          var staffIds = [];
+          checkboxes.forEach(function(cb) {
+            if (cb.checked) staffIds.push(cb.getAttribute('data-staff-id'));
+          });
+          try {
+            await ServerAPI.markPDAttendance(o.id, staffIds);
+            Modal.close();
+            Toast.success('Attendance recorded!');
+            loadOfferingDetail(o.id);
+          } catch (err) {
+            Toast.error('Error: ' + (err.message || err));
+          }
+        }}
+      ]);
+    }
+
+    function renderReflectionsSection(o) {
+      var section = ClientUtils.el('div', { className: 'pd-section' });
+      var titleRow = ClientUtils.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-md)' });
+      titleRow.appendChild(ClientUtils.el('div', { className: 'pd-section-title', style: 'margin-bottom:0' }, ['Reflections (' + (o.reflections || []).length + ')']));
+
+      // Check if current user can add a reflection
+      var user = App.getUser();
+      if (user && !state.isAdmin) {
+        var myAttended = o.registrations.filter(function(r) { return r.staffId === user.id && r.status === 'attended'; });
+        var myReflection = (o.reflections || []).filter(function(r) { return r.staffId === user.id; });
+        if (myAttended.length > 0 && myReflection.length === 0) {
+          titleRow.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm btn-secondary',
+            onClick: function() { showReflectionModal(o.id); }
+          }, ['Add Reflection']));
+        }
+      }
+      section.appendChild(titleRow);
+
+      if (!o.reflections || o.reflections.length === 0) {
+        section.appendChild(ClientUtils.el('div', { className: 'pd-empty', style: 'padding:var(--space-lg)' }, [
+          'No reflections yet.'
+        ]));
+      } else {
+        o.reflections.forEach(function(ref) {
+          section.appendChild(renderReflectionCard(ref));
+        });
+      }
+
+      // Average rating
+      if (o.avgRating > 0) {
+        section.appendChild(ClientUtils.el('div', { style: 'text-align:center;color:var(--text-muted);font-size:var(--text-sm);margin-top:var(--space-sm)' }, [
+          'Average rating: ' + renderStarsHTML(o.avgRating) + ' (' + o.avgRating + '/5)'
+        ]));
+      }
+
+      viewContainer.appendChild(section);
+    }
+
+    function renderReflectionCard(ref) {
+      var card = ClientUtils.el('div', { className: 'pd-reflection-card' });
+
+      var header = ClientUtils.el('div', { className: 'pd-reflection-header' });
+      var author = ClientUtils.el('div', { className: 'pd-reflection-author' });
+      author.appendChild(ClientUtils.el('div', { className: 'pd-reflection-author-avatar' }, [ref.staffInitials]));
+      author.appendChild(ClientUtils.el('span', { style: 'font-weight:600' }, [ref.staffName]));
+      header.appendChild(author);
+
+      var stars = ClientUtils.el('div', { className: 'pd-rating-stars' });
+      stars.innerHTML = renderStarsHTML(ref.rating);
+      header.appendChild(stars);
+      card.appendChild(header);
+
+      card.appendChild(ClientUtils.el('div', { className: 'pd-reflection-text' }, [ref.reflectionText]));
+
+      if (ref.linkedSelectionId) {
+        card.appendChild(ClientUtils.el('div', { className: 'pd-reflection-linked' }, ['\uD83D\uDD17 Linked to Growth Plan standard']));
+      } else {
+        // Show link button for own reflections
+        var user = App.getUser();
+        if (user && ref.staffId === user.id) {
+          card.appendChild(ClientUtils.el('button', {
+            className: 'btn btn-sm btn-outline', style: 'margin-top:var(--space-sm)',
+            onClick: function() { showLinkToStandardModal(ref.id); }
+          }, ['Link to Growth Standard']));
+        }
+      }
+
+      if (ref.createdAt) {
+        card.appendChild(ClientUtils.el('div', { style: 'font-size:11px;color:var(--text-muted);margin-top:var(--space-xs)' }, [ClientUtils.timeAgo(ref.createdAt)]));
+      }
+
+      return card;
+    }
+
+    function renderStarsHTML(rating) {
+      var html = '';
+      for (var i = 1; i <= 5; i++) {
+        html += '<span class="' + (i <= rating ? 'pd-star--filled' : 'pd-star--empty') + '">\u2605</span>';
+      }
+      return html;
+    }
+
+    function renderActivitySection(activities) {
+      var section = ClientUtils.el('div', { className: 'pd-section' });
+      section.appendChild(ClientUtils.el('div', { className: 'pd-section-title' }, ['Activity Log']));
+      var list = ClientUtils.el('div', { className: 'pd-activity-list' });
+      activities.forEach(function(a) {
+        var entry = ClientUtils.el('div', { className: 'pd-activity-entry' });
+        entry.appendChild(ClientUtils.el('div', { className: 'pd-activity-icon' }, [ACTIVITY_ICONS[a.actionType] || '\uD83D\uDCDD']));
+        entry.appendChild(ClientUtils.el('div', { className: 'pd-activity-text' }, [
+          ClientUtils.el('strong', {}, [a.userName]),
+          ' ',
+          formatActivityDesc(a)
+        ]));
+        entry.appendChild(ClientUtils.el('div', { className: 'pd-activity-time' }, [ClientUtils.timeAgo(a.createdAt)]));
+        list.appendChild(entry);
+      });
+      section.appendChild(list);
+      viewContainer.appendChild(section);
+    }
+
+    function formatActivityDesc(a) {
+      switch (a.actionType) {
+        case 'offering_created': return 'created this offering';
+        case 'offering_updated': return 'updated ' + (a.fieldName || 'offering');
+        case 'offering_published': return 'published this offering';
+        case 'offering_completed': return 'marked as completed';
+        case 'offering_cancelled': return 'cancelled this offering';
+        case 'registered': return 'registered for this offering';
+        case 'waitlisted': return 'joined the waitlist';
+        case 'cancelled_registration': return 'cancelled registration';
+        case 'attendance_marked': return 'marked attendance: ' + (a.newValue || '');
+        case 'reflection_added': return 'added a reflection (' + (a.newValue || '') + ')';
+        case 'reflection_updated': return 'updated their reflection';
+        case 'evidence_linked': return 'linked as evidence to Growth Plan';
+        default: return a.actionType;
+      }
+    }
+
+    // ── Status / Delete actions ──
+
+    async function updateStatus(offeringId, newStatus) {
+      var msg = 'Are you sure you want to ' + (newStatus === 'published' ? 'publish' : newStatus === 'completed' ? 'mark as completed' : 'cancel') + ' this offering?';
+      if (!confirm(msg)) return;
+      try {
+        await ServerAPI.updatePDOfferingStatus(offeringId, newStatus);
+        Toast.success('Status updated to ' + newStatus);
+        loadOfferingDetail(offeringId);
+      } catch (err) {
+        Toast.error('Error: ' + (err.message || err));
+      }
+    }
+
+    async function deleteOffering(offeringId) {
+      if (!confirm('Delete this offering? This will remove all registrations, reflections, and activity. This cannot be undone.')) return;
+      try {
+        await ServerAPI.deletePDOffering(offeringId);
+        Toast.success('Offering deleted.');
+        switchView('catalog');
+      } catch (err) {
+        Toast.error('Error: ' + (err.message || err));
+      }
+    }
+
+    // ── Offering Modal ──
+
+    function showOfferingModal(existing) {
+      var isEdit = !!existing;
+      var title = isEdit ? 'Edit Offering' : 'New PD Offering';
+
+      var body = '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Title *</label>' +
+        '<input class="pd-form-input" id="pd-title" value="' + ClientUtils.escapeHtml((existing && existing.title) || '') + '">' +
+        '</div>' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Description</label>' +
+        '<textarea class="pd-form-textarea" id="pd-desc">' + ClientUtils.escapeHtml((existing && existing.description) || '') + '</textarea>' +
+        '</div>' +
+        '<div class="pd-form-row">' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Category *</label>' +
+        '<select class="pd-form-select" id="pd-category">' +
+        Object.keys(CATEGORY_LABELS).map(function(k) {
+          return '<option value="' + k + '"' + (existing && existing.category === k ? ' selected' : '') + '>' + CATEGORY_LABELS[k] + '</option>';
+        }).join('') +
+        '</select></div>' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Session Date *</label>' +
+        '<input class="pd-form-input" type="date" id="pd-date" value="' + ((existing && existing.sessionDate) || '') + '">' +
+        '</div></div>' +
+        '<div class="pd-form-row-3">' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Start Time</label>' +
+        '<input class="pd-form-input" type="time" id="pd-start" value="' + ((existing && existing.startTime) || '') + '">' +
+        '</div>' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">End Time</label>' +
+        '<input class="pd-form-input" type="time" id="pd-end" value="' + ((existing && existing.endTime) || '') + '">' +
+        '</div>' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Credit Hours</label>' +
+        '<input class="pd-form-input" type="number" id="pd-credits" min="0" step="0.5" value="' + ((existing && existing.creditHours) || '') + '">' +
+        '</div></div>' +
+        '<div class="pd-form-row">' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Location</label>' +
+        '<input class="pd-form-input" id="pd-location" value="' + ClientUtils.escapeHtml((existing && existing.location) || '') + '">' +
+        '</div>' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Max Capacity (0 = unlimited)</label>' +
+        '<input class="pd-form-input" type="number" id="pd-capacity" min="0" value="' + ((existing && existing.maxCapacity) || '0') + '">' +
+        '</div></div>' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Facilitator</label>' +
+        '<div id="pd-facilitator-slot"></div>' +
+        '</div>' +
+        '<div class="pd-form-row">' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Recurrence</label>' +
+        '<select class="pd-form-select" id="pd-recurrence">' +
+        '<option value="none"' + (existing && existing.recurrence === 'none' ? ' selected' : '') + '>None</option>' +
+        '<option value="weekly"' + (existing && existing.recurrence === 'weekly' ? ' selected' : '') + '>Weekly</option>' +
+        '<option value="biweekly"' + (existing && existing.recurrence === 'biweekly' ? ' selected' : '') + '>Bi-weekly</option>' +
+        '<option value="monthly"' + (existing && existing.recurrence === 'monthly' ? ' selected' : '') + '>Monthly</option>' +
+        '</select></div>' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Tags (comma-separated)</label>' +
+        '<input class="pd-form-input" id="pd-tags" value="' + ClientUtils.escapeHtml((existing && existing.relatedTags) || '') + '">' +
+        '</div></div>';
+
+      Modal.open(title, body, [
+        { label: 'Cancel', className: 'btn btn-outline', onClick: function() { Modal.close(); } },
+        { label: isEdit ? 'Save Changes' : 'Create Offering', className: 'btn btn-primary', onClick: async function() {
+          await saveOffering(existing);
+        }}
+      ]);
+
+      // Init StaffSelector
+      var slot = Modal.getBody().querySelector('#pd-facilitator-slot');
+      if (slot) {
+        var facilitatorSelector = StaffSelector.render(slot, {
+          selectedId: existing ? existing.facilitatorId : '',
+          name: 'facilitator'
+        });
+        slot._selector = facilitatorSelector;
+      }
+    }
+
+    async function saveOffering(existing) {
+      var body = Modal.getBody();
+      var data = {
+        title: body.querySelector('#pd-title').value.trim(),
+        description: body.querySelector('#pd-desc').value.trim(),
+        category: body.querySelector('#pd-category').value,
+        session_date: body.querySelector('#pd-date').value,
+        start_time: body.querySelector('#pd-start').value,
+        end_time: body.querySelector('#pd-end').value,
+        credit_hours: body.querySelector('#pd-credits').value,
+        location: body.querySelector('#pd-location').value.trim(),
+        max_capacity: body.querySelector('#pd-capacity').value,
+        recurrence: body.querySelector('#pd-recurrence').value,
+        related_tags: body.querySelector('#pd-tags').value.trim()
+      };
+
+      var slot = body.querySelector('#pd-facilitator-slot');
+      if (slot && slot._selector) {
+        data.facilitator_id = slot._selector.getValue() || '';
+      }
+
+      if (!data.title || !data.session_date) {
+        Toast.error('Title and Session Date are required.');
+        return;
+      }
+
+      try {
+        if (existing) {
+          await ServerAPI.updatePDOffering(existing.id, data);
+          Modal.close();
+          Toast.success('Offering updated.');
+          loadOfferingDetail(existing.id);
+        } else {
+          var created = await ServerAPI.createPDOffering(data);
+          Modal.close();
+          Toast.success('Offering created.');
+          loadOfferingDetail(created.id);
+        }
+      } catch (err) {
+        Toast.error('Error: ' + (err.message || err));
+      }
+    }
+
+    // ── Reflection Modal ──
+
+    function showReflectionModal(offeringId) {
+      var body = '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Rating *</label>' +
+        '<div id="pd-rating-slot"></div>' +
+        '</div>' +
+        '<div class="pd-form-group">' +
+        '<label class="pd-form-label">Reflection *</label>' +
+        '<textarea class="pd-form-textarea" id="pd-reflection-text" rows="5" placeholder="Share your thoughts on this PD session..."></textarea>' +
+        '</div>';
+
+      Modal.open('Add Reflection', body, [
+        { label: 'Cancel', className: 'btn btn-outline', onClick: function() { Modal.close(); } },
+        { label: 'Submit Reflection', className: 'btn btn-primary', onClick: async function() {
+          var mBody = Modal.getBody();
+          var ratingSlot = mBody.querySelector('#pd-rating-slot');
+          var ratingValue = ratingSlot && ratingSlot._rating ? ratingSlot._rating.getValue() : 0;
+          var reflectionText = mBody.querySelector('#pd-reflection-text').value.trim();
+
+          if (!ratingValue || ratingValue < 1) { Toast.error('Please select a rating.'); return; }
+          if (!reflectionText) { Toast.error('Please enter a reflection.'); return; }
+
+          try {
+            await ServerAPI.addPDReflection({
+              offering_id: offeringId,
+              rating: ratingValue,
+              reflection_text: reflectionText
+            });
+            Modal.close();
+            Toast.success('Reflection submitted!');
+            loadOfferingDetail(offeringId);
+          } catch (err) {
+            Toast.error('Error: ' + (err.message || err));
+          }
+        }}
+      ]);
+
+      // Init RatingScale
+      var ratingSlot = Modal.getBody().querySelector('#pd-rating-slot');
+      if (ratingSlot) {
+        var rs = RatingScale.render(ratingSlot, { name: 'pd-rating', max: 5 });
+        ratingSlot._rating = rs;
+      }
+    }
+
+    // ── Link to Standard Modal ──
+
+    async function showLinkToStandardModal(reflectionId) {
+      Modal.open('Link to Growth Standard', '<div style="text-align:center;padding:var(--space-lg)">Loading your standards...</div>', []);
+
+      try {
+        var myPlan = await ServerAPI.getMyGrowthPlan();
+        if (!myPlan || !myPlan.selections || myPlan.selections.length === 0) {
+          Modal.close();
+          Toast.info('No active growth plan standards found.');
+          return;
+        }
+
+        var body = '<div class="pd-standard-selector">';
+        myPlan.selections.forEach(function(sel) {
+          body += '<div class="pd-standard-option" data-selection-id="' + sel.id + '">' +
+            '<span class="gp-accordion__std-number">' + sel.standardNumber + '</span>' +
+            '<span>' + ClientUtils.escapeHtml(sel.shortName) + '</span>' +
+            '</div>';
+        });
+        body += '</div>';
+
+        Modal.open('Link to Growth Standard', body, [
+          { label: 'Cancel', className: 'btn btn-outline', onClick: function() { Modal.close(); } },
+          { label: 'Link', className: 'btn btn-primary', onClick: async function() {
+            var selected = Modal.getBody().querySelector('.pd-standard-option--selected');
+            if (!selected) { Toast.error('Please select a standard.'); return; }
+            var selectionId = selected.getAttribute('data-selection-id');
+            try {
+              await ServerAPI.linkReflectionToStandard(reflectionId, selectionId);
+              Modal.close();
+              Toast.success('Evidence linked to Growth Plan!');
+              if (state.currentOffering) loadOfferingDetail(state.currentOffering.id);
+            } catch (err) {
+              Toast.error('Error: ' + (err.message || err));
+            }
+          }}
+        ]);
+
+        // Click to select
+        Modal.getBody().querySelectorAll('.pd-standard-option').forEach(function(el) {
+          el.addEventListener('click', function() {
+            Modal.getBody().querySelectorAll('.pd-standard-option').forEach(function(e) {
+              e.classList.remove('pd-standard-option--selected');
+            });
+            el.classList.add('pd-standard-option--selected');
+          });
+        });
+      } catch (err) {
+        Modal.close();
+        Toast.error('Error loading standards: ' + (err.message || err));
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // My PD View (teachers)
+    // ═══════════════════════════════════════════════
+
+    async function loadMyPD() {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        var results = await Promise.all([
+          ServerAPI.getMyPDSummary(),
+          ServerAPI.getMyPDRegistrations()
+        ]);
+        state.myPD = { summary: results[0], registrations: results[1] };
+        LoadingSpinner.hide(viewContainer);
+        renderMyPDView();
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load PD history: ' + (err.message || err));
+      }
+    }
+
+    function renderMyPDView() {
+      viewContainer.innerHTML = '';
+      var s = state.myPD.summary;
+
+      // Summary cards
+      var summaryGrid = ClientUtils.el('div', { className: 'pd-my-summary' });
+
+      // Credit hours ring
+      var creditCard = ClientUtils.el('div', { className: 'pd-summary-card' });
+      var targetHours = 20; // Annual target
+      var pct = Math.min(100, Math.round((s.totalCreditHours / targetHours) * 100));
+      var circumference = 2 * Math.PI * 40;
+      var offset = circumference - (pct / 100) * circumference;
+      creditCard.innerHTML = '<svg class="pd-credit-ring" viewBox="0 0 100 100">' +
+        '<circle class="pd-credit-ring-bg" cx="50" cy="50" r="40" fill="none" stroke-width="8"/>' +
+        '<circle class="pd-credit-ring-fill" cx="50" cy="50" r="40" fill="none" stroke-width="8" ' +
+        'stroke-dasharray="' + circumference + '" stroke-dashoffset="' + offset + '" ' +
+        'transform="rotate(-90 50 50)" stroke-linecap="round"/>' +
+        '<text class="pd-credit-ring-text" x="50" y="50" text-anchor="middle" dominant-baseline="central">' + s.totalCreditHours + '</text>' +
+        '</svg>' +
+        '<div class="pd-stat-label">Credit Hours (of ' + targetHours + ' target)</div>';
+      summaryGrid.appendChild(creditCard);
+
+      // Attended card
+      var attendedCard = ClientUtils.el('div', { className: 'pd-summary-card' }, [
+        ClientUtils.el('div', { className: 'pd-stat-value' }, [String(s.attended)]),
+        ClientUtils.el('div', { className: 'pd-stat-label' }, ['Sessions Attended'])
+      ]);
+      summaryGrid.appendChild(attendedCard);
+
+      // Reflections card
+      var refCard = ClientUtils.el('div', { className: 'pd-summary-card' }, [
+        ClientUtils.el('div', { className: 'pd-stat-value' }, [String(s.reflectionCount)]),
+        ClientUtils.el('div', { className: 'pd-stat-label' }, ['Reflections Written'])
+      ]);
+      summaryGrid.appendChild(refCard);
+
+      // Avg rating card
+      var ratingCard = ClientUtils.el('div', { className: 'pd-summary-card' });
+      ratingCard.innerHTML = '<div class="pd-stat-value">' + (s.avgRating || '--') + '</div>' +
+        '<div class="pd-stat-label">Avg Rating Given</div>';
+      summaryGrid.appendChild(ratingCard);
+
+      viewContainer.appendChild(summaryGrid);
+
+      // Category chart
+      if (s.byCategory && Object.keys(s.byCategory).length > 0) {
+        var chartContainer = ClientUtils.el('div', { className: 'pd-chart-container' });
+        var canvas = ClientUtils.el('canvas', { id: 'pd-category-chart' });
+        chartContainer.appendChild(canvas);
+        viewContainer.appendChild(chartContainer);
+
+        setTimeout(function() {
+          var labels = Object.keys(s.byCategory).map(function(k) { return CATEGORY_LABELS[k] || k; });
+          var data = Object.values(s.byCategory);
+          new Chart(canvas, {
+            type: 'bar',
+            data: {
+              labels: labels,
+              datasets: [{ label: 'Sessions', data: data, backgroundColor: '#6366f1' }]
+            },
+            options: {
+              indexAxis: 'y',
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+            }
+          });
+        }, 50);
+      }
+
+      // PD History table
+      var section = ClientUtils.el('div', { className: 'pd-section' });
+      section.appendChild(ClientUtils.el('div', { className: 'pd-section-title' }, ['PD History']));
+
+      if (!state.myPD.registrations || state.myPD.registrations.length === 0) {
+        section.appendChild(ClientUtils.el('div', { className: 'pd-empty' }, [
+          ClientUtils.el('div', { className: 'pd-empty-icon' }, ['\uD83D\uDCDA']),
+          'No PD sessions yet. Browse the catalog to get started!'
+        ]));
+      } else {
+        DataTable.render(section, {
+          columns: [
+            { key: 'offeringTitle', label: 'Title' },
+            { key: 'sessionDate', label: 'Date', render: function(r) { return ClientUtils.formatDate(r.sessionDate); } },
+            { key: 'category', label: 'Category', render: function(r) {
+              return '<span class="pd-category-badge pd-cat--' + r.category + '">' + (CATEGORY_LABELS[r.category] || r.category) + '</span>';
+            }},
+            { key: 'status', label: 'Status', render: function(r) {
+              return '<span class="pd-category-badge pd-reg--' + r.status + '">' + r.status + '</span>';
+            }},
+            { key: 'creditHoursEarned', label: 'Credits', render: function(r) {
+              return r.creditHoursEarned > 0 ? String(r.creditHoursEarned) : '--';
+            }},
+            { key: 'reflectionRating', label: 'Rating', render: function(r) {
+              return r.hasReflection ? renderStarsHTML(r.reflectionRating) : '--';
+            }}
+          ],
+          data: state.myPD.registrations,
+          pageSize: 10,
+          sortable: true,
+          onRowClick: function(row) { loadOfferingDetail(row.offeringId); }
+        });
+      }
+      viewContainer.appendChild(section);
+    }
+
+    // ═══════════════════════════════════════════════
+    // PD Reporting View (admin)
+    // ═══════════════════════════════════════════════
+
+    async function loadPDReporting() {
+      viewContainer.innerHTML = '';
+      LoadingSpinner.show(viewContainer);
+      try {
+        var results = await Promise.all([
+          ServerAPI.getPDStats(),
+          ServerAPI.getPDOverview({})
+        ]);
+        LoadingSpinner.hide(viewContainer);
+        renderPDReporting(results[0], results[1]);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load reporting: ' + (err.message || err));
+      }
+    }
+
+    function renderPDReporting(stats, overview) {
+      viewContainer.innerHTML = '';
+
+      // Stats cards
+      var statsGrid = ClientUtils.el('div', { className: 'pd-stats-grid' });
+      var cards = [
+        { value: stats.totalRegistrations, label: 'Total Registrations' },
+        { value: stats.totalAttended, label: 'Total Attended' },
+        { value: stats.totalAttended > 0 && stats.totalRegistrations > 0
+          ? Math.round((stats.totalAttended / stats.totalRegistrations) * 100) + '%'
+          : '--', label: 'Attendance Rate' },
+        { value: stats.totalCreditHours, label: 'Credit Hours Awarded' },
+        { value: stats.avgRating ? stats.avgRating + '/5' : '--', label: 'Avg Rating' }
+      ];
+      cards.forEach(function(c) {
+        statsGrid.appendChild(ClientUtils.el('div', { className: 'pd-stat-card' }, [
+          ClientUtils.el('div', { className: 'pd-stat-value' }, [String(c.value)]),
+          ClientUtils.el('div', { className: 'pd-stat-label' }, [c.label])
+        ]));
+      });
+      viewContainer.appendChild(statsGrid);
+
+      // Category distribution chart
+      if (stats.byCategory && Object.keys(stats.byCategory).length > 0) {
+        var chartContainer = ClientUtils.el('div', { className: 'pd-chart-container', style: 'max-width:400px' });
+        var canvas = ClientUtils.el('canvas', { id: 'pd-reporting-chart' });
+        chartContainer.appendChild(canvas);
+        viewContainer.appendChild(chartContainer);
+
+        var colors = ['#3b82f6', '#8b5cf6', '#f97316', '#14b8a6', '#22c55e', '#4f46e5', '#6b7280'];
+        setTimeout(function() {
+          var labels = Object.keys(stats.byCategory).map(function(k) { return CATEGORY_LABELS[k] || k; });
+          new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+              labels: labels,
+              datasets: [{ data: Object.values(stats.byCategory), backgroundColor: colors.slice(0, labels.length) }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { position: 'right' } }
+            }
+          });
+        }, 50);
+      }
+
+      // Top offerings
+      if (stats.topOfferings && stats.topOfferings.length > 0) {
+        var topSection = ClientUtils.el('div', { className: 'pd-section' });
+        topSection.appendChild(ClientUtils.el('div', { className: 'pd-section-title' }, ['Top Offerings by Attendance']));
+        DataTable.render(topSection, {
+          columns: [
+            { key: 'title', label: 'Offering' },
+            { key: 'category', label: 'Category', render: function(r) {
+              return '<span class="pd-category-badge pd-cat--' + r.category + '">' + (CATEGORY_LABELS[r.category] || r.category) + '</span>';
+            }},
+            { key: 'attendedCount', label: 'Attended' }
+          ],
+          data: stats.topOfferings,
+          pageSize: 5,
+          onRowClick: function(row) { loadOfferingDetail(row.id); }
+        });
+        viewContainer.appendChild(topSection);
+      }
+
+      // All offerings summary table
+      var allSection = ClientUtils.el('div', { className: 'pd-section' });
+      allSection.appendChild(ClientUtils.el('div', { className: 'pd-section-title' }, ['All Offerings']));
+      DataTable.render(allSection, {
+        columns: [
+          { key: 'title', label: 'Title' },
+          { key: 'category', label: 'Category', render: function(r) {
+            return '<span class="pd-category-badge pd-cat--' + r.category + '">' + (CATEGORY_LABELS[r.category] || r.category) + '</span>';
+          }},
+          { key: 'sessionDate', label: 'Date', render: function(r) { return ClientUtils.formatDate(r.sessionDate); } },
+          { key: 'status', label: 'Status', render: function(r) {
+            return '<span class="pd-category-badge pd-status--' + r.status + '">' + r.status + '</span>';
+          }},
+          { key: 'registeredCount', label: 'Registered' },
+          { key: 'attendedCount', label: 'Attended' }
+        ],
+        data: overview.offerings || [],
+        pageSize: 10,
+        sortable: true,
+        onRowClick: function(row) { loadOfferingDetail(row.id); }
+      });
+      viewContainer.appendChild(allSection);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Init
+    // ═══════════════════════════════════════════════
+
+    buildLayout();
+    return {
+      onActivate: function() {
+        buildSubNav(state.view);
+        switchView(state.view);
+      }
+    };
+  }
+};
+</script>

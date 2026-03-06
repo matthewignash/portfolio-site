@@ -1,0 +1,1569 @@
+<script>
+    console.log('=== LEARNING MAP SYSTEM v4.3 (Story: Student Map Interaction) ===');
+
+    // ================================================
+    // CONSTANTS
+    // ================================================
+
+    var HEX_WIDTH = 110, HEX_HEIGHT = 100, COL_SPACING = 140, ROW_SPACING = 120;
+    var MAX_MESSAGE_LENGTH = 150;
+    var MAX_CONTENT_LENGTH = 2000;
+
+    // SBAR domain question cues — shared between Cornell Notes and student hex panel
+    var SBAR_QUESTION_CUES = {
+      KU: ['What are the key facts?', 'Can you define the main concept?', 'What do you already know about this?'],
+      TT: ['How would you apply this?', 'What steps are involved?', 'Can you give an example?'],
+      C: ['How does this relate to other topics?', 'What patterns do you notice?', 'How would you explain this to someone else?']
+    };
+
+    // C4: Language name lookup — shared between MapBuilder (translanguaging) and Planner (banner)
+    var SST_LANG_NAMES = {
+      zh: 'Chinese', es: 'Spanish', ar: 'Arabic', hi: 'Hindi',
+      vi: 'Vietnamese', tl: 'Filipino', pt: 'Portuguese', ru: 'Russian',
+      de: 'German', it: 'Italian', ja: 'Japanese', ko: 'Korean',
+      fr: 'French', ta: 'Tamil'
+    };
+
+    var ARROW_COLORS = {
+      always: '#3b82f6', sequential: '#3b82f6', score: '#f59e0b', performance: '#f59e0b',
+      status: '#10b981', teacher_approval: '#8b5cf6', approval: '#8b5cf6',
+      mtss: '#ef4444', locked: '#94a3b8', choice: '#ec4899', assessment: '#dc2626',
+      time: '#06b6d4', compound: '#6366f1', resource: '#d97706',
+      peer_feedback: '#ec4899'
+    };
+
+    var COLOR_LABELS = {
+      always: 'Blue (sequential)', score: 'Amber (performance)',
+      status: 'Green (status)', teacher_approval: 'Purple (approval)',
+      assessment: 'Red (assessment)', time: 'Cyan (time-based)',
+      compound: 'Indigo (multi-gate)', choice: 'Pink (student choice)',
+      peer_feedback: 'Pink (peer feedback)'
+    };
+
+    var HEX_THEMES = {
+      core: { fill: '#ffffff', stroke: '#3b82f6' },
+      ext: { fill: '#ffffff', stroke: '#10b981' },
+      scaf: { fill: '#ffffff', stroke: '#f59e0b' },
+      student: { fill: '#8b5cf6', stroke: '#7c3aed' },
+      'class': { fill: '#ffffff', stroke: '#ec4899' },
+      lab: { fill: '#f0fdfa', stroke: '#0d9488' },
+      lesson: { fill: '#faf5ff', stroke: '#7c3aed' },
+      resource: { fill: '#fef3c7', stroke: '#d97706' },
+      whiteboard: { fill: '#fef9c3', stroke: '#ca8a04' }
+    };
+
+    var RES_TYPE_ICONS = {
+      video: '🎬', practice: '✏️', reading: '📖', worksheet: '📄', link: '🔗'
+    };
+
+    // Course Dropdown Options (Story 2.1)
+    var DEPARTMENTS = ['Science', 'Math', 'English', 'EAL', 'World Language',
+                       'Design', 'PHE', 'Visual Arts', 'Performing Arts',
+                       'Learning Support', 'Humanities'];
+    var GRADE_LEVELS = ['6', '7', '8', '9', '10', '11', '12',
+                        '6-7', '7-8', '8-9', '9-10', '10-11', '11-12',
+                        '6-8', '9-12', 'All Grades'];
+
+    // ================================================
+    // GLOBAL STATE
+    // ================================================
+
+    var userData = null;
+    var mapsData = [];
+    var classesData = [];
+    var usersData = [];
+    var coursesData = [];  // Story 2.1
+    var unitCountsCache = {};  // Story 2.1: Cache unit counts per course
+    var currentUnitsCourseId = null;  // Story 2.1b: Currently selected course in units panel
+    var currentUnitsData = [];        // Story 2.1b: Units loaded for the panel
+    var currentLessonsUnitId = null;  // Story 2.2: Currently selected unit for lessons
+    var currentLessonsUnitTitle = ''; // Story 2.2: Title for breadcrumb display
+    var currentLessonsData = [];      // Story 2.2: Lessons loaded for current unit
+    var currentLessonMapHexes = [];   // Story 2.2: Hexes from the unit's linked map
+    var unitsPanelMode = 'units';     // Story 2.2: 'units' or 'lessons'
+    var lessonActivityTemplatesCache = null;  // Story 2.2: {opening:[], main:[], closing:[]}
+    var lessonUdlStrategiesCache = null;      // Story 2.2: {representation:[], actionExpression:[], engagement:[]}
+    var lessonAssessmentStrategiesCache = null; // Story 2.2: []
+    var lessonEditorMainActivities = [];      // Story 2.2: Dynamic main activities state
+    var lessonEditorSuccessCriteria = [];     // Story 2.2: Dynamic success criteria state
+    var standardsData = [];             // Story 2.3: All loaded standards
+    var hexStandardsAllData = [];       // Story 2.3: All standards (for hex picker)
+    var hexStandardsSelected = [];      // Story 2.3: Currently selected standards on hex
+    var coverageData = null;            // Story 2.3: Loaded coverage report
+    var hexStandardsCountsCache = {};   // Standards Alignment: count per hex for badge rendering
+    var lessonStandardsSelected = [];   // Standards Alignment: selected standards in lesson editor
+
+    // Course Analytics Dashboard
+    var cadSelectedCourseId = null;
+    var cadDashboardData = null;
+    var cadCoverageDetailCache = {};
+    var cadInitialized = false;
+
+    // Knowledge Gap Analysis
+    var kgaHexSortColumn = 'avgScorePct';
+    var kgaHexSortAsc = true;
+    var kgaExpandedStudents = {};
+    var kgaComputedData = null;
+
+    // Formative Check Logging
+    var fclCurrentHexId = null;
+    var fclCurrentMapId = null;
+    var fclModalMode = 'log';
+    var fclSelectedStrategy = null;
+    var fclStudentResults = {};
+    var fclHistoryCache = [];
+    var fclStudentSectionOpen = false;
+    var fclSelectedClassId = null;
+    var fclRosterCache = [];
+    // Embedded Formative Assessment
+    var efaBuilderData = null;
+    var efaBuilderHexId = null;
+    var efaBuilderPreviewMode = false;
+    var efaStudentAnswers = {};
+    var efaCurrentAttempt = null;
+    var efaShuffleMap = {};
+    var spaSelectedMapIndex = null;  // Student Progress Analytics: selected map index
+    var previewStudentEmail = null;  // Teacher preview: selected student email
+    var previewClassId = null;       // Teacher preview: selected class for roster
+    var currentRoster = [];
+    var currentMap = null;
+    // UX Overhaul: collapsible section states (session-only, not persisted)
+    var uxoCollapsedSections = {};
+    var csbSidebarVisible = true;
+    var a11yLastFocusedEl = null;
+    var onbChecklistData = null;
+    var onbChecklistVisible = true;
+    var onbLegendVisible = false;
+    var onbLegendAutoShown = false;
+    var selectedHexId = null;
+    var connectMode = false;
+    var connectSourceHexId = null;
+    var selectedConnection = null;
+    var formOptions = { subjects: [], years: [], roles: [] };
+    var currentViewMode = 'teacher';
+    var studentsQueue = [];
+    var currentAddClassId = null;
+
+    // Progress Dashboard
+    var progressDashboardData = null;
+    var progressSelectedClassId = null;
+    var progressSelectedMapId = null;
+    var progressSelectedStudent = null;
+    var progressClassMaps = [];
+
+    // Student Map Interaction
+    var studentProgressData = {};         // {hexId: {status, score, ...}} for current map in student view
+    var studentProgressLoading = false;
+    var saSelectedRating = null;          // Self-Assessment: currently selected rating in modal
+    var saEvidenceCount = 0;              // Self-Assessment v2: current evidence row count in modal
+    var appConfig = { requireTeacherApproval: true, enableBranching: true, maxHexesPerMap: 100 }; // Config enforcement (loaded from backend)
+
+    // Student Support Profiles
+    var supportProfilesData = null;  // Cached support profiles for current context
+
+    // Prompt Builder / Enhanced Support (E1+E2)
+    var pbDetailPanelOpen = false;
+    var pbSupportDataCache = null;
+    var pbUdlStrategiesCache = null;
+    var pbSelectedUdl = { representation: [], actionExpression: [], engagement: [] };
+    var pbSuggestedUdl = { representation: [], actionExpression: [], engagement: [] };
+    var pbPlanningNotes = '';
+
+    // Student Support View (E3-S1)
+    var sstProfileData = null;
+    var sstSelectedStrategies = {};
+    var previewWidaBracket = null;  // Teacher preview: override WIDA bracket ('low'/'mid'/'high'/null)
+
+    // Reflection Prompts (Phase 1 Research Alignment)
+    var rflPromptVisible = false;       // Is completion reflection card showing?
+    var rflLastPromptIndex = -1;        // Last used prompt index (rotate through)
+    var rflSaving = false;              // RPC in-flight guard
+
+    // Quick Feedback Templates (Story 3)
+    var qftTemplatesCache = null;
+    var qftManagerOpen = false;
+
+    // Cornell Notes / Second Brain
+    var cnCurrentNote = null;
+    var cnCueCount = 0;
+    var cnDistillMode = false;
+    var cnDistillSentences = [];
+    var cnDistillBold = {};
+    var cnDistillHighlight = {};
+    var cnDistillSummary = '';
+    var cnNotebookData = null;
+    var cnNotebookLoaded = false;
+    var cnParaSection = 'projects';
+    var cnExpandedNoteId = null;
+
+    // Note Coaching Dashboard (teacher)
+    var cncComputedData = null;
+    var cncExpandedStudents = {};
+    var cncInitialized = false;
+
+    // Teaching Methods / EAL sub-nav lazy rendering
+    var tmgRenderedSections = {};
+    var esgRenderedSections = {};
+    var tmgPickerAnswers = [false, false, false, false];
+
+    // Design Thinking / PBL
+    var dtkFrameworkPresets = null;   // Cached framework presets
+    var dtkFrameworkCache = {};       // unitId -> parsed framework object
+
+    // Teacher Support Dashboard (E3-S2)
+    var tsdProfilesCache = null;
+    var tsdComputedData = null;
+    var tsdExpandedStudents = {};
+    var tsdProfilesClassId = null;
+    var tsdInitialized = false;
+
+    // Portfolio Insights (teacher)
+    var piaComputedData = null;
+    var piaExpandedStudents = {};
+    var piaInitialized = false;
+
+    // Lab Insights Dashboard (teacher)
+    var linData = null;
+    var linExpandedStudents = {};
+    var linInitialized = false;
+    var linSelectedAssignment = 'all';
+
+    // Student Custom Tasks
+    var stlTasksData = [];
+    var stlFilter = 'all';
+    var stlSectionCollapsed = false;
+    var stlSaving = false;
+
+    // Teacher Reminders
+    var trmRemindersData = [];
+    var trmFilter = 'all';
+    var trmSaving = false;
+    var trmInitialized = false;
+
+    // Standards scoping
+    var stdSubjectsCache = null;
+    var hexStandardsPickerContext = null;
+    var hexStandardsShowAll = false;
+
+    // Branch Expansion state (Stories 1-6)
+    var bexChoiceModalOpen = false;
+    var bexStudentChoices = {};
+    var lrdSidebarOpen = false;
+    var lrdExpandedHexId = null;
+
+    // Teacher Calendar state
+    var tclCalendarOpen = false;
+    var tclViewMode = 'timeline';
+    var tclMonthOffset = 0;
+    var tclDragState = null;
+
+    // Time Re-evaluation polling state
+    var trePollingTimer = null;
+    var treLastCheckState = {};
+    var treActive = false;
+    var TRE_FAST_INTERVAL = 30000;
+    var TRE_NORMAL_INTERVAL = 60000;
+    var TRE_MAX_INTERVAL = 120000;
+    var TRE_FAST_DURATION = 300000;
+    var treCurrentInterval = 30000;
+    var treSessionStart = null;
+
+    function getStandardsContextForMap() {
+      if (currentMap && currentMap.courseId) {
+        for (var i = 0; i < coursesData.length; i++) {
+          if (String(coursesData[i].courseId) === String(currentMap.courseId)) {
+            var c = coursesData[i];
+            if (c.standardFramework) {
+              return { framework: c.standardFramework, subject: c.standardSubject || '' };
+            }
+            break;
+          }
+        }
+      }
+      return null;
+    }
+
+    // AISC Core
+    var ascCoreData = null;
+    var ascPlannerExpanded = false;
+    var ascCompetencyProfile = null;
+
+    // Lab Template & Rubric Editor
+    var lteMode = null;
+    var lteEditingData = null;
+    var lteExpandedSection = null;
+    var lteSaving = false;
+    var lteReturnStep = null;
+    var lteDirty = false;
+
+    // Lab Report Builder (teacher)
+    var labBuilderData = null;
+    var labBuilderStep = 1;
+    var labTemplatesCache = null;
+    var labRubricsCache = null;
+    var labAssignmentsCache = {};
+
+    // Lab Report Editor (student)
+    var labEditorData = null;
+    var labEditorSectionContent = {};
+    var labEditorDirty = {};
+    var labEditorSaveTimers = {};
+    var labEditorReadOnly = false;
+    var labEditorSubmitting = false;
+    var labVersionCache = null;
+
+    // Lab Scoring (teacher)
+    var labScoringData = null;
+    var labScoringScores = {};
+    var labScoringSelectedSub = null;
+    var labScoringReadOnly = false;
+    var labScoringReconciled = {};
+
+    // CollabSpace
+    var colabBoardsData = [];
+    var colabBoardsLoaded = false;
+    var colabCurrentBoardId = null;
+    var colabBoardFilter = 'all';
+    var colabBoardViewData = null;
+    var colabBoardViewLoading = false;
+    var colabComposerOpen = false;
+    var colabComposerAnon = false;
+    var colabExpandedComments = {};
+    var colabSaving = false;
+    var colabColumnOrder = [];
+    var colabSelectedColor = '';
+    var colabOpenMenuPostId = null;
+    var colabMemberData = null;
+    var colabMemberManagerOpen = false;
+    var colabMemberSaving = false;
+    var colabSettingsOpen = false;
+    var colabSettingsData = null;
+    var colabSettingsSaving = false;
+    var colabSettingsTriggerEl = null;
+    var colabSettingsColumns = [];
+
+    // Peer Feedback state
+    var pfbReceivedCache = null;
+    var pfbGivenCache = null;
+    var pfbReviewPeer = null;
+    var pfbCurrentRatings = {};
+    var pfbSubmitting = false;
+
+    // Student Planner
+    var plannerDataLoaded = false;  // Track if planner data has been loaded
+
+    // Celebrations
+    var celData = null;
+    var celPendingQueue = [];
+    var celCurrentOverlay = null;
+
+    // Student Portfolio & Growth
+    var pfPortfolioData = null;
+    var pfLoading = false;
+    var pfExpandedFrameworks = {};
+    var pfInitialized = false;
+    var pfFilterMode = 'all';
+
+    // Unit Checklists (student planner)
+    var uclChecklistData = [];
+    var uclExpandedUnits = {};
+    var uclSectionCollapsed = false;
+
+    // Process Journal (student planner)
+    var pjrJournalData = [];
+    var pjrJournalLoaded = false;
+    var pjrSelectedMap = 'all';
+    var pjrSectionCollapsed = true;
+    var pjrEntryFormOpen = false;
+    var _lazyPjrLoaded = false;
+
+    // Study Dashboard
+    var ssdInitialized = false;
+    var ssdSelectedMapId = null;
+    var ssdExpandedHexes = {};
+    var ssdShowAllReview = false;
+    var ssdWeeklyGoal = 5;
+    var ssdGoalCelebrated = false;
+
+    // Course Standards Report
+    var cadStandardsReportData = null;
+
+    // Differentiation
+    var difGroupsData = [];
+    var difMemberships = [];
+    var difHexAssignments = [];
+    var difSelectedGroupId = null;
+    var difOverlayOpen = false;
+    var difScope = 'class';
+    var difVisibilityData = null;
+    var difOverridesExpanded = false;
+    var difProfilesCache = null;
+
+    // Differentiation Analytics (dfa-)
+    var dfaComputedData = null;
+    var dfaInitialized = false;
+    var dfaExpandedGroups = {};
+    var dfaGroupsData = [];
+    var dfaMemberships = [];
+    var dfaHexAssignments = [];
+    var dfaProfilesData = [];
+    var dfaMapId = null;
+
+    // Grade & Review Dashboard
+    var grvQueueData = null;
+    var grvSelectedIndex = null;
+    var grvFilter = 'all';
+    var grvInitialized = false;
+    var grvSaving = false;
+    var grvPollingTimer = null;
+    var grvLastRefreshTime = null;
+    var grvNewItemIds = [];
+    var grvLastUpdatedTimer = null;
+    var grvNoChangeCount = 0;
+
+    // Progress Heatmap Overlay (phm-)
+    var phmOverlayActive = false;
+    var phmHexStats = null;
+    var phmDashboardData = null;
+
+    // Lesson Map Drill-Down
+    var lessonMapCache = {};          // mapId -> full lesson map data (lazy-loaded)
+    var parentMapStack = [];          // Stack of {mapId, hexId} for back-navigation
+    var lessonProgressSummary = {};   // hexId -> {total, completed, mastered, completionPct, status} for lesson hexes
+    var lsmPlannerGroupCollapsed = {}; // groupKey -> boolean for collapsed planner lesson groups
+
+    // Review Insights (rvi-)
+    var rviIterationData = null;
+    var rviFeedbackData = null;
+    var rviInitialized = false;
+    var rviExpandedHexes = {};
+    var rviDataLoading = false;
+
+    // Competency & ATL (cat-)
+    var catCompData = null;
+    var catAtlData = null;
+    var catInitialized = false;
+    var catExpandedStudents = {};
+    var catCompLoading = false;
+    var catAtlLoading = false;
+
+    // Teacher Lesson Insights (lsmt-)
+    var lsmtData = null;
+    var lsmtInitialized = false;
+    var lsmtExpandedStudents = {};
+
+    // Lesson Map Convert Tool
+    var lsmConvertMode = false;
+    var lsmConvertSelected = {};
+
+    // Name Selector & Grouping (nsg-)
+    var nsgPickerOpen = false;
+    var nsgMode = 'picker';
+    var nsgClassId = null;
+    var nsgRosterData = [];
+    var nsgAbsentEmails = {};
+    var nsgSelectionHistory = {};
+    var nsgNoRepeatMode = true;
+    var nsgSelectedEmails = {};
+    var nsgCurrentGroups = [];
+    var nsgProjectorMode = false;
+    var nsgAnimTimer = null;
+    var nsgAbsentOpen = false;
+    var nsgHistoryOpen = false;
+    var nsgGroupMode = 'count';
+    var nsgGroupNumber = 4;
+    var nsgSavedGroupSets = [];
+    var nsgSavedGroupsOpen = false;
+
+    // Countdown Timer state
+    var ctdTimerOpen = false;
+    var ctdTimerState = 'idle';  // idle | running | paused | finished
+    var ctdRemainingMs = 0;
+    var ctdTotalMs = 0;
+    var ctdEndTime = 0;
+    var ctdTickTimer = null;
+    var ctdDisplayMode = 'overlay';  // overlay | projector | mini
+    var ctdStationMode = false;
+    var ctdStationCount = 4;
+    var ctdCurrentStation = 1;
+    var ctdStationDuration = 0;
+    var ctdCustomPresets = [];
+    // Phase 2: backend sync + student + labels + messages + pomodoro
+    var ctdSessionId = null;
+    var ctdPresetsMigrated = false;
+    var ctdStudentPolling = false;
+    var ctdStudentPollTimer = null;
+    var ctdStudentClassIndex = 0;
+    var ctdStudentNoTimerSince = null;
+    var ctdStudentEndTime = 0;
+    var ctdStudentTotalMs = 0;
+    var ctdStudentTickTimer = null;
+    var ctdStudentSessionData = null;
+    var ctdLabel = '';
+    var ctdMessages = null;
+    var ctdMessagesFired = {};
+    var ctdPomodoroMode = false;
+    var ctdPomodoroConfig = null;
+    var ctdPomodoroCycle = 1;
+    var ctdPomodoroPhase = 'work';
+
+    // Quick Polls state (qp-)
+    var qpCreatorOpen = false;
+    var qpCreatorView = 'create';
+    var qpActivePollId = null;
+    var qpActivePollData = null;
+    var qpSelectedType = 'mc';
+    var qpOptions = ['', ''];
+    var qpCorrectIndex = -1;
+    var qpSelectedClassId = null;
+    var qpRefreshTimer = null;
+    var qpHistoryCache = [];
+    var qpStudentPolling = false;
+    var qpStudentPollTimer = null;
+    var qpStudentClassIndex = 0;
+    var qpStudentNoPollSince = null;
+    var qpStudentActivePollId = null;
+    var qpStudentActivePollData = null;
+    var qpStudentResponded = false;
+
+    // Whiteboard state (wb-)
+    var wbCanvasEl = null;
+    var wbCtx = null;
+    var wbTool = 'pen';
+    var wbColor = '#000000';
+    var wbWidth = 4;
+    var wbBackground = 'blank';
+    var wbUndoStack = [];
+    var wbRedoStack = [];
+    var wbIsDrawing = false;
+    var wbLastX = 0;
+    var wbLastY = 0;
+    var wbShapeStartX = 0;
+    var wbShapeStartY = 0;
+    var wbOverlayOpen = false;
+    var wbDirty = false;
+    var wbSaving = false;
+    var wbCurrentHexId = null;
+    var wbCurrentMapId = null;
+    var wbMode = null;
+    var wbImageLoaded = false;
+    var wbAutoSaveTimer = null;
+    var wbTemplateCache = {};
+
+    // Projector Mode state (pjm-)
+    var pjmIsOpen = false;
+    var pjmCurrentView = 'overview';
+    var pjmFocusHexId = null;
+    var pjmHexStats = null;
+    var pjmRefreshTimer = null;
+    var pjmLastRefreshTime = null;
+    var pjmFeedEvents = [];
+    var pjmUpdatedTimer = null;
+    var pjmSlidesHexId = null;
+    var pjmSidebarOpen = true;
+    var pjmSidebarTab = 'lesson';
+    var pjmTranslateLang = '';
+    var pjmTranslationCache = {};
+    var pjmTranslateLoading = false;
+
+    // Drag-and-drop state
+    var isDragging = false;
+    var dragHexId = null;
+    var dragStartX = 0, dragStartY = 0;
+    var dragOffsetX = 0, dragOffsetY = 0;
+    var dragOrigRow = 0, dragOrigCol = 0;
+    var dragMoved = false;
+    var DRAG_THRESHOLD = 5;
+    var dragPreviewEl = null;
+    var hasUnsavedMoves = false;
+
+    // ================================================
+    // INITIALIZATION
+    // ================================================
+
+    window.addEventListener('DOMContentLoaded', loadAllData);
+
+    // Warn about unsaved work when leaving the page
+    window.addEventListener('beforeunload', function(e) {
+      var hasUnsaved = false;
+      // Check lab editor dirty sections
+      if (typeof labEditorDirty !== 'undefined' && labEditorDirty) {
+        for (var dk in labEditorDirty) {
+          if (labEditorDirty.hasOwnProperty(dk) && labEditorDirty[dk]) { hasUnsaved = true; break; }
+        }
+      }
+      // Check if Cornell Note textarea has been modified
+      if (!hasUnsaved && typeof cnCurrentNote !== 'undefined' && cnCurrentNote && cnCurrentNote.noteId) {
+        var notesEl = document.getElementById('cnNotesTextarea');
+        if (notesEl && notesEl.value !== (cnCurrentNote.notesContent || '')) hasUnsaved = true;
+      }
+      if (hasUnsaved) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    // Accessibility: Announce dynamic content to screen readers (Session 3)
+    var _a11yAnnounceTimer = null;
+    function a11yAnnounce(message) {
+      var region = document.getElementById('a11yLiveRegion');
+      if (!region) return;
+      region.textContent = message;
+      if (_a11yAnnounceTimer) clearTimeout(_a11yAnnounceTimer);
+      _a11yAnnounceTimer = setTimeout(function() { region.textContent = ''; }, 3000);
+    }
+
+    // Accessibility: Focus trap for modal dialogs (Session 3)
+    function a11yTrapFocus(modalEl, e) {
+      var focusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
+      var focusables = modalEl.querySelectorAll(focusableSelector);
+      var visibleFocusables = [];
+      for (var i = 0; i < focusables.length; i++) {
+        // Filter to visible elements (not hidden by display:none or similar)
+        if (focusables[i].offsetParent !== null || focusables[i].offsetWidth > 0 || focusables[i].offsetHeight > 0) {
+          visibleFocusables.push(focusables[i]);
+        }
+      }
+      if (visibleFocusables.length === 0) return;
+
+      var firstEl = visibleFocusables[0];
+      var lastEl = visibleFocusables[visibleFocusables.length - 1];
+
+      if (e.shiftKey) {
+        // Shift+Tab: if on first element, wrap to last
+        if (document.activeElement === firstEl) {
+          e.preventDefault();
+          lastEl.focus();
+        }
+      } else {
+        // Tab: if on last element, wrap to first
+        if (document.activeElement === lastEl) {
+          e.preventDefault();
+          firstEl.focus();
+        }
+      }
+    }
+
+    document.addEventListener('keydown', function(e) {
+      // Accessibility: Focus trap for content modal (Session 3)
+      if (e.key === 'Tab') {
+        var contentModal = document.getElementById('contentModal');
+        if (contentModal && contentModal.style.display !== 'none' && contentModal.classList.contains('active')) {
+          a11yTrapFocus(contentModal, e);
+          return;
+        }
+      }
+      // Command Palette: Ctrl+K / Cmd+K
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (typeof cmdOpen !== 'undefined' && cmdOpen) { closeCommandPalette(); } else if (typeof openCommandPalette === 'function') { openCommandPalette(); }
+        return;
+      }
+      // Projector Mode keyboard shortcuts (Arrow/Space/T/B/R when projector is open)
+      if (typeof pjmHandleKeydown === 'function' && pjmIsOpen && pjmHandleKeydown(e)) return;
+      // Countdown Timer keyboard shortcuts (Space/R/F/M when timer is open)
+      if (typeof ctdHandleKeydown === 'function' && ctdTimerOpen && ctdHandleKeydown(e)) return;
+      if (e.key === 'Escape') {
+        if (pjmIsOpen) { pjmClose(); return; }
+        if (wbOverlayOpen) { wbCloseTeacherCanvas(); return; }
+        if (qpCreatorOpen) { qpCloseCreator(); return; }
+        if (ctdTimerOpen) { ctdCloseTimer(); return; }
+        if (nsgPickerOpen) { nsgClosePicker(); return; }
+        if (typeof turActive !== 'undefined' && turActive) { turSkipTour(); return; }
+        if (document.getElementById('onbCompleteCard')) { if (typeof onbDismissCompletion === 'function') onbDismissCompletion(); return; }
+        if (document.getElementById('onbWelcomeCard')) { if (typeof onbDismissWelcome === 'function') onbDismissWelcome(); return; }
+        if (onbLegendVisible && typeof onbToggleLegend === 'function') { onbToggleLegend(); return; }
+        if (onbChecklistVisible && typeof onbDismissChecklist === 'function') { onbDismissChecklist(); return; }
+        if (typeof cmdOpen !== 'undefined' && cmdOpen) { closeCommandPalette(); return; }
+        if (colabSettingsOpen) { colabCloseSettings(); return; }
+        if (colabMemberManagerOpen) { cbmCloseManager(); return; }
+        if (colabOpenMenuPostId) { colabTogglePostMenu(colabOpenMenuPostId); return; }
+        if (colabBoardViewData && colabComposerOpen) { colabToggleComposer(); return; }
+        if (colabBoardViewData) { colabCloseBoardView(); return; }
+        if (qftManagerOpen) { qftCloseManager(); return; }
+        if (tclCalendarOpen) { tclCloseCalendar(); return; }
+        if (rflPromptVisible) { rflDismissPrompt(); return; }
+        if (document.getElementById('dtkTransitionCard')) { dtkDismissTransition(); return; }
+        if (bexChoiceModalOpen) { bexCloseChoiceModal(); return; }
+        if (difOverlayOpen) { difCloseOverlay(); return; }
+        if (lteMode) { lteCloseEditor(); return; }
+        if (labScoringData) { labScoringClose(); return; }
+        if (labBuilderData) { labCloseBuilder(); return; }
+        if (efaBuilderData) { closeAssessmentBuilder(); return; }
+        if (isDragging) {
+          cancelDrag();
+          return;
+        }
+        closeClassModal();
+        closeRosterModal();
+        closeAddStudentsModal();
+        closeAssignMapsModal();  // Map Assignment
+        closeAddUserModal();
+        closeContentModal();
+        closeCourseModal();  // Story 2.1
+        closeUnitModal();    // Story 2.1b
+        closeLessonModal();  // Story 2.2
+        closeStandardModal();  // Story 2.3
+        closeUnitsPanel();   // Story 2.1b
+        if (typeof closeUbdEditor === 'function') closeUbdEditor();  // UBD Planner
+        if (typeof closeProgressDetail === 'function') closeProgressDetail();  // Progress Dashboard
+        if (typeof closeFclModal === 'function') closeFclModal();  // Formative Check Modal
+        if (typeof closePromptBuilder === 'function') closePromptBuilder();  // Prompt Builder Modal
+        if (typeof closeSspEditor === 'function') closeSspEditor();  // Support Profile Editor
+        if (typeof dctCloseDictPanel === 'function' && dctDictPanelOpen) { dctCloseDictPanel(); return; }
+        if (lrdSidebarOpen) { lrdToggleSidebar(); }
+        if (connectMode) cancelConnectMode();
+        if (selectedConnection) deselectConnection();
+        if (selectedHexId) deselectHex();
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedConnection) {
+        var activeTag = document.activeElement.tagName.toLowerCase();
+        if (activeTag !== 'input' && activeTag !== 'textarea' && activeTag !== 'select') {
+          e.preventDefault();
+          deleteSelectedConnection();
+        }
+      }
+    });
+
+    // ================================================
+    // VIEW MODE
+    // ================================================
+
+    function setViewMode(mode) {
+      currentViewMode = mode;
+      studentProgressData = {};  // Clear student progress when switching modes
+
+      var teacherBtn = document.getElementById('teacherViewBtn');
+      var studentBtn = document.getElementById('studentViewBtn');
+      var banner = document.getElementById('studentPreviewBanner');
+      var classesTab = document.getElementById('classesTab');
+      var usersTab = document.getElementById('usersTab');
+      var builderTab = document.getElementById('builderTab');
+      var coursesTab = document.getElementById('coursesTab');  // Story 2.1
+      var standardsTab = document.getElementById('standardsTab');  // Story 2.3
+      var ubdPlannerTab = document.getElementById('ubdPlannerTab');  // UBD Planner
+      var progressTab = document.getElementById('progressTab');  // Progress Dashboard
+      var settingsTab = document.getElementById('settingsTab');  // Admin Settings
+      var integrationsTab = document.getElementById('integrationsTab');  // Integrations
+      var plannerTab = document.getElementById('plannerTab');  // Student Planner
+      var builderTools = document.getElementById('builderTools');
+
+      if (mode === 'student') {
+        teacherBtn.classList.remove('active');
+        studentBtn.classList.add('active', 'student-active');
+        banner.classList.add('active');
+        classesTab.classList.add('hidden');
+        usersTab.classList.add('hidden');
+        builderTab.classList.add('hidden');
+        coursesTab.classList.add('hidden');  // Story 2.1
+        standardsTab.classList.add('hidden');  // Story 2.3
+        ubdPlannerTab.classList.add('hidden');  // UBD Planner
+        settingsTab.classList.add('hidden');  // Admin Settings
+        integrationsTab.classList.add('hidden');  // Integrations
+        var teachingMethodsTab = document.getElementById('teachingMethodsTab');
+        if (teachingMethodsTab) teachingMethodsTab.classList.add('hidden');  // Teaching Methods
+        var ealStrategiesTab = document.getElementById('ealStrategiesTab');
+        if (ealStrategiesTab) ealStrategiesTab.classList.add('hidden');  // EAL Strategies
+        progressTab.classList.remove('hidden');  // Progress: visible for students
+        if (plannerTab) plannerTab.classList.remove('hidden');  // Student Planner: visible for students
+        var studyDashTab = document.getElementById('studyDashTab');
+        if (studyDashTab) studyDashTab.classList.remove('hidden');  // Study Dashboard: visible for students
+        builderTools.style.display = 'none';
+        document.getElementById('mapsViewTitle').textContent = 'My Learning Maps';
+        var createMapBtnEl = document.getElementById('createMapBtn');
+        if (createMapBtnEl) createMapBtnEl.style.display = 'none';
+        closeHexEditorPanel();
+        closeConnectionEditorPanel();
+
+        // Load planner data if switching to student mode (teacher preview)
+        if (!plannerDataLoaded && typeof loadPlannerData === 'function') {
+          loadPlannerData();
+          plannerDataLoaded = true;
+        }
+
+        // Show ATL toolkit and load data in student mode
+        var atlPanelSm = document.getElementById('atlToolkitPanel');
+        if (atlPanelSm) atlPanelSm.style.display = 'block';
+        if (typeof loadATLData === 'function' && !atlProgressData) {
+          loadATLData();
+        }
+
+        // Populate global preview banner class dropdown
+        var globalClassSel = document.getElementById('tpvGlobalClassSelect');
+        if (globalClassSel) {
+          globalClassSel.innerHTML = '<option value="">-- Class --</option>';
+          var pClasses = classesData || [];
+          for (var ci = 0; ci < pClasses.length; ci++) {
+            var pc = pClasses[ci];
+            if (pc.status === 'removed' || pc.status === 'archived') continue;
+            var pSel = (previewClassId && String(pc.classId) === String(previewClassId)) ? ' selected' : '';
+            globalClassSel.innerHTML += '<option value="' + escapeHtml(pc.classId) + '"' + pSel + '>' +
+              escapeHtml(pc.className) + (pc.subject ? ' (' + pc.subject + ')' : '') + '</option>';
+          }
+          // Restore student dropdown if class was already selected
+          if (previewClassId) {
+            onGlobalPreviewClassChange(previewClassId);
+          }
+        }
+
+        var activeTab = document.querySelector('.tab.active');
+        if (activeTab && (activeTab.dataset.view === 'classes' || activeTab.dataset.view === 'builder' || activeTab.dataset.view === 'users' || activeTab.dataset.view === 'courses' || activeTab.dataset.view === 'standards' || activeTab.dataset.view === 'ubdPlanner' || activeTab.dataset.view === 'settings' || activeTab.dataset.view === 'integrations' || activeTab.dataset.view === 'teachingMethods' || activeTab.dataset.view === 'ealStrategies')) {
+          switchTab(document.querySelector('[data-view="maps"]'));
+        }
+      } else {
+        teacherBtn.classList.add('active');
+        studentBtn.classList.remove('active', 'student-active');
+        banner.classList.remove('active');
+        classesTab.classList.remove('hidden');
+        builderTab.classList.remove('hidden');
+        builderTools.style.display = 'flex';
+        document.getElementById('mapsViewTitle').textContent = 'Your Learning Maps';
+        var createMapBtnTeacher = document.getElementById('createMapBtn');
+        if (createMapBtnTeacher) createMapBtnTeacher.style.display = '';
+
+        // Story 2.1: Show Courses tab for teachers/admins
+        if (userData && userData.canEdit) {
+          coursesTab.classList.remove('hidden');
+        }
+
+        // Story 2.3: Show Standards tab for teachers/admins
+        if (userData && userData.canEdit) {
+          standardsTab.classList.remove('hidden');
+        }
+
+        // UBD Planner: Show for teachers/admins
+        if (userData && userData.canEdit) {
+          ubdPlannerTab.classList.remove('hidden');
+        }
+
+        // Integrations: Show for teachers/admins
+        if (userData && userData.canEdit) {
+          integrationsTab.classList.remove('hidden');
+        }
+
+        // Teaching Methods: Show for teachers/admins
+        var teachingMethodsTabEl = document.getElementById('teachingMethodsTab');
+        if (teachingMethodsTabEl && userData && userData.canEdit) {
+          teachingMethodsTabEl.classList.remove('hidden');
+        }
+
+        // EAL Strategies: Show for teachers/admins
+        var ealStrategiesTabEl = document.getElementById('ealStrategiesTab');
+        if (ealStrategiesTabEl && userData && userData.canEdit) {
+          ealStrategiesTabEl.classList.remove('hidden');
+        }
+
+        // Student Planner: hide for teachers
+        if (plannerTab) plannerTab.classList.add('hidden');
+        // Study Dashboard: hide for teachers
+        var studyDashTabT = document.getElementById('studyDashTab');
+        if (studyDashTabT) studyDashTabT.classList.add('hidden');
+
+        // Stop student timer polling when switching to teacher mode
+        if (typeof ctdStudentStopPolling === 'function') ctdStudentStopPolling();
+
+        // ATL Toolkit: hide in teacher mode
+        var atlPanelTm = document.getElementById('atlToolkitPanel');
+        if (atlPanelTm) atlPanelTm.style.display = 'none';
+
+        // Progress Dashboard: visible for all roles
+        progressTab.classList.remove('hidden');
+
+        if (userData && userData.isAdmin) {
+          usersTab.classList.remove('hidden');
+          settingsTab.classList.remove('hidden');
+        }
+      }
+
+      showMaps();
+      if (currentMap) renderHexGrid();
+      loadProgressDashboard();  // Re-render progress tab for mode change
+    }
+
+    function exitStudentPreview() {
+      previewStudentEmail = null;
+      previewClassId = null;
+      // Clear cached dashboard/analytics data from preview session
+      progressDashboardData = null;
+      kgaComputedData = null;
+      celData = null;
+      plannerData = null;
+      plannerTasks = [];
+      ssdInitialized = false;
+      ssdSelectedMapId = null;
+      if (typeof cncComputedData !== 'undefined') cncComputedData = null;
+      if (typeof cncInitialized !== 'undefined') cncInitialized = false;
+      if (typeof tsdComputedData !== 'undefined') tsdComputedData = null;
+      if (typeof tsdInitialized !== 'undefined') tsdInitialized = false;
+      if (typeof dfaComputedData !== 'undefined') dfaComputedData = null;
+      if (typeof treStopPolling === 'function') treStopPolling();
+      if (typeof qpStudentStopPolling === 'function') qpStudentStopPolling();
+      // Clear global banner dropdowns
+      var gClassSel = document.getElementById('tpvGlobalClassSelect');
+      if (gClassSel) gClassSel.value = '';
+      var gStudentSel = document.getElementById('tpvGlobalStudentSelect');
+      if (gStudentSel) { gStudentSel.innerHTML = '<option value="">-- Student --</option>'; gStudentSel.disabled = true; }
+      var gName = document.getElementById('tpvGlobalStudentName');
+      if (gName) gName.textContent = '';
+      // Reset WIDA bracket preview
+      previewWidaBracket = null;
+      var gBracket = document.getElementById('tpvWidaBracket');
+      if (gBracket) { gBracket.value = ''; gBracket.style.display = 'none'; }
+      var gBracketLabel = document.getElementById('tpvWidaBracketLabel');
+      if (gBracketLabel) gBracketLabel.style.display = 'none';
+      setViewMode('teacher');
+    }
+
+    /**
+     * Handle class selection in the global preview banner.
+     * Populates the student dropdown from roster.
+     */
+    function onGlobalPreviewClassChange(classId) {
+      previewClassId = classId;
+      previewStudentEmail = null;
+      // Clear data globals
+      progressDashboardData = null;
+      celData = null;
+      plannerData = null;
+      plannerTasks = [];
+      ssdInitialized = false;
+      ssdSelectedMapId = null;
+
+      var studentSel = document.getElementById('tpvGlobalStudentSelect');
+      var nameSp = document.getElementById('tpvGlobalStudentName');
+      if (nameSp) nameSp.textContent = '';
+
+      if (!classId) {
+        if (studentSel) {
+          studentSel.innerHTML = '<option value="">-- Student --</option>';
+          studentSel.disabled = true;
+        }
+        // Sync Progress tab tpv- selectors if they exist
+        var localClassSel = document.getElementById('tpvClassSelect');
+        if (localClassSel) localClassSel.value = '';
+        return;
+      }
+
+      if (studentSel) {
+        studentSel.innerHTML = '<option value="">Loading...</option>';
+        studentSel.disabled = true;
+      }
+
+      getCachedRoster(classId, function(roster) {
+        if (!studentSel) return;
+        studentSel.innerHTML = '<option value="">-- Student --</option>';
+        var active = [];
+        for (var i = 0; i < roster.length; i++) {
+          if (roster[i].status !== 'removed') active.push(roster[i]);
+        }
+        if (active.length === 0) {
+          studentSel.innerHTML = '<option value="">No students</option>';
+          return;
+        }
+        active.sort(function(a, b) {
+          var na = (a.studentName || a.email || '').toLowerCase();
+          var nb = (b.studentName || b.email || '').toLowerCase();
+          return na < nb ? -1 : (na > nb ? 1 : 0);
+        });
+        for (var j = 0; j < active.length; j++) {
+          var opt = document.createElement('option');
+          opt.value = active[j].studentEmail || active[j].email;
+          opt.textContent = active[j].studentName || active[j].studentEmail || active[j].email;
+          // Restore selection if already set
+          if (previewStudentEmail && opt.value === previewStudentEmail) opt.selected = true;
+          studentSel.appendChild(opt);
+        }
+        studentSel.disabled = false;
+        // Sync Progress tab tpv- selectors if they exist
+        var localClassSel = document.getElementById('tpvClassSelect');
+        if (localClassSel && String(localClassSel.value) !== String(classId)) {
+          localClassSel.value = classId;
+        }
+      }, function(err) {
+        if (studentSel) studentSel.innerHTML = '<option value="">Error loading</option>';
+      });
+    }
+
+    /**
+     * Handle student selection in the global preview banner.
+     * Fetches batch data and re-renders the active tab.
+     */
+    function onGlobalPreviewStudentChange(email) {
+      previewStudentEmail = email;
+      // Clear preview data
+      progressDashboardData = null;
+      celData = null;
+      ssdInitialized = false;
+      ssdSelectedMapId = null;
+
+      var nameSp = document.getElementById('tpvGlobalStudentName');
+      if (nameSp) nameSp.textContent = '';
+
+      if (!email) return;
+
+      if (nameSp) nameSp.textContent = 'Loading...';
+
+      var expectedEmail = email;
+      google.script.run
+        .withSuccessHandler(function(batch) {
+          if (previewStudentEmail !== expectedEmail) return; // stale response
+          // Dispatch batch data
+          progressDashboardData = batch.dashboard;
+          celData = batch.celebrations;
+          plannerData = batch.planner;
+          plannerTasks = (batch.planner && batch.planner.tasks) ? batch.planner.tasks : [];
+          if (typeof uclChecklistData !== 'undefined') uclChecklistData = batch.unitChecklists || [];
+
+          // Update name from student select text
+          var sSel = document.getElementById('tpvGlobalStudentSelect');
+          if (sSel && nameSp) {
+            var selOpt = sSel.options[sSel.selectedIndex];
+            nameSp.textContent = selOpt ? selOpt.textContent : '';
+          }
+
+          // Show WIDA bracket selector for teacher preview
+          var bracketSel = document.getElementById('tpvWidaBracket');
+          if (bracketSel) {
+            bracketSel.style.display = '';
+            bracketSel.value = ''; // Auto (from profile)
+            previewWidaBracket = null;
+          }
+          var bracketLabel = document.getElementById('tpvWidaBracketLabel');
+          if (bracketLabel) bracketLabel.style.display = '';
+
+          // Re-render the active tab
+          var activeView = document.querySelector('.view.active');
+          if (activeView) {
+            var viewId = activeView.id;
+            if (viewId === 'progressView' && typeof loadProgressDashboard === 'function') {
+              loadProgressDashboard();
+            } else if (viewId === 'studyDashView' && typeof ssdRenderDashboard === 'function') {
+              ssdInitialized = false;
+              ssdRenderDashboard();
+            } else if (viewId === 'plannerView' && typeof renderPlannerView === 'function') {
+              renderPlannerView();
+            }
+          }
+
+          // Sync Progress tab tpv- selectors if they exist
+          var localStudentSel = document.getElementById('tpvStudentSelect');
+          if (localStudentSel && String(localStudentSel.value) !== String(email)) {
+            localStudentSel.value = email;
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (previewStudentEmail !== expectedEmail) return;
+          if (nameSp) nameSp.textContent = '';
+          showToast('Error loading student data: ' + escapeHtml(err.message), 'error');
+        })
+        .getStudentBatchDataForPreview(email);
+    }
+
+    /**
+     * Handle WIDA bracket override in teacher preview mode.
+     * Allows teachers to see how the hex panel adapts for each bracket without needing a real profile.
+     */
+    function onPreviewWidaBracketChange(value) {
+      previewWidaBracket = value || null;
+      // If a hex panel is open, re-render it to reflect the new bracket
+      var contentModal = document.getElementById('contentModal');
+      if (contentModal && contentModal.classList.contains('active') && selectedHexId) {
+        closeContentModal();
+        setTimeout(function() {
+          if (typeof handleHexClick === 'function') handleHexClick(selectedHexId);
+        }, 100);
+      }
+    }
+
+    // ================================================
+    // DATA LOADING
+    // ================================================
+
+    function loadAllData() {
+      // Single batch RPC replaces ~8 individual calls (user, formOptions, maps, classes, config, courses, standards)
+      google.script.run
+        .withSuccessHandler(function(data) {
+          // --- Dispatch user data ---
+          var user = data.user;
+          userData = user;
+          // User data loaded — dispatch to UI
+          document.getElementById('userEmail').textContent = user.email;
+
+          var badge = document.getElementById('userRoleBadge');
+          badge.textContent = user.role;
+          badge.className = 'user-role-badge ' + user.normalizedRole;
+
+          if (user.canEdit) {
+            document.getElementById('viewModeSwitcher').style.display = 'flex';
+          }
+
+          // Hide tabs based on role
+          if (!user.isAdmin) {
+            document.getElementById('usersTab').classList.add('hidden');
+            document.getElementById('settingsTab').classList.add('hidden');
+          }
+          if (user.isAdmin) {
+            document.getElementById('settingsTab').classList.remove('hidden');
+          }
+          if (!user.canEdit) {
+            document.getElementById('coursesTab').classList.add('hidden');
+            document.getElementById('standardsTab').classList.add('hidden');
+            document.getElementById('ubdPlannerTab').classList.add('hidden');
+            document.getElementById('integrationsTab').classList.add('hidden');
+            document.getElementById('teachingMethodsTab').classList.add('hidden');
+            document.getElementById('ealStrategiesTab').classList.add('hidden');
+            var createMapBtnInit = document.getElementById('createMapBtn');
+            if (createMapBtnInit) createMapBtnInit.style.display = 'none';
+          }
+          if (user.canEdit) {
+            document.getElementById('integrationsTab').classList.remove('hidden');
+            document.getElementById('teachingMethodsTab').classList.remove('hidden');
+            document.getElementById('ealStrategiesTab').classList.remove('hidden');
+          }
+          var plnTab = document.getElementById('plannerTab');
+          if (plnTab) {
+            if (!user.canEdit) { plnTab.classList.remove('hidden'); }
+            else { plnTab.classList.add('hidden'); }
+          }
+          // Collab tab: visible to all roles
+          var collabTabEl = document.getElementById('collabTab');
+          if (collabTabEl) collabTabEl.classList.remove('hidden');
+          if (!user.isAdmin) {
+            var seedBtn = document.getElementById('seedStandardsBtn');
+            if (seedBtn) seedBtn.style.display = 'none';
+          }
+
+          // --- Dispatch form options ---
+          formOptions = data.formOptions || {
+            subjects: ['Science', 'Math', 'English', 'Other'],
+            years: [new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)],
+            roles: ['Administrator', 'Teacher', 'Student']
+          };
+          populateFormDropdowns();
+          populateCourseDropdowns();
+
+          // --- Dispatch maps ---
+          mapsData = data.maps || [];
+          showMaps();
+
+          // --- Dispatch classes ---
+          classesData = data.classes || [];
+          showClasses();
+          if (typeof populateProgressClassDropdown === 'function') populateProgressClassDropdown();
+
+          // --- Dispatch config ---
+          if (data.config) appConfig = data.config;
+
+          // --- Dispatch teacher/admin-only data ---
+          if (data.courses) {
+            coursesData = data.courses;
+            showCourses();
+            for (var i = 0; i < coursesData.length; i++) {
+              loadUnitCount(coursesData[i].courseId);
+            }
+          }
+          if (data.standards) {
+            standardsData = data.standards;
+            showStandards();
+            populateCoverageMapDropdown();
+          }
+
+          // --- Secondary RPCs (role-specific, not bundled) ---
+          // These fire AFTER the main bundle succeeds to stagger load
+          // Note: loadAllStandardsForPicker, loadUbdPlannerData, loadIntegrationSettings
+          // are now lazy-loaded on first tab switch (see switchTab)
+          if (user.canEdit) {
+            loadProgressDashboard();
+          }
+          if (user.isAdmin) {
+            loadUsers();
+            loadAdminSettings();
+          }
+          initNotifications();
+
+          // AISC Core data — teachers load immediately, students defer to Planner tab
+          if (user.canEdit) {
+            google.script.run
+              .withSuccessHandler(function(core) { ascCoreData = core; })
+              .withFailureHandler(function() { ascCoreData = null; })
+              .getAiscCore();
+          }
+
+          // Student-specific: switch to student view mode
+          if (!user.canEdit) {
+            setViewMode('student');
+          }
+
+          // Student-specific: single batch RPC replaces 3 expensive calls
+          // (dashboard + planner + celebrations in one backend call)
+          if (!user.canEdit) {
+            google.script.run
+              .withSuccessHandler(function(batch) {
+                // Dispatch dashboard data
+                progressDashboardData = batch.dashboard;
+                if (typeof renderProgressStudentView === 'function') {
+                  renderProgressStudentView(batch.dashboard);
+                }
+                // Dispatch planner data
+                plannerData = batch.planner;
+                plannerTasks = batch.planner.tasks || [];
+                plannerDataLoaded = true;
+                uclChecklistData = batch.unitChecklists || [];
+                if (typeof renderPlannerView === 'function') renderPlannerView();
+                // Dispatch celebration data
+                celData = batch.celebrations;
+                if (typeof updateCelDisplays === 'function') updateCelDisplays();
+                // Dispatch portfolio data
+                if (batch.portfolio) {
+                  pfPortfolioData = batch.portfolio;
+                  pfInitialized = true;
+                }
+                // Re-render Study Dashboard if it's the active view (data may have arrived after retry timeout)
+                var activeViewEl = document.querySelector('.view.active');
+                if (activeViewEl && activeViewEl.id === 'studyDashView' && typeof ssdRenderDashboard === 'function') {
+                  ssdInitialized = false;
+                  ssdRenderDashboard();
+                }
+              })
+              .withFailureHandler(function(err) {
+                console.error('Student batch load error:', err);
+              })
+              .getStudentBatchData();
+
+            // Keep on load: student profile (needed for hex modal supports)
+            google.script.run
+              .withSuccessHandler(function(profile) {
+                sstProfileData = profile;
+                // Set student dictionary language from profile
+                if (profile && profile.homeLanguages && profile.homeLanguages.length > 0) {
+                  var supportedDictLangs = ['ja', 'ko', 'fr', 'ta', 'zh', 'es', 'ar', 'hi', 'vi', 'tl', 'pt', 'ru', 'de', 'it'];
+                  for (var hl = 0; hl < profile.homeLanguages.length; hl++) {
+                    if (supportedDictLangs.indexOf(profile.homeLanguages[hl]) !== -1) {
+                      if (typeof dctStudentLang !== 'undefined') dctStudentLang = profile.homeLanguages[hl];
+                      break;
+                    }
+                  }
+                }
+              })
+              .withFailureHandler(function() { sstProfileData = null; })
+              .getMyStudentProfile();
+          }
+
+          // Start student timer polling (if student mode)
+          if (!user.canEdit && typeof ctdStudentStartPolling === 'function') {
+            ctdStudentStartPolling();
+          }
+          // Start student quick poll polling (if student mode)
+          if (!user.canEdit && typeof qpStudentStartPolling === 'function') {
+            qpStudentStartPolling();
+          }
+
+          // ATL panel: hide for teachers (only visible in student mode)
+          var atlPanel = document.getElementById('atlToolkitPanel');
+          if (atlPanel) atlPanel.style.display = user.canEdit ? 'none' : 'block';
+
+          // Onboarding + guided tour: welcome screen for first-time students, tour for returning
+          if (data.tourStatus) {
+            setTimeout(function() {
+              if (typeof onbShowWelcome === 'function') {
+                onbShowWelcome(data.tourStatus);
+              } else if (data.tourStatus.shouldShowTour && typeof turStartTour === 'function') {
+                turStartTour(data.tourStatus);
+              }
+            }, 2000);
+          }
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('userEmail').textContent = 'Error loading data';
+          showToast(friendlyError(err), 'error');
+          console.error('Initial data load error:', err);
+        })
+        .getInitialData();
+    }
+
+    // ================================================
+    // TAB NAVIGATION
+    // ================================================
+
+    // Lazy-load flags: secondary data loaded on first tab visit
+    var _lazyStandardsPickerLoaded = false;
+    var _lazyUbdLoaded = false;
+    var _lazyIntegrationsLoaded = false;
+    var _lazyAiscCoreLoaded = false;
+    var _lazyStlLoaded = false;
+    var _lazyAtlLoaded = false;
+    var atlServerTips = [];
+    var atlServerTipsLoaded = false;
+
+    function switchTab(button) {
+      var viewName = button.getAttribute('data-view');
+      document.querySelectorAll('.tab').forEach(function(t) {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+        t.setAttribute('tabindex', '-1');
+      });
+      button.classList.add('active');
+      button.setAttribute('aria-selected', 'true');
+      button.setAttribute('tabindex', '0');
+      document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+      document.getElementById(viewName + 'View').classList.add('active');
+      closeUnitsPanel();  // Story 2.1b: Close units panel when switching tabs
+      // Accessibility: announce tab switch to screen readers (Session 3)
+      a11yAnnounce('Switched to ' + button.textContent.trim() + ' tab');
+
+      // Lazy-load secondary data on first tab visit
+      // Note: standards picker now loads in openMapInBuilder() with course context scoping
+      if (viewName === 'ubdPlanner' && !_lazyUbdLoaded && userData && userData.canEdit) {
+        _lazyUbdLoaded = true;
+        if (typeof loadUbdPlannerData === 'function') loadUbdPlannerData();
+      }
+      if (viewName === 'integrations' && !_lazyIntegrationsLoaded && userData && userData.canEdit) {
+        _lazyIntegrationsLoaded = true;
+        if (typeof loadIntegrationSettings === 'function') loadIntegrationSettings();
+      }
+      if (viewName === 'teachingMethods' && !tmgLoaded && userData && userData.canEdit) {
+        if (typeof loadTeachingMethodsTab === 'function') loadTeachingMethodsTab();
+      }
+      if (viewName === 'ealStrategies' && !esgLoaded && userData && userData.canEdit) {
+        if (typeof loadEALStrategiesTab === 'function') loadEALStrategiesTab();
+      }
+      if (viewName === 'collab' && !colabBoardsLoaded) {
+        if (typeof colabLoadBoards === 'function') colabLoadBoards();
+      }
+      // Onboarding milestone: planner visited
+      if (viewName === 'planner' && typeof onbMarkMilestone === 'function') {
+        onbMarkMilestone('plannerVisited');
+      }
+      // Student-only lazy-loads on first Planner tab visit
+      if (viewName === 'planner' && userData && !userData.canEdit) {
+        if (!_lazyAiscCoreLoaded) {
+          _lazyAiscCoreLoaded = true;
+          google.script.run
+            .withSuccessHandler(function(core) {
+              ascCoreData = core;
+              if (typeof ascRenderPlannerPanel === 'function') ascRenderPlannerPanel();
+            })
+            .withFailureHandler(function() { ascCoreData = null; })
+            .getAiscCore();
+        }
+        if (!_lazyStlLoaded && typeof stlLoadTasks === 'function') {
+          _lazyStlLoaded = true;
+          stlLoadTasks();
+        }
+        if (!_lazyAtlLoaded && typeof loadATLData === 'function') {
+          _lazyAtlLoaded = true;
+          loadATLData();
+        }
+        if (!_lazyPjrLoaded && typeof pjrLoadJournal === 'function') {
+          _lazyPjrLoaded = true;
+          pjrLoadJournal();
+        }
+      }
+      // Study Dashboard: lazy-load on first visit (student or teacher preview)
+      if (viewName === 'studyDash' && !ssdInitialized && userData && (!userData.canEdit || previewStudentEmail)) {
+        ssdInitialized = true;
+        if (typeof ssdRenderDashboard === 'function') ssdRenderDashboard();
+      }
+    }
+
+    // Accessibility: Arrow key navigation for tab system (Session 3, WAI-ARIA Tabs pattern)
+    // Accessibility: Arrow key navigation for tab system (Session 3, WAI-ARIA Tabs manual activation)
+    // Arrow/Home/End move focus only; Enter/Space activates the focused tab.
+    // Manual activation avoids triggering expensive lazy-load RPCs for tabs the user arrows past.
+    (function initTabKeyboardNav() {
+      var tabsContainer = document.getElementById('tabsContainer');
+      if (!tabsContainer) return;
+      tabsContainer.addEventListener('keydown', function(e) {
+        var key = e.key;
+
+        // Enter/Space: activate the focused tab
+        if (key === 'Enter' || key === ' ') {
+          e.preventDefault();
+          if (document.activeElement && document.activeElement.getAttribute('role') === 'tab') {
+            switchTab(document.activeElement);
+          }
+          return;
+        }
+
+        // Arrow keys / Home / End: move focus only (do not activate)
+        if (key !== 'ArrowRight' && key !== 'ArrowLeft' && key !== 'Home' && key !== 'End') return;
+
+        var allTabs = tabsContainer.querySelectorAll('[role="tab"]');
+        var visibleTabs = [];
+        for (var i = 0; i < allTabs.length; i++) {
+          // Skip hidden tabs (display:none from role-based visibility)
+          if (allTabs[i].offsetParent !== null || allTabs[i].offsetWidth > 0) {
+            visibleTabs.push(allTabs[i]);
+          }
+        }
+        if (visibleTabs.length === 0) return;
+
+        var currentIdx = -1;
+        for (var j = 0; j < visibleTabs.length; j++) {
+          if (visibleTabs[j] === document.activeElement) { currentIdx = j; break; }
+        }
+        if (currentIdx === -1) return;
+
+        var targetIdx = currentIdx;
+        if (key === 'ArrowRight') {
+          targetIdx = (currentIdx + 1) % visibleTabs.length;
+        } else if (key === 'ArrowLeft') {
+          targetIdx = (currentIdx - 1 + visibleTabs.length) % visibleTabs.length;
+        } else if (key === 'Home') {
+          targetIdx = 0;
+        } else if (key === 'End') {
+          targetIdx = visibleTabs.length - 1;
+        }
+
+        // Move focus and update roving tabindex without activating
+        e.preventDefault();
+        var allTabEls = tabsContainer.querySelectorAll('[role="tab"]');
+        for (var k = 0; k < allTabEls.length; k++) {
+          allTabEls[k].setAttribute('tabindex', '-1');
+        }
+        visibleTabs[targetIdx].setAttribute('tabindex', '0');
+        visibleTabs[targetIdx].focus();
+      });
+    })();
+
+    // ================================================
+    // ROSTER CACHE
+    // ================================================
+
+    var _rosterCache = {};
+
+    /**
+     * Get class roster with client-side caching.
+     * Avoids redundant RPCs when switching between views that need roster data.
+     * Cache is per-classId. Call invalidateRosterCache(classId) after edits.
+     */
+    function getCachedRoster(classId, callback, errCallback) {
+      if (_rosterCache[classId]) {
+        callback(_rosterCache[classId]);
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function(roster) {
+          _rosterCache[classId] = roster;
+          callback(roster);
+        })
+        .withFailureHandler(function(err) {
+          if (errCallback) errCallback(err);
+        })
+        .getClassRoster(classId);
+    }
+
+    function invalidateRosterCache(classId) {
+      if (classId) {
+        delete _rosterCache[classId];
+      } else {
+        _rosterCache = {};
+      }
+    }
+
+    // ================================================
+    // UTILITIES
+    // ================================================
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      var div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    /**
+     * Convert raw backend error messages into student-friendly text.
+     * Maps common technical error patterns to plain-language equivalents.
+     */
+    function friendlyError(err) {
+      var msg = (err && err.message) ? err.message : (typeof err === 'string' ? err : '');
+      var lower = msg.toLowerCase();
+      if (lower.indexOf('sheet not found') !== -1 || lower.indexOf('spreadsheet') !== -1) {
+        return 'Something went wrong loading your data. Try refreshing the page.';
+      }
+      if (lower.indexOf('lock timeout') !== -1 || lower.indexOf('lock service') !== -1 || lower.indexOf('too many') !== -1) {
+        return 'The system is busy right now. Please try again in a moment.';
+      }
+      if (lower.indexOf('permission') !== -1 || lower.indexOf('access') !== -1 || lower.indexOf('denied') !== -1) {
+        return 'You don\'t have access to this. Ask your teacher for help.';
+      }
+      if (lower.indexOf('not found') !== -1 || lower.indexOf('no record') !== -1) {
+        return 'We couldn\'t find what you were looking for. Try refreshing the page.';
+      }
+      if (lower.indexOf('network') !== -1 || lower.indexOf('timeout') !== -1 || lower.indexOf('fetch') !== -1) {
+        return 'There was a connection problem. Check your internet and try again.';
+      }
+      if (lower.indexOf('invalid') !== -1 || lower.indexOf('validation') !== -1) {
+        return 'Something wasn\'t quite right. Please check your input and try again.';
+      }
+      // Default fallback
+      return 'Something went wrong. Please try again.';
+    }
+
+    /**
+     * Get the current WIDA bracket for adaptive UI rendering.
+     * Returns 'low' (levels 1-2), 'mid' (levels 3-4), 'high' (levels 5-6), or null (no profile).
+     * Checks previewWidaBracket override first (for teacher preview mode).
+     */
+    function getWidaBracket() {
+      // Teacher preview override takes priority
+      if (previewWidaBracket) { return previewWidaBracket; }
+      // Check student's actual WIDA profile
+      if (typeof sstProfileData !== 'undefined' && sstProfileData && sstProfileData.widaOverallLevel) {
+        var level = parseInt(sstProfileData.widaOverallLevel, 10);
+        if (level >= 1 && level <= 2) { return 'low'; }
+        if (level >= 3 && level <= 4) { return 'mid'; }
+        if (level >= 5 && level <= 6) { return 'high'; }
+      }
+      return null;
+    }
+
+    /**
+     * CSV Export Utility — generates and downloads a CSV file from tabular data.
+     * @param {string[]} headers - Column header names
+     * @param {Array[]} rows - Array of row arrays (cell values)
+     * @param {string} filename - Download filename (should end in .csv)
+     */
+    function csvExportData(headers, rows, filename) {
+      if (!headers || !rows) return;
+      var csvContent = '\uFEFF'; // BOM for Excel UTF-8 compatibility
+      function esc(val) {
+        var s = (val === null || val === undefined) ? '' : String(val);
+        if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
+          return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+      }
+      var headerLine = [];
+      for (var h = 0; h < headers.length; h++) headerLine.push(esc(headers[h]));
+      csvContent += headerLine.join(',') + '\r\n';
+      for (var r = 0; r < rows.length; r++) {
+        var rowLine = [];
+        for (var c = 0; c < rows[r].length; c++) rowLine.push(esc(rows[r][c]));
+        csvContent += rowLine.join(',') + '\r\n';
+      }
+      var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'export.csv';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('CSV downloaded: ' + (filename || 'export.csv'), 'success');
+    }
+
+    function showToast(message, type) {
+      var toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast ' + (type || 'info');
+      toast.classList.add('show');
+      setTimeout(function() { toast.classList.remove('show'); }, 3000);
+      // Accessibility: announce toast to screen readers (Session 3)
+      a11yAnnounce(message);
+    }
+
+</script>

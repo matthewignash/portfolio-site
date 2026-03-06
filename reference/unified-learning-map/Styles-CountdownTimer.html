@@ -1,0 +1,248 @@
+<style>
+    /* ================================================
+       COUNTDOWN TIMER STYLES
+       Prefix: ctd-
+       ================================================ */
+
+    /* Overlay */
+    .ctd-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 265; display: none; align-items: center; justify-content: center; }
+    .ctd-overlay.active { display: flex; }
+
+    /* Modal */
+    .ctd-modal { background: white; border-radius: 12px; width: 420px; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; }
+
+    /* Header */
+    .ctd-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+    .ctd-header-title { font-size: 15px; font-weight: 600; color: #1e293b; }
+    .ctd-header-right { display: flex; align-items: center; gap: 6px; }
+    .ctd-mode-btn { background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 14px; cursor: pointer; transition: all 0.15s; }
+    .ctd-mode-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+    .ctd-close-btn { background: none; border: none; font-size: 22px; color: #94a3b8; cursor: pointer; line-height: 1; padding: 0 2px; }
+    .ctd-close-btn:hover { color: #475569; }
+
+    /* Body */
+    .ctd-body { flex: 1; overflow-y: auto; padding: 20px; text-align: center; }
+
+    /* Preset grid */
+    .ctd-preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+    .ctd-preset-btn { padding: 14px 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; cursor: pointer; transition: all 0.15s; text-align: center; }
+    .ctd-preset-btn:hover { border-color: #0d9488; background: #f0fdfa; }
+    .ctd-preset-btn .ctd-preset-time { font-size: 20px; font-weight: 700; color: #1e293b; display: block; }
+    .ctd-preset-btn .ctd-preset-label { font-size: 12px; color: #64748b; display: block; margin-top: 2px; }
+
+    /* Custom presets section */
+    .ctd-custom-presets { margin-bottom: 16px; }
+    .ctd-custom-preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+    .ctd-custom-preset { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid #ddd6fe; border-radius: 6px; background: #faf5ff; cursor: pointer; transition: all 0.15s; }
+    .ctd-custom-preset:hover { border-color: #7c3aed; background: #f5f3ff; }
+    .ctd-custom-preset-label { font-size: 12px; font-weight: 500; color: #5b21b6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .ctd-custom-preset-del { background: none; border: none; color: #a78bfa; cursor: pointer; font-size: 13px; padding: 0 2px; line-height: 1; flex-shrink: 0; }
+    .ctd-custom-preset-del:hover { color: #ef4444; }
+
+    /* Custom input section */
+    .ctd-custom-section { border-top: 1px solid #f1f5f9; padding-top: 14px; }
+    .ctd-custom-section-title { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .ctd-custom-input-row { display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 10px; }
+    .ctd-custom-input { width: 60px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 16px; font-weight: 600; text-align: center; font-family: inherit; }
+    .ctd-custom-input:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 2px rgba(13,148,136,0.15); }
+    .ctd-custom-input-label { font-size: 12px; color: #64748b; }
+    .ctd-start-btn { padding: 10px 28px; border: none; border-radius: 8px; background: #0d9488; color: white; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+    .ctd-start-btn:hover { background: #0f766e; }
+    .ctd-start-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+    /* Station rotation setup */
+    .ctd-station-section { border-top: 1px solid #f1f5f9; padding-top: 14px; margin-top: 14px; }
+    .ctd-station-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; cursor: pointer; }
+    .ctd-station-toggle input[type="checkbox"] { accent-color: #0d9488; }
+    .ctd-station-toggle label { font-size: 13px; color: #475569; cursor: pointer; }
+    .ctd-station-config { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
+    .ctd-station-config label { font-size: 12px; color: #64748b; }
+    .ctd-station-config select,
+    .ctd-station-config input { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; font-family: inherit; }
+
+    /* Timer running view */
+    .ctd-timer-display { position: relative; margin: 10px auto 16px; }
+    .ctd-progress-ring { transform: rotate(-90deg); }
+    .ctd-progress-ring-bg { fill: none; stroke: #f1f5f9; stroke-width: 6; }
+    .ctd-progress-ring-fg { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.15s linear, stroke 0.3s; }
+    .ctd-time-text { font-size: 42px; font-weight: 700; color: #1e293b; letter-spacing: -1px; }
+
+    /* Color phases */
+    .ctd-phase-green .ctd-progress-ring-fg { stroke: #10b981; }
+    .ctd-phase-green .ctd-time-text { color: #059669; }
+    .ctd-phase-amber .ctd-progress-ring-fg { stroke: #f59e0b; }
+    .ctd-phase-amber .ctd-time-text { color: #d97706; }
+    .ctd-phase-red .ctd-progress-ring-fg { stroke: #ef4444; }
+    .ctd-phase-red .ctd-time-text { color: #dc2626; }
+    @keyframes ctd-flash-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .ctd-phase-flash .ctd-time-text { color: #dc2626; animation: ctd-flash-pulse 0.6s infinite; }
+    .ctd-phase-flash .ctd-progress-ring-fg { stroke: #ef4444; }
+
+    /* Controls */
+    .ctd-controls { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
+    .ctd-ctrl-btn { padding: 10px 22px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .ctd-ctrl-btn.primary { background: #0d9488; color: white; }
+    .ctd-ctrl-btn.primary:hover { background: #0f766e; }
+    .ctd-ctrl-btn.secondary { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .ctd-ctrl-btn.secondary:hover { background: #e2e8f0; }
+
+    /* Station badge */
+    .ctd-station-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; background: #dbeafe; color: #2563eb; border-radius: 12px; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+
+    /* Finished view */
+    .ctd-finished-icon { font-size: 48px; margin-bottom: 8px; }
+    .ctd-finished-text { font-size: 18px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+    .ctd-finished-sub { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+
+    /* Projector mode */
+    .ctd-overlay.ctd-projector { background: #111827; }
+    .ctd-overlay.ctd-projector .ctd-modal { background: #111827; border-radius: 0; width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; box-shadow: none; }
+    .ctd-overlay.ctd-projector .ctd-header { background: transparent; border-bottom: none; }
+    .ctd-overlay.ctd-projector .ctd-header-title { color: #94a3b8; }
+    .ctd-overlay.ctd-projector .ctd-close-btn { color: #64748b; }
+    .ctd-overlay.ctd-projector .ctd-close-btn:hover { color: #e2e8f0; }
+    .ctd-overlay.ctd-projector .ctd-mode-btn { border-color: #374151; color: #94a3b8; }
+    .ctd-overlay.ctd-projector .ctd-mode-btn:hover { background: #1f2937; }
+    .ctd-overlay.ctd-projector .ctd-body { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .ctd-overlay.ctd-projector .ctd-time-text { font-size: 200px; color: #f1f5f9; }
+    .ctd-overlay.ctd-projector .ctd-progress-ring { display: none; }
+    .ctd-overlay.ctd-projector .ctd-station-badge { font-size: 18px; padding: 6px 20px; }
+    .ctd-overlay.ctd-projector .ctd-ctrl-btn { font-size: 18px; padding: 14px 36px; }
+    .ctd-overlay.ctd-projector .ctd-finished-icon { font-size: 80px; }
+    .ctd-overlay.ctd-projector .ctd-finished-text { font-size: 36px; color: #f1f5f9; }
+    .ctd-overlay.ctd-projector .ctd-finished-sub { font-size: 18px; color: #94a3b8; }
+    .ctd-overlay.ctd-projector .ctd-phase-green .ctd-time-text { color: #34d399; }
+    .ctd-overlay.ctd-projector .ctd-phase-amber .ctd-time-text { color: #fbbf24; }
+    .ctd-overlay.ctd-projector .ctd-phase-red .ctd-time-text { color: #f87171; }
+    .ctd-overlay.ctd-projector .ctd-phase-flash .ctd-time-text { color: #f87171; }
+    /* Projector progress bar at bottom */
+    .ctd-projector-bar { display: none; position: absolute; bottom: 0; left: 0; right: 0; height: 8px; background: #1f2937; }
+    .ctd-projector-bar-fill { height: 100%; transition: width 0.15s linear; }
+    .ctd-overlay.ctd-projector .ctd-projector-bar { display: block; }
+
+    /* Mini pill */
+    .ctd-mini-pill { position: fixed; bottom: 20px; right: 20px; z-index: 265; display: none; align-items: center; gap: 6px; padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer; transition: all 0.15s; font-family: inherit; }
+    .ctd-mini-pill:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
+    .ctd-mini-pill.active { display: flex; }
+    .ctd-mini-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .ctd-mini-dot.green { background: #10b981; }
+    .ctd-mini-dot.amber { background: #f59e0b; }
+    .ctd-mini-dot.red { background: #ef4444; }
+    .ctd-mini-dot.flash { background: #ef4444; animation: ctd-flash-pulse 0.6s infinite; }
+    .ctd-mini-time { font-size: 14px; font-weight: 700; color: #1e293b; font-variant-numeric: tabular-nums; }
+
+    /* Save preset button */
+    .ctd-save-preset-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; font-size: 12px; color: #7c3aed; background: #faf5ff; border: 1px dashed #c4b5fd; border-radius: 4px; cursor: pointer; transition: all 0.15s; margin-top: 6px; }
+    .ctd-save-preset-btn:hover { background: #f5f3ff; border-color: #7c3aed; }
+
+    /* Station transition overlay */
+    .ctd-station-transition { font-size: 16px; font-weight: 600; color: #2563eb; margin-bottom: 8px; }
+
+    /* ================================================
+       PHASE 2: Labels, Messages, Pomodoro, Student Bar
+       ================================================ */
+
+    /* Timer label in running/finished view */
+    .ctd-label-display { font-size: 14px; color: #64748b; font-weight: 500; margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px; margin-left: auto; margin-right: auto; }
+    .ctd-overlay.ctd-projector .ctd-label-display { font-size: 28px; color: #94a3b8; max-width: 80vw; }
+
+    /* Label input in preset view */
+    .ctd-label-section { margin-bottom: 14px; }
+    .ctd-label-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-family: inherit; box-sizing: border-box; }
+    .ctd-label-input:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 2px rgba(13,148,136,0.15); }
+    .ctd-label-input::placeholder { color: #94a3b8; }
+
+    /* Mini pill label */
+    .ctd-mini-label { font-size: 12px; color: #64748b; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Projector mode label */
+    .pjm-timer-label { font-size: 28px; color: #94a3b8; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80vw; }
+
+    /* Pomodoro section in preset view */
+    .ctd-pomodoro-section { border-top: 1px solid #f1f5f9; padding-top: 14px; margin-top: 14px; }
+    .ctd-pomodoro-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; cursor: pointer; }
+    .ctd-pomodoro-toggle input[type="checkbox"] { accent-color: #7c3aed; }
+    .ctd-pomodoro-toggle label { font-size: 13px; color: #475569; cursor: pointer; }
+    .ctd-pomodoro-config { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
+    .ctd-pomodoro-config label { font-size: 12px; color: #64748b; display: block; margin-bottom: 2px; }
+    .ctd-pomodoro-config input { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; font-family: inherit; box-sizing: border-box; text-align: center; }
+    .ctd-pomodoro-config input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.15); }
+
+    /* Pomodoro badge in running view */
+    .ctd-pomodoro-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+    .ctd-pomodoro-badge.work { background: #ccfbf1; color: #0d9488; }
+    .ctd-pomodoro-badge.break { background: #dcfce7; color: #16a34a; }
+    .ctd-pomodoro-badge.longBreak { background: #dbeafe; color: #2563eb; }
+    .ctd-overlay.ctd-projector .ctd-pomodoro-badge { font-size: 18px; padding: 6px 20px; }
+
+    /* Pomodoro break phase overrides */
+    .ctd-phase-break .ctd-progress-ring-fg { stroke: #22c55e; }
+    .ctd-phase-break .ctd-time-text { color: #16a34a; }
+    .ctd-overlay.ctd-projector .ctd-phase-break .ctd-time-text { color: #4ade80; }
+
+    /* Countdown messages section in preset view */
+    .ctd-messages-section { border-top: 1px solid #f1f5f9; padding-top: 14px; margin-top: 14px; }
+    .ctd-messages-section .ctd-custom-section-title { margin-bottom: 8px; }
+    .ctd-message-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .ctd-message-pct { font-size: 12px; font-weight: 600; color: #64748b; min-width: 36px; text-align: right; flex-shrink: 0; }
+    .ctd-message-input { flex: 1; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; font-family: inherit; }
+    .ctd-message-input:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 2px rgba(13,148,136,0.15); }
+
+    /* Countdown message toast */
+    .ctd-message-toast { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15,23,42,0.88); color: white; padding: 12px 24px; border-radius: 10px; font-size: 16px; font-weight: 600; z-index: 10; pointer-events: none; animation: ctd-msg-fade 3s ease forwards; white-space: nowrap; }
+    .ctd-overlay.ctd-projector .ctd-message-toast { font-size: 36px; padding: 20px 48px; }
+    @keyframes ctd-msg-fade {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+      10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    /* Student message toast (floats above student bar) */
+    .ctd-student-message { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(15,23,42,0.88); color: white; padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; z-index: 101; pointer-events: none; animation: ctd-msg-fade 3s ease forwards; white-space: nowrap; }
+
+    /* ================================================
+       STUDENT TIMER BAR
+       ================================================ */
+    .ctd-student-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; background: white; border-top: 2px solid #e2e8f0; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 8px 16px; font-family: inherit; box-shadow: 0 -2px 8px rgba(0,0,0,0.08); }
+    .ctd-student-bar.paused { opacity: 0.7; }
+    .ctd-student-label { font-size: 13px; color: #475569; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ctd-student-time { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; color: #1e293b; }
+    .ctd-student-progress-wrap { width: 100%; max-width: 300px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
+    .ctd-student-progress { height: 100%; border-radius: 3px; transition: width 0.15s linear, background-color 0.3s; }
+    .ctd-student-station { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 10px; white-space: nowrap; }
+    .ctd-student-station.station { background: #dbeafe; color: #2563eb; }
+    .ctd-student-station.pomodoro-work { background: #ccfbf1; color: #0d9488; }
+    .ctd-student-station.pomodoro-break { background: #dcfce7; color: #16a34a; }
+    .ctd-student-station.pomodoro-longBreak { background: #dbeafe; color: #2563eb; }
+
+    /* Student bar color phases (phase class is on parent bar element) */
+    .ctd-student-bar.ctd-student-phase-green .ctd-student-time { color: #059669; }
+    .ctd-student-bar.ctd-student-phase-green .ctd-student-progress { background: #10b981; }
+    .ctd-student-bar.ctd-student-phase-amber .ctd-student-time { color: #d97706; }
+    .ctd-student-bar.ctd-student-phase-amber .ctd-student-progress { background: #f59e0b; }
+    .ctd-student-bar.ctd-student-phase-red .ctd-student-time { color: #dc2626; }
+    .ctd-student-bar.ctd-student-phase-red .ctd-student-progress { background: #ef4444; }
+    .ctd-student-bar.ctd-student-phase-flash .ctd-student-time { color: #dc2626; animation: ctd-flash-pulse 0.6s infinite; }
+    .ctd-student-bar.ctd-student-phase-flash .ctd-student-progress { background: #ef4444; }
+    .ctd-student-bar.ctd-student-phase-break .ctd-student-time { color: #16a34a; }
+    .ctd-student-bar.ctd-student-phase-break .ctd-student-progress { background: #22c55e; }
+    .ctd-student-bar.paused .ctd-student-time::after { content: ' (paused)'; font-size: 12px; font-weight: 400; color: #94a3b8; }
+
+    /* Focus-visible parity (WCAG 2.4.7) */
+    .ctd-mode-btn:focus-visible,
+    .ctd-close-btn:focus-visible,
+    .ctd-preset-btn:focus-visible,
+    .ctd-custom-preset:focus-visible,
+    .ctd-custom-preset-del:focus-visible,
+    .ctd-start-btn:focus-visible,
+    .ctd-ctrl-btn:focus-visible,
+    .ctd-mini-pill:focus-visible,
+    .ctd-save-preset-btn:focus-visible {
+      outline: 3px solid #0d9488;
+      outline-offset: 2px;
+    }
+</style>

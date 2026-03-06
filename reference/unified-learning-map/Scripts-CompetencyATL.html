@@ -1,0 +1,482 @@
+<script>
+    // ================================================
+    // COMPETENCY & ATL DASHBOARD (ES5)
+    // Teacher analytics for AISC competencies + ATL
+    // ================================================
+
+    // Known ATL category keys (frontend iterates these for sparse data handling)
+    var CAT_ATL_KEYS = ['thinking', 'communication', 'social', 'selfManagement', 'research'];
+
+    var CAT_ATL_LABELS = {
+      thinking: 'Thinking',
+      communication: 'Communication',
+      social: 'Social',
+      selfManagement: 'Self-Management',
+      research: 'Research'
+    };
+
+
+    // ================================================
+    // ENTRY POINT
+    // ================================================
+
+    function catLoadDashboard() {
+      var container = document.getElementById('compAtlContent');
+      if (!container) return;
+
+      var currentClassId = (typeof progressSelectedClassId !== 'undefined') ? progressSelectedClassId : null;
+      var currentMapId = (typeof progressSelectedMapId !== 'undefined') ? progressSelectedMapId : null;
+
+      if (!currentClassId) {
+        container.innerHTML = '<div class="cat-empty">' +
+          '<div class="cat-empty-icon">&#127891;</div>' +
+          '<div class="cat-empty-title">Select a Class</div>' +
+          '<div class="cat-empty-text">Choose a class in Class Progress first, then switch to Competency &amp; ATL.</div>' +
+          '</div>';
+        return;
+      }
+
+      // Use cache if both data sources are still valid
+      var compCached = catCompData && !catCompLoading &&
+        String(catCompData._classId) === String(currentClassId) &&
+        String(catCompData._mapId) === String(currentMapId);
+      var atlCached = catAtlData && !catAtlLoading &&
+        String(catAtlData._classId) === String(currentClassId);
+
+      if (catInitialized && compCached && atlCached) {
+        catRenderDashboard();
+        return;
+      }
+
+      container.innerHTML = '<div class="cat-loading"><span class="loading-spinner"></span> Loading competency &amp; ATL data...</div>';
+
+      // Always load ATL (class-only dependency)
+      catLoadATLSection(currentClassId);
+
+      // Load competency only if map is selected
+      if (currentMapId) {
+        catLoadCompSection(currentClassId, currentMapId);
+      } else {
+        catCompData = null;
+        catCompLoading = false;
+        catCheckRenderReady();
+      }
+    }
+
+
+    // ================================================
+    // ATL SECTION LOADER (class-only)
+    // ================================================
+
+    function catLoadATLSection(classId) {
+      catAtlLoading = true;
+      var expectedClassId = classId;
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (String(progressSelectedClassId) !== String(expectedClassId)) return;
+          catAtlData = data || {};
+          catAtlData._classId = expectedClassId;
+          catAtlLoading = false;
+          catCheckRenderReady();
+        })
+        .withFailureHandler(function(err) {
+          if (String(progressSelectedClassId) !== String(expectedClassId)) return;
+          catAtlData = { _error: err.message || String(err) };
+          catAtlData._classId = expectedClassId;
+          catAtlLoading = false;
+          catCheckRenderReady();
+        })
+        .getClassATLSummary(classId);
+    }
+
+
+    // ================================================
+    // COMPETENCY SECTION LOADER (class + map)
+    // ================================================
+
+    function catLoadCompSection(classId, mapId) {
+      catCompLoading = true;
+      var expectedClassId = classId;
+      var expectedMapId = mapId;
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (String(progressSelectedClassId) !== String(expectedClassId)) return;
+          if (String(progressSelectedMapId) !== String(expectedMapId)) return;
+          catCompData = data || {};
+          catCompData._classId = expectedClassId;
+          catCompData._mapId = expectedMapId;
+          catCompLoading = false;
+          catCheckRenderReady();
+        })
+        .withFailureHandler(function(err) {
+          if (String(progressSelectedClassId) !== String(expectedClassId)) return;
+          catCompData = { _error: err.message || String(err) };
+          catCompData._classId = expectedClassId;
+          catCompData._mapId = expectedMapId;
+          catCompLoading = false;
+          catCheckRenderReady();
+        })
+        .getClassCompetencyBreakdown(classId, mapId);
+    }
+
+
+    // ================================================
+    // RENDER-READY CHECK (both RPCs must finish)
+    // ================================================
+
+    function catCheckRenderReady() {
+      if (catCompLoading || catAtlLoading) return;
+      catInitialized = true;
+      catRenderDashboard();
+    }
+
+
+    // ================================================
+    // ORCHESTRATOR
+    // ================================================
+
+    function catRenderDashboard() {
+      var container = document.getElementById('compAtlContent');
+      if (!container) return;
+
+      var currentMapId = (typeof progressSelectedMapId !== 'undefined') ? progressSelectedMapId : null;
+
+      var html = '<div class="cat-container">';
+
+      // SECTION A: AISC Competency Breakdown
+      html += catRenderCompSection(currentMapId);
+
+      // Visual separator
+      html += '<div class="cat-separator"></div>';
+
+      // SECTION B: ATL Class Summary
+      html += catRenderAtlSection();
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+
+    // ================================================
+    // SECTION A: COMPETENCY BREAKDOWN
+    // ================================================
+
+    function catRenderCompSection(currentMapId) {
+      var html = '<div class="cat-section-title">AISC Competency Breakdown</div>';
+
+      // No map selected — show info note
+      if (!currentMapId) {
+        html += '<div class="cat-info-note">' +
+          '<span class="cat-info-note-icon">&#8505;&#65039;</span>' +
+          'Select a map to see competency data. Competency analysis requires both a class and a map.' +
+          '</div>';
+        return html;
+      }
+
+      // Error state
+      if (catCompData && catCompData._error) {
+        html += '<div class="cat-empty">' +
+          '<div class="cat-empty-icon">&#9888;&#65039;</div>' +
+          '<div class="cat-empty-title">Could Not Load Competency Data</div>' +
+          '<div class="cat-empty-text">' + escapeHtml(catCompData._error) + '</div>' +
+          '</div>';
+        return html;
+      }
+
+      // Still loading
+      if (!catCompData || catCompLoading) {
+        html += '<div class="cat-loading"><span class="loading-spinner"></span> Loading competency data...</div>';
+        return html;
+      }
+
+      var competencies = catCompData.competencies || {};
+      var studentCount = catCompData.studentCount || 0;
+
+      // Summary cards
+      html += catRenderCompSummary(competencies, studentCount);
+
+      // Competency bars
+      html += catRenderCompBars(competencies);
+
+      return html;
+    }
+
+    function catRenderCompSummary(competencies, studentCount) {
+      var compList = (typeof ascGetCompetencies === 'function') ? ascGetCompetencies() : [];
+      if (compList.length === 0) return '';
+
+      // Find strongest + weakest
+      var strongest = null;
+      var weakest = null;
+
+      for (var c = 0; c < compList.length; c++) {
+        var data = competencies[compList[c].key];
+        if (!data || data.studentCount === 0) continue;
+
+        if (!strongest || data.avgCompletionPct > strongest.pct) {
+          strongest = { label: compList[c].short, pct: data.avgCompletionPct };
+        }
+        if (!weakest || data.avgCompletionPct < weakest.pct) {
+          weakest = { label: compList[c].short, pct: data.avgCompletionPct };
+        }
+      }
+
+      var cards = [
+        { value: String(studentCount), label: 'Students Assessed', color: '' }
+      ];
+
+      if (strongest) {
+        cards.push({ value: strongest.label, label: 'Strongest', color: 'green', sub: strongest.pct + '% completion' });
+      }
+      if (weakest) {
+        var wColor = weakest.pct < 40 ? 'red' : 'amber';
+        cards.push({ value: weakest.label, label: 'Weakest', color: wColor, sub: weakest.pct + '% completion' });
+      }
+
+      var html = '<div class="cat-cards">';
+      for (var i = 0; i < cards.length; i++) {
+        html += '<div class="cat-card">';
+        html += '<div class="cat-card-value' + (cards[i].color ? ' ' + cards[i].color : '') + '">' + escapeHtml(cards[i].value) + '</div>';
+        html += '<div class="cat-card-label">' + escapeHtml(cards[i].label) + '</div>';
+        if (cards[i].sub) {
+          html += '<div class="cat-card-sub">' + escapeHtml(cards[i].sub) + '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function catRenderCompBars(competencies) {
+      var compList = (typeof ascGetCompetencies === 'function') ? ascGetCompetencies() : [];
+      if (compList.length === 0) return '';
+
+      var html = '';
+      var gapCompetencies = [];
+
+      for (var c = 0; c < compList.length; c++) {
+        var comp = compList[c];
+        var data = competencies[comp.key];
+
+        if (!data || data.studentCount === 0) {
+          gapCompetencies.push(comp.label);
+          continue;
+        }
+
+        var completionPct = data.avgCompletionPct || 0;
+        var scorePct = data.avgScorePct || 0;
+
+        html += '<div class="cat-comp-row">';
+        html += '<span class="cat-comp-dot" style="background:' + comp.color + ';"></span>';
+        html += '<span class="cat-comp-label" title="' + escapeHtml(comp.label) + '">' + escapeHtml(comp.label) + '</span>';
+        html += '<div class="cat-comp-bar-container">';
+        html += '<div class="cat-comp-bar-fill" style="width:' + completionPct + '%; background:' + comp.color + '; opacity:0.6;"></div>';
+        // Score marker overlaid on bar
+        if (scorePct > 0) {
+          html += '<div class="cat-comp-score-marker" style="left:' + Math.min(scorePct, 100) + '%; background:' + comp.color + ';"></div>';
+        }
+        html += '</div>';
+        html += '<span class="cat-comp-value">' + completionPct + '%</span>';
+        html += '<span class="cat-comp-students">' + data.studentCount + ' student' + (data.studentCount !== 1 ? 's' : '') + '</span>';
+        html += '</div>';
+      }
+
+      // Gap warning for competencies with no tagged hexes
+      if (gapCompetencies.length > 0) {
+        html += '<div class="cat-gap-warning">';
+        html += '<strong>No hexes tagged:</strong> ' + escapeHtml(gapCompetencies.join(', '));
+        html += ' \u2014 tag hexes with these competencies in the hex editor to see data.';
+        html += '</div>';
+      }
+
+      return html;
+    }
+
+
+    // ================================================
+    // SECTION B: ATL CLASS SUMMARY
+    // ================================================
+
+    function catRenderAtlSection() {
+      var html = '<div class="cat-section-title">ATL Class Summary</div>';
+
+      // Error state
+      if (catAtlData && catAtlData._error) {
+        html += '<div class="cat-empty">' +
+          '<div class="cat-empty-icon">&#9888;&#65039;</div>' +
+          '<div class="cat-empty-title">Could Not Load ATL Data</div>' +
+          '<div class="cat-empty-text">' + escapeHtml(catAtlData._error) + '</div>' +
+          '</div>';
+        return html;
+      }
+
+      // Still loading
+      if (!catAtlData || catAtlLoading) {
+        html += '<div class="cat-loading"><span class="loading-spinner"></span> Loading ATL data...</div>';
+        return html;
+      }
+
+      var totalStudents = catAtlData.totalStudents || 0;
+      var withRatings = catAtlData.studentsWithRatings || 0;
+      var catAverages = catAtlData.categoryAverages || {};
+      var needSupport = catAtlData.studentsNeedingSupport || [];
+
+      // Summary cards
+      html += catRenderAtlSummary(totalStudents, withRatings, catAverages, needSupport);
+
+      // ATL category bars
+      html += catRenderAtlBars(catAverages);
+
+      // Students needing support
+      html += catRenderSupportList(needSupport);
+
+      return html;
+    }
+
+    function catRenderAtlSummary(totalStudents, withRatings, catAverages, needSupport) {
+      // Participation rate
+      var partPct = totalStudents > 0 ? Math.round((withRatings / totalStudents) * 100) : 0;
+      var partColor = partPct >= 70 ? 'green' : (partPct >= 40 ? 'amber' : 'red');
+
+      // Find strongest category
+      var strongestLabel = '\u2014';
+      var strongestAvg = 0;
+      for (var k = 0; k < CAT_ATL_KEYS.length; k++) {
+        var key = CAT_ATL_KEYS[k];
+        var catData = catAverages[key];
+        if (catData && catData.average > strongestAvg) {
+          strongestAvg = catData.average;
+          strongestLabel = catData.label || CAT_ATL_LABELS[key] || key;
+        }
+      }
+
+      // Support count
+      var supportCount = needSupport.length;
+      var supportColor = supportCount > 0 ? 'red' : 'green';
+
+      var cards = [
+        { value: partPct + '%', label: 'Participation', color: partColor, sub: withRatings + ' of ' + totalStudents + ' students' },
+        { value: strongestAvg > 0 ? strongestLabel : '\u2014', label: 'Strongest', color: strongestAvg > 0 ? 'green' : '', sub: strongestAvg > 0 ? (strongestAvg + ' / 4') : '' },
+        { value: String(supportCount), label: 'Need Support', color: supportColor }
+      ];
+
+      var html = '<div class="cat-cards">';
+      for (var i = 0; i < cards.length; i++) {
+        html += '<div class="cat-card">';
+        html += '<div class="cat-card-value' + (cards[i].color ? ' ' + cards[i].color : '') + '">' + escapeHtml(cards[i].value) + '</div>';
+        html += '<div class="cat-card-label">' + escapeHtml(cards[i].label) + '</div>';
+        if (cards[i].sub) {
+          html += '<div class="cat-card-sub">' + escapeHtml(cards[i].sub) + '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function catRenderAtlBars(catAverages) {
+      var atlIcons = (typeof ATL_CAT_ICONS !== 'undefined') ? ATL_CAT_ICONS : {};
+      var html = '';
+
+      for (var k = 0; k < CAT_ATL_KEYS.length; k++) {
+        var key = CAT_ATL_KEYS[k];
+        var catData = catAverages[key] || { average: 0, respondents: 0 };
+        var label = catData.label || CAT_ATL_LABELS[key] || key;
+        var avg = catData.average || 0;
+        var respondents = catData.respondents || 0;
+        var icon = atlIcons[key] || '\uD83C\uDF1F';
+
+        // Bar color: green >=3.0, amber >=2.0, red <2.0
+        var barColor = avg >= 3.0 ? '#16a34a' : (avg >= 2.0 ? '#d97706' : '#dc2626');
+        var barWidth = Math.round((avg / 4) * 100);
+
+        html += '<div class="cat-atl-row">';
+        html += '<span class="cat-atl-icon">' + icon + '</span>';
+        html += '<span class="cat-atl-label" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>';
+        html += '<div class="cat-atl-bar-container">';
+        html += '<div class="cat-atl-bar-fill" style="width:' + barWidth + '%; background:' + barColor + ';"></div>';
+        html += '</div>';
+        html += '<span class="cat-atl-value">' + avg + ' / 4</span>';
+        html += '<span class="cat-atl-respondents">(' + respondents + ')</span>';
+        html += '</div>';
+      }
+
+      return html;
+    }
+
+
+    // ================================================
+    // STUDENTS NEEDING SUPPORT
+    // ================================================
+
+    function catRenderSupportList(needSupport) {
+      if (!needSupport || needSupport.length === 0) {
+        return '<div class="cat-all-well">' +
+          '&#9989; All students are developing well \u2014 no support alerts.' +
+          '</div>';
+      }
+
+      var expanded = catExpandedStudents._supportOpen;
+      var chevronChar = expanded ? '\u25BC' : '\u25B6';
+      var html = '';
+
+      html += '<div class="cat-support-toggle' + (expanded ? ' expanded' : '') + '" ' +
+        'role="button" tabindex="0" ' +
+        'aria-expanded="' + (expanded ? 'true' : 'false') + '" ' +
+        'aria-controls="catSupportList" ' +
+        'onclick="catToggleStudentDetail()" ' +
+        'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click();}">';
+      html += '<span class="cat-support-chevron">' + chevronChar + '</span>';
+      html += 'Students Needing Support (' + needSupport.length + ')';
+      html += '</div>';
+
+      // Always render list content; hide via CSS when collapsed
+      html += '<div class="cat-support-list" id="catSupportList" style="' + (expanded ? '' : 'display:none;') + '">';
+      var atlIcons = (typeof ATL_CAT_ICONS !== 'undefined') ? ATL_CAT_ICONS : {};
+      for (var s = 0; s < needSupport.length; s++) {
+        var st = needSupport[s];
+        var catIcon = atlIcons[st.weakestCategory] || '';
+
+        html += '<div class="cat-support-row">';
+        html += '<span class="cat-support-name">' + escapeHtml(st.name || st.email) + '</span>';
+        html += '<span class="cat-support-category">' + catIcon + ' ' + escapeHtml(st.weakestCategoryLabel || st.weakestCategory) + '</span>';
+        html += '<span class="cat-support-badge">' + st.averageRating + ' / 4</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      return html;
+    }
+
+
+    // ================================================
+    // INTERACTION
+    // ================================================
+
+    function catToggleStudentDetail() {
+      var listEl = document.getElementById('catSupportList');
+      var toggleEl = document.querySelector('.cat-support-toggle');
+
+      if (catExpandedStudents._supportOpen) {
+        delete catExpandedStudents._supportOpen;
+        if (listEl) listEl.style.display = 'none';
+        if (toggleEl) {
+          toggleEl.classList.remove('expanded');
+          toggleEl.setAttribute('aria-expanded', 'false');
+          var chev = toggleEl.querySelector('.cat-support-chevron');
+          if (chev) chev.textContent = '\u25B6';
+        }
+      } else {
+        catExpandedStudents._supportOpen = true;
+        if (listEl) listEl.style.display = '';
+        if (toggleEl) {
+          toggleEl.classList.add('expanded');
+          toggleEl.setAttribute('aria-expanded', 'true');
+          var chev2 = toggleEl.querySelector('.cat-support-chevron');
+          if (chev2) chev2.textContent = '\u25BC';
+        }
+      }
+    }
+</script>

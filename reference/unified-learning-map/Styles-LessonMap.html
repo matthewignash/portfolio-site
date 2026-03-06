@@ -1,0 +1,424 @@
+<style>
+/* ---- Lesson Map Drill-Down (lsm- prefix) ---- */
+
+/* Hex badge for lesson type */
+.lsm-hex-badge {
+  background: #7c3aed;
+  color: #fff;
+}
+
+/* Teacher hex editor section */
+.lsm-editor-section {
+  padding: 4px 0;
+}
+
+.lsm-editor-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #7c3aed;
+  margin-bottom: 8px;
+}
+
+.lsm-editor-note {
+  font-size: 12px;
+  color: #6b7280;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+/* Linked map card in hex editor */
+.lsm-linked-card {
+  background: #faf5ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.lsm-linked-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5b21b6;
+  margin-bottom: 4px;
+}
+
+.lsm-linked-meta {
+  font-size: 11px;
+  color: #7c3aed;
+  margin-bottom: 8px;
+}
+
+.lsm-linked-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Create/link options */
+.lsm-link-options {
+  padding: 4px 0;
+}
+
+.lsm-link-or {
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.lsm-link-select {
+  width: 100%;
+  font-size: 12px;
+}
+
+/* Back to Unit button */
+.lsm-back-btn {
+  color: #7c3aed !important;
+  border-color: #ddd6fe !important;
+  font-size: 12px;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+.lsm-back-btn:hover {
+  background: #faf5ff !important;
+  border-color: #7c3aed !important;
+}
+
+/* Auto-generate button */
+.lsm-autogen-btn {
+  color: #7c3aed !important;
+  border-color: #ddd6fe !important;
+  font-size: 12px;
+}
+.lsm-autogen-btn:hover {
+  background: #faf5ff !important;
+}
+
+/* Map list: child lesson map indent */
+.lsm-child-map {
+  margin-left: 24px;
+  border-left: 3px solid #ddd6fe;
+  background: #faf5ff;
+}
+.lsm-child-prefix {
+  color: #7c3aed;
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+/* Filter toggle in map list */
+.lsm-filter-toggle {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+.lsm-filter-label {
+  font-size: 12px;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- Student Lesson Overview Modal ---- */
+
+.lsm-overview-status {
+  margin-bottom: 12px;
+}
+
+.lsm-overview-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+
+.lsm-progress-ring {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  /* conic-gradient set via inline style */
+}
+
+.lsm-progress-ring-inner {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lsm-progress-fraction {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.lsm-progress-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Lesson overview sections */
+.lsm-overview-section {
+  margin-bottom: 14px;
+}
+
+.lsm-overview-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.lsm-overview-section-body {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Vocabulary chips */
+.lsm-overview-vocab {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lsm-vocab-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  background: #ede9fe;
+  color: #5b21b6;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.lsm-vocab-more {
+  font-size: 11px;
+  color: #9ca3af;
+  padding: 3px 6px;
+}
+
+/* ---- Activity List in Overview Modal ---- */
+
+.lsm-overview-activities {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.lsm-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.lsm-activity-item:hover {
+  background: #f9fafb;
+}
+
+.lsm-activity-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lsm-dot-gray { background: #d1d5db; }
+.lsm-dot-blue { background: #3b82f6; }
+.lsm-dot-green { background: #10b981; }
+
+.lsm-activity-icon {
+  flex-shrink: 0;
+}
+
+.lsm-activity-label {
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Hex Grid: Lesson Progress Fraction ---- */
+
+.lsm-hex-progress {
+  font-weight: 600;
+  color: #7c3aed !important;
+}
+
+/* ---- Student Analytics: Lesson Breakdown Bars ---- */
+
+.lsm-analytics-lesson {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.lsm-analytics-lesson-label {
+  flex: 0 0 140px;
+  font-size: 12px;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lsm-analytics-lesson-bar {
+  flex: 1;
+  height: 12px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.lsm-analytics-lesson-fill {
+  height: 100%;
+  background: #7c3aed;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.lsm-analytics-lesson-text {
+  flex: 0 0 40px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-align: right;
+}
+
+/* ---- Planner: Lesson Group Headers ---- */
+
+.lsm-planner-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #faf5ff;
+  border: 1px solid #ede9fe;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+.lsm-planner-group-header:hover {
+  background: #f5f3ff;
+}
+
+.lsm-planner-group-toggle {
+  font-size: 11px;
+  color: #7c3aed;
+  transition: transform 0.2s;
+}
+.lsm-planner-group-toggle.collapsed {
+  transform: rotate(-90deg);
+}
+
+.lsm-planner-group-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5b21b6;
+  flex: 1;
+}
+
+.lsm-planner-group-badge {
+  font-size: 11px;
+  color: #7c3aed;
+  background: #ede9fe;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.lsm-planner-group-tasks {
+  margin-left: 16px;
+  border-left: 2px solid #ede9fe;
+  padding-left: 8px;
+  margin-bottom: 8px;
+}
+
+.lsm-planner-group-tasks.collapsed {
+  display: none;
+}
+
+/* ================================================
+   TEACHER LESSON INSIGHTS (lsmt-)
+   ================================================ */
+
+.lsmt-container { padding: 16px 24px; }
+.lsmt-section-title { font-size: 14px; font-weight: 700; color: #1e293b; margin: 16px 0 8px; }
+.lsmt-section-title:first-child { margin-top: 0; }
+
+.lsmt-empty, .lsmt-loading {
+  text-align: center; padding: 40px 20px; color: #64748b; font-size: 14px;
+}
+.lsmt-empty .icon { font-size: 40px; margin-bottom: 8px; }
+.lsmt-loading .loading-spinner { margin-right: 8px; }
+
+.lsmt-overview-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px; margin-bottom: 16px;
+}
+.lsmt-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 14px 10px; text-align: center;
+}
+.lsmt-card-value { font-size: 22px; font-weight: 800; color: #1e293b; }
+.lsmt-card-label { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+.lsmt-lesson-row {
+  border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 8px;
+}
+.lsmt-lesson-header {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  background: #faf5ff; cursor: pointer; transition: background 0.15s;
+}
+.lsmt-lesson-header:hover { background: #f3e8ff; }
+.lsmt-lesson-header:focus-visible { outline: 3px solid #14b8a6; outline-offset: -3px; }
+
+.lsmt-lesson-icon { font-size: 16px; flex: 0 0 auto; }
+.lsmt-lesson-label { font-size: 13px; font-weight: 600; color: #1e293b; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lsmt-lesson-activities { font-size: 12px; color: #7c3aed; background: #ede9fe; padding: 2px 8px; border-radius: 10px; flex: 0 0 auto; }
+.lsmt-lesson-rate { font-size: 13px; font-weight: 700; flex: 0 0 auto; }
+.lsmt-lesson-score { font-size: 12px; color: #64748b; flex: 0 0 auto; }
+.lsmt-chevron { font-size: 12px; color: #94a3b8; flex: 0 0 auto; }
+
+.lsmt-student-list { padding: 0 14px 10px; }
+.lsmt-student-list.collapsed { display: none; }
+
+.lsmt-student-row {
+  display: flex; align-items: center; gap: 8px; padding: 5px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.lsmt-student-row:last-child { border-bottom: none; }
+.lsmt-student-name { font-size: 13px; color: #334155; flex: 0 0 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lsmt-student-bar { flex: 1 1 auto; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.lsmt-student-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.lsmt-student-fraction { font-size: 12px; color: #64748b; flex: 0 0 40px; text-align: right; font-weight: 600; }
+
+/* ================================================
+   CONVERT TO LESSONS TOOL
+   ================================================ */
+
+.lsm-convert-btn { color: #7c3aed !important; border-color: #ddd6fe !important; }
+.lsm-convert-btn:hover { background: #faf5ff !important; }
+
+.lsm-convert-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; background: #faf5ff;
+  border: 1px solid #ddd6fe; border-radius: 8px; margin-left: auto;
+}
+.lsm-convert-info { font-size: 12px; color: #5b21b6; font-weight: 600; }
+
+.lsm-convert-selected { outline: 3px solid #7c3aed !important; outline-offset: 2px; }
+</style>

@@ -1,0 +1,1014 @@
+<script>
+// ============================================================================
+// Scripts-LabScoring.html
+// Teacher scoring overlay for lab report submissions.
+// Shows rubric criteria with level descriptors/numeric inputs,
+// per-criterion feedback, and multi-scorer comparison.
+// ES5 ONLY — no const, let, =>, template literals, .includes()
+//
+// Dependencies:
+//   labAssignmentsCache (Scripts-Core.html)
+//   labScoringData, labScoringScores, labScoringSelectedSub,
+//   labScoringReadOnly, labScoringReconciled (Scripts-Core.html)
+//   escapeHtml, showToast (Scripts-Core.html)
+//   labRichSanitize (Scripts-LabRichEditor.html)
+// ============================================================================
+
+
+/**
+ * Open the scoring overlay for an assignment.
+ * Loads rubric + submissions, renders left panel, auto-selects first.
+ *
+ * @param {string} assignmentId
+ */
+function labScoringOpen(assignmentId) {
+  if (!assignmentId) return;
+
+  var overlay = document.getElementById('labScoringOverlay');
+  if (!overlay) return;
+
+  // Initialize state
+  labScoringData = {
+    assignmentId: assignmentId,
+    assignment: null,
+    rubric: null,
+    submissions: [],
+    selectedIdx: -1,
+    sectionData: [],
+    _expectedAssignmentId: String(assignmentId)
+  };
+  labScoringScores = {};
+  labScoringSelectedSub = null;
+  labScoringReadOnly = false;
+  labScoringReconciled = {};
+
+  overlay.style.display = 'flex';
+
+  // Show loading
+  var leftEl = document.getElementById('labScoringLeft');
+  var rightEl = document.getElementById('labScoringRight');
+  if (leftEl) leftEl.innerHTML = '<div style="padding:20px;color:#94a3b8;text-align:center;">Loading...</div>';
+  if (rightEl) rightEl.innerHTML = '';
+
+  // Find assignment in cache or from labAssignmentsCache
+  var cachedAssignment = null;
+  var keys = Object.keys(labAssignmentsCache || {});
+  for (var k = 0; k < keys.length; k++) {
+    var cached = labAssignmentsCache[keys[k]];
+    if (cached && Array.isArray(cached)) {
+      for (var c = 0; c < cached.length; c++) {
+        if (String(cached[c].assignmentId) === String(assignmentId)) {
+          cachedAssignment = cached[c];
+          break;
+        }
+      }
+    }
+    if (cachedAssignment) break;
+  }
+
+  if (cachedAssignment) {
+    labScoringData.assignment = cachedAssignment;
+  }
+
+  var expectedId = labScoringData._expectedAssignmentId;
+  var rubricLoaded = false;
+  var subsLoaded = false;
+
+  function tryRender() {
+    if (!rubricLoaded || !subsLoaded) return;
+    if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+    labScoringRenderSubmissionList();
+    // Auto-select first submitted student
+    var subs = labScoringData.submissions;
+    for (var i = 0; i < subs.length; i++) {
+      if (String(subs[i].status) === 'submitted') {
+        labScoringSelectSubmission(i);
+        return;
+      }
+    }
+    // Fallback: select first scored or any
+    if (subs.length > 0) labScoringSelectSubmission(0);
+  }
+
+  // Load rubric
+  var rubricId = cachedAssignment ? cachedAssignment.rubricId : '';
+  if (rubricId) {
+    google.script.run
+      .withSuccessHandler(function(rubric) {
+        if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+        labScoringData.rubric = rubric;
+        rubricLoaded = true;
+        tryRender();
+      })
+      .withFailureHandler(function(err) {
+        if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+        rubricLoaded = true;
+        tryRender();
+      })
+      .getLabRubric(rubricId);
+  } else {
+    rubricLoaded = true;
+  }
+
+  // Load submissions
+  google.script.run
+    .withSuccessHandler(function(submissions) {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      labScoringData.submissions = submissions || [];
+      subsLoaded = true;
+      tryRender();
+    })
+    .withFailureHandler(function(err) {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      labScoringData.submissions = [];
+      subsLoaded = true;
+      tryRender();
+    })
+    .getLabSubmissionsForAssignment(assignmentId);
+}
+
+
+/**
+ * Close the scoring overlay and reset state.
+ */
+function labScoringClose() {
+  var overlay = document.getElementById('labScoringOverlay');
+  if (overlay) overlay.style.display = 'none';
+
+  // Refresh hex info panel if open
+  if (labScoringData && labScoringData.assignment) {
+    var hexId = labScoringData.assignment.hexId;
+    if (hexId && typeof labRenderAssignmentInfo === 'function') {
+      labRenderAssignmentInfo(hexId);
+    }
+  }
+
+  labScoringData = null;
+  labScoringScores = {};
+  labScoringSelectedSub = null;
+  labScoringReadOnly = false;
+  labScoringReconciled = {};
+}
+
+
+/**
+ * Render the left panel: submission list with status badges.
+ */
+function labScoringRenderSubmissionList() {
+  var el = document.getElementById('labScoringLeft');
+  if (!el || !labScoringData) return;
+
+  var subs = labScoringData.submissions;
+  if (subs.length === 0) {
+    el.innerHTML = '<div style="padding:20px;color:#94a3b8;text-align:center;">No submissions found.</div>';
+    return;
+  }
+
+  var html = '<div class="lab-scoring-list-header">Students (' + subs.length + ')</div>';
+
+  for (var i = 0; i < subs.length; i++) {
+    var sub = subs[i];
+    var status = String(sub.status || 'draft');
+    var isSelected = (i === labScoringData.selectedIdx);
+
+    html += '<div class="lab-scoring-student-item' +
+      (isSelected ? ' lab-scoring-student-selected' : '') +
+      '" onclick="labScoringSelectSubmission(' + i + ')">';
+    html += '<div class="lab-scoring-student-email">' + escapeHtml(sub.studentEmail || '') + '</div>';
+    html += '<div class="lab-scoring-student-meta">';
+    html += '<span class="lab-submission-badge lab-submission-badge-' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  // Export All button
+  html += '<div style="padding:10px;border-top:1px solid #e2e8f0;">';
+  html += '<button class="btn btn-outline btn-small" onclick="labScoringExportAll()" style="width:100%;font-size:11px;">&#128196; Export All Docs</button>';
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+
+/**
+ * Select a submission and load its data for scoring.
+ *
+ * @param {number} idx - Index in submissions array
+ */
+function labScoringSelectSubmission(idx) {
+  if (!labScoringData || idx < 0 || idx >= labScoringData.submissions.length) return;
+
+  labScoringData.selectedIdx = idx;
+  labScoringScores = {};
+  labScoringReconciled = {};
+
+  var sub = labScoringData.submissions[idx];
+  labScoringSelectedSub = sub;
+  labScoringReadOnly = (String(sub.status) === 'scored');
+
+  // Update left panel selection
+  labScoringRenderSubmissionList();
+
+  // Show loading in right panel
+  var rightEl = document.getElementById('labScoringRight');
+  if (rightEl) rightEl.innerHTML = '<div style="padding:20px;color:#94a3b8;text-align:center;">Loading submission...</div>';
+
+  var expectedId = labScoringData._expectedAssignmentId;
+  var subId = sub.submissionId;
+  var sectionLoaded = false;
+  var scoresLoaded = false;
+
+  function tryRenderForm() {
+    if (!sectionLoaded || !scoresLoaded) return;
+    if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+    labScoringRenderForm();
+  }
+
+  // Load section data
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      labScoringData.sectionData = (result && result.sectionData) ? result.sectionData : [];
+      if (result && result.template) labScoringData.template = result.template;
+      sectionLoaded = true;
+      tryRenderForm();
+    })
+    .withFailureHandler(function() {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      labScoringData.sectionData = [];
+      sectionLoaded = true;
+      tryRenderForm();
+    })
+    .getStudentSubmission(labScoringData.assignmentId);
+
+  // Load existing scores
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      // Pre-populate labScoringScores from existing scores
+      var scores = (result && result.scores) ? result.scores : [];
+      var scorerEmail = '';
+      // Find current user's scores (first non-reconciled scorer)
+      for (var s = 0; s < scores.length; s++) {
+        if (String(scores[s].scorerRole) !== 'reconciled') {
+          labScoringScores[String(scores[s].criterionId)] = {
+            score: scores[s].score,
+            feedback: scores[s].feedback || ''
+          };
+        }
+      }
+      labScoringData.existingScores = result;
+      scoresLoaded = true;
+      tryRenderForm();
+    })
+    .withFailureHandler(function() {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      labScoringData.existingScores = { scores: [], scorers: [] };
+      scoresLoaded = true;
+      tryRenderForm();
+    })
+    .getLabScoresForSubmission(subId);
+}
+
+
+/**
+ * Render the right panel: student content + scoring form.
+ */
+function labScoringRenderForm() {
+  var rightEl = document.getElementById('labScoringRight');
+  if (!rightEl || !labScoringData || !labScoringSelectedSub) return;
+
+  var sub = labScoringSelectedSub;
+  var rubric = labScoringData.rubric;
+  var status = String(sub.status || 'draft');
+
+  var html = '';
+
+  // Student header
+  html += '<div class="lab-scoring-student-header">';
+  html += '<span>' + escapeHtml(sub.studentEmail || '') + '</span>';
+  html += '<span class="lab-submission-badge lab-submission-badge-' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>';
+  if (parseInt(sub.revisionNumber || 0, 10) > 0) {
+    html += '<span class="lab-version-badge">Revision ' + escapeHtml(String(sub.revisionNumber)) + '</span>';
+  }
+  html += '</div>';
+
+  // Check for multi-scorer comparison
+  var existingScores = labScoringData.existingScores || { scores: [], scorers: [] };
+  var isMultiScorer = rubric && (rubric.multiScorer === true || rubric.multiScorer === 'true');
+  var scorerCount = (existingScores.scorers || []).length;
+
+  if (isMultiScorer && scorerCount >= 2 && !labScoringReadOnly) {
+    html += labScoringBuildComparison(rubric, existingScores);
+  } else {
+    // Student content (collapsible sections)
+    html += labScoringBuildStudentContent();
+
+    // Rubric criteria
+    if (rubric && rubric.criteria) {
+      html += '<div class="lab-scoring-criteria-title">Rubric: ' + escapeHtml(rubric.title || '') + '</div>';
+      var criteria = rubric.criteria.slice().sort(function(a, b) {
+        return (a.sequence || 0) - (b.sequence || 0);
+      });
+      for (var c = 0; c < criteria.length; c++) {
+        html += labScoringBuildCriterionCard(criteria[c], rubric);
+      }
+    }
+  }
+
+  // Summary bar
+  html += labScoringBuildSummaryBar();
+
+  rightEl.innerHTML = html;
+}
+
+
+/**
+ * Build HTML for collapsible student report content.
+ *
+ * @returns {string} HTML string
+ */
+function labScoringBuildStudentContent() {
+  var sections = [];
+  if (labScoringData.template && labScoringData.template.sectionsJson) {
+    sections = labScoringData.template.sectionsJson.slice().sort(function(a, b) {
+      return (a.sequence || 0) - (b.sequence || 0);
+    });
+  }
+
+  var sectionData = labScoringData.sectionData || [];
+  var sectionMap = {};
+  for (var i = 0; i < sectionData.length; i++) {
+    sectionMap[String(sectionData[i].sectionKey)] = sectionData[i];
+  }
+
+  if (sections.length === 0) return '';
+
+  var html = '<div class="lab-scoring-content-title">Student Report</div>';
+
+  for (var s = 0; s < sections.length; s++) {
+    var sec = sections[s];
+    var secKey = String(sec.sectionId || '');
+    var sd = sectionMap[secKey];
+    var content = (sd && sd.contentMarkup) ? String(sd.contentMarkup) : '';
+    var preview = content.replace(/<[^>]+>/g, '').substring(0, 100);
+
+    html += '<div class="lab-scoring-section-preview">';
+    html += '<div class="lab-scoring-section-toggle" role="button" tabindex="0" aria-expanded="false" onclick="labScoringToggleSection(\'' + escapeHtml(secKey) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();labScoringToggleSection(\'' + escapeHtml(secKey) + '\');}">';
+    html += '<span class="lab-scoring-section-arrow" id="labScoringArrow-' + escapeHtml(secKey) + '">&#9654;</span>';
+    html += '<span class="lab-scoring-section-title">' + escapeHtml(sec.title || 'Section') + '</span>';
+    if (sd && sd.wordCount) html += '<span class="lab-scoring-section-wc">' + escapeHtml(String(sd.wordCount)) + ' words</span>';
+    html += '</div>';
+    html += '<div class="lab-scoring-section-body" id="labScoringSecBody-' + escapeHtml(secKey) + '" style="display:none;">';
+    if (content) {
+      html += (typeof labRichSanitize === 'function') ? labRichSanitize(content) : escapeHtml(content);
+    } else {
+      html += '<em style="color:#94a3b8;">(No content)</em>';
+    }
+    html += '</div></div>';
+  }
+
+  return html;
+}
+
+
+/**
+ * Toggle section content visibility.
+ *
+ * @param {string} sectionKey
+ */
+function labScoringToggleSection(sectionKey) {
+  var body = document.getElementById('labScoringSecBody-' + sectionKey);
+  var arrow = document.getElementById('labScoringArrow-' + sectionKey);
+  if (!body) return;
+
+  var isVisible = body.style.display !== 'none';
+  body.style.display = isVisible ? 'none' : 'block';
+  if (arrow) arrow.innerHTML = isVisible ? '&#9654;' : '&#9660;';
+}
+
+
+/**
+ * Build HTML for a single criterion scoring card.
+ *
+ * @param {Object} crit - Criterion object
+ * @param {Object} rubric - Rubric object
+ * @returns {string} HTML string
+ */
+function labScoringBuildCriterionCard(crit, rubric) {
+  var cid = String(crit.criterionId || '');
+  var escCid = escapeHtml(cid);
+  var scaleMax = parseInt(rubric.scaleMax, 10) || 8;
+  var scaleType = String(rubric.scaleType || 'level');
+  var currentScore = labScoringScores[cid] ? labScoringScores[cid].score : null;
+  var currentFeedback = labScoringScores[cid] ? labScoringScores[cid].feedback : '';
+
+  var html = '<div class="lab-scoring-criterion">';
+
+  // Header: title + dimension badges
+  html += '<div class="lab-scoring-criterion-header">';
+  html += '<span class="lab-scoring-criterion-title">' + escapeHtml(crit.title || '') + '</span>';
+
+  var dims = String(crit.internalDimensions || '').split(',');
+  for (var d = 0; d < dims.length; d++) {
+    var dim = dims[d].trim();
+    if (dim) {
+      html += '<span class="lab-scoring-dim-badge">' + escapeHtml(dim) + '</span>';
+    }
+  }
+
+  if (parseInt(crit.weight, 10) > 1) {
+    html += '<span class="lab-scoring-weight-badge">Weight: ' + escapeHtml(String(crit.weight)) + '</span>';
+  }
+  html += '</div>';
+
+  // Scoring input
+  if (scaleType === 'level') {
+    html += labScoringBuildLevelButtons(crit, rubric, currentScore);
+  } else {
+    // Numeric input
+    html += '<div class="lab-scoring-numeric">';
+    html += '<input type="number" min="0" max="' + scaleMax + '" value="' +
+      (currentScore !== null ? currentScore : '') + '"' +
+      (labScoringReadOnly ? ' disabled' : '') +
+      ' onchange="labScoringSetNumericScore(\'' + escCid + '\',this.value)"' +
+      ' id="labScoringNumeric-' + escCid + '">';
+    html += '<span class="lab-scoring-numeric-max">/ ' + scaleMax + '</span>';
+    var numLabel = (currentScore !== null) ? labScoringGetScaleLabel(rubric, currentScore) : '';
+    html += '<span class="lab-scoring-numeric-label" id="labScoringNumLabel-' + escCid + '">' + escapeHtml(numLabel) + '</span>';
+    html += '</div>';
+  }
+
+  // Feedback textarea
+  html += '<div class="lab-scoring-feedback">';
+  html += '<textarea maxlength="500" placeholder="Feedback for this criterion..."' +
+    (labScoringReadOnly ? ' disabled' : '') +
+    ' oninput="labScoringOnFeedbackInput(\'' + escCid + '\')"' +
+    ' id="labScoringFeedback-' + escCid + '">' + escapeHtml(currentFeedback) + '</textarea>';
+  html += '<span class="lab-scoring-char-count" id="labScoringCharCount-' + escCid + '">' +
+    currentFeedback.length + '/500</span>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Build level descriptor buttons for a criterion.
+ *
+ * @param {Object} crit - Criterion object
+ * @param {Object} rubric - Rubric object
+ * @param {number|null} currentScore - Current selected score
+ * @returns {string} HTML string
+ */
+function labScoringBuildLevelButtons(crit, rubric, currentScore) {
+  var cid = String(crit.criterionId || '');
+  var escCid = escapeHtml(cid);
+  var scaleMax = parseInt(rubric.scaleMax, 10) || 8;
+  var scaleLabelJson = (typeof rubric.scaleLabelJson === 'string')
+    ? JSON.parse(rubric.scaleLabelJson || '{}') : (rubric.scaleLabelJson || {});
+
+  // Build bands from scaleLabelJson
+  var bands = [];
+  var keys = Object.keys(scaleLabelJson);
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k];
+    var parts = key.split('-');
+    var lo, hi;
+    if (parts.length === 2) {
+      lo = parseInt(parts[0], 10);
+      hi = parseInt(parts[1], 10);
+    } else {
+      lo = parseInt(parts[0], 10);
+      hi = lo;
+    }
+    if (isNaN(lo)) continue;
+    bands.push({ lo: lo, hi: hi, label: scaleLabelJson[key], key: key });
+  }
+  bands.sort(function(a, b) { return b.lo - a.lo; }); // Highest first
+
+  // Map band index to level descriptor
+  var descriptors = [
+    crit.level0Desc || '',
+    crit.level1Desc || '',
+    crit.level2Desc || '',
+    crit.level3Desc || '',
+    crit.level4Desc || ''
+  ];
+
+  var html = '<div class="lab-scoring-levels">';
+
+  for (var b = 0; b < bands.length; b++) {
+    var band = bands[b];
+    var isInBand = (currentScore !== null && currentScore >= band.lo && currentScore <= band.hi);
+    var desc = descriptors[bands.length - 1 - b] || '';
+
+    html += '<div class="lab-scoring-level-btn' + (isInBand ? ' lab-scoring-level-selected' : '') + '"' +
+      (labScoringReadOnly ? '' : ' onclick="labScoringSelectBand(\'' + escCid + '\',' + band.lo + ',' + band.hi + ')"') + '>';
+    html += '<div class="lab-scoring-level-top">';
+    html += '<span class="lab-scoring-level-range">' + escapeHtml(band.key) + '</span>';
+    html += '<span class="lab-scoring-level-label">' + escapeHtml(band.label) + '</span>';
+    html += '</div>';
+    if (desc) {
+      html += '<div class="lab-scoring-level-desc">' + escapeHtml(desc) + '</div>';
+    }
+
+    // Sub-score buttons within band (only if band selected)
+    if (isInBand && band.lo !== band.hi && !labScoringReadOnly) {
+      html += '<div class="lab-scoring-sub-scores">';
+      for (var sv = band.lo; sv <= band.hi; sv++) {
+        var isActive = (currentScore === sv);
+        html += '<button class="lab-scoring-sub-btn' + (isActive ? ' lab-scoring-sub-btn-active' : '') + '"' +
+          ' onclick="event.stopPropagation();labScoringSelectLevel(\'' + escCid + '\',' + sv + ')">' +
+          sv + '</button>';
+      }
+      html += '</div>';
+    } else if (isInBand && band.lo === band.hi) {
+      // Single value band (like '0'), already selected
+    }
+
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Select a level band (sets score to the lower bound, showing sub-buttons).
+ *
+ * @param {string} criterionId
+ * @param {number} lo - Lower bound
+ * @param {number} hi - Upper bound
+ */
+function labScoringSelectBand(criterionId, lo, hi) {
+  if (labScoringReadOnly) return;
+  if (!labScoringScores[criterionId]) labScoringScores[criterionId] = { score: null, feedback: '' };
+  labScoringScores[criterionId].score = lo;
+  labScoringRenderForm();
+}
+
+
+/**
+ * Select an exact score within a level band.
+ *
+ * @param {string} criterionId
+ * @param {number} score
+ */
+function labScoringSelectLevel(criterionId, score) {
+  if (labScoringReadOnly) return;
+  if (!labScoringScores[criterionId]) labScoringScores[criterionId] = { score: null, feedback: '' };
+  labScoringScores[criterionId].score = score;
+  labScoringRenderForm();
+}
+
+
+/**
+ * Set numeric score from input.
+ *
+ * @param {string} criterionId
+ * @param {string} value
+ */
+function labScoringSetNumericScore(criterionId, value) {
+  if (labScoringReadOnly) return;
+  var score = parseInt(value, 10);
+  if (isNaN(score) || score < 0) score = 0;
+  if (!labScoringScores[criterionId]) labScoringScores[criterionId] = { score: null, feedback: '' };
+  labScoringScores[criterionId].score = score;
+
+  // Update label
+  var rubric = labScoringData ? labScoringData.rubric : null;
+  var labelEl = document.getElementById('labScoringNumLabel-' + criterionId);
+  if (labelEl && rubric) {
+    labelEl.textContent = labScoringGetScaleLabel(rubric, score);
+  }
+}
+
+
+/**
+ * Handle feedback textarea input.
+ *
+ * @param {string} criterionId
+ */
+function labScoringOnFeedbackInput(criterionId) {
+  var textarea = document.getElementById('labScoringFeedback-' + criterionId);
+  var countEl = document.getElementById('labScoringCharCount-' + criterionId);
+  if (!textarea) return;
+
+  if (!labScoringScores[criterionId]) labScoringScores[criterionId] = { score: null, feedback: '' };
+  labScoringScores[criterionId].feedback = textarea.value;
+
+  if (countEl) countEl.textContent = textarea.value.length + '/500';
+}
+
+
+/**
+ * Build the summary bar HTML.
+ *
+ * @returns {string} HTML string
+ */
+function labScoringBuildSummaryBar() {
+  var total = labScoringComputeTotal();
+  var status = labScoringSelectedSub ? String(labScoringSelectedSub.status || '') : '';
+  var isScored = (status === 'scored');
+
+  var html = '<div class="lab-scoring-summary">';
+  html += '<span class="lab-scoring-total">' + total.display + '</span>';
+  if (total.label) html += '<span class="lab-scoring-scale-label">' + escapeHtml(total.label) + '</span>';
+
+  if (!isScored && status === 'submitted') {
+    html += '<button class="btn btn-outline btn-small" onclick="labScoringSave()">Save Scores</button>';
+    html += '<button class="btn btn-primary btn-small" onclick="labScoringFinalize()">Finalize &amp; Record</button>';
+  }
+  html += '<button class="btn btn-outline btn-small" onclick="labScoringExportDoc()">&#128196; Export Doc</button>';
+  html += '</div>';
+
+  return html;
+}
+
+
+/**
+ * Compute total weighted score from current labScoringScores.
+ *
+ * @returns {Object} { weighted, max, pct, display, label }
+ */
+function labScoringComputeTotal() {
+  if (!labScoringData || !labScoringData.rubric) return { weighted: 0, max: 0, pct: 0, display: '—', label: '' };
+
+  var rubric = labScoringData.rubric;
+  var criteria = rubric.criteria || [];
+  var scaleMax = parseInt(rubric.scaleMax, 10) || 8;
+  var totalWeighted = 0;
+  var totalMaxWeighted = 0;
+
+  for (var c = 0; c < criteria.length; c++) {
+    var cid = String(criteria[c].criterionId);
+    var weight = parseInt(criteria[c].weight, 10) || 1;
+    var score = labScoringScores[cid] ? labScoringScores[cid].score : null;
+
+    if (score !== null && score !== undefined) {
+      totalWeighted += score * weight;
+    }
+    totalMaxWeighted += scaleMax * weight;
+  }
+
+  var pct = totalMaxWeighted > 0 ? Math.round((totalWeighted / totalMaxWeighted) * 100) : 0;
+  var label = labScoringGetScaleLabel(rubric, totalMaxWeighted > 0 ? (totalWeighted / (totalMaxWeighted / scaleMax)) : 0);
+
+  return {
+    weighted: totalWeighted,
+    max: totalMaxWeighted,
+    pct: pct,
+    display: totalWeighted + '/' + totalMaxWeighted + ' (' + pct + '%)',
+    label: label
+  };
+}
+
+
+/**
+ * Resolve a score to its scale label.
+ *
+ * @param {Object} rubric
+ * @param {number} score
+ * @returns {string}
+ */
+function labScoringGetScaleLabel(rubric, score) {
+  if (!rubric) return '';
+  var scaleLabelJson = (typeof rubric.scaleLabelJson === 'string')
+    ? JSON.parse(rubric.scaleLabelJson || '{}') : (rubric.scaleLabelJson || {});
+
+  var numScore = parseFloat(score) || 0;
+  var keys = Object.keys(scaleLabelJson);
+
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var parts = key.split('-');
+    if (parts.length === 2) {
+      var lo = parseFloat(parts[0]);
+      var hi = parseFloat(parts[1]);
+      if (!isNaN(lo) && !isNaN(hi) && numScore >= lo && numScore <= hi) {
+        return scaleLabelJson[key];
+      }
+    } else {
+      var val = parseFloat(key);
+      if (!isNaN(val) && Math.abs(numScore - val) < 0.5) {
+        return scaleLabelJson[key];
+      }
+    }
+  }
+  return '';
+}
+
+
+/**
+ * Save current scores via RPC.
+ */
+function labScoringSave() {
+  if (!labScoringData || !labScoringSelectedSub) return;
+
+  var subId = labScoringSelectedSub.submissionId;
+  var rubric = labScoringData.rubric;
+  if (!rubric || !rubric.criteria) return;
+
+  // Build scores array
+  var scoresArray = [];
+  var criteria = rubric.criteria;
+  for (var c = 0; c < criteria.length; c++) {
+    var cid = String(criteria[c].criterionId);
+    var sc = labScoringScores[cid];
+    if (!sc || sc.score === null || sc.score === undefined) {
+      showToast('Please score all criteria before saving.', 'error');
+      return;
+    }
+    scoresArray.push({
+      criterionId: cid,
+      score: sc.score,
+      feedback: sc.feedback || ''
+    });
+  }
+
+  var expectedId = labScoringData._expectedAssignmentId;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      showToast('Scores saved successfully.', 'success');
+    })
+    .withFailureHandler(function(err) {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      showToast('Save failed: ' + (err.message || err), 'error');
+    })
+    .saveLabScores(subId, scoresArray);
+}
+
+
+/**
+ * Finalize scoring: confirm, save, update status.
+ */
+function labScoringFinalize() {
+  if (!labScoringData || !labScoringSelectedSub) return;
+
+  var total = labScoringComputeTotal();
+  var msg = 'Finalize this score?\n\n' + total.display;
+  if (total.label) msg += ' (' + total.label + ')';
+  msg += '\n\nThis will record the score to the student\'s progress and cannot be undone.';
+
+  if (!confirm(msg)) return;
+
+  // Save scores first, then finalize
+  var subId = labScoringSelectedSub.submissionId;
+  var rubric = labScoringData.rubric;
+  if (!rubric || !rubric.criteria) return;
+
+  var scoresArray = [];
+  var criteria = rubric.criteria;
+  for (var c = 0; c < criteria.length; c++) {
+    var cid = String(criteria[c].criterionId);
+    var sc = labScoringScores[cid];
+    if (!sc || sc.score === null || sc.score === undefined) {
+      showToast('Please score all criteria before finalizing.', 'error');
+      return;
+    }
+    scoresArray.push({
+      criterionId: cid,
+      score: sc.score,
+      feedback: sc.feedback || ''
+    });
+  }
+
+  var expectedId = labScoringData._expectedAssignmentId;
+
+  // Step 1: Save scores
+  google.script.run
+    .withSuccessHandler(function() {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+
+      // Step 2: Finalize
+      google.script.run
+        .withSuccessHandler(function() {
+          if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+          showToast('Score finalized and recorded.', 'success');
+
+          // Update local status
+          if (labScoringSelectedSub) labScoringSelectedSub.status = 'scored';
+          if (labScoringData.submissions[labScoringData.selectedIdx]) {
+            labScoringData.submissions[labScoringData.selectedIdx].status = 'scored';
+          }
+          labScoringReadOnly = true;
+          labScoringRenderSubmissionList();
+          labScoringRenderForm();
+        })
+        .withFailureHandler(function(err) {
+          if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+          showToast('Finalize failed: ' + (err.message || err), 'error');
+        })
+        .finalizeLabScore(subId);
+    })
+    .withFailureHandler(function(err) {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      showToast('Save failed: ' + (err.message || err), 'error');
+    })
+    .saveLabScores(subId, scoresArray);
+}
+
+
+/**
+ * Export single submission as Google Doc.
+ */
+function labScoringExportDoc() {
+  if (!labScoringSelectedSub) return;
+  var subId = labScoringSelectedSub.submissionId;
+
+  showToast('Exporting to Google Doc...', 'success');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result && result.docUrl) {
+        showToast('Google Doc created successfully.', 'success');
+        window.open(result.docUrl, '_blank');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Export failed: ' + (err.message || err), 'error');
+    })
+    .exportLabSubmissionToDoc(subId);
+}
+
+
+/**
+ * Export all submissions for the assignment.
+ */
+function labScoringExportAll() {
+  if (!labScoringData) return;
+  var assignmentId = labScoringData.assignmentId;
+
+  if (!confirm('Export all scored/submitted reports as Google Docs?')) return;
+
+  showToast('Exporting all submissions...', 'success');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result && result.exports) {
+        var count = 0;
+        for (var i = 0; i < result.exports.length; i++) {
+          if (result.exports[i].docUrl) count++;
+        }
+        showToast(count + ' document(s) created.', 'success');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Batch export failed: ' + (err.message || err), 'error');
+    })
+    .exportLabAssignmentDocs(assignmentId);
+}
+
+
+// ============================================================================
+// MULTI-SCORER COMPARISON (Story 3.5)
+// ============================================================================
+
+
+/**
+ * Build comparison view HTML for multi-scorer rubrics.
+ *
+ * @param {Object} rubric
+ * @param {Object} existingScores - { scores: [], scorers: [] }
+ * @returns {string} HTML string
+ */
+function labScoringBuildComparison(rubric, existingScores) {
+  var scorers = existingScores.scorers || [];
+  var scores = existingScores.scores || [];
+  var criteria = (rubric.criteria || []).slice().sort(function(a, b) {
+    return (a.sequence || 0) - (b.sequence || 0);
+  });
+  var scaleMax = parseInt(rubric.scaleMax, 10) || 8;
+
+  // Group non-reconciled scores by criterion and scorer
+  var byCritScorer = {};
+  for (var s = 0; s < scores.length; s++) {
+    var sc = scores[s];
+    if (String(sc.scorerRole) === 'reconciled') continue;
+    var ck = String(sc.criterionId) + '|' + String(sc.scorerEmail).toLowerCase();
+    byCritScorer[ck] = sc;
+  }
+
+  var html = '<div class="lab-scoring-comparison">';
+  html += '<div class="lab-scoring-comparison-header">';
+  html += '<strong>Multi-Scorer Comparison</strong>';
+  html += '<div style="font-size:11px;color:#64748b;margin-top:4px;">';
+  html += 'Scorer A: ' + escapeHtml(scorers[0] || '') + '<br>';
+  html += 'Scorer B: ' + escapeHtml(scorers[1] || '');
+  html += '</div></div>';
+
+  for (var c = 0; c < criteria.length; c++) {
+    var crit = criteria[c];
+    var cid = String(crit.criterionId);
+    var escCid = escapeHtml(cid);
+
+    var scoreA = byCritScorer[cid + '|' + String(scorers[0]).toLowerCase()];
+    var scoreB = byCritScorer[cid + '|' + String(scorers[1]).toLowerCase()];
+    var valA = scoreA ? parseFloat(scoreA.score) || 0 : 0;
+    var valB = scoreB ? parseFloat(scoreB.score) || 0 : 0;
+    var diff = Math.abs(valA - valB);
+    var diffClass = diff === 0 ? '' : (diff <= 2 ? 'lab-scoring-diff-minor' : 'lab-scoring-diff-major');
+    var avg = Math.round(((valA + valB) / 2) * 10) / 10;
+
+    var reconciled = labScoringReconciled[cid];
+    var reconciledDisplay = reconciled ? reconciled.method + (reconciled.method === 'manual' ? ': ' + reconciled.value : '') : '';
+
+    html += '<div class="lab-scoring-comparison-row">';
+    html += '<div class="lab-scoring-comparison-criterion">' + escapeHtml(crit.title || '') + '</div>';
+    html += '<div class="lab-scoring-comparison-scores">';
+    html += '<span class="lab-scoring-comparison-val">' + valA + '</span>';
+    html += '<span class="lab-scoring-comparison-vs">vs</span>';
+    html += '<span class="lab-scoring-comparison-val">' + valB + '</span>';
+    if (diff > 0) html += '<span class="' + diffClass + '">(\u00B1' + diff + ')</span>';
+    html += '</div>';
+
+    html += '<div class="lab-scoring-comparison-actions">';
+    html += '<button class="lab-scoring-use-btn' + (reconciled && reconciled.method === 'scorer_a' ? ' lab-scoring-use-btn-active' : '') + '"' +
+      ' onclick="labScoringReconcileChoice(\'' + escCid + '\',\'scorer_a\',' + valA + ')">' + valA + '</button>';
+    html += '<button class="lab-scoring-use-btn' + (reconciled && reconciled.method === 'scorer_b' ? ' lab-scoring-use-btn-active' : '') + '"' +
+      ' onclick="labScoringReconcileChoice(\'' + escCid + '\',\'scorer_b\',' + valB + ')">' + valB + '</button>';
+    html += '<button class="lab-scoring-use-btn' + (reconciled && reconciled.method === 'average' ? ' lab-scoring-use-btn-active' : '') + '"' +
+      ' onclick="labScoringReconcileChoice(\'' + escCid + '\',\'average\',' + avg + ')">Avg ' + avg + '</button>';
+    html += '<input type="number" class="lab-scoring-manual-input" min="0" max="' + scaleMax + '"' +
+      ' placeholder="#" style="width:50px;"' +
+      ' onchange="labScoringReconcileChoice(\'' + escCid + '\',\'manual\',parseInt(this.value,10)||0)">';
+    html += '</div>';
+
+    html += '</div>';
+  }
+
+  html += '<div class="lab-scoring-comparison-footer">';
+  html += '<button class="btn btn-primary btn-small" onclick="labScoringSaveReconciliation()">Save Reconciliation</button>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Set reconciled choice for a criterion.
+ *
+ * @param {string} criterionId
+ * @param {string} method - 'scorer_a', 'scorer_b', 'average', 'manual'
+ * @param {number} value
+ */
+function labScoringReconcileChoice(criterionId, method, value) {
+  labScoringReconciled[criterionId] = { method: method, value: value };
+
+  // Also update labScoringScores for summary bar
+  if (!labScoringScores[criterionId]) labScoringScores[criterionId] = { score: null, feedback: '' };
+  labScoringScores[criterionId].score = value;
+
+  // Re-render to show active state
+  labScoringRenderForm();
+}
+
+
+/**
+ * Save all reconciled scores via RPC.
+ */
+function labScoringSaveReconciliation() {
+  if (!labScoringData || !labScoringSelectedSub) return;
+
+  var rubric = labScoringData.rubric;
+  if (!rubric || !rubric.criteria) return;
+
+  var reconciled = [];
+  var criteria = rubric.criteria;
+  for (var c = 0; c < criteria.length; c++) {
+    var cid = String(criteria[c].criterionId);
+    var rec = labScoringReconciled[cid];
+    if (!rec) {
+      showToast('Please reconcile all criteria before saving.', 'error');
+      return;
+    }
+    reconciled.push({
+      criterionId: cid,
+      method: rec.method,
+      manualScore: rec.value,
+      manualFeedback: ''
+    });
+  }
+
+  var subId = labScoringSelectedSub.submissionId;
+  var expectedId = labScoringData._expectedAssignmentId;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      showToast('Reconciliation saved.', 'success');
+    })
+    .withFailureHandler(function(err) {
+      if (!labScoringData || String(labScoringData._expectedAssignmentId) !== String(expectedId)) return;
+      showToast('Reconciliation failed: ' + (err.message || err), 'error');
+    })
+    .saveReconciledScores(subId, reconciled);
+}
+
+</script>

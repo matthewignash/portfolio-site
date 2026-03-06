@@ -1,0 +1,915 @@
+<style>
+/* ============================================================================
+   STUDENT SUPPORT PROFILES — ssp- prefix
+   Styles for IEP/WIDA/EAL student support profile management
+   ============================================================================ */
+
+/* --- Profile List --- */
+.ssp-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.ssp-profile-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.ssp-profile-card:hover {
+  border-color: #cbd5e0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.ssp-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ssp-student-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1a202c;
+}
+
+.ssp-student-id {
+  font-size: 12px;
+  color: #718096;
+  margin-left: 8px;
+}
+
+.ssp-type-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ssp-type-badge.ssp-type-iep { background: #fed7e2; color: #97266d; }
+.ssp-type-badge.ssp-type-504 { background: #fefcbf; color: #975a16; }
+.ssp-type-badge.ssp-type-wida { background: #c6f6d5; color: #276749; }
+.ssp-type-badge.ssp-type-eal { background: #bee3f8; color: #2a4365; }
+.ssp-type-badge.ssp-type-other { background: #e2e8f0; color: #4a5568; }
+
+.ssp-card-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ssp-accom-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  background: #edf2f7;
+  color: #4a5568;
+}
+.ssp-accom-chip.ssp-active { background: #ebf8ff; color: #2b6cb0; }
+
+.ssp-wida-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ssp-wida-badge.ssp-wida-1 { background: #fed7e2; color: #97266d; }
+.ssp-wida-badge.ssp-wida-2 { background: #fefcbf; color: #975a16; }
+.ssp-wida-badge.ssp-wida-3 { background: #fef3c7; color: #92400e; }
+.ssp-wida-badge.ssp-wida-4 { background: #c6f6d5; color: #276749; }
+.ssp-wida-badge.ssp-wida-5 { background: #bee3f8; color: #2a4365; }
+.ssp-wida-badge.ssp-wida-6 { background: #e2e8f0; color: #4a5568; }
+
+.ssp-wida-label {
+  font-size: 12px;
+  color: #718096;
+}
+
+.ssp-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+/* --- Profile Editor Modal --- */
+.ssp-editor-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ssp-editor-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 95%;
+  max-width: 640px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+
+.ssp-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ssp-editor-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.ssp-editor-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.ssp-editor-close:hover { color: #e53e3e; background: #fff5f5; }
+
+.ssp-editor-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  min-height: 0;
+}
+
+.ssp-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* --- Form Groups --- */
+.ssp-form-group {
+  margin-bottom: 16px;
+}
+
+.ssp-form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 4px;
+}
+
+.ssp-form-hint {
+  font-size: 12px;
+  color: #a0aec0;
+  margin-bottom: 4px;
+}
+
+.ssp-form-input, .ssp-form-select, .ssp-form-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #1a202c;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+.ssp-form-input:focus, .ssp-form-select:focus, .ssp-form-textarea:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66,153,225,0.15);
+}
+
+.ssp-form-textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.ssp-form-row {
+  display: flex;
+  gap: 12px;
+}
+.ssp-form-row > .ssp-form-group {
+  flex: 1;
+}
+
+/* --- Accommodation Toggles --- */
+.ssp-accom-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ssp-accom-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: #ffffff;
+}
+.ssp-accom-toggle:hover { border-color: #4299e1; }
+.ssp-accom-toggle.ssp-toggle-on {
+  background: #ebf8ff;
+  border-color: #4299e1;
+  color: #2b6cb0;
+  font-weight: 600;
+}
+
+.ssp-accom-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.ssp-toggle-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e0;
+  background: #ffffff;
+  transition: all 0.15s ease;
+}
+.ssp-toggle-on .ssp-toggle-dot {
+  border-color: #4299e1;
+  background: #4299e1;
+}
+
+/* --- WIDA Domain Inputs --- */
+.ssp-wida-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ssp-wida-domain {
+  text-align: center;
+}
+
+.ssp-wida-domain-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #718096;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.ssp-wida-domain-input {
+  width: 100%;
+  padding: 6px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #2d3748;
+  box-sizing: border-box;
+}
+
+/* --- Strategy List --- */
+.ssp-strategy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ssp-strategy-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #4a5568;
+}
+.ssp-strategy-item.ssp-strategy-inactive {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.ssp-strategy-source {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.ssp-strategy-source.ssp-src-wida { background: #c6f6d5; color: #276749; }
+.ssp-strategy-source.ssp-src-teacher { background: #bee3f8; color: #2a4365; }
+
+.ssp-strategy-toggle {
+  margin-left: auto;
+  cursor: pointer;
+  color: #a0aec0;
+  font-size: 16px;
+}
+.ssp-strategy-toggle:hover { color: #e53e3e; }
+
+.ssp-strategy-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ssp-strategy-add-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.ssp-strategy-add-btn {
+  padding: 6px 14px;
+  background: #4299e1;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ssp-strategy-add-btn:hover { background: #3182ce; }
+
+/* --- Section Divider --- */
+.ssp-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #2d3748;
+  margin: 20px 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #edf2f7;
+}
+
+/* --- Empty State --- */
+.ssp-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #a0aec0;
+}
+.ssp-empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.ssp-empty-state-text {
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+/* --- Buttons --- */
+.ssp-btn {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.ssp-btn-primary { background: #4299e1; color: #ffffff; }
+.ssp-btn-primary:hover { background: #3182ce; }
+.ssp-btn-secondary { background: #edf2f7; color: #4a5568; }
+.ssp-btn-secondary:hover { background: #e2e8f0; }
+.ssp-btn-danger { background: #fff5f5; color: #e53e3e; }
+.ssp-btn-danger:hover { background: #fed7d7; }
+.ssp-btn-sm { padding: 4px 12px; font-size: 12px; }
+
+/* --- Reminder Panel (Story 2 — lesson editor) --- */
+.ssp-reminder-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #fefcbf;
+  color: #975a16;
+  margin-left: 8px;
+}
+
+.ssp-reminder-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fffff0;
+  border: 1px solid #f6e05e;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #744210;
+  margin-bottom: 12px;
+}
+
+.ssp-reminder-group {
+  margin-bottom: 10px;
+}
+
+.ssp-reminder-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 4px;
+}
+
+.ssp-reminder-students {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ssp-student-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: #edf2f7;
+  color: #4a5568;
+}
+
+.ssp-wida-card {
+  background: #f0fff4;
+  border: 1px solid #c6f6d5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+.ssp-wida-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ssp-wida-card-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #276749;
+}
+
+.ssp-strategy-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: #c6f6d5;
+  color: #276749;
+  margin: 2px;
+}
+
+/* --- Hex Editor Info Bar (Story 2) --- */
+.ssp-hex-info-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 0 12px 8px;
+  background: #fffff0;
+  border: 1px solid #f6e05e;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #744210;
+}
+.ssp-hex-info-bar-icon {
+  font-size: 16px;
+}
+
+/* --- Roster Profile Button --- */
+.ssp-roster-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background: #f7fafc;
+  cursor: pointer;
+  font-size: 14px;
+  color: #718096;
+  transition: all 0.15s ease;
+}
+.ssp-roster-btn:hover { border-color: #4299e1; color: #4299e1; background: #ebf8ff; }
+.ssp-roster-btn.ssp-has-profile { border-color: #48bb78; color: #48bb78; background: #f0fff4; }
+
+/* =====================================================
+   STUDENT SUPPORT TAB (sst- prefix) — E3-S1
+   "My Supports" section in student hex content modal
+   ===================================================== */
+
+/* Section container */
+.sst-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid #e2e8f0;
+}
+.sst-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sst-section-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 400;
+  margin-bottom: 12px;
+}
+
+/* Domain cards (L/S/R/W) — 2x2 grid */
+.sst-domains-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.sst-domain-card {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 10px;
+}
+.sst-domain-recommended {
+  border-color: #0d9488;
+  border-width: 2px;
+  background: #f0fdfa;
+}
+.sst-recommended-badge {
+  font-size: 12px;
+  color: #0d9488;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.sst-domain-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.sst-domain-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.sst-domain-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0369a1;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.sst-domain-level {
+  font-size: 12px;
+  color: #0284c7;
+  background: #e0f2fe;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Strategy items with checkboxes */
+.sst-strategy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sst-strategy-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: #334155;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+.sst-strategy-item:hover {
+  background: #e0f2fe;
+}
+.sst-strategy-checkbox {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border: 2px solid #94a3b8;
+  border-radius: 3px;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  margin-top: 1px;
+}
+.sst-strategy-checkbox.checked {
+  background: #0ea5e9;
+  border-color: #0ea5e9;
+}
+.sst-strategy-checkbox.checked::after {
+  content: '\2713';
+  position: absolute;
+  top: -1px;
+  left: 2px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.sst-strategy-text {
+  flex: 1;
+  line-height: 1.4;
+}
+.sst-domain-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* Accommodations card */
+.sst-accom-card {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.sst-accom-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 8px;
+}
+.sst-accom-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sst-accom-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #78350f;
+}
+.sst-accom-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* Translanguaging tip */
+.sst-translang-tip {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.sst-translang-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.sst-translang-text {
+  font-size: 12px;
+  color: #065f46;
+  line-height: 1.5;
+}
+
+/* UDL Fallback (no profile) */
+.sst-udl-fallback {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.sst-udl-fallback-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 8px;
+}
+.sst-udl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sst-udl-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+/* Save row */
+.sst-save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.sst-save-btn {
+  padding: 8px 16px;
+  background: #0ea5e9;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.sst-save-btn:hover {
+  background: #0284c7;
+}
+.sst-save-btn:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+.sst-save-status {
+  font-size: 12px;
+  color: #059669;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.sst-save-status.visible {
+  opacity: 1;
+}
+
+/* Empty state */
+.sst-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* B2: WIDA sentence frames section */
+.sst-frames-section {
+  background: #f0fdfa;
+  border-left: 3px solid #0d9488;
+  border-radius: 0 8px 8px 0;
+  padding: 12px;
+  margin-top: 12px;
+}
+.sst-frames-header {
+  color: #0d9488;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.sst-frame-chip {
+  display: inline-block;
+  border: 1px dashed #0d9488;
+  color: #0d9488;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  margin: 4px;
+  background: transparent;
+}
+
+/* B3: SBAR question cues section */
+.sst-cues-section {
+  background: #fffbeb;
+  border-left: 3px solid #d97706;
+  border-radius: 0 8px 8px 0;
+  padding: 12px;
+  margin-top: 12px;
+}
+.sst-cues-header {
+  color: #d97706;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.sst-cue-chip {
+  display: inline-block;
+  border: 1px dashed #d97706;
+  color: #92400e;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  margin: 4px;
+  background: transparent;
+}
+
+/* C1: Preset learning strategy cards */
+.sst-preset-section {
+  padding: 12px 0;
+  margin-top: 8px;
+}
+.sst-preset-header {
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.sst-preset-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border-left: 3px solid #0d9488;
+}
+.sst-preset-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.sst-preset-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e293b;
+}
+.sst-preset-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.sst-preset-desc-hover {
+  display: none;
+}
+.sst-preset-card:hover .sst-preset-desc-hover,
+.sst-preset-card:focus-within .sst-preset-desc-hover {
+  display: block;
+}
+.sst-preset-domain {
+  font-size: 12px;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 8px;
+  display: inline-block;
+  margin-top: 4px;
+}
+.sst-preset-card:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+
+/* C4: Enhanced translanguaging section */
+.sst-translang-section {
+  background: #f0fdf4;
+  border-left: 3px solid #22c55e;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+.sst-translang-header {
+  color: #16a34a;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.sst-translang-section .sst-translang-tip {
+  font-size: 12px;
+  color: #334155;
+  padding: 4px 0;
+  line-height: 1.5;
+}
+.sst-translang-section .sst-translang-tip::before {
+  content: '\2714 ';
+}
+</style>

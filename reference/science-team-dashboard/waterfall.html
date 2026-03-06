@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waterfall Schedule</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>
+    body { margin: 0; padding: 0; background: #f5f6f8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .app-container { max-width: 960px; margin: 0 auto; padding: 12px 16px; }
+    .app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #dee2e6; }
+    .app-header h1 { font-size: 1.25rem; font-weight: 600; margin: 0; color: #1a1a2e; }
+    .header-actions { display: flex; gap: 6px; align-items: center; }
+    .error-banner { display: none; margin-bottom: 12px; }
+    .success-banner { display: none; margin-bottom: 12px; }
+    .loading-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: #6c757d; }
+    .loading-container .spinner-border { width: 2.5rem; height: 2.5rem; margin-bottom: 12px; }
+
+    /* View toggle pills */
+    .view-toggle { display: flex; gap: 0; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden; }
+    .view-toggle-btn { padding: 4px 14px; font-size: 0.78rem; font-weight: 500; color: #6c757d; background: #fff; border: none; cursor: pointer; transition: all 0.15s; }
+    .view-toggle-btn:not(:last-child) { border-right: 1px solid #dee2e6; }
+    .view-toggle-btn.active { background: #0d6efd; color: #fff; }
+    .view-toggle-btn:hover:not(.active) { background: #f0f4ff; }
+
+    /* School toggle */
+    .school-toggle { display: flex; gap: 0; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden; }
+    .school-toggle-btn { padding: 4px 10px; font-size: 0.72rem; font-weight: 600; color: #6c757d; background: #fff; border: none; cursor: pointer; transition: all 0.15s; }
+    .school-toggle-btn:not(:last-child) { border-right: 1px solid #dee2e6; }
+    .school-toggle-btn.active { background: #333; color: #fff; }
+
+    /* Day-type badges */
+    .day-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem; }
+    .day-badge-lg { padding: 6px 18px; font-size: 1.1rem; border-radius: 16px; }
+    .day-badge.a-day { background: #e8f0fe; color: #1a73e8; border: 1px solid #c5d9f7; }
+    .day-badge.b-day { background: #fce8e6; color: #ea4335; border: 1px solid #f5c6c2; }
+    .day-badge.holiday { background: #fef7e0; color: #b8860b; border: 1px solid #f5e6b8; }
+    .day-badge.no-rotation { background: #e6f4ea; color: #137333; border: 1px solid #c4e5cb; }
+    .day-badge.weekend { background: #f0f0f0; color: #999; border: 1px solid #ddd; }
+
+    /* Today view */
+    .today-header { text-align: center; margin-bottom: 16px; }
+    .today-label { font-size: 0.78rem; color: #6c757d; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 4px; }
+    .today-date { font-size: 1rem; font-weight: 500; color: #333; margin-bottom: 10px; }
+
+    /* Block cards grid */
+    .block-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+    .block-card { border-radius: 8px; padding: 12px 8px; text-align: center; transition: all 0.15s; }
+    .block-card.a-day { background: #e8f0fe; border: 2px solid #c5d9f7; }
+    .block-card.b-day { background: #fce8e6; border: 2px solid #f5c6c2; }
+    .block-card.current { box-shadow: 0 0 0 2px #0d6efd, 0 3px 10px rgba(13,110,253,0.2); }
+    .block-card-period { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; font-weight: 600; margin-bottom: 2px; }
+    .block-card-name { font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; }
+    .block-card.a-day .block-card-name { color: #1a73e8; }
+    .block-card.b-day .block-card-name { color: #ea4335; }
+    .block-card-time { font-size: 0.73rem; color: #555; font-weight: 500; }
+
+    /* Period indicator */
+    .period-indicator { text-align: center; font-size: 0.82rem; color: #6c757d; padding: 6px 12px; background: #f8f9fa; border-radius: 8px; }
+    .period-indicator i { margin-right: 4px; }
+    .period-indicator .current-text { color: #0d6efd; font-weight: 600; }
+
+    /* Week view grid */
+    .week-header { font-size: 0.82rem; color: #6c757d; margin-bottom: 10px; font-weight: 500; }
+    .week-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .week-day { border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 8px; text-align: center; background: #fff; transition: all 0.15s; }
+    .week-day.today-col { border-color: #0d6efd; box-shadow: 0 0 0 1px #0d6efd; background: #f8fbff; }
+    .week-day.holiday-col { background: #fef7e0; border-color: #f5e6b8; }
+    .week-day-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px; color: #999; font-weight: 600; margin-bottom: 2px; }
+    .week-day-date { font-size: 0.78rem; font-weight: 600; color: #333; margin-bottom: 6px; }
+    .week-day-badge { margin-bottom: 6px; }
+    .week-day-blocks { font-size: 0.65rem; color: #666; line-height: 1.5; }
+    .week-day-blocks .block-label { display: inline-block; padding: 1px 4px; border-radius: 3px; margin: 1px; font-weight: 500; font-size: 0.62rem; }
+    .week-day-blocks .block-label.a-block { background: #e8f0fe; color: #1a73e8; }
+    .week-day-blocks .block-label.b-block { background: #fce8e6; color: #ea4335; }
+
+    /* No school state */
+    .no-school { text-align: center; padding: 30px 20px; }
+    .no-school i { font-size: 2rem; color: #ccc; display: block; margin-bottom: 8px; }
+    .no-school p { font-size: 0.88rem; color: #999; margin: 0; }
+    .no-school .next-day { font-size: 0.8rem; color: #6c757d; margin-top: 8px; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 40px 20px; color: #999; }
+    .empty-state i { font-size: 2rem; margin-bottom: 8px; display: block; }
+
+    /* Teacher schedule */
+    .teacher-section { margin-top: 16px; }
+    .teacher-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #dee2e6; }
+    .teacher-section-header h3 { font-size: 0.92rem; font-weight: 600; margin: 0; color: #1a1a2e; }
+    .teacher-toggle { display: flex; gap: 0; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden; }
+    .teacher-toggle-btn { padding: 3px 10px; font-size: 0.72rem; font-weight: 500; color: #6c757d; background: #fff; border: none; cursor: pointer; transition: all 0.15s; }
+    .teacher-toggle-btn:not(:last-child) { border-right: 1px solid #dee2e6; }
+    .teacher-toggle-btn.active { background: #198754; color: #fff; }
+    .teacher-toggle-btn:hover:not(.active) { background: #f0f4ff; }
+
+    .period-group { margin-bottom: 10px; }
+    .period-group-header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px 6px 0 0; font-size: 0.78rem; font-weight: 600; }
+    .period-group-header.a-period { background: #e8f0fe; color: #1a73e8; border: 1px solid #c5d9f7; border-bottom: none; }
+    .period-group-header.b-period { background: #fce8e6; color: #ea4335; border: 1px solid #f5c6c2; border-bottom: none; }
+    .period-group-header .period-time { font-weight: 400; color: #6c757d; margin-left: auto; font-size: 0.72rem; }
+    .teacher-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .teacher-table th { background: #f8f9fa; padding: 4px 10px; font-weight: 600; color: #555; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.3px; border: 1px solid #dee2e6; }
+    .teacher-table td { padding: 5px 10px; border: 1px solid #dee2e6; color: #333; }
+    .teacher-table tr:hover { background: #f8fbff; }
+    .teacher-table .no-teachers { color: #adb5bd; font-style: italic; text-align: center; }
+
+    /* Clickable week days */
+    .week-day.clickable { cursor: pointer; }
+    .week-day.clickable:hover { border-color: #aac4f0; background: #fafcff; }
+    .week-day.selected-col { border-color: #0d6efd; box-shadow: 0 0 0 1px #0d6efd; background: #f0f4ff; }
+    .day-teacher-panel { margin-top: 16px; }
+    .day-teacher-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .day-teacher-header h3 { font-size: 0.88rem; font-weight: 600; margin: 0; color: #333; }
+    .day-teacher-close { background: none; border: none; font-size: 1rem; color: #999; cursor: pointer; padding: 0 4px; }
+    .day-teacher-close:hover { color: #333; }
+    .inline-spinner { text-align: center; padding: 20px; color: #6c757d; font-size: 0.82rem; }
+    .inline-spinner .spinner-border { width: 1.5rem; height: 1.5rem; margin-right: 8px; }
+
+    /* Month view */
+    .month-header { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 12px; }
+    .month-header h2 { font-size: 1.05rem; font-weight: 600; margin: 0; color: #333; min-width: 160px; text-align: center; }
+    .month-nav-btn { background: none; border: 1px solid #dee2e6; border-radius: 6px; font-size: 0.85rem; cursor: pointer; padding: 4px 10px; color: #555; }
+    .month-nav-btn:hover { background: #f0f4ff; border-color: #aac4f0; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-header-cell { text-align: center; font-size: 0.68rem; font-weight: 600; color: #888; padding: 6px 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .cal-cell { min-height: 72px; border: 1px solid #e9ecef; border-radius: 4px; padding: 4px 6px; background: #fff; cursor: pointer; transition: all 0.15s; }
+    .cal-cell:hover { border-color: #aac4f0; }
+    .cal-cell.cal-today { border-color: #0d6efd; background: #f0f7ff; }
+    .cal-cell.cal-selected { border-color: #0d6efd; border-width: 2px; background: #f0f4ff; }
+    .cal-cell.cal-outside { opacity: 0.3; cursor: default; }
+    .cal-cell.cal-weekend { background: #fafafa; }
+    .cal-cell.cal-holiday { background: #fffcf0; }
+    .cal-day-num { font-size: 0.78rem; font-weight: 600; color: #333; }
+    .cal-day-type { margin-top: 2px; }
+    .cal-day-type .day-badge { font-size: 0.55rem; padding: 1px 4px; border-radius: 6px; }
+    .cal-dots { display: flex; gap: 3px; margin-top: 3px; flex-wrap: wrap; }
+    .cal-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .cal-dot.meeting { background: #6f42c1; }
+    .cal-dot.task { background: #34a853; }
+    .cal-dot.announcement { background: #fd7e14; }
+    .cal-dot-count.announcement { color: #fd7e14; }
+    .cal-dot-count { font-size: 0.55rem; font-weight: 600; }
+    .cal-dot-count.meeting { color: #6f42c1; }
+    .cal-dot-count.task { color: #34a853; }
+
+    /* Day detail panel */
+    .day-detail-panel { margin-top: 16px; border: 1px solid #dee2e6; border-radius: 8px; background: #fff; overflow: hidden; }
+    .day-detail-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
+    .day-detail-header h3 { font-size: 0.88rem; font-weight: 600; margin: 0; color: #333; }
+    .day-detail-body { padding: 12px 14px; }
+    .detail-section { margin-bottom: 14px; }
+    .detail-section:last-child { margin-bottom: 0; }
+    .detail-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .detail-section-header h4 { font-size: 0.82rem; font-weight: 600; margin: 0; color: #555; }
+    .detail-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.8rem; color: #333; }
+    .detail-item:last-child { border-bottom: none; }
+    .detail-item-time { font-size: 0.72rem; color: #6c757d; white-space: nowrap; min-width: 50px; }
+    .detail-item-title { flex: 1; }
+    .detail-empty { font-size: 0.78rem; color: #adb5bd; font-style: italic; padding: 4px 0; }
+    .priority-badge { font-size: 0.6rem; padding: 1px 5px; border-radius: 6px; font-weight: 600; }
+    .priority-low { background: #e9ecef; color: #495057; }
+    .priority-normal { background: #cfe2ff; color: #084298; }
+    .priority-high { background: #fff3cd; color: #664d03; }
+    .priority-urgent { background: #f8d7da; color: #842029; }
+
+    /* Modal overrides */
+    .modal-body .form-label { margin-bottom: 2px; }
+
+    @media (max-width: 600px) {
+      .block-grid { grid-template-columns: repeat(2, 1fr); }
+      .week-grid { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+      .week-day { padding: 6px 4px; }
+      .cal-grid { gap: 1px; }
+      .cal-cell { min-height: 54px; padding: 3px 4px; }
+      .cal-day-num { font-size: 0.7rem; }
+      .cal-day-type .day-badge { font-size: 0.5rem; }
+      .month-header h2 { font-size: 0.9rem; min-width: 130px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Error / Success Banners -->
+  <div class="app-container">
+    <div id="error-banner" class="alert alert-danger error-banner alert-dismissible" role="alert">
+      <span id="error-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideError()"></button>
+    </div>
+    <div id="success-banner" class="alert alert-success success-banner alert-dismissible" role="alert">
+      <span id="success-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideSuccess()"></button>
+    </div>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div id="loading-spinner" class="loading-container">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <small>Loading schedule...</small>
+  </div>
+
+  <!-- Main Content -->
+  <div id="app-content" class="app-container" style="display: none;"></div>
+
+  <!-- Quick-Add Meeting Modal -->
+  <div id="quick-meeting-modal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" style="font-size:0.95rem;font-weight:600;"><i class="bi bi-calendar-plus" style="color:#6f42c1;margin-right:6px;"></i>Add Meeting</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label" style="font-size:0.78rem;font-weight:600;">Template</label>
+            <select id="qm-template" class="form-select form-select-sm" onchange="onQuickMeetingTemplateChange()">
+              <option value="">Select template...</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label" style="font-size:0.78rem;font-weight:600;">Date</label>
+            <input type="date" id="qm-date" class="form-control form-control-sm">
+          </div>
+          <div class="row mb-2">
+            <div class="col-6">
+              <label class="form-label" style="font-size:0.78rem;font-weight:600;">Start Time</label>
+              <input type="time" id="qm-start" class="form-control form-control-sm" value="14:00">
+            </div>
+            <div class="col-6">
+              <label class="form-label" style="font-size:0.78rem;font-weight:600;">End Time</label>
+              <input type="time" id="qm-end" class="form-control form-control-sm" value="15:00">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label" style="font-size:0.78rem;font-weight:600;">Location</label>
+            <input type="text" id="qm-location" class="form-control form-control-sm" placeholder="e.g. Room 204" value="Room 204">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary" onclick="handleQuickAddMeeting()" id="qm-submit-btn">
+            <i class="bi bi-plus-circle"></i> Create Meeting
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick-Add Task Modal -->
+  <div id="quick-task-modal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" style="font-size:0.95rem;font-weight:600;"><i class="bi bi-check2-square" style="color:#34a853;margin-right:6px;"></i>Add Task</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label" style="font-size:0.78rem;font-weight:600;">Title</label>
+            <input type="text" id="qt-title" class="form-control form-control-sm" placeholder="Task title...">
+          </div>
+          <div class="mb-2">
+            <label class="form-label" style="font-size:0.78rem;font-weight:600;">Assignee</label>
+            <select id="qt-assignee" class="form-select form-select-sm">
+              <option value="Everyone">Everyone</option>
+            </select>
+          </div>
+          <div class="row mb-2">
+            <div class="col-6">
+              <label class="form-label" style="font-size:0.78rem;font-weight:600;">Priority</label>
+              <select id="qt-priority" class="form-select form-select-sm">
+                <option value="Normal">Normal</option>
+                <option value="Low">Low</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label" style="font-size:0.78rem;font-weight:600;">Due Date</label>
+              <input type="date" id="qt-due" class="form-control form-control-sm">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-success" onclick="handleQuickAddTask()" id="qt-submit-btn">
+            <i class="bi bi-plus-circle"></i> Create Task
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+  /* ============================================================
+     SECTION 1: APP STATE
+     ============================================================ */
+
+  var AppState = {
+    currentUser: null,
+    isLoading: true,
+    currentView: 'today',
+    school: 'HS',
+    todaySchedule: null,
+    weekSchedule: null,
+    teacherData: null,
+    teacherFilter: 'team',
+    // Week view: clickable day
+    selectedWeekDay: null,
+    selectedDayTeachers: null,
+    loadingDayTeachers: false,
+    // Month view
+    monthYear: null,
+    monthSchedule: null,
+    monthMeetings: null,
+    monthTasks: null,
+    monthAnnouncements: null,
+    selectedMonthDay: null,
+    selectedMonthDayTeachers: null,
+    loadingMonthDayTeachers: false,
+    loadingMonth: false,
+    templates: null
+  };
+
+  /* ============================================================
+     SECTION 2: HELPER FUNCTIONS
+     ============================================================ */
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function formatDateISO(d) {
+    var y = d.getFullYear();
+    var m = (d.getMonth() + 1);
+    var day = d.getDate();
+    return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+
+  function getDayTypeClass(entry) {
+    if (!entry || entry.noSchool) return 'weekend';
+    if (entry.dayType === 'HOLIDAY') return 'holiday';
+    if (entry.dayType === 'NO-ROTATION') return 'no-rotation';
+    if (entry.type === 'A') return 'a-day';
+    if (entry.type === 'B') return 'b-day';
+    return 'weekend';
+  }
+
+  function getBlockClass(blockName) {
+    if (!blockName) return '';
+    if (blockName.charAt(0) === 'A') return 'a-block';
+    if (blockName.charAt(0) === 'B') return 'b-block';
+    return '';
+  }
+
+  function formatDisplayDate(dateStr) {
+    if (!dateStr) return '';
+    var parts = dateStr.split('-');
+    var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    var days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    var months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return days[d.getDay()] + ', ' + months[d.getMonth()] + ' ' + d.getDate();
+  }
+
+  function formatShortDate(dateStr) {
+    if (!dateStr) return '';
+    var parts = dateStr.split('-');
+    var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[d.getMonth()] + ' ' + d.getDate();
+  }
+
+  function getDayName(dateStr) {
+    if (!dateStr) return '';
+    var parts = dateStr.split('-');
+    var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[d.getDay()];
+  }
+
+  function formatTime(timeStr) {
+    if (!timeStr) return '';
+    var parts = timeStr.split(':');
+    var h = parseInt(parts[0]);
+    var m = parts[1];
+    if (h === 0) return '12:' + m + ' AM';
+    if (h < 12) return h + ':' + m + ' AM';
+    if (h === 12) return '12:' + m + ' PM';
+    return (h - 12) + ':' + m + ' PM';
+  }
+
+  function formatTimeShort(timeStr) {
+    if (!timeStr) return '';
+    var parts = timeStr.split(':');
+    var h = parseInt(parts[0]);
+    var m = parts[1];
+    if (h > 12) h = h - 12;
+    return h + ':' + m;
+  }
+
+  function getCurrentPeriodInfo(entry) {
+    if (!entry || !entry.bellTimes || !entry.blocks || entry.blocks.length === 0) return null;
+    var now = new Date();
+    var nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    for (var i = 0; i < 4; i++) {
+      var startKey = 'Block' + (i + 1) + 'Start';
+      var endKey = 'Block' + (i + 1) + 'End';
+      if (!entry.bellTimes[startKey] || !entry.bellTimes[endKey]) continue;
+      var startParts = entry.bellTimes[startKey].split(':');
+      var endParts = entry.bellTimes[endKey].split(':');
+      var startMin = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
+      var endMin = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
+
+      if (nowMinutes >= startMin && nowMinutes < endMin) {
+        return { status: 'in-session', blockIndex: i, blockName: entry.blocks[i], period: i + 1 };
+      }
+      if (nowMinutes < startMin) {
+        return { status: 'upcoming', blockIndex: i, blockName: entry.blocks[i], period: i + 1, startTime: entry.bellTimes[startKey] };
+      }
+    }
+
+    var lastEndKey = 'Block4End';
+    if (entry.bellTimes[lastEndKey]) {
+      var lastEndParts = entry.bellTimes[lastEndKey].split(':');
+      var lastEnd = parseInt(lastEndParts[0]) * 60 + parseInt(lastEndParts[1]);
+      if (nowMinutes >= lastEnd) {
+        return { status: 'done' };
+      }
+    }
+    return null;
+  }
+
+  function showError(msg) {
+    var banner = document.getElementById('error-banner');
+    document.getElementById('error-message').textContent = msg;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 5000);
+  }
+
+  function hideError() { document.getElementById('error-banner').style.display = 'none'; }
+
+  function showSuccess(msg) {
+    var banner = document.getElementById('success-banner');
+    document.getElementById('success-message').textContent = msg;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 3000);
+  }
+
+  function hideSuccess() { document.getElementById('success-banner').style.display = 'none'; }
+
+  /* ============================================================
+     SECTION 3: RENDERING
+     ============================================================ */
+
+  function renderApp() {
+    var spinner = document.getElementById('loading-spinner');
+    var content = document.getElementById('app-content');
+    if (AppState.isLoading) { spinner.style.display = 'flex'; content.style.display = 'none'; return; }
+    spinner.style.display = 'none';
+    content.style.display = 'block';
+
+    if (AppState.currentView === 'month') { renderMonthView(); }
+    else if (AppState.currentView === 'week') { renderWeekView(); }
+    else { renderTodayView(); }
+  }
+
+  // ---- HEADER (shared) ----
+  function renderHeader() {
+    var html = '';
+    html += '<div class="app-header">';
+    html += '<h1><i class="bi bi-calendar2-week" style="color:#0d6efd;margin-right:6px;"></i> Waterfall Schedule</h1>';
+    html += '<div class="header-actions">';
+
+    // School toggle
+    html += '<div class="school-toggle">';
+    html += '<button class="school-toggle-btn' + (AppState.school === 'HS' ? ' active' : '') + '" onclick="switchSchool(\'HS\')">HS</button>';
+    html += '<button class="school-toggle-btn' + (AppState.school === 'MS' ? ' active' : '') + '" onclick="switchSchool(\'MS\')">MS</button>';
+    html += '</div>';
+
+    // View toggle
+    html += '<div class="view-toggle">';
+    html += '<button class="view-toggle-btn' + (AppState.currentView === 'today' ? ' active' : '') + '" onclick="switchView(\'today\')">Today</button>';
+    html += '<button class="view-toggle-btn' + (AppState.currentView === 'week' ? ' active' : '') + '" onclick="switchView(\'week\')">Week</button>';
+    html += '<button class="view-toggle-btn' + (AppState.currentView === 'month' ? ' active' : '') + '" onclick="switchView(\'month\')">Month</button>';
+    html += '</div>';
+
+    html += '</div></div>';
+    return html;
+  }
+
+  // ---- TODAY VIEW ----
+  function renderTodayView() {
+    var content = document.getElementById('app-content');
+    var entry = AppState.todaySchedule;
+    var html = renderHeader();
+
+    // No school (weekend or missing)
+    if (!entry || entry.noSchool) {
+      html += '<div class="no-school">';
+      html += '<i class="bi bi-sun"></i>';
+      html += '<p>No school today</p>';
+      var nextDay = findNextSchoolDay();
+      if (nextDay) {
+        html += '<div class="next-day">Next: <span class="day-badge ' + getDayTypeClass(nextDay) + '">' + escapeHtml(nextDay.dayType) + '</span> on ' + formatDisplayDate(nextDay.date) + '</div>';
+      }
+      html += '</div>';
+      content.innerHTML = html;
+      return;
+    }
+
+    // Holiday
+    if (entry.dayType === 'HOLIDAY') {
+      html += '<div class="today-header">';
+      html += '<div class="today-label">Today</div>';
+      html += '<div class="today-date">' + formatDisplayDate(entry.date) + '</div>';
+      html += '<span class="day-badge day-badge-lg holiday"><i class="bi bi-calendar-x"></i> Holiday</span>';
+      if (entry.notes) html += '<div style="margin-top:8px;font-size:0.85rem;color:#6c757d;">' + escapeHtml(entry.notes) + '</div>';
+      html += '</div>';
+      var nextDay2 = findNextSchoolDay();
+      if (nextDay2) {
+        html += '<div class="period-indicator">Next school day: <span class="day-badge ' + getDayTypeClass(nextDay2) + '">' + escapeHtml(nextDay2.dayType) + '</span> on ' + formatDisplayDate(nextDay2.date) + '</div>';
+      }
+      content.innerHTML = html;
+      return;
+    }
+
+    // Regular school day
+    var dayClass = getDayTypeClass(entry);
+    html += '<div class="today-header">';
+    html += '<div class="today-label">Today</div>';
+    html += '<div class="today-date">' + formatDisplayDate(entry.date) + '</div>';
+    html += '<span class="day-badge day-badge-lg ' + dayClass + '">' + escapeHtml(entry.dayType) + ' Day</span>';
+    html += '</div>';
+
+    // Block cards
+    var periodInfo = getCurrentPeriodInfo(entry);
+    html += '<div class="block-grid">';
+    for (var i = 0; i < 4; i++) {
+      var blockName = entry.blocks[i] || '';
+      var blockClass = (blockName.charAt(0) === 'A') ? 'a-day' : 'b-day';
+      var isCurrent = (periodInfo && periodInfo.status === 'in-session' && periodInfo.blockIndex === i);
+      html += '<div class="block-card ' + blockClass + (isCurrent ? ' current' : '') + '">';
+      html += '<div class="block-card-period">Period ' + (i + 1) + '</div>';
+      html += '<div class="block-card-name">' + escapeHtml(blockName) + '</div>';
+      if (entry.bellTimes) {
+        html += '<div class="block-card-time">' + formatTimeShort(entry.bellTimes['Block' + (i + 1) + 'Start']) + ' – ' + formatTimeShort(entry.bellTimes['Block' + (i + 1) + 'End']) + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // Period indicator
+    if (periodInfo) {
+      html += '<div class="period-indicator">';
+      if (periodInfo.status === 'in-session') {
+        html += '<i class="bi bi-broadcast"></i> <span class="current-text">Period ' + periodInfo.period + ' (' + escapeHtml(periodInfo.blockName) + ') is in session</span>';
+      } else if (periodInfo.status === 'upcoming') {
+        html += '<i class="bi bi-clock"></i> Next: Period ' + periodInfo.period + ' (' + escapeHtml(periodInfo.blockName) + ') at ' + formatTime(periodInfo.startTime);
+      } else if (periodInfo.status === 'done') {
+        html += '<i class="bi bi-check-circle"></i> School day is complete';
+      }
+      html += '</div>';
+    }
+
+    // Teacher schedule section
+    html += renderTeacherSchedule();
+
+    content.innerHTML = html;
+  }
+
+  // ---- TEACHER SCHEDULE ----
+  function renderTeacherSchedule(optionalData, optionalFilterKey) {
+    var data = optionalData || AppState.teacherData;
+    var filterKey = optionalFilterKey || 'teacherFilter';
+    if (!data || data.noSchool || !data.periods || data.periods.length === 0) {
+      return '';
+    }
+
+    var html = '<div class="teacher-section">';
+
+    // Header with toggle
+    html += '<div class="teacher-section-header">';
+    html += '<h3><i class="bi bi-people-fill" style="color:#198754;margin-right:6px;"></i> Teacher Schedules</h3>';
+    html += '<div class="teacher-toggle">';
+    html += '<button class="teacher-toggle-btn' + (AppState.teacherFilter === 'team' ? ' active' : '') + '" onclick="switchTeacherFilter(\'team\')">Our Team</button>';
+    html += '<button class="teacher-toggle-btn' + (AppState.teacherFilter === 'all' ? ' active' : '') + '" onclick="switchTeacherFilter(\'all\')">All Teachers</button>';
+    html += '</div>';
+    html += '</div>';
+
+    var departmentEmails = data.departmentEmails || [];
+
+    for (var p = 0; p < data.periods.length; p++) {
+      var period = data.periods[p];
+      var blockChar = period.block ? period.block.charAt(0) : '';
+      var periodClass = blockChar === 'A' ? 'a-period' : (blockChar === 'B' ? 'b-period' : 'a-period');
+
+      // Filter teachers
+      var teachers = period.teachers || [];
+      if (AppState.teacherFilter === 'team' && departmentEmails.length > 0) {
+        teachers = [];
+        for (var t = 0; t < (period.teachers || []).length; t++) {
+          var teacherEmail = (period.teachers[t].email || '').toLowerCase();
+          if (departmentEmails.indexOf(teacherEmail) !== -1) {
+            teachers.push(period.teachers[t]);
+          }
+        }
+      }
+
+      html += '<div class="period-group">';
+
+      // Period header
+      html += '<div class="period-group-header ' + periodClass + '">';
+      html += '<i class="bi bi-clock"></i> Period ' + period.period + ' — ' + escapeHtml(period.block);
+      if (period.startTime && period.endTime) {
+        html += '<span class="period-time">' + formatTimeShort(period.startTime) + ' – ' + formatTimeShort(period.endTime) + '</span>';
+      }
+      html += '</div>';
+
+      // Teacher table
+      html += '<table class="teacher-table">';
+      html += '<thead><tr><th>Teacher</th><th>Course</th><th>Room</th></tr></thead>';
+      html += '<tbody>';
+
+      if (teachers.length === 0) {
+        var msg = AppState.teacherFilter === 'team' ? 'No team members teaching this period' : 'No teachers scheduled';
+        html += '<tr><td colspan="3" class="no-teachers">' + msg + '</td></tr>';
+      } else {
+        for (var j = 0; j < teachers.length; j++) {
+          html += '<tr>';
+          html += '<td>' + escapeHtml(teachers[j].name) + '</td>';
+          html += '<td>' + escapeHtml(teachers[j].course) + '</td>';
+          html += '<td>' + escapeHtml(teachers[j].room) + '</td>';
+          html += '</tr>';
+        }
+      }
+
+      html += '</tbody></table>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function findNextSchoolDay() {
+    if (!AppState.weekSchedule || AppState.weekSchedule.length === 0) return null;
+    var todayStr = formatDateISO(new Date());
+    for (var i = 0; i < AppState.weekSchedule.length; i++) {
+      var day = AppState.weekSchedule[i];
+      if (day.date > todayStr && !day.noSchool && day.dayType !== 'HOLIDAY' && day.dayType !== 'NO-ROTATION' && day.dayType !== 'NONE') {
+        return day;
+      }
+    }
+    return null;
+  }
+
+  // ---- WEEK VIEW ----
+  function renderWeekView() {
+    var content = document.getElementById('app-content');
+    var week = AppState.weekSchedule;
+    var html = renderHeader();
+
+    if (!week || week.length === 0) {
+      html += '<div class="empty-state"><i class="bi bi-calendar-week"></i><p>No schedule data for this week</p></div>';
+      content.innerHTML = html;
+      return;
+    }
+
+    // Week header
+    var firstDate = week[0].date;
+    var lastDate = week[week.length - 1].date;
+    html += '<div class="week-header"><i class="bi bi-calendar-range"></i> ' + formatShortDate(firstDate) + ' – ' + formatShortDate(lastDate) + '</div>';
+
+    var todayStr = formatDateISO(new Date());
+
+    // Week grid
+    html += '<div class="week-grid">';
+    for (var i = 0; i < week.length; i++) {
+      var day = week[i];
+      var isToday = (day.date === todayStr);
+      var dayClass = getDayTypeClass(day);
+      var colClass = isToday ? ' today-col' : '';
+      if (day.dayType === 'HOLIDAY') colClass += ' holiday-col';
+
+      // Determine if this day is clickable (school day with blocks)
+      var isClickable = !day.noSchool && day.dayType !== 'HOLIDAY' && day.dayType !== 'NO-ROTATION' && day.dayType !== 'NONE' && day.blocks && day.blocks.length > 0;
+      var isSelected = (AppState.selectedWeekDay === day.date);
+      if (isClickable) colClass += ' clickable';
+      if (isSelected) colClass += ' selected-col';
+
+      var clickAttr = isClickable ? ' onclick="selectWeekDay(\'' + day.date + '\')"' : '';
+      html += '<div class="week-day' + colClass + '"' + clickAttr + '>';
+      html += '<div class="week-day-label">' + getDayName(day.date) + '</div>';
+      var dateParts = day.date.split('-');
+      html += '<div class="week-day-date">' + parseInt(dateParts[2]) + '</div>';
+
+      if (day.dayType === 'HOLIDAY') {
+        html += '<div class="week-day-badge"><span class="day-badge holiday" style="font-size:0.68rem;padding:2px 6px;">Holiday</span></div>';
+        if (day.notes) html += '<div class="week-day-blocks" style="font-size:0.6rem;color:#999;">' + escapeHtml(day.notes) + '</div>';
+      } else if (day.noSchool || day.dayType === 'NONE' || !day.blocks || day.blocks.length === 0) {
+        html += '<div class="week-day-badge"><span class="day-badge weekend" style="font-size:0.68rem;padding:2px 6px;">—</span></div>';
+      } else {
+        html += '<div class="week-day-badge"><span class="day-badge ' + dayClass + '" style="font-size:0.72rem;padding:2px 8px;">' + escapeHtml(day.dayType) + '</span></div>';
+        html += '<div class="week-day-blocks">';
+        for (var b = 0; b < day.blocks.length; b++) {
+          html += '<span class="block-label ' + getBlockClass(day.blocks[b]) + '">' + escapeHtml(day.blocks[b]) + '</span>';
+        }
+        html += '</div>';
+      }
+
+      if (isToday) {
+        html += '<div style="font-size:0.58rem;color:#0d6efd;font-weight:600;margin-top:4px;">TODAY</div>';
+      }
+
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // Teacher schedule panel for selected day
+    if (AppState.selectedWeekDay) {
+      html += '<div class="day-teacher-panel">';
+
+      // Find the selected day's entry for the header
+      var selDay = null;
+      for (var s = 0; s < week.length; s++) {
+        if (week[s].date === AppState.selectedWeekDay) { selDay = week[s]; break; }
+      }
+
+      html += '<div class="day-teacher-header">';
+      html += '<h3><i class="bi bi-people-fill" style="color:#198754;margin-right:6px;"></i> Teachers — ' + formatDisplayDate(AppState.selectedWeekDay);
+      if (selDay) html += ' (' + escapeHtml(selDay.dayType) + ')';
+      html += '</h3>';
+      html += '<button class="day-teacher-close" onclick="closeWeekDayPanel()" title="Close"><i class="bi bi-x-lg"></i></button>';
+      html += '</div>';
+
+      if (AppState.loadingDayTeachers) {
+        html += '<div class="inline-spinner"><span class="spinner-border spinner-border-sm"></span> Loading teacher schedules...</div>';
+      } else if (AppState.selectedDayTeachers) {
+        html += renderTeacherSchedule(AppState.selectedDayTeachers);
+      }
+
+      html += '</div>';
+    }
+
+    content.innerHTML = html;
+  }
+
+  // ---- MONTH VIEW ----
+  function renderMonthView() {
+    var content = document.getElementById('app-content');
+    var html = renderHeader();
+
+    if (!AppState.monthYear) {
+      var now = new Date();
+      AppState.monthYear = { year: now.getFullYear(), month: now.getMonth() + 1 };
+    }
+
+    if (AppState.loadingMonth) {
+      html += '<div class="inline-spinner" style="padding:40px;"><span class="spinner-border spinner-border-sm"></span> Loading month schedule...</div>';
+      content.innerHTML = html;
+      return;
+    }
+
+    var year = AppState.monthYear.year;
+    var month = AppState.monthYear.month;
+    var monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    // Month header with nav
+    html += '<div class="month-header">';
+    html += '<button class="month-nav-btn" onclick="switchMonth(-1)" title="Previous month"><i class="bi bi-chevron-left"></i></button>';
+    html += '<h2>' + monthNames[month - 1] + ' ' + year + '</h2>';
+    html += '<button class="month-nav-btn" onclick="switchMonth(1)" title="Next month"><i class="bi bi-chevron-right"></i></button>';
+    html += '</div>';
+
+    // Calendar grid
+    var dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    html += '<div class="cal-grid">';
+
+    // Header row
+    for (var h = 0; h < 7; h++) {
+      html += '<div class="cal-header-cell">' + dayHeaders[h] + '</div>';
+    }
+
+    // Build schedule lookup by date
+    var scheduleLookup = {};
+    if (AppState.monthSchedule) {
+      for (var s = 0; s < AppState.monthSchedule.length; s++) {
+        scheduleLookup[AppState.monthSchedule[s].date] = AppState.monthSchedule[s];
+      }
+    }
+
+    // Build meetings lookup by date
+    var meetingsByDate = {};
+    if (AppState.monthMeetings) {
+      for (var mi = 0; mi < AppState.monthMeetings.length; mi++) {
+        var mtg = AppState.monthMeetings[mi];
+        var mtgDate = mtg.Date || mtg.date || '';
+        if (mtgDate) {
+          if (!meetingsByDate[mtgDate]) meetingsByDate[mtgDate] = [];
+          meetingsByDate[mtgDate].push(mtg);
+        }
+      }
+    }
+
+    // Build tasks lookup by due date
+    var tasksByDate = {};
+    if (AppState.monthTasks) {
+      for (var ti = 0; ti < AppState.monthTasks.length; ti++) {
+        var tsk = AppState.monthTasks[ti];
+        var tskDate = tsk.DueDate || tsk.dueDate || '';
+        if (tskDate) {
+          if (!tasksByDate[tskDate]) tasksByDate[tskDate] = [];
+          tasksByDate[tskDate].push(tsk);
+        }
+      }
+    }
+
+    // Build announcements lookup by EventDate
+    var announcementsByDate = {};
+    if (AppState.monthAnnouncements) {
+      for (var ai = 0; ai < AppState.monthAnnouncements.length; ai++) {
+        var ann = AppState.monthAnnouncements[ai];
+        var annDate = ann.EventDate || '';
+        if (annDate) {
+          if (!announcementsByDate[annDate]) announcementsByDate[annDate] = [];
+          announcementsByDate[annDate].push(ann);
+        }
+      }
+    }
+
+    // Calculate calendar grid days
+    var firstDayOfMonth = new Date(year, month - 1, 1);
+    var startDow = firstDayOfMonth.getDay(); // 0=Sun
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var todayStr = formatDateISO(new Date());
+
+    // Days from previous month to fill first row
+    var prevMonthDays = new Date(year, month - 1, 0).getDate();
+    for (var pd = startDow - 1; pd >= 0; pd--) {
+      var prevDay = prevMonthDays - pd;
+      html += '<div class="cal-cell cal-outside"><div class="cal-day-num">' + prevDay + '</div></div>';
+    }
+
+    // Days of current month
+    for (var d = 1; d <= daysInMonth; d++) {
+      var dateObj = new Date(year, month - 1, d);
+      var dateStr = formatDateISO(dateObj);
+      var dow = dateObj.getDay();
+      var isWeekend = (dow === 0 || dow === 6);
+      var isToday = (dateStr === todayStr);
+      var isSelected = (dateStr === AppState.selectedMonthDay);
+
+      var entry = scheduleLookup[dateStr] || null;
+      var dayMeetings = meetingsByDate[dateStr] || [];
+      var dayTasks = tasksByDate[dateStr] || [];
+      var dayAnnouncements = announcementsByDate[dateStr] || [];
+
+      var cellClass = 'cal-cell';
+      if (isWeekend) cellClass += ' cal-weekend';
+      if (isToday) cellClass += ' cal-today';
+      if (isSelected) cellClass += ' cal-selected';
+      if (entry && entry.dayType === 'HOLIDAY') cellClass += ' cal-holiday';
+
+      var clickable = !isWeekend;
+      var clickHandler = clickable ? ' onclick="selectMonthDay(\'' + dateStr + '\')"' : '';
+
+      html += '<div class="' + cellClass + '"' + clickHandler + '>';
+      html += '<div class="cal-day-num">' + d + '</div>';
+
+      // Day type badge
+      if (entry && !entry.noSchool && entry.dayType && entry.dayType !== 'NONE') {
+        var badgeClass = getDayTypeClass(entry);
+        html += '<div class="cal-day-type"><span class="day-badge ' + badgeClass + '">' + escapeHtml(entry.dayType) + '</span></div>';
+      } else if (entry && entry.dayType === 'HOLIDAY') {
+        html += '<div class="cal-day-type"><span class="day-badge holiday">Holiday</span></div>';
+      }
+
+      // Meeting/task/announcement dots
+      if (dayMeetings.length > 0 || dayTasks.length > 0 || dayAnnouncements.length > 0) {
+        html += '<div class="cal-dots">';
+        if (dayMeetings.length > 0) {
+          html += '<span class="cal-dot meeting" title="' + dayMeetings.length + ' meeting(s)"></span>';
+          if (dayMeetings.length > 1) html += '<span class="cal-dot-count meeting">' + dayMeetings.length + '</span>';
+        }
+        if (dayTasks.length > 0) {
+          html += '<span class="cal-dot task" title="' + dayTasks.length + ' task(s)"></span>';
+          if (dayTasks.length > 1) html += '<span class="cal-dot-count task">' + dayTasks.length + '</span>';
+        }
+        if (dayAnnouncements.length > 0) {
+          html += '<span class="cal-dot announcement" title="' + dayAnnouncements.length + ' event(s)/deadline(s)"></span>';
+          if (dayAnnouncements.length > 1) html += '<span class="cal-dot-count announcement">' + dayAnnouncements.length + '</span>';
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+    }
+
+    // Days from next month to fill last row
+    var totalCells = startDow + daysInMonth;
+    var remaining = (7 - (totalCells % 7)) % 7;
+    for (var nd = 1; nd <= remaining; nd++) {
+      html += '<div class="cal-cell cal-outside"><div class="cal-day-num">' + nd + '</div></div>';
+    }
+
+    html += '</div>'; // end cal-grid
+
+    // Day detail panel
+    if (AppState.selectedMonthDay) {
+      html += renderDayDetailPanel();
+    }
+
+    content.innerHTML = html;
+  }
+
+  // ---- DAY DETAIL PANEL (Month view) ----
+  function renderDayDetailPanel() {
+    var dateStr = AppState.selectedMonthDay;
+    if (!dateStr) return '';
+
+    // Find schedule entry
+    var entry = null;
+    if (AppState.monthSchedule) {
+      for (var i = 0; i < AppState.monthSchedule.length; i++) {
+        if (AppState.monthSchedule[i].date === dateStr) { entry = AppState.monthSchedule[i]; break; }
+      }
+    }
+
+    // Find meetings for this date
+    var dayMeetings = [];
+    if (AppState.monthMeetings) {
+      for (var mi = 0; mi < AppState.monthMeetings.length; mi++) {
+        var mtg = AppState.monthMeetings[mi];
+        var mtgDate = mtg.Date || mtg.date || '';
+        if (mtgDate === dateStr) dayMeetings.push(mtg);
+      }
+    }
+
+    // Find tasks for this date
+    var dayTasks = [];
+    if (AppState.monthTasks) {
+      for (var ti = 0; ti < AppState.monthTasks.length; ti++) {
+        var tsk = AppState.monthTasks[ti];
+        var tskDate = tsk.DueDate || tsk.dueDate || '';
+        if (tskDate === dateStr) dayTasks.push(tsk);
+      }
+    }
+
+    var html = '<div class="day-detail-panel">';
+
+    // Header
+    html += '<div class="day-detail-header">';
+    html += '<h3><i class="bi bi-calendar-day" style="color:#0d6efd;margin-right:6px;"></i>' + formatDisplayDate(dateStr);
+    if (entry && entry.dayType && entry.dayType !== 'NONE') {
+      html += ' <span class="day-badge ' + getDayTypeClass(entry) + '" style="font-size:0.72rem;margin-left:6px;">' + escapeHtml(entry.dayType) + '</span>';
+    }
+    html += '</h3>';
+    html += '<button class="day-teacher-close" onclick="closeMonthDayPanel()" title="Close"><i class="bi bi-x-lg"></i></button>';
+    html += '</div>';
+
+    html += '<div class="day-detail-body">';
+
+    // Schedule info
+    if (entry && !entry.noSchool && entry.blocks && entry.blocks.length > 0) {
+      html += '<div class="detail-section">';
+      html += '<div class="detail-section-header"><h4><i class="bi bi-calendar2-week" style="color:#0d6efd;margin-right:4px;"></i> Schedule</h4></div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+      for (var b = 0; b < entry.blocks.length; b++) {
+        var blockName = entry.blocks[b] || '';
+        var blockCls = getBlockClass(blockName);
+        html += '<span class="block-label ' + blockCls + '" style="font-size:0.72rem;padding:2px 8px;">';
+        html += 'P' + (b + 1) + ': ' + escapeHtml(blockName);
+        if (entry.bellTimes) {
+          var startKey = 'Block' + (b + 1) + 'Start';
+          var endKey = 'Block' + (b + 1) + 'End';
+          if (entry.bellTimes[startKey]) {
+            html += ' <span style="color:#888;">(' + formatTimeShort(entry.bellTimes[startKey]) + '–' + formatTimeShort(entry.bellTimes[endKey]) + ')</span>';
+          }
+        }
+        html += '</span>';
+      }
+      html += '</div>';
+      html += '</div>';
+    } else if (entry && (entry.dayType === 'HOLIDAY' || entry.noSchool)) {
+      html += '<div class="detail-section">';
+      html += '<div class="detail-empty"><i class="bi bi-sun" style="margin-right:4px;"></i> ' + escapeHtml(entry.notes || entry.reason || 'No school') + '</div>';
+      html += '</div>';
+    }
+
+    // Meetings section
+    html += '<div class="detail-section">';
+    html += '<div class="detail-section-header">';
+    html += '<h4><i class="bi bi-camera-video" style="color:#6f42c1;margin-right:4px;"></i> Meetings (' + dayMeetings.length + ')</h4>';
+    html += '<button class="btn btn-sm btn-outline-primary" style="font-size:0.7rem;padding:2px 8px;" onclick="openQuickMeetingModal()"><i class="bi bi-plus"></i> Add</button>';
+    html += '</div>';
+    if (dayMeetings.length === 0) {
+      html += '<div class="detail-empty">No meetings scheduled</div>';
+    } else {
+      for (var m = 0; m < dayMeetings.length; m++) {
+        var meet = dayMeetings[m];
+        html += '<div class="detail-item">';
+        var meetTime = meet.StartTime || meet.startTime || '';
+        if (meetTime) html += '<span class="detail-item-time">' + formatTime(meetTime) + '</span>';
+        html += '<span class="detail-item-title">' + escapeHtml(meet.Title || meet.title || 'Untitled') + '</span>';
+        var meetStatus = meet.Status || meet.status || '';
+        if (meetStatus) {
+          var statusCls = meetStatus === 'Finalized' ? 'bg-success' : (meetStatus === 'In Progress' ? 'bg-warning' : 'bg-secondary');
+          html += '<span class="badge ' + statusCls + '" style="font-size:0.6rem;">' + escapeHtml(meetStatus) + '</span>';
+        }
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+
+    // Tasks section
+    html += '<div class="detail-section">';
+    html += '<div class="detail-section-header">';
+    html += '<h4><i class="bi bi-check2-square" style="color:#34a853;margin-right:4px;"></i> Tasks Due (' + dayTasks.length + ')</h4>';
+    html += '<button class="btn btn-sm btn-outline-success" style="font-size:0.7rem;padding:2px 8px;" onclick="openQuickTaskModal()"><i class="bi bi-plus"></i> Add</button>';
+    html += '</div>';
+    if (dayTasks.length === 0) {
+      html += '<div class="detail-empty">No tasks due</div>';
+    } else {
+      for (var t = 0; t < dayTasks.length; t++) {
+        var task = dayTasks[t];
+        html += '<div class="detail-item">';
+        var priority = task.Priority || task.priority || 'Normal';
+        var prCls = 'priority-' + priority.toLowerCase();
+        html += '<span class="priority-badge ' + prCls + '">' + escapeHtml(priority) + '</span>';
+        html += '<span class="detail-item-title">' + escapeHtml(task.Title || task.title || 'Untitled') + '</span>';
+        var taskStatus = task.Status || task.status || '';
+        if (taskStatus) {
+          html += '<span style="font-size:0.68rem;color:#888;">' + escapeHtml(taskStatus) + '</span>';
+        }
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+
+    // Announcements/Events section
+    var dayAnnouncements = [];
+    if (AppState.monthAnnouncements) {
+      for (var ai = 0; ai < AppState.monthAnnouncements.length; ai++) {
+        var ann = AppState.monthAnnouncements[ai];
+        if ((ann.EventDate || '') === dateStr) dayAnnouncements.push(ann);
+      }
+    }
+    html += '<div class="detail-section">';
+    html += '<div class="detail-section-header">';
+    html += '<h4><i class="bi bi-megaphone" style="color:#fd7e14;margin-right:4px;"></i> Events & Deadlines (' + dayAnnouncements.length + ')</h4>';
+    html += '</div>';
+    if (dayAnnouncements.length === 0) {
+      html += '<div class="detail-empty">No events or deadlines</div>';
+    } else {
+      for (var a = 0; a < dayAnnouncements.length; a++) {
+        var evt = dayAnnouncements[a];
+        html += '<div class="detail-item">';
+        if (evt.EventTime) {
+          html += '<span class="detail-item-time">' + formatTime(evt.EventTime) + '</span>';
+        }
+        var catClass = evt.Category === 'Deadline' ? 'bg-danger' : 'bg-info text-dark';
+        html += '<span class="badge ' + catClass + '" style="font-size:0.6rem;">' + escapeHtml(evt.Category || '') + '</span>';
+        html += '<span class="detail-item-title">' + escapeHtml(evt.Message || '') + '</span>';
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+
+    // Teacher schedules (loaded on demand)
+    html += '<div class="detail-section">';
+    html += '<div class="detail-section-header"><h4><i class="bi bi-people-fill" style="color:#198754;margin-right:4px;"></i> Teacher Schedules</h4></div>';
+    if (AppState.loadingMonthDayTeachers) {
+      html += '<div class="inline-spinner"><span class="spinner-border spinner-border-sm"></span> Loading...</div>';
+    } else if (AppState.selectedMonthDayTeachers) {
+      var thtml = renderTeacherSchedule(AppState.selectedMonthDayTeachers);
+      if (thtml) {
+        html += thtml;
+      } else {
+        html += '<div class="detail-empty">No teacher data available</div>';
+      }
+    } else {
+      html += '<div class="detail-empty">Loading teacher data...</div>';
+    }
+    html += '</div>';
+
+    html += '</div>'; // end day-detail-body
+    html += '</div>'; // end day-detail-panel
+
+    return html;
+  }
+
+  /* ============================================================
+     SECTION 4: EVENT HANDLERS
+     ============================================================ */
+
+  function switchView(view) {
+    AppState.currentView = view;
+    if (view === 'month' && !AppState.monthSchedule) {
+      // Initialize month year if not set
+      if (!AppState.monthYear) {
+        var now = new Date();
+        AppState.monthYear = { year: now.getFullYear(), month: now.getMonth() + 1 };
+      }
+      loadMonthData();
+    }
+    renderApp();
+  }
+
+  function switchSchool(school) {
+    AppState.school = school;
+    AppState.isLoading = true;
+    // Clear week day selection
+    AppState.selectedWeekDay = null;
+    AppState.selectedDayTeachers = null;
+    // Clear month data so it reloads
+    AppState.monthSchedule = null;
+    AppState.monthMeetings = null;
+    AppState.monthTasks = null;
+    AppState.monthAnnouncements = null;
+    AppState.selectedMonthDay = null;
+    AppState.selectedMonthDayTeachers = null;
+    renderApp();
+    loadTodaySchedule();
+    loadWeekSchedule();
+    loadTeacherSchedules();
+    // Reload month data if currently on month view
+    if (AppState.currentView === 'month') {
+      loadMonthData();
+    }
+  }
+
+  function switchTeacherFilter(filter) {
+    AppState.teacherFilter = filter;
+    renderApp();
+  }
+
+  // ---- Week day selection ----
+  function selectWeekDay(dateStr) {
+    if (AppState.selectedWeekDay === dateStr) {
+      // Toggle off
+      AppState.selectedWeekDay = null;
+      AppState.selectedDayTeachers = null;
+      AppState.loadingDayTeachers = false;
+      renderApp();
+      return;
+    }
+    AppState.selectedWeekDay = dateStr;
+    AppState.selectedDayTeachers = null;
+    AppState.loadingDayTeachers = true;
+    renderApp();
+
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.selectedDayTeachers = data;
+      AppState.loadingDayTeachers = false;
+      renderApp();
+    }).withFailureHandler(function(err) {
+      showError('Failed to load teacher schedules: ' + err);
+      AppState.loadingDayTeachers = false;
+      renderApp();
+    }).getTeacherSchedules(dateStr, AppState.school);
+  }
+
+  function closeWeekDayPanel() {
+    AppState.selectedWeekDay = null;
+    AppState.selectedDayTeachers = null;
+    AppState.loadingDayTeachers = false;
+    renderApp();
+  }
+
+  // ---- Month navigation ----
+  function switchMonth(delta) {
+    var m = AppState.monthYear.month + delta;
+    var y = AppState.monthYear.year;
+    if (m < 1) { m = 12; y--; }
+    if (m > 12) { m = 1; y++; }
+    AppState.monthYear = { year: y, month: m };
+    AppState.selectedMonthDay = null;
+    AppState.selectedMonthDayTeachers = null;
+    AppState.monthSchedule = null;
+    loadMonthData();
+  }
+
+  // ---- Month day selection ----
+  function selectMonthDay(dateStr) {
+    if (AppState.selectedMonthDay === dateStr) {
+      AppState.selectedMonthDay = null;
+      AppState.selectedMonthDayTeachers = null;
+      AppState.loadingMonthDayTeachers = false;
+      renderApp();
+      return;
+    }
+    AppState.selectedMonthDay = dateStr;
+    AppState.selectedMonthDayTeachers = null;
+    AppState.loadingMonthDayTeachers = true;
+    renderApp();
+
+    // Load teacher schedules for selected day
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.selectedMonthDayTeachers = data;
+      AppState.loadingMonthDayTeachers = false;
+      renderApp();
+    }).withFailureHandler(function(err) {
+      AppState.loadingMonthDayTeachers = false;
+      renderApp();
+    }).getTeacherSchedules(dateStr, AppState.school);
+  }
+
+  function closeMonthDayPanel() {
+    AppState.selectedMonthDay = null;
+    AppState.selectedMonthDayTeachers = null;
+    AppState.loadingMonthDayTeachers = false;
+    renderApp();
+  }
+
+  // ---- Quick-add meeting ----
+  function openQuickMeetingModal() {
+    var dateStr = AppState.selectedMonthDay || formatDateISO(new Date());
+    document.getElementById('qm-date').value = dateStr;
+    document.getElementById('qm-start').value = '14:00';
+    document.getElementById('qm-end').value = '15:00';
+    document.getElementById('qm-location').value = 'Room 204';
+    document.getElementById('qm-submit-btn').disabled = false;
+
+    // Load templates if not cached
+    if (!AppState.templates) {
+      loadMonthTemplates(function() {
+        populateTemplateDropdown();
+      });
+    } else {
+      populateTemplateDropdown();
+    }
+
+    var modal = new bootstrap.Modal(document.getElementById('quick-meeting-modal'));
+    modal.show();
+  }
+
+  function populateTemplateDropdown() {
+    var sel = document.getElementById('qm-template');
+    sel.innerHTML = '<option value="">Select template...</option>';
+    if (AppState.templates) {
+      for (var i = 0; i < AppState.templates.length; i++) {
+        var tpl = AppState.templates[i];
+        if (tpl.IsActive === true || tpl.IsActive === 'TRUE' || tpl.IsActive === 'true') {
+          sel.innerHTML += '<option value="' + escapeHtml(tpl.TemplateId) + '">' + escapeHtml(tpl.Name) + '</option>';
+        }
+      }
+    }
+  }
+
+  function onQuickMeetingTemplateChange() {
+    // Template selection changed — nothing else needed since backend uses template
+  }
+
+  function handleQuickAddMeeting() {
+    var templateId = document.getElementById('qm-template').value;
+    var date = document.getElementById('qm-date').value;
+    var startTime = document.getElementById('qm-start').value;
+    var endTime = document.getElementById('qm-end').value;
+    var location = document.getElementById('qm-location').value;
+
+    if (!templateId) { showError('Please select a meeting template'); return; }
+    if (!date) { showError('Please select a date'); return; }
+
+    document.getElementById('qm-submit-btn').disabled = true;
+
+    google.script.run.withSuccessHandler(function(result) {
+      bootstrap.Modal.getInstance(document.getElementById('quick-meeting-modal')).hide();
+      showSuccess('Meeting created successfully!');
+      // Reload month meetings
+      loadMonthMeetings();
+    }).withFailureHandler(function(err) {
+      showError('Failed to create meeting: ' + err);
+      document.getElementById('qm-submit-btn').disabled = false;
+    }).createMeetingFromTemplate(templateId, date, startTime, endTime, location);
+  }
+
+  // ---- Quick-add task ----
+  function openQuickTaskModal() {
+    var dateStr = AppState.selectedMonthDay || formatDateISO(new Date());
+    document.getElementById('qt-title').value = '';
+    document.getElementById('qt-due').value = dateStr;
+    document.getElementById('qt-priority').value = 'Normal';
+    document.getElementById('qt-submit-btn').disabled = false;
+
+    // Populate assignee dropdown from department emails
+    var sel = document.getElementById('qt-assignee');
+    sel.innerHTML = '<option value="Everyone">Everyone</option>';
+    if (AppState.selectedMonthDayTeachers && AppState.selectedMonthDayTeachers.departmentEmails) {
+      var emails = AppState.selectedMonthDayTeachers.departmentEmails;
+      for (var i = 0; i < emails.length; i++) {
+        var name = emails[i].split('@')[0];
+        name = name.charAt(0).toUpperCase() + name.slice(1);
+        sel.innerHTML += '<option value="' + escapeHtml(emails[i]) + '">' + escapeHtml(name) + '</option>';
+      }
+    }
+
+    var modal = new bootstrap.Modal(document.getElementById('quick-task-modal'));
+    modal.show();
+  }
+
+  function handleQuickAddTask() {
+    var title = document.getElementById('qt-title').value.trim();
+    var assignee = document.getElementById('qt-assignee').value;
+    var priority = document.getElementById('qt-priority').value;
+    var dueDate = document.getElementById('qt-due').value;
+
+    if (!title) { showError('Please enter a task title'); return; }
+
+    document.getElementById('qt-submit-btn').disabled = true;
+
+    var data = {
+      Title: title,
+      Assignee: assignee,
+      Priority: priority,
+      DueDate: dueDate,
+      Status: 'Not Started'
+    };
+
+    google.script.run.withSuccessHandler(function(result) {
+      bootstrap.Modal.getInstance(document.getElementById('quick-task-modal')).hide();
+      showSuccess('Task created successfully!');
+      // Reload month tasks
+      loadMonthTasks();
+    }).withFailureHandler(function(err) {
+      showError('Failed to create task: ' + err);
+      document.getElementById('qt-submit-btn').disabled = false;
+    }).createSharedTask(data);
+  }
+
+  // ---- Data loading ----
+  function loadTodaySchedule() {
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.todaySchedule = data;
+      checkLoaded();
+    }).withFailureHandler(function(err) {
+      showError('Failed to load today schedule: ' + err);
+      checkLoaded();
+    }).getTodaySchedule(AppState.school);
+  }
+
+  function loadWeekSchedule() {
+    var todayStr = formatDateISO(new Date());
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.weekSchedule = data;
+      checkLoaded();
+    }).withFailureHandler(function(err) {
+      showError('Failed to load week schedule: ' + err);
+      checkLoaded();
+    }).getWeekSchedule(todayStr, AppState.school);
+  }
+
+  function loadTeacherSchedules() {
+    var todayStr = formatDateISO(new Date());
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.teacherData = data;
+      checkLoaded();
+    }).withFailureHandler(function(err) {
+      // Teacher schedule is optional — don't show error, just skip
+      AppState.teacherData = null;
+      checkLoaded();
+    }).getTeacherSchedules(todayStr, AppState.school);
+  }
+
+  // ---- Month data loading ----
+  var monthLoadCount = 0;
+  var monthLoadTarget = 4;
+
+  function loadMonthData() {
+    if (!AppState.monthYear) return;
+    AppState.loadingMonth = true;
+    monthLoadCount = 0;
+    renderApp();
+
+    var year = AppState.monthYear.year;
+    var month = AppState.monthYear.month;
+
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.monthSchedule = data;
+      checkMonthLoaded();
+    }).withFailureHandler(function(err) {
+      showError('Failed to load month schedule: ' + err);
+      AppState.monthSchedule = [];
+      checkMonthLoaded();
+    }).getMonthSchedule(year, month, AppState.school);
+
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.monthMeetings = data || [];
+      checkMonthLoaded();
+    }).withFailureHandler(function(err) {
+      AppState.monthMeetings = [];
+      checkMonthLoaded();
+    }).getMeetings();
+
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.monthTasks = data || [];
+      checkMonthLoaded();
+    }).withFailureHandler(function(err) {
+      AppState.monthTasks = [];
+      checkMonthLoaded();
+    }).getSharedTasks();
+
+    // Load announcements with EventDate in this month
+    var startDate = year + '-' + (month < 10 ? '0' : '') + month + '-01';
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var endDate = year + '-' + (month < 10 ? '0' : '') + month + '-' + (daysInMonth < 10 ? '0' : '') + daysInMonth;
+
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.monthAnnouncements = data || [];
+      checkMonthLoaded();
+    }).withFailureHandler(function(err) {
+      AppState.monthAnnouncements = [];
+      checkMonthLoaded();
+    }).getAnnouncementsByDateRange(startDate, endDate);
+  }
+
+  function checkMonthLoaded() {
+    monthLoadCount++;
+    if (monthLoadCount >= monthLoadTarget) {
+      AppState.loadingMonth = false;
+      renderApp();
+    }
+  }
+
+  function loadMonthMeetings() {
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.monthMeetings = data || [];
+      renderApp();
+    }).withFailureHandler(function(err) {
+      // Silently fail
+    }).getMeetings();
+  }
+
+  function loadMonthTasks() {
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.monthTasks = data || [];
+      renderApp();
+    }).withFailureHandler(function(err) {
+      // Silently fail
+    }).getSharedTasks();
+  }
+
+  function loadMonthAnnouncements() {
+    if (!AppState.monthYear) return;
+    var year = AppState.monthYear.year;
+    var month = AppState.monthYear.month;
+    var startDate = year + '-' + (month < 10 ? '0' : '') + month + '-01';
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var endDate = year + '-' + (month < 10 ? '0' : '') + month + '-' + (daysInMonth < 10 ? '0' : '') + daysInMonth;
+
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.monthAnnouncements = data || [];
+      renderApp();
+    }).withFailureHandler(function(err) {
+      // Silently fail
+    }).getAnnouncementsByDateRange(startDate, endDate);
+  }
+
+  function loadMonthTemplates(callback) {
+    google.script.run.withSuccessHandler(function(data) {
+      AppState.templates = data || [];
+      if (callback) callback();
+    }).withFailureHandler(function(err) {
+      AppState.templates = [];
+      if (callback) callback();
+    }).getTemplates();
+  }
+
+  /* ============================================================
+     SECTION 5: BOOT
+     ============================================================ */
+
+  var loadCount = 0;
+  var loadTarget = 4;
+
+  function checkLoaded() {
+    loadCount++;
+    if (loadCount >= loadTarget) {
+      AppState.isLoading = false;
+      renderApp();
+    }
+  }
+
+  function boot() {
+    loadCount = 0;
+
+    google.script.run.withSuccessHandler(function(user) {
+      AppState.currentUser = user;
+      checkLoaded();
+    }).withFailureHandler(function(err) {
+      showError('Failed to load user: ' + err);
+      checkLoaded();
+    }).getCurrentUser();
+
+    loadTodaySchedule();
+    loadWeekSchedule();
+    loadTeacherSchedules();
+  }
+
+  boot();
+  </script>
+</body>
+</html>

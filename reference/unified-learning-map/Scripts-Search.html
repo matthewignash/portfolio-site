@@ -1,0 +1,331 @@
+<script>
+// ================================================
+// COMMAND PALETTE SEARCH (ES5)
+// cmd- prefix
+// ================================================
+
+var cmdOpen = false;
+var cmdActiveIndex = -1;
+var cmdResults = [];
+
+// ================================================
+// OPEN / CLOSE
+// ================================================
+
+function openCommandPalette() {
+  var overlay = document.getElementById('cmdOverlay');
+  if (!overlay) return;
+  overlay.classList.add('active');
+  cmdOpen = true;
+  cmdActiveIndex = -1;
+  cmdResults = [];
+
+  var input = document.getElementById('cmdInput');
+  input.value = '';
+  input.focus();
+
+  renderCmdResults({});
+}
+
+function closeCommandPalette() {
+  var overlay = document.getElementById('cmdOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  cmdOpen = false;
+  cmdActiveIndex = -1;
+  cmdResults = [];
+}
+
+// ================================================
+// SEARCH ENGINE
+// ================================================
+
+function cmdSearch(query) {
+  var term = (query || '').toLowerCase().replace(/^\s+|\s+$/g, '');
+  if (!term || term.length < 2) {
+    cmdResults = [];
+    renderCmdResults({});
+    return;
+  }
+
+  var grouped = {
+    hexes: [],
+    maps: [],
+    courses: [],
+    standards: []
+  };
+
+  var MAX_PER_GROUP = 5;
+  var isStudent = (typeof currentViewMode !== 'undefined' && currentViewMode === 'student');
+
+  // --- Search Maps + Hexes ---
+  var maps = (typeof mapsData !== 'undefined') ? mapsData : [];
+  for (var m = 0; m < maps.length; m++) {
+    var map = maps[m];
+    var mapTitle = (map.title || '').toLowerCase();
+
+    // Match map title
+    if (grouped.maps.length < MAX_PER_GROUP && mapTitle.indexOf(term) !== -1) {
+      grouped.maps.push({
+        type: 'map',
+        id: map.mapId,
+        title: map.title || map.mapId,
+        subtitle: (map.hexes ? map.hexes.length : 0) + ' hexes',
+        score: mapTitle.indexOf(term) === 0 ? 2 : 1
+      });
+    }
+
+    // Match hexes within this map
+    if (map.hexes && grouped.hexes.length < MAX_PER_GROUP) {
+      for (var h = 0; h < map.hexes.length; h++) {
+        if (grouped.hexes.length >= MAX_PER_GROUP) break;
+        var hex = map.hexes[h];
+        var hexLabel = (hex.label || '').toLowerCase();
+        var hexDesc = (hex.description || '').toLowerCase();
+        if (hexLabel.indexOf(term) !== -1 || hexDesc.indexOf(term) !== -1) {
+          grouped.hexes.push({
+            type: 'hex',
+            id: hex.id,
+            mapId: map.mapId,
+            title: hex.label || hex.id,
+            subtitle: map.title || map.mapId,
+            icon: hex.icon || '',
+            hexType: hex.type || 'core',
+            score: hexLabel.indexOf(term) === 0 ? 2 : 1
+          });
+        }
+      }
+    }
+  }
+
+  // --- Search Courses (skip for students) ---
+  if (!isStudent) {
+    var courses = (typeof coursesData !== 'undefined') ? coursesData : [];
+    for (var c = 0; c < courses.length; c++) {
+      if (grouped.courses.length >= MAX_PER_GROUP) break;
+      var course = courses[c];
+      var courseTitle = (course.title || '').toLowerCase();
+      var courseDept = (course.programTrack || '').toLowerCase();
+      if (courseTitle.indexOf(term) !== -1 || courseDept.indexOf(term) !== -1) {
+        var subtitleParts = [];
+        if (course.programTrack) subtitleParts.push(course.programTrack);
+        if (course.gradeLevel) subtitleParts.push('Grade ' + course.gradeLevel);
+        grouped.courses.push({
+          type: 'course',
+          id: course.courseId,
+          title: course.title || course.courseId,
+          subtitle: subtitleParts.join(' \u2022 '),
+          score: courseTitle.indexOf(term) === 0 ? 2 : 1
+        });
+      }
+    }
+  }
+
+  // --- Search Standards (skip for students) ---
+  if (!isStudent) {
+    var stds = (typeof standardsData !== 'undefined') ? standardsData : [];
+    for (var s = 0; s < stds.length; s++) {
+      if (grouped.standards.length >= MAX_PER_GROUP) break;
+      var std = stds[s];
+      var stdCode = (std.code || '').toLowerCase();
+      var stdDesc = (std.description || '').toLowerCase();
+      var stdFw = (std.framework || '').toLowerCase();
+      if (stdCode.indexOf(term) !== -1 || stdDesc.indexOf(term) !== -1 || stdFw.indexOf(term) !== -1) {
+        grouped.standards.push({
+          type: 'standard',
+          id: std.standardId,
+          title: std.code || std.standardId,
+          subtitle: std.description || '',
+          badge: std.framework || '',
+          score: stdCode.indexOf(term) === 0 ? 2 : 1
+        });
+      }
+    }
+  }
+
+  // Sort each group by score (prefix matches first)
+  var groupKeys = ['hexes', 'maps', 'courses', 'standards'];
+  for (var g = 0; g < groupKeys.length; g++) {
+    var key = groupKeys[g];
+    grouped[key].sort(function(a, b) { return b.score - a.score; });
+    if (grouped[key].length > MAX_PER_GROUP) {
+      grouped[key] = grouped[key].slice(0, MAX_PER_GROUP);
+    }
+  }
+
+  renderCmdResults(grouped);
+}
+
+// ================================================
+// RENDERING
+// ================================================
+
+function renderCmdResults(grouped) {
+  var body = document.getElementById('cmdBody');
+  if (!body) return;
+
+  cmdResults = [];
+  cmdActiveIndex = -1;
+
+  var groupMeta = [
+    { key: 'hexes',     label: 'Hexes',     iconClass: 'cmd-icon-hex',    iconChar: '\u2B22' },
+    { key: 'maps',      label: 'Maps',      iconClass: 'cmd-icon-map',    iconChar: '\uD83D\uDDFA' },
+    { key: 'courses',   label: 'Courses',   iconClass: 'cmd-icon-course', iconChar: '\uD83D\uDCDA' },
+    { key: 'standards', label: 'Standards',  iconClass: 'cmd-icon-std',    iconChar: '\uD83D\uDCCF' }
+  ];
+
+  var hasResults = false;
+  var html = '';
+
+  for (var g = 0; g < groupMeta.length; g++) {
+    var meta = groupMeta[g];
+    var items = grouped[meta.key] || [];
+    if (items.length === 0) continue;
+    hasResults = true;
+
+    html += '<div class="cmd-group">';
+    html += '<div class="cmd-group-label">' + escapeHtml(meta.label) + '</div>';
+
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var flatIdx = cmdResults.length;
+      cmdResults.push(item);
+
+      var iconDisplay = (item.type === 'hex' && item.icon) ? item.icon : meta.iconChar;
+
+      html += '<div class="cmd-item" data-cmd-idx="' + flatIdx + '" ';
+      html += 'onmouseenter="cmdHoverItem(' + flatIdx + ')" ';
+      html += 'onclick="cmdSelectItem(' + flatIdx + ')">';
+      html += '<div class="cmd-item-icon ' + meta.iconClass + '">' + iconDisplay + '</div>';
+      html += '<div class="cmd-item-text">';
+      html += '<div class="cmd-item-title">' + escapeHtml(item.title) + '</div>';
+      if (item.subtitle) {
+        html += '<div class="cmd-item-subtitle">' + escapeHtml(item.subtitle) + '</div>';
+      }
+      html += '</div>';
+      if (item.badge) {
+        html += '<div class="cmd-item-badge">' + escapeHtml(item.badge) + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  if (!hasResults) {
+    var input = document.getElementById('cmdInput');
+    var val = (input && input.value) ? input.value.replace(/^\s+|\s+$/g, '') : '';
+    if (val.length >= 2) {
+      html = '<div class="cmd-empty">No results found for \u201C' + escapeHtml(val) + '\u201D</div>';
+    } else {
+      html = '<div class="cmd-empty">Type at least 2 characters to search\u2026</div>';
+    }
+  }
+
+  body.innerHTML = html;
+
+  // Auto-select first result
+  if (cmdResults.length > 0) {
+    cmdActiveIndex = 0;
+    updateCmdActiveHighlight();
+  }
+}
+
+// ================================================
+// KEYBOARD NAVIGATION
+// ================================================
+
+function cmdHandleKeydown(e) {
+  if (!cmdOpen) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (cmdResults.length > 0) {
+      cmdActiveIndex = (cmdActiveIndex + 1) % cmdResults.length;
+      updateCmdActiveHighlight();
+      scrollCmdItemIntoView();
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (cmdResults.length > 0) {
+      cmdActiveIndex = cmdActiveIndex <= 0 ? cmdResults.length - 1 : cmdActiveIndex - 1;
+      updateCmdActiveHighlight();
+      scrollCmdItemIntoView();
+    }
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (cmdActiveIndex >= 0 && cmdActiveIndex < cmdResults.length) {
+      cmdSelectItem(cmdActiveIndex);
+    }
+  }
+}
+
+function updateCmdActiveHighlight() {
+  var items = document.querySelectorAll('.cmd-item');
+  for (var i = 0; i < items.length; i++) {
+    var idx = parseInt(items[i].getAttribute('data-cmd-idx'), 10);
+    if (idx === cmdActiveIndex) {
+      items[i].classList.add('cmd-active');
+    } else {
+      items[i].classList.remove('cmd-active');
+    }
+  }
+}
+
+function scrollCmdItemIntoView() {
+  var el = document.querySelector('.cmd-item[data-cmd-idx="' + cmdActiveIndex + '"]');
+  if (el && el.scrollIntoView) {
+    el.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function cmdHoverItem(idx) {
+  cmdActiveIndex = idx;
+  updateCmdActiveHighlight();
+}
+
+// ================================================
+// NAVIGATION DISPATCH
+// ================================================
+
+function cmdSelectItem(idx) {
+  var item = cmdResults[idx];
+  if (!item) return;
+
+  closeCommandPalette();
+
+  if (item.type === 'map') {
+    openMapInBuilder(item.id);
+
+  } else if (item.type === 'hex') {
+    openMapInBuilder(item.mapId);
+    selectHex(item.id);
+
+  } else if (item.type === 'course') {
+    switchTab(document.querySelector('[data-view="courses"]'));
+    viewCourseUnits(item.id, item.title || '');
+
+  } else if (item.type === 'standard') {
+    switchTab(document.querySelector('[data-view="standards"]'));
+    var searchInput = document.getElementById('standardsSearchInput');
+    if (searchInput) {
+      searchInput.value = item.title;
+      if (typeof filterStandards === 'function') filterStandards();
+    }
+  }
+}
+
+// ================================================
+// INPUT HANDLER
+// ================================================
+
+function cmdOnInput() {
+  var input = document.getElementById('cmdInput');
+  if (input) cmdSearch(input.value);
+}
+
+function cmdOverlayClick(e) {
+  if (e.target.id === 'cmdOverlay') {
+    closeCommandPalette();
+  }
+}
+</script>

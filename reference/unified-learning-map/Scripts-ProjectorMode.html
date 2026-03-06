@@ -1,0 +1,1779 @@
+<script>
+    /* ================================================
+       PROJECTOR MODE / CLASSROOM DISPLAY
+       Prefix: pjm-
+       ================================================ */
+
+    // ---- Constants ----
+    var PJM_VIEWS = ['overview', 'focus', 'feed', 'timer', 'slides', 'poll'];
+    var PJM_REFRESH_INTERVAL = 45000;    // 45 seconds
+    var PJM_UPDATED_INTERVAL = 15000;    // 15 seconds for "updated X ago" text
+    var PJM_MAX_FEED_ITEMS = 50;
+
+    var PJM_HEAT_COLORS = [
+      { min: 0,  fill: '#fee2e2', stroke: '#ef4444' },
+      { min: 1,  fill: '#fef3c7', stroke: '#f59e0b' },
+      { min: 26, fill: '#dbeafe', stroke: '#3b82f6' },
+      { min: 51, fill: '#d1fae5', stroke: '#10b981' },
+      { min: 76, fill: '#a7f3d0', stroke: '#047857' }
+    ];
+
+    var PJM_STATUS_ORDER = { pending: 0, in_progress: 1, not_started: 2, completed: 3, mastered: 4 };
+
+    // ================================================
+    //  STORY 1 — Overlay Shell + Map Overview
+    // ================================================
+
+    function pjmOpen() {
+      if (currentViewMode !== 'teacher') {
+        showToast('Projector mode is available in teacher view', 'error');
+        return;
+      }
+      if (!currentMap || !currentMap.hexes || currentMap.hexes.length === 0) {
+        showToast('Open a map first to use projector mode', 'error');
+        return;
+      }
+
+      pjmIsOpen = true;
+      pjmCurrentView = 'overview';
+      pjmFocusHexId = null;
+      pjmTranslationCache = {};
+      pjmTranslateLoading = false;
+
+      var overlay = document.getElementById('pjmOverlay');
+      if (overlay) overlay.classList.add('active');
+
+      // Set map title
+      var titleEl = document.getElementById('pjmMapTitle');
+      if (titleEl) titleEl.textContent = currentMap.title || 'Untitled Map';
+
+      // Compute hex stats
+      pjmComputeHexStats();
+
+      // Render stats bar and default view
+      pjmRenderStatsBar();
+      pjmSwitchView('overview');
+
+      // Start auto-refresh
+      pjmStartRefresh();
+
+      // Move focus into the overlay for keyboard/screen reader users
+      var firstTab = document.querySelector('#pjmOverlay .pjm-view-tab');
+      if (firstTab) firstTab.focus();
+    }
+
+    function pjmClose() {
+      pjmIsOpen = false;
+      pjmStopRefresh();
+
+      var overlay = document.getElementById('pjmOverlay');
+      if (overlay) overlay.classList.remove('active');
+
+      // Return focus to the toolbar button
+      var projBtn = document.getElementById('pjmProjectorBtn');
+      if (projBtn) projBtn.focus();
+    }
+
+    function pjmSwitchView(viewName) {
+      if (PJM_VIEWS.indexOf(viewName) === -1) return;
+      pjmCurrentView = viewName;
+
+      // Update tab highlights
+      var tabs = document.querySelectorAll('.pjm-view-tab');
+      for (var i = 0; i < tabs.length; i++) {
+        var tab = tabs[i];
+        if (tab.getAttribute('data-view') === viewName) {
+          tab.classList.add('active');
+        } else {
+          tab.classList.remove('active');
+        }
+      }
+
+      // Dispatch to renderer
+      if (viewName === 'overview') {
+        pjmRenderOverview();
+      } else if (viewName === 'focus') {
+        pjmRenderFocusHex(pjmFocusHexId);
+      } else if (viewName === 'feed') {
+        pjmRenderFeed();
+      } else if (viewName === 'timer') {
+        pjmRenderTimerView();
+      } else if (viewName === 'slides') {
+        pjmRenderSlidesView();
+      } else if (viewName === 'poll') {
+        pjmRenderPollView();
+      }
+
+      // Render keyboard hints
+      pjmRenderKeyboardHints();
+    }
+
+    // ---- Stats Bar ----
+
+    function pjmRenderStatsBar() {
+      var bar = document.getElementById('pjmStatsBar');
+      if (!bar) return;
+
+      var stats = pjmComputeOverviewStats();
+      var hasData = stats.totalStudents > 0;
+      var completionColor = stats.avgCompletion >= 70 ? 'green' : (stats.avgCompletion >= 40 ? 'amber' : 'red');
+
+      bar.innerHTML =
+        '<div class="pjm-stat-card">' +
+          '<div class="pjm-stat-value">' + (hasData ? stats.totalStudents : '--') + '</div>' +
+          '<div class="pjm-stat-label">Students</div>' +
+        '</div>' +
+        '<div class="pjm-stat-card">' +
+          '<div class="pjm-stat-value ' + (hasData ? completionColor : '') + '">' + (hasData ? stats.avgCompletion + '%' : '--') + '</div>' +
+          '<div class="pjm-stat-label">Completion</div>' +
+        '</div>' +
+        '<div class="pjm-stat-card">' +
+          '<div class="pjm-stat-value">' + (stats.avgScore !== null ? stats.avgScore + '%' : '--') + '</div>' +
+          '<div class="pjm-stat-label">Avg Score</div>' +
+        '</div>' +
+        '<div class="pjm-stat-card">' +
+          '<div class="pjm-stat-value">' + (hasData ? stats.inProgress : '--') + '</div>' +
+          '<div class="pjm-stat-label">In Progress</div>' +
+        '</div>' +
+        '<div class="pjm-stat-card">' +
+          '<div class="pjm-stat-value">' + (hasData ? stats.pendingReview : '--') + '</div>' +
+          '<div class="pjm-stat-label">Pending Review</div>' +
+        '</div>';
+    }
+
+    function pjmComputeOverviewStats() {
+      var result = { totalStudents: 0, avgCompletion: 0, avgScore: null, inProgress: 0, pendingReview: 0 };
+
+      if (!progressDashboardData || !progressDashboardData.students) return result;
+
+      var students = progressDashboardData.students;
+      result.totalStudents = students.length;
+
+      if (students.length === 0) return result;
+
+      var totalCompletion = 0;
+      var totalScore = 0;
+      var scoreCount = 0;
+      var inProgressCount = 0;
+      var pendingCount = 0;
+
+      for (var s = 0; s < students.length; s++) {
+        var stu = students[s];
+        totalCompletion += (stu.percentComplete || 0);
+
+        if (stu.averageScore !== null && stu.averageScore !== undefined) {
+          totalScore += stu.averageScore;
+          scoreCount++;
+        }
+
+        var hp = stu.hexProgress || {};
+        for (var hid in hp) {
+          if (!hp.hasOwnProperty(hid)) continue;
+          var prog = hp[hid];
+          if (prog.status === 'in_progress') inProgressCount++;
+          if ((prog.status === 'completed' || prog.status === 'mastered') && !prog.teacherApproved) {
+            pendingCount++;
+          }
+        }
+      }
+
+      result.avgCompletion = Math.round(totalCompletion / students.length);
+      result.avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : null;
+      result.inProgress = inProgressCount;
+      result.pendingReview = pendingCount;
+
+      return result;
+    }
+
+    // ---- Hex Stats ----
+
+    function pjmComputeHexStats() {
+      // Reuse phmHexStats if already computed
+      if (phmHexStats && typeof phmHexStats === 'object') {
+        var keys = [];
+        for (var k in phmHexStats) {
+          if (phmHexStats.hasOwnProperty(k)) keys.push(k);
+        }
+        if (keys.length > 0) {
+          pjmHexStats = phmHexStats;
+          return;
+        }
+      }
+
+      // Compute from scratch
+      pjmHexStats = {};
+      if (!progressDashboardData || !progressDashboardData.students) return;
+      if (!currentMap || !currentMap.hexes) return;
+
+      var students = progressDashboardData.students;
+
+      // Initialize
+      for (var h = 0; h < currentMap.hexes.length; h++) {
+        var hid = String(currentMap.hexes[h].id);
+        pjmHexStats[hid] = { total: 0, completed: 0, mastered: 0, inProgress: 0, notStarted: 0, pending: 0, avgScore: 0, scoreSum: 0, scoreCount: 0, completionPct: 0 };
+      }
+
+      // Aggregate
+      for (var s = 0; s < students.length; s++) {
+        var hp = students[s].hexProgress || {};
+        for (var hexId in pjmHexStats) {
+          if (!pjmHexStats.hasOwnProperty(hexId)) continue;
+          var stat = pjmHexStats[hexId];
+          stat.total++;
+          var prog = hp[hexId];
+          if (!prog) {
+            stat.notStarted++;
+          } else {
+            var st = prog.status || 'not_started';
+            if (st === 'mastered') { stat.mastered++; stat.completed++; }
+            else if (st === 'completed') { stat.completed++; }
+            else if (st === 'in_progress') { stat.inProgress++; }
+            else { stat.notStarted++; }
+            if ((st === 'completed' || st === 'mastered') && !prog.teacherApproved) {
+              stat.pending++;
+            }
+            if (prog.score !== null && prog.score !== undefined && prog.maxScore > 0) {
+              stat.scoreSum += (prog.score / prog.maxScore) * 100;
+              stat.scoreCount++;
+            }
+          }
+        }
+      }
+
+      // Compute averages
+      for (var hid2 in pjmHexStats) {
+        if (!pjmHexStats.hasOwnProperty(hid2)) continue;
+        var s2 = pjmHexStats[hid2];
+        s2.avgScore = s2.scoreCount > 0 ? Math.round(s2.scoreSum / s2.scoreCount) : null;
+        s2.completionPct = s2.total > 0 ? Math.round((s2.completed / s2.total) * 100) : 0;
+      }
+    }
+
+    function pjmGetHexColor(completionPct) {
+      var pct = completionPct || 0;
+      for (var i = PJM_HEAT_COLORS.length - 1; i >= 0; i--) {
+        if (pct >= PJM_HEAT_COLORS[i].min) {
+          return PJM_HEAT_COLORS[i];
+        }
+      }
+      return PJM_HEAT_COLORS[0];
+    }
+
+    // ---- Map Overview Renderer ----
+
+    function pjmRenderOverview() {
+      var container = document.getElementById('pjmViewContainer');
+      if (!container) return;
+
+      if (!currentMap || !currentMap.hexes || currentMap.hexes.length === 0) {
+        container.innerHTML = '<div class="pjm-empty"><div class="pjm-empty-icon">🗺️</div><div class="pjm-empty-title">No Map Loaded</div><div class="pjm-empty-text">Open a map in the builder to use projector mode.</div></div>';
+        return;
+      }
+
+      if (!progressDashboardData || !progressDashboardData.students) {
+        container.innerHTML = '<div class="pjm-empty"><div class="pjm-empty-icon">📊</div><div class="pjm-empty-title">No Class Data</div><div class="pjm-empty-text">Load class progress data from the Progress tab first.</div></div>';
+        return;
+      }
+
+      var hexes = currentMap.hexes;
+      var typeLabelsLocal = { core: '🔵', ext: '🟢', scaf: '🟡', student: '🟣', 'class': '🩷', lab: '🧪', lesson: '📖', resource: '📦' };
+
+      // Build hex positions
+      var positions = [];
+      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      for (var i = 0; i < hexes.length; i++) {
+        var hex = hexes[i];
+        var pos = pjmGridToPixels(hex.row || 0, hex.col || 0);
+        positions.push({ hex: hex, x: pos.x, y: pos.y });
+        if (pos.x < minX) minX = pos.x;
+        if (pos.y < minY) minY = pos.y;
+        if (pos.x + 110 > maxX) maxX = pos.x + 110;
+        if (pos.y + 100 > maxY) maxY = pos.y + 100;
+      }
+
+      // Compute scale to fit container
+      var containerRect = container.getBoundingClientRect();
+      var gridW = maxX - minX + 40;  // padding
+      var gridH = maxY - minY + 40;
+      var scaleX = containerRect.width / gridW;
+      var scaleY = containerRect.height / gridH;
+      var scale = Math.min(scaleX, scaleY, 1.5);  // cap at 1.5x
+
+      // Center offset
+      var scaledW = gridW * scale;
+      var scaledH = gridH * scale;
+      var offsetX = (containerRect.width - scaledW) / 2 - minX * scale + 20 * scale;
+      var offsetY = (containerRect.height - scaledH) / 2 - minY * scale + 20 * scale;
+
+      var html = '<div class="pjm-overview"><div class="pjm-grid-wrapper" style="transform: scale(' + scale + '); transform-origin: top left; left: ' + offsetX + 'px; top: ' + offsetY + 'px;">';
+
+      for (var j = 0; j < positions.length; j++) {
+        var p = positions[j];
+        var hx = p.hex;
+        var hid = String(hx.id);
+        var stats = pjmHexStats ? pjmHexStats[hid] : null;
+        var pct = stats ? stats.completionPct : 0;
+        var color = pjmGetHexColor(pct);
+        var label = escapeHtml((hx.label || '').substring(0, 15));
+        var icon = typeLabelsLocal[hx.type] || '⬡';
+        var fraction = stats ? stats.completed + '/' + stats.total : '';
+
+        html += '<div class="pjm-hex" tabindex="0" role="button" style="left:' + p.x + 'px; top:' + p.y + 'px; background:' + color.fill + '; border-color:' + color.stroke + ';" data-hexid="' + hid + '">' +
+          '<span class="pjm-hex-icon">' + icon + '</span>' +
+          '<span class="pjm-hex-label">' + label + '</span>' +
+          '<span class="pjm-hex-fraction">' + fraction + '</span>' +
+        '</div>';
+      }
+
+      html += '</div></div>';
+      container.innerHTML = html;
+
+      // Attach click + keyboard handlers
+      var hexEls = container.querySelectorAll('.pjm-hex');
+      for (var k = 0; k < hexEls.length; k++) {
+        hexEls[k].addEventListener('click', function() {
+          var hexId = this.getAttribute('data-hexid');
+          pjmFocusHexId = hexId;
+          pjmSwitchView('focus');
+        });
+        hexEls[k].addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            var hexId = this.getAttribute('data-hexid');
+            pjmFocusHexId = hexId;
+            pjmSwitchView('focus');
+          }
+        });
+      }
+    }
+
+    function pjmGridToPixels(row, col) {
+      var xOffset = (row % 2 === 0) ? 0 : COL_SPACING / 2;
+      return { x: col * COL_SPACING + xOffset + 60, y: row * ROW_SPACING + 60 };
+    }
+
+
+    // ================================================
+    //  STORY 2 — Focus Hex Detail + Activity Feed
+    // ================================================
+
+    function pjmRenderFocusHex(hexId) {
+      var container = document.getElementById('pjmViewContainer');
+      if (!container) return;
+
+      if (!hexId) {
+        container.innerHTML = '<div class="pjm-empty"><div class="pjm-empty-icon">👆</div><div class="pjm-empty-title">Select a Hex</div><div class="pjm-empty-text">Click a hex in Map Overview to see details.</div></div>';
+        return;
+      }
+
+      // Find hex data
+      var hex = null;
+      if (currentMap && currentMap.hexes) {
+        for (var i = 0; i < currentMap.hexes.length; i++) {
+          if (String(currentMap.hexes[i].id) === String(hexId)) {
+            hex = currentMap.hexes[i];
+            break;
+          }
+        }
+      }
+
+      if (!hex) {
+        container.innerHTML = '<div class="pjm-empty"><div class="pjm-empty-icon">❓</div><div class="pjm-empty-title">Hex Not Found</div></div>';
+        return;
+      }
+
+      var typeLabelsLocal = { core: '🔵 Core', ext: '🟢 Extension', scaf: '🟡 Scaffold', student: '🟣 Student', 'class': '🩷 Class', lab: '🧪 Lab Report', lesson: '📖 Lesson', resource: '📦 Resource' };
+      var stats = pjmHexStats ? pjmHexStats[String(hexId)] : null;
+      var pct = stats ? stats.completionPct : 0;
+      var completed = stats ? stats.completed : 0;
+      var total = stats ? stats.total : 0;
+      var avgScore = stats ? stats.avgScore : null;
+
+      // Build badges
+      var badgesHtml = '<span class="pjm-badge pjm-badge-type">' + escapeHtml(typeLabelsLocal[hex.type] || hex.type) + '</span>';
+      var curriculum = hex.curriculum || {};
+      var sbarDomains = curriculum.sbarDomains || [];
+      for (var d = 0; d < sbarDomains.length; d++) {
+        badgesHtml += '<span class="pjm-badge pjm-badge-sbar">' + escapeHtml(sbarDomains[d]) + '</span>';
+      }
+      var competencies = curriculum.competencies || [];
+      if (typeof competencies === 'string' && competencies) {
+        competencies = competencies.split(',');
+      }
+      for (var c = 0; c < competencies.length; c++) {
+        var comp = (competencies[c] || '').trim();
+        if (comp) badgesHtml += '<span class="pjm-badge pjm-badge-comp">' + escapeHtml(comp) + '</span>';
+      }
+
+      // Completion ring (conic-gradient)
+      var ringPct = Math.min(pct, 100);
+      var ringColor = pct >= 70 ? '#10b981' : (pct >= 40 ? '#f59e0b' : '#ef4444');
+      var ringBg = 'conic-gradient(' + ringColor + ' ' + ringPct + '%, #334155 ' + ringPct + '%)';
+
+      // Student list
+      var studentList = pjmBuildStudentList(hexId);
+      var studentsHtml = '';
+      for (var si = 0; si < studentList.length; si++) {
+        studentsHtml += pjmRenderStudentCard(studentList[si], hexId);
+      }
+
+      // Slides button (if hex has a slides URL)
+      var slidesBtnHtml = '';
+      if (hex.slidesUrl && hex.slidesUrl.indexOf('docs.google.com/presentation') !== -1) {
+        slidesBtnHtml = '<button class="pjm-focus-slides-btn" onclick="pjmSlidesHexId=\'' + escapeHtml(String(hex.id)) + '\';pjmSwitchView(\'slides\')">📊 View Slides</button>';
+      }
+
+      var html =
+        '<div class="pjm-focus">' +
+          '<div class="pjm-focus-actions">' +
+            '<button class="pjm-focus-back" onclick="pjmGoBack()" aria-label="Back to overview">← Back to Overview</button>' +
+            slidesBtnHtml +
+          '</div>' +
+          '<div class="pjm-focus-header">' +
+            '<div class="pjm-focus-info">' +
+              '<div class="pjm-focus-icon">' + (typeLabelsLocal[hex.type] || '⬡').split(' ')[0] + '</div>' +
+              '<div class="pjm-focus-title">' + escapeHtml(hex.label || 'Untitled') + '</div>' +
+              '<div class="pjm-focus-desc">' + escapeHtml((hex.description || '').substring(0, 200)) + '</div>' +
+              '<div class="pjm-focus-badges">' + badgesHtml + '</div>' +
+            '</div>' +
+            '<div class="pjm-focus-stats">' +
+              '<div class="pjm-ring-container">' +
+                '<div class="pjm-ring" style="background: ' + ringBg + ';"></div>' +
+                '<div class="pjm-ring-text">' +
+                  '<div class="pjm-ring-pct">' + pct + '%</div>' +
+                  '<div class="pjm-ring-fraction">' + completed + ' / ' + total + '</div>' +
+                '</div>' +
+              '</div>' +
+              (avgScore !== null ? '<div class="pjm-focus-avg-score">Avg Score: ' + avgScore + '%</div>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="pjm-student-section-title">Students (' + total + ')</div>' +
+          '<div class="pjm-student-grid">' + studentsHtml + '</div>' +
+        '</div>';
+
+      container.innerHTML = html;
+    }
+
+    function pjmBuildStudentList(hexId) {
+      var list = [];
+      if (!progressDashboardData || !progressDashboardData.students) return list;
+
+      var students = progressDashboardData.students;
+      for (var i = 0; i < students.length; i++) {
+        var stu = students[i];
+        var hp = stu.hexProgress || {};
+        var prog = hp[String(hexId)];
+        var status = 'not_started';
+        var score = null;
+        var isPending = false;
+
+        if (prog) {
+          status = prog.status || 'not_started';
+          if (prog.score !== null && prog.score !== undefined && prog.maxScore > 0) {
+            score = Math.round((prog.score / prog.maxScore) * 100);
+          }
+          if ((status === 'completed' || status === 'mastered') && !prog.teacherApproved) {
+            isPending = true;
+          }
+        }
+
+        list.push({
+          name: stu.name || stu.email || '',
+          email: stu.email || '',
+          status: isPending ? 'pending' : status,
+          score: score
+        });
+      }
+
+      // Sort by priority: pending first, then in_progress, then not_started, then completed/mastered
+      list.sort(function(a, b) {
+        var aOrder = PJM_STATUS_ORDER[a.status] !== undefined ? PJM_STATUS_ORDER[a.status] : 5;
+        var bOrder = PJM_STATUS_ORDER[b.status] !== undefined ? PJM_STATUS_ORDER[b.status] : 5;
+        return aOrder - bOrder;
+      });
+
+      return list;
+    }
+
+    function pjmRenderStudentCard(student, hexId) {
+      var displayName = '';
+      if (typeof nsgFormatNameForDisplay === 'function') {
+        displayName = nsgFormatNameForDisplay(student);
+      } else {
+        displayName = escapeHtml(student.name || student.email || 'Unknown');
+      }
+      var scoreText = student.score !== null ? student.score + '%' : '';
+
+      return '<div class="pjm-student-card">' +
+        '<span class="pjm-student-dot ' + student.status + '"></span>' +
+        '<span class="pjm-student-name">' + displayName + '</span>' +
+        (scoreText ? '<span class="pjm-student-score">' + scoreText + '</span>' : '') +
+      '</div>';
+    }
+
+    function pjmGoBack() {
+      pjmFocusHexId = null;
+      pjmSwitchView('overview');
+    }
+
+
+    // ---- Activity Feed ----
+
+    function pjmRenderFeed() {
+      var container = document.getElementById('pjmViewContainer');
+      if (!container) return;
+
+      var events = pjmBuildFeedEvents();
+      pjmFeedEvents = events;
+
+      if (events.length === 0) {
+        container.innerHTML = '<div class="pjm-empty"><div class="pjm-empty-icon">📋</div><div class="pjm-empty-title">No Recent Activity</div><div class="pjm-empty-text">Student completions and progress will appear here.</div></div>';
+        return;
+      }
+
+      var typeLabelsLocal = { core: '🔵', ext: '🟢', scaf: '🟡', student: '🟣', 'class': '🩷', lab: '🧪', lesson: '📖', resource: '📦' };
+      var html = '<div class="pjm-feed"><div class="pjm-feed-title">Recent Activity</div>';
+
+      for (var i = 0; i < events.length; i++) {
+        var ev = events[i];
+        var statusClass = ev.status || 'in_progress';
+        var statusLabel = statusClass === 'mastered' ? 'Mastered' : (statusClass === 'completed' ? 'Completed' : (statusClass === 'in_progress' ? 'In Progress' : statusClass));
+        var icon = typeLabelsLocal[ev.hexType] || '⬡';
+        var timeStr = pjmFormatRelativeTime(ev.timestamp);
+        var scoreHtml = ev.score !== null ? '<div class="pjm-feed-score">' + ev.score + '%</div>' : '';
+
+        html += '<div class="pjm-feed-item">' +
+          '<span class="pjm-feed-icon">' + icon + '</span>' +
+          '<div class="pjm-feed-content">' +
+            '<div class="pjm-feed-student">' + escapeHtml(ev.studentName) + '</div>' +
+            '<div class="pjm-feed-hex">' + escapeHtml(ev.hexLabel) + '</div>' +
+          '</div>' +
+          '<div class="pjm-feed-right">' +
+            '<span class="pjm-feed-status ' + statusClass + '">' + statusLabel + '</span>' +
+            scoreHtml +
+            '<div class="pjm-feed-time">' + timeStr + '</div>' +
+          '</div>' +
+        '</div>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function pjmBuildFeedEvents() {
+      var events = [];
+      if (!progressDashboardData || !progressDashboardData.students) return events;
+      if (!currentMap || !currentMap.hexes) return events;
+
+      // Build hex lookup
+      var hexLookup = {};
+      for (var h = 0; h < currentMap.hexes.length; h++) {
+        var hex = currentMap.hexes[h];
+        hexLookup[String(hex.id)] = hex;
+      }
+
+      var students = progressDashboardData.students;
+      for (var s = 0; s < students.length; s++) {
+        var stu = students[s];
+        var hp = stu.hexProgress || {};
+
+        // Format name for display
+        var displayName = '';
+        if (typeof nsgFormatNameForDisplay === 'function') {
+          displayName = nsgFormatNameForDisplay(stu);
+        } else {
+          displayName = stu.name || stu.email || 'Student';
+        }
+
+        for (var hid in hp) {
+          if (!hp.hasOwnProperty(hid)) continue;
+          var prog = hp[hid];
+          var hex = hexLookup[String(hid)];
+          if (!hex) continue;
+
+          // Only include events with timestamps and meaningful status
+          var timestamp = prog.completedAt || prog.updatedAt || '';
+          if (!timestamp) continue;
+          var status = prog.status || 'not_started';
+          if (status === 'not_started') continue;
+
+          var score = null;
+          if (prog.score !== null && prog.score !== undefined && prog.maxScore > 0) {
+            score = Math.round((prog.score / prog.maxScore) * 100);
+          }
+
+          events.push({
+            studentName: displayName,
+            hexLabel: hex.label || 'Untitled',
+            hexType: hex.type || 'core',
+            status: status,
+            score: score,
+            timestamp: timestamp
+          });
+        }
+      }
+
+      // Sort by timestamp descending
+      events.sort(function(a, b) {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+
+      // Limit
+      if (events.length > PJM_MAX_FEED_ITEMS) {
+        events = events.slice(0, PJM_MAX_FEED_ITEMS);
+      }
+
+      return events;
+    }
+
+    function pjmFormatRelativeTime(isoStr) {
+      if (!isoStr) return '';
+      try {
+        var d = new Date(isoStr);
+        var now = new Date();
+        var diffMs = now.getTime() - d.getTime();
+        var diffSec = Math.floor(diffMs / 1000);
+        var diffMin = Math.floor(diffSec / 60);
+        var diffHr = Math.floor(diffMin / 60);
+        var diffDay = Math.floor(diffHr / 24);
+
+        if (diffSec < 60) return 'Just now';
+        if (diffMin < 60) return diffMin + 'm ago';
+        if (diffHr < 24) return diffHr + 'h ago';
+        if (diffDay === 1) return 'Yesterday';
+        if (diffDay < 7) return diffDay + 'd ago';
+
+        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return months[d.getMonth()] + ' ' + d.getDate();
+      } catch (e) {
+        return '';
+      }
+    }
+
+
+    // ================================================
+    //  STORY 3 — Timer + Map Split, Auto-Refresh, Keyboard
+    // ================================================
+
+    // ---- Timer + Map Split View ----
+
+    function pjmRenderTimerView() {
+      var container = document.getElementById('pjmViewContainer');
+      if (!container) return;
+
+      var timerHtml = pjmRenderTimerDisplay();
+      var gridHtml = pjmRenderCompactGrid();
+
+      container.innerHTML =
+        '<div class="pjm-timer-view">' +
+          '<div class="pjm-timer-left">' + timerHtml + '</div>' +
+          '<div class="pjm-timer-right">' + gridHtml + '</div>' +
+        '</div>';
+
+      // Post-render: resize compact grid to actual container dimensions
+      setTimeout(pjmResizeCompactGrid, 0);
+    }
+
+    function pjmRenderTimerDisplay() {
+      // If timer is not active, show quick-start prompt
+      if (typeof ctdTimerState === 'undefined' || ctdTimerState === 'idle') {
+        return '<div class="pjm-timer-prompt">Start a Timer</div>' +
+          '<div class="pjm-quick-start">' +
+            '<button class="pjm-quick-btn" onclick="pjmQuickStartTimer(60000)">1 min</button>' +
+            '<button class="pjm-quick-btn" onclick="pjmQuickStartTimer(120000)">2 min</button>' +
+            '<button class="pjm-quick-btn" onclick="pjmQuickStartTimer(300000)">5 min</button>' +
+            '<button class="pjm-quick-btn" onclick="pjmQuickStartTimer(600000)">10 min</button>' +
+          '</div>';
+      }
+
+      // Timer is running/paused/finished — read ctd state
+      var timeStr = typeof ctdFormatTime === 'function' ? ctdFormatTime(ctdRemainingMs) : '00:00';
+      var phase = typeof ctdGetColorPhase === 'function' ? ctdGetColorPhase(ctdRemainingMs, ctdTotalMs) : 'green';
+
+      var html = '';
+      // Label display
+      if (typeof ctdLabel !== 'undefined' && ctdLabel) {
+        html += '<div class="pjm-timer-label">' + escapeHtml(ctdLabel) + '</div>';
+      }
+      html += '<div class="pjm-timer-time ' + phase + '">' + timeStr + '</div>';
+
+      // Pomodoro badge
+      if (typeof ctdPomodoroMode !== 'undefined' && ctdPomodoroMode) {
+        var phaseLabel = ctdPomodoroPhase === 'work' ? 'Work' : (ctdPomodoroPhase === 'longBreak' ? 'Long Break' : 'Break');
+        html += '<div class="pjm-timer-station">' + phaseLabel + ' ' + ctdPomodoroCycle + ' of ' + (ctdPomodoroConfig ? ctdPomodoroConfig.cycles : 4) + '</div>';
+      }
+
+      // Station info
+      if (ctdStationMode) {
+        html += '<div class="pjm-timer-station">Station ' + ctdCurrentStation + ' of ' + ctdStationCount + '</div>';
+      }
+
+      // Progress bar
+      if (ctdTotalMs > 0) {
+        var barPct = ctdTotalMs > 0 ? Math.round((ctdRemainingMs / ctdTotalMs) * 100) : 0;
+        html += '<div class="pjm-timer-bar"><div class="pjm-timer-bar-fill ' + phase + '" style="width:' + barPct + '%"></div></div>';
+      }
+
+      // Controls
+      html += '<div class="pjm-timer-controls">';
+      if (ctdTimerState === 'running') {
+        html += '<button class="pjm-timer-ctrl-btn" onclick="if(typeof ctdPause===\'function\')ctdPause();pjmRenderTimerView();">⏸ Pause</button>';
+      } else if (ctdTimerState === 'paused') {
+        html += '<button class="pjm-timer-ctrl-btn primary" onclick="if(typeof ctdResume===\'function\')ctdResume();pjmRenderTimerView();">▶ Resume</button>';
+      } else if (ctdTimerState === 'finished') {
+        html += '<button class="pjm-timer-ctrl-btn primary" onclick="if(typeof ctdReset===\'function\')ctdReset();pjmRenderTimerView();">↻ New Timer</button>';
+      }
+      html += '<button class="pjm-timer-ctrl-btn" onclick="if(typeof ctdReset===\'function\')ctdReset();pjmRenderTimerView();">↻ Reset</button>';
+      html += '</div>';
+
+      return html;
+    }
+
+    function pjmQuickStartTimer(ms) {
+      if (typeof ctdSelectPreset === 'function') {
+        ctdSelectPreset(ms);  // ctdSelectPreset calls ctdStart() internally
+      }
+      pjmRenderTimerView();
+    }
+
+    function pjmRenderCompactGrid() {
+      if (!currentMap || !currentMap.hexes || currentMap.hexes.length === 0) {
+        return '<div class="pjm-empty"><div class="pjm-empty-icon">🗺️</div><div class="pjm-empty-text">No map data</div></div>';
+      }
+
+      var hexes = currentMap.hexes;
+      var typeLabelsLocal = { core: '🔵', ext: '🟢', scaf: '🟡', student: '🟣', 'class': '🩷', lab: '🧪', lesson: '📖', resource: '📦' };
+
+      // Compute bounding box
+      var positions = [];
+      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (var i = 0; i < hexes.length; i++) {
+        var pos = pjmGridToPixels(hexes[i].row || 0, hexes[i].col || 0);
+        positions.push(pos);
+        if (pos.x < minX) minX = pos.x;
+        if (pos.y < minY) minY = pos.y;
+        if (pos.x + 110 > maxX) maxX = pos.x + 110;
+        if (pos.y + 100 > maxY) maxY = pos.y + 100;
+      }
+
+      // Compute grid natural size — actual scaling done post-render by pjmResizeCompactGrid()
+      var gridW = maxX - minX + 40;
+      var gridH = maxY - minY + 40;
+
+      var html = '<div class="pjm-compact-grid" data-grid-w="' + gridW + '" data-grid-h="' + gridH + '" style="transform-origin: top left;">';
+
+      for (var j = 0; j < hexes.length; j++) {
+        var hx = hexes[j];
+        var hid = String(hx.id);
+        var stats = pjmHexStats ? pjmHexStats[hid] : null;
+        var pct = stats ? stats.completionPct : 0;
+        var color = pjmGetHexColor(pct);
+        var label = escapeHtml((hx.label || '').substring(0, 12));
+
+        html += '<div class="pjm-compact-hex" style="left:' + positions[j].x + 'px; top:' + positions[j].y + 'px; background:' + color.fill + '; border-color:' + color.stroke + ';">' +
+          '<span class="pjm-hex-icon">' + (typeLabelsLocal[hx.type] || '⬡') + '</span>' +
+          '<span class="pjm-compact-hex-label">' + label + '</span>' +
+        '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+
+    function pjmResizeCompactGrid() {
+      var rightPanel = document.querySelector('.pjm-timer-right');
+      var grid = document.querySelector('.pjm-compact-grid');
+      if (!rightPanel || !grid) return;
+
+      var rect = rightPanel.getBoundingClientRect();
+      if (rect.width < 50 || rect.height < 50) return;
+
+      var gridW = parseFloat(grid.getAttribute('data-grid-w')) || 600;
+      var gridH = parseFloat(grid.getAttribute('data-grid-h')) || 500;
+
+      var scaleX = rect.width / gridW;
+      var scaleY = rect.height / gridH;
+      var scale = Math.min(scaleX, scaleY, 1.5);
+
+      // Center the grid within the container
+      var scaledW = gridW * scale;
+      var scaledH = gridH * scale;
+      var offsetX = (rect.width - scaledW) / 2;
+      var offsetY = (rect.height - scaledH) / 2;
+
+      grid.style.transform = 'scale(' + scale.toFixed(3) + ')';
+      grid.style.left = offsetX + 'px';
+      grid.style.top = offsetY + 'px';
+    }
+
+    // ================================================
+    //  SLIDES VIEW
+    // ================================================
+
+    function pjmRenderSlidesView() {
+      var container = document.getElementById('pjmViewContainer');
+      if (!container) return;
+
+      // Collect hexes with slidesUrl
+      var slidesHexes = [];
+      if (currentMap && currentMap.hexes) {
+        for (var i = 0; i < currentMap.hexes.length; i++) {
+          var h = currentMap.hexes[i];
+          if (h.slidesUrl && h.slidesUrl.indexOf('docs.google.com/presentation') !== -1) {
+            slidesHexes.push(h);
+          }
+        }
+      }
+
+      if (slidesHexes.length === 0) {
+        container.innerHTML = '<div class="pjm-empty"><div class="pjm-empty-icon">📊</div><div class="pjm-empty-title">No Slides Linked</div><div class="pjm-empty-text">Add a Google Slides URL to a hex in the editor to display presentations here.</div></div>';
+        return;
+      }
+
+      // Auto-select first hex if none selected or current is invalid
+      var validSelection = false;
+      if (pjmSlidesHexId) {
+        for (var j = 0; j < slidesHexes.length; j++) {
+          if (String(slidesHexes[j].id) === String(pjmSlidesHexId)) {
+            validSelection = true;
+            break;
+          }
+        }
+      }
+      if (!validSelection) {
+        pjmSlidesHexId = String(slidesHexes[0].id);
+      }
+
+      // Build dropdown options
+      var optionsHtml = '';
+      var selectedUrl = '';
+      for (var k = 0; k < slidesHexes.length; k++) {
+        var sh = slidesHexes[k];
+        var isSelected = (String(sh.id) === String(pjmSlidesHexId));
+        optionsHtml += '<option value="' + escapeHtml(String(sh.id)) + '"' + (isSelected ? ' selected' : '') + '>' + escapeHtml(sh.label || 'Untitled') + '</option>';
+        if (isSelected) selectedUrl = sh.slidesUrl;
+      }
+
+      var sidebarContentHtml = '';
+      try {
+        sidebarContentHtml = pjmRenderSidebarContent();
+      } catch (e) {
+        sidebarContentHtml = '<div class="pjm-sidebar-empty">Unable to load lesson data.</div>';
+      }
+
+      // Build sidebar with tab system
+      var sidebarTabsHtml =
+        '<div class="pjm-sidebar-tabs">' +
+          '<button class="pjm-sidebar-tab' + (pjmSidebarTab === 'lesson' ? ' active' : '') + '" onclick="pjmSwitchSidebarTab(\'lesson\')" aria-label="Lesson info">\uD83D\uDCCB Lesson</button>' +
+          '<button class="pjm-sidebar-tab' + (pjmSidebarTab === 'translate' ? ' active' : '') + '" onclick="pjmSwitchSidebarTab(\'translate\')" aria-label="Translations">\uD83C\uDF10 Translate</button>' +
+        '</div>';
+
+      var tabContentHtml = '';
+      if (pjmSidebarTab === 'translate') {
+        tabContentHtml = pjmRenderTranslationView();
+      } else {
+        tabContentHtml = sidebarContentHtml;
+      }
+
+      var html =
+        '<div class="pjm-slides-view">' +
+          '<div class="pjm-slides-main">' +
+            '<div class="pjm-slides-toolbar">' +
+              '<label class="pjm-slides-label" for="pjmSlidesSelect">Presentation:</label>' +
+              '<select class="pjm-slides-select" id="pjmSlidesSelect" onchange="pjmOnSlidesHexChange(this.value)">' + optionsHtml + '</select>' +
+              '<button class="pjm-slides-fullscreen-btn" onclick="pjmFullscreenSlides()" title="Full Screen">\u26F6 Full Screen</button>' +
+              '<button class="pjm-sidebar-toggle" onclick="pjmToggleSidebar()" aria-expanded="' + (pjmSidebarOpen ? 'true' : 'false') + '" aria-label="Toggle sidebar" title="Toggle sidebar">\uD83D\uDCCB Info</button>' +
+            '</div>' +
+            '<iframe class="pjm-slides-iframe" id="pjmSlidesIframe" src="' + escapeHtml(selectedUrl) + '" frameborder="0" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>' +
+          '</div>' +
+          '<div class="pjm-sidebar' + (pjmSidebarOpen ? ' pjm-sidebar-open' : '') + '" id="pjmSidebar">' +
+            sidebarTabsHtml +
+            '<div id="pjmSidebarTabContent">' + tabContentHtml + '</div>' +
+          '</div>' +
+        '</div>';
+
+      container.innerHTML = html;
+    }
+
+    function pjmRenderSidebarContent() {
+      var ubd = (currentMap && currentMap.ubdData) ? currentMap.ubdData : {};
+      var hexes = (currentMap && currentMap.hexes) ? currentMap.hexes : [];
+      var hasContent = false;
+      var html = '';
+
+      // Section 1: Current Activity
+      var currentHex = null;
+      for (var ci = 0; ci < hexes.length; ci++) {
+        if (String(hexes[ci].id) === String(pjmSlidesHexId)) { currentHex = hexes[ci]; break; }
+      }
+      if (currentHex) {
+        hasContent = true;
+        var typeLabels = { core: 'Core', extension: 'Extension', resource: 'Resource', lab: 'Lab', assessment: 'Assessment', lesson: 'Lesson', peer_feedback: 'Peer Feedback' };
+        html += pjmSidebarSection('activity', 'Current Activity', false,
+          '<div class="pjm-sidebar-activity-icon">' + escapeHtml(currentHex.icon || '') + '</div>' +
+          '<div class="pjm-sidebar-activity-label">' + escapeHtml(currentHex.label || 'Untitled') + '</div>' +
+          '<div class="pjm-sidebar-activity-type">' + escapeHtml(typeLabels[currentHex.type] || currentHex.type || '') + '</div>' +
+          (currentHex.description ? '<div class="pjm-sidebar-activity-desc">' + escapeHtml(currentHex.description) + '</div>' : '')
+        );
+      }
+
+      // Section 2: Learning Intentions + Success Criteria (expandable per-item)
+      var lis = (ubd.stage2 && ubd.stage2.learningIntentions) ? ubd.stage2.learningIntentions : [];
+      if (lis.length > 0) {
+        hasContent = true;
+        var lisHtml = '';
+        var liNum = 0;
+        for (var li = 0; li < lis.length; li++) {
+          var item = lis[li];
+          if (!item.intention) continue;
+          liNum++;
+          var hasSc = item.successCriteria && item.successCriteria.length > 0;
+          var liClickAttr = hasSc ? ' role="button" tabindex="0" aria-expanded="false" onclick="pjmToggleLiItem(' + li + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();pjmToggleLiItem(' + li + ');}"' : '';
+          lisHtml += '<div class="pjm-sidebar-li-item"' + liClickAttr + '>';
+          lisHtml += '<span class="pjm-sidebar-li-number">' + liNum + '</span>';
+          lisHtml += '<div class="pjm-sidebar-li-content">';
+          lisHtml += '<div class="pjm-sidebar-li-text">' + escapeHtml(item.intention);
+          if (hasSc) lisHtml += ' <span class="pjm-sidebar-li-chevron" data-li-chevron="' + li + '">\u25B6</span>';
+          lisHtml += '</div>';
+          if (hasSc) {
+            lisHtml += '<div class="pjm-sidebar-li-sc" data-li-sc="' + li + '"><span class="pjm-sidebar-li-sc-icon">\u2713</span> ' + escapeHtml(item.successCriteria) + '</div>';
+          }
+          lisHtml += '</div>';
+          lisHtml += '</div>';
+        }
+        html += pjmSidebarSection('intentions', '\uD83C\uDFAF Learning Intentions', false, lisHtml);
+      }
+
+      // Section 3: Essential Questions (clickable highlight)
+      var eqs = ubd.essentialQuestions || [];
+      if (eqs.length > 0) {
+        hasContent = true;
+        var eqHtml = '';
+        for (var eq = 0; eq < eqs.length; eq++) {
+          if (!eqs[eq].question) continue;
+          eqHtml += '<div class="pjm-sidebar-eq" role="button" tabindex="0" data-eq-idx="' + eq + '" onclick="pjmHighlightEQ(' + eq + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();pjmHighlightEQ(' + eq + ');}">' + (eq + 1) + '. ' + escapeHtml(eqs[eq].question) + '</div>';
+        }
+        html += pjmSidebarSection('questions', '\u2753 Essential Questions', true, eqHtml);
+      }
+
+      // Section 4: Key Vocabulary (expandable items)
+      var vocab = ubd.vocabulary || [];
+      if (vocab.length > 0) {
+        hasContent = true;
+        var vocHtml = '';
+        for (var vi = 0; vi < vocab.length; vi++) {
+          if (!vocab[vi].term) continue;
+          vocHtml += '<div class="pjm-sidebar-vocab-item" role="button" tabindex="0" aria-expanded="false" onclick="pjmToggleVocabItem(' + vi + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();pjmToggleVocabItem(' + vi + ');}">';
+          vocHtml += '<div style="display:flex;align-items:center;gap:6px;">';
+          vocHtml += '<span class="pjm-sidebar-vocab-term">' + escapeHtml(vocab[vi].term) + '</span>';
+          var vTier = vocab[vi].tier || 3;
+          if (vTier === 1) { vocHtml += '<span class="pjm-sidebar-tier-badge pjm-tier-everyday">T1</span>'; }
+          else if (vTier === 2) { vocHtml += '<span class="pjm-sidebar-tier-badge pjm-tier-academic">T2</span>'; }
+          vocHtml += '<span class="pjm-sidebar-vocab-chevron" data-vocab-chevron="' + vi + '">\u25B6</span>';
+          vocHtml += '</div>';
+          if (vocab[vi].definition) {
+            vocHtml += '<div class="pjm-sidebar-vocab-detail" data-vocab-detail="' + vi + '">' + escapeHtml(vocab[vi].definition) + '</div>';
+          }
+          vocHtml += '</div>';
+        }
+        html += pjmSidebarSection('vocabulary', '\uD83D\uDCD6 Key Vocabulary', true, vocHtml);
+      }
+
+      // Section 5: UDL Strategies (collapsed by default)
+      var udlContent = pjmRenderUdlContent(ubd);
+      if (udlContent) {
+        hasContent = true;
+        html += pjmSidebarSection('udl', '\uD83E\uDDE0 UDL Strategies', true, udlContent);
+      }
+
+      // Section 6: Resources (collapsed by default)
+      var resources = (ubd.stage3 && ubd.stage3.resources) ? ubd.stage3.resources : '';
+      if (resources && resources.length > 0) {
+        hasContent = true;
+        var resHtml = '<div class="pjm-sidebar-resources">' + escapeHtml(resources) + '</div>';
+        html += pjmSidebarSection('resources', '\uD83D\uDCDA Resources', true, resHtml);
+      }
+
+      // Section 7: Teacher Notes (collapsed by default, truncated)
+      var activities = (ubd.stage3 && ubd.stage3.learningActivities) ? ubd.stage3.learningActivities : '';
+      if (activities && activities.length > 0) {
+        hasContent = true;
+        var truncated = activities.length > 200 ? activities.substring(0, 200) + '...' : activities;
+        var notesHtml = '<div class="pjm-sidebar-notes">' + escapeHtml(truncated) + '</div>';
+        html += pjmSidebarSection('notes', '\uD83D\uDCDD Teacher Notes', true, notesHtml);
+      }
+
+      // Section 8: Lesson Progress (ALL items clickable — slides hexes change iframe, others go to Focus view)
+      if (hexes.length > 1) {
+        hasContent = true;
+        var progHtml = '';
+        for (var pi = 0; pi < hexes.length; pi++) {
+          var ph = hexes[pi];
+          var isCurrent = String(ph.id) === String(pjmSlidesHexId);
+          var hasSlidesUrl = ph.slidesUrl && ph.slidesUrl.indexOf('docs.google.com/presentation') !== -1;
+          var typeClass = hasSlidesUrl ? '' : ' pjm-sidebar-no-slides';
+          var currentRowClass = isCurrent ? ' pjm-sidebar-current-row' : '';
+          var safeId = escapeHtml(String(ph.id)).replace(/'/g, "\\'");
+          progHtml += '<div class="pjm-sidebar-progress-item' + typeClass + currentRowClass + '" role="button" tabindex="0" onclick="pjmOnProgressItemClick(\'' + safeId + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();pjmOnProgressItemClick(\'' + safeId + '\');}">';
+          progHtml += '<span class="pjm-sidebar-progress-dot' + (isCurrent ? ' pjm-sidebar-current' : '') + '"></span>';
+          progHtml += '<span class="pjm-sidebar-progress-icon">' + escapeHtml(ph.icon || '') + '</span>';
+          progHtml += '<span class="pjm-sidebar-progress-label">' + escapeHtml(ph.label || 'Untitled') + '</span>';
+          progHtml += '</div>';
+        }
+        html += pjmSidebarSection('progress', '\uD83D\uDCCB Lesson Progress', false, progHtml);
+      }
+
+      if (!hasContent) {
+        html = '<div class="pjm-sidebar-empty">No lesson data available. Add learning intentions and vocabulary in the UBD Planner.</div>';
+      }
+
+      return html;
+    }
+
+    function pjmSidebarSection(key, title, defaultCollapsed, bodyHtml) {
+      var collapsed = defaultCollapsed ? ' collapsed' : '';
+      return '<div class="pjm-sidebar-section">' +
+        '<div class="pjm-sidebar-section-header" role="button" tabindex="0" aria-expanded="' + (!defaultCollapsed ? 'true' : 'false') + '" onclick="pjmToggleSidebarSection(\'' + key + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();pjmToggleSidebarSection(\'' + key + '\');}">' +
+          '<span class="pjm-sidebar-section-title">' + escapeHtml(title) + '</span>' +
+          '<span class="pjm-sidebar-chevron' + collapsed + '">\u25BC</span>' +
+        '</div>' +
+        '<div class="pjm-sidebar-body' + collapsed + '" data-section="' + key + '">' + bodyHtml + '</div>' +
+      '</div>';
+    }
+
+    function pjmToggleSidebarSection(sectionKey) {
+      var body = document.querySelector('.pjm-sidebar-body[data-section="' + sectionKey + '"]');
+      if (!body) return;
+      var header = body.previousElementSibling;
+      var chevron = header ? header.querySelector('.pjm-sidebar-chevron') : null;
+      var isCollapsed = body.className.indexOf('collapsed') !== -1;
+      if (isCollapsed) {
+        body.className = body.className.replace(' collapsed', '');
+        if (chevron) chevron.className = chevron.className.replace(' collapsed', '');
+        if (header) header.setAttribute('aria-expanded', 'true');
+      } else {
+        body.className += ' collapsed';
+        if (chevron) chevron.className += ' collapsed';
+        if (header) header.setAttribute('aria-expanded', 'false');
+      }
+    }
+
+    function pjmToggleVocabItem(idx) {
+      var detail = document.querySelector('[data-vocab-detail="' + idx + '"]');
+      var chevron = document.querySelector('[data-vocab-chevron="' + idx + '"]');
+      var item = detail ? detail.parentElement : null;
+      if (!detail) return;
+      var isExpanded = detail.className.indexOf('expanded') !== -1;
+      if (isExpanded) {
+        detail.className = 'pjm-sidebar-vocab-detail';
+        if (chevron) chevron.className = 'pjm-sidebar-vocab-chevron';
+        if (item) item.setAttribute('aria-expanded', 'false');
+      } else {
+        detail.className = 'pjm-sidebar-vocab-detail expanded';
+        if (chevron) chevron.className = 'pjm-sidebar-vocab-chevron expanded';
+        if (item) item.setAttribute('aria-expanded', 'true');
+      }
+    }
+
+    function pjmOnProgressItemClick(hexId) {
+      // Check if the hex has a slides URL
+      var hasSlides = false;
+      if (currentMap && currentMap.hexes) {
+        for (var i = 0; i < currentMap.hexes.length; i++) {
+          if (String(currentMap.hexes[i].id) === String(hexId)) {
+            var url = currentMap.hexes[i].slidesUrl || '';
+            hasSlides = url.indexOf('docs.google.com/presentation') !== -1;
+            break;
+          }
+        }
+      }
+      if (hasSlides) {
+        // Change the slides iframe to this hex's presentation
+        pjmOnSlidesHexChange(hexId);
+      } else {
+        // Navigate to Focus Hex view for this hex
+        pjmFocusHexId = String(hexId);
+        pjmSwitchView('focus');
+        // Focus the back button for keyboard users
+        setTimeout(function() {
+          var backBtn = document.querySelector('.pjm-focus-back');
+          if (backBtn) backBtn.focus();
+        }, 50);
+      }
+    }
+
+    function pjmToggleLiItem(idx) {
+      var sc = document.querySelector('[data-li-sc="' + idx + '"]');
+      var chevron = document.querySelector('[data-li-chevron="' + idx + '"]');
+      var item = sc ? sc.parentElement.parentElement : null;
+      if (!sc) return;
+      var isExpanded = sc.className.indexOf('expanded') !== -1;
+      if (isExpanded) {
+        sc.className = 'pjm-sidebar-li-sc';
+        if (chevron) chevron.className = 'pjm-sidebar-li-chevron';
+        if (item) item.setAttribute('aria-expanded', 'false');
+      } else {
+        sc.className = 'pjm-sidebar-li-sc expanded';
+        if (chevron) chevron.className = 'pjm-sidebar-li-chevron expanded';
+        if (item) item.setAttribute('aria-expanded', 'true');
+      }
+    }
+
+    function pjmHighlightEQ(idx) {
+      // Toggle highlight — only one EQ highlighted at a time
+      var allEqs = document.querySelectorAll('.pjm-sidebar-eq');
+      for (var e = 0; e < allEqs.length; e++) {
+        var eqIdx = allEqs[e].getAttribute('data-eq-idx');
+        if (String(eqIdx) === String(idx)) {
+          var isActive = allEqs[e].className.indexOf('pjm-sidebar-eq-active') !== -1;
+          allEqs[e].className = isActive ? 'pjm-sidebar-eq' : 'pjm-sidebar-eq pjm-sidebar-eq-active';
+        } else {
+          allEqs[e].className = 'pjm-sidebar-eq';
+        }
+      }
+    }
+
+    function pjmRenderUdlContent(ubd) {
+      var udl = ubd.udl;
+      if (!udl) return '';
+      var principles = [
+        { key: 'representation', label: 'Representation', color: '#3b82f6' },
+        { key: 'actionExpression', label: 'Action & Expression', color: '#22c55e' },
+        { key: 'engagement', label: 'Engagement', color: '#f59e0b' }
+      ];
+      var hasAny = false;
+      var out = '';
+      for (var p = 0; p < principles.length; p++) {
+        var pr = principles[p];
+        var items = udl[pr.key];
+        if (!items || items.length === 0) continue;
+        hasAny = true;
+        out += '<div class="pjm-sidebar-udl-principle">';
+        out += '<div class="pjm-sidebar-udl-label"><span class="pjm-sidebar-udl-dot" style="background:' + pr.color + '"></span> ' + escapeHtml(pr.label) + '</div>';
+        for (var s = 0; s < items.length; s++) {
+          if (items[s]) out += '<span class="pjm-sidebar-udl-chip">' + escapeHtml(items[s]) + '</span> ';
+        }
+        out += '</div>';
+      }
+      return hasAny ? out : '';
+    }
+
+    function pjmToggleSidebar() {
+      pjmSidebarOpen = !pjmSidebarOpen;
+      var sidebar = document.getElementById('pjmSidebar');
+      var btn = document.querySelector('.pjm-sidebar-toggle');
+      if (sidebar) {
+        if (pjmSidebarOpen) {
+          sidebar.className = 'pjm-sidebar pjm-sidebar-open';
+        } else {
+          sidebar.className = 'pjm-sidebar';
+        }
+      }
+      if (btn) btn.setAttribute('aria-expanded', String(pjmSidebarOpen));
+    }
+
+    function pjmUpdateSidebarActivity() {
+      // Only update when lesson tab is active
+      if (pjmSidebarTab !== 'lesson') return;
+      // Update Current Activity section without full sidebar re-render
+      var hexes = (currentMap && currentMap.hexes) ? currentMap.hexes : [];
+      var currentHex = null;
+      for (var ci = 0; ci < hexes.length; ci++) {
+        if (String(hexes[ci].id) === String(pjmSlidesHexId)) { currentHex = hexes[ci]; break; }
+      }
+      // Update activity section
+      var actBody = document.querySelector('.pjm-sidebar-body[data-section="activity"]');
+      if (actBody && currentHex) {
+        var typeLabels = { core: 'Core', extension: 'Extension', resource: 'Resource', lab: 'Lab', assessment: 'Assessment', lesson: 'Lesson', peer_feedback: 'Peer Feedback' };
+        actBody.innerHTML =
+          '<div class="pjm-sidebar-activity-icon">' + escapeHtml(currentHex.icon || '') + '</div>' +
+          '<div class="pjm-sidebar-activity-label">' + escapeHtml(currentHex.label || 'Untitled') + '</div>' +
+          '<div class="pjm-sidebar-activity-type">' + escapeHtml(typeLabels[currentHex.type] || currentHex.type || '') + '</div>' +
+          (currentHex.description ? '<div class="pjm-sidebar-activity-desc">' + escapeHtml(currentHex.description) + '</div>' : '');
+      }
+      // Update progress dots + current row highlight
+      var dots = document.querySelectorAll('.pjm-sidebar-progress-dot');
+      var items = document.querySelectorAll('.pjm-sidebar-progress-item');
+      for (var di = 0; di < hexes.length && di < dots.length; di++) {
+        var isCurrent = String(hexes[di].id) === String(pjmSlidesHexId);
+        if (isCurrent) {
+          dots[di].className = 'pjm-sidebar-progress-dot pjm-sidebar-current';
+          if (items[di]) items[di].className = items[di].className.replace(' pjm-sidebar-current-row', '') + ' pjm-sidebar-current-row';
+        } else {
+          dots[di].className = 'pjm-sidebar-progress-dot';
+          if (items[di]) items[di].className = items[di].className.replace(' pjm-sidebar-current-row', '');
+        }
+      }
+    }
+
+    function pjmOnSlidesHexChange(hexId) {
+      pjmSlidesHexId = String(hexId);
+
+      // Find the slides URL for this hex and update iframe
+      if (currentMap && currentMap.hexes) {
+        for (var i = 0; i < currentMap.hexes.length; i++) {
+          if (String(currentMap.hexes[i].id) === String(hexId)) {
+            var iframe = document.getElementById('pjmSlidesIframe');
+            var rawUrl = currentMap.hexes[i].slidesUrl || '';
+            if (iframe && rawUrl && (rawUrl.indexOf('https://') === 0 || rawUrl.indexOf('http://') === 0)) {
+              iframe.src = rawUrl;
+            }
+            break;
+          }
+        }
+      }
+
+      // Update sidebar without full re-render (preserves collapsed states)
+      pjmUpdateSidebarActivity();
+    }
+
+    function pjmSwitchSidebarTab(tab) {
+      pjmSidebarTab = tab;
+      // Update tab button active states
+      var tabs = document.querySelectorAll('.pjm-sidebar-tab');
+      for (var t = 0; t < tabs.length; t++) {
+        var isActive = (tab === 'lesson' && t === 0) || (tab === 'translate' && t === 1);
+        if (isActive) {
+          tabs[t].className = 'pjm-sidebar-tab active';
+        } else {
+          tabs[t].className = 'pjm-sidebar-tab';
+        }
+      }
+      // Render tab content
+      var contentEl = document.getElementById('pjmSidebarTabContent');
+      if (!contentEl) return;
+      if (tab === 'translate') {
+        contentEl.innerHTML = pjmRenderTranslationView();
+      } else {
+        try {
+          contentEl.innerHTML = pjmRenderSidebarContent();
+        } catch (e) {
+          contentEl.innerHTML = '<div class="pjm-sidebar-empty">Unable to load lesson data.</div>';
+        }
+      }
+    }
+
+    function pjmRenderTranslationView() {
+      // Build language dropdown
+      var langLabels = (typeof DCT_LANG_LABELS !== 'undefined') ? DCT_LANG_LABELS : { ja: 'Japanese', ko: 'Korean', fr: 'French', es: 'Spanish', zh: 'Chinese' };
+      var selectHtml = '<select class="pjm-translate-select" onchange="pjmChangeTranslateLang(this.value)" aria-label="Translation language">';
+      selectHtml += '<option value="">Select language...</option>';
+      var langKeys = [];
+      for (var k in langLabels) {
+        if (langLabels.hasOwnProperty(k)) langKeys.push(k);
+      }
+      for (var li = 0; li < langKeys.length; li++) {
+        var lk = langKeys[li];
+        selectHtml += '<option value="' + escapeHtml(lk) + '"' + (pjmTranslateLang === lk ? ' selected' : '') + '>' + escapeHtml(langLabels[lk]) + '</option>';
+      }
+      selectHtml += '</select>';
+
+      // Auto-captions helper note
+      var captionsNote = '<div class="pjm-translate-captions-note">';
+      captionsNote += '<div class="pjm-translate-captions-note-text">';
+      captionsNote += '\uD83D\uDD0A For live speech captions, use Google Slides\' built-in captions: click <strong>CC</strong> in presentation mode. ';
+      captionsNote += '<a href="https://support.google.com/docs/answer/9109474" target="_blank" rel="noopener" class="pjm-translate-captions-link">Learn more</a>';
+      captionsNote += '</div></div>';
+
+      // Content area
+      var contentHtml = '<div id="pjmTranslateContent">';
+      if (pjmTranslateLang && pjmTranslationCache[pjmTranslateLang]) {
+        contentHtml += pjmRenderTranslatedContent(pjmTranslateLang, pjmTranslationCache[pjmTranslateLang]);
+      } else if (pjmTranslateLang && pjmTranslateLoading) {
+        contentHtml += '<div class="pjm-translate-loading">\u231B Translating...</div>';
+      } else if (pjmTranslateLang) {
+        contentHtml += '<div class="pjm-translate-loading">\u231B Translating...</div>';
+      } else {
+        contentHtml += '<div class="pjm-translate-empty">Select a language above to translate lesson content.</div>';
+      }
+      contentHtml += '</div>';
+
+      // Custom text translator
+      var customHtml = '<div class="pjm-translate-custom">';
+      customHtml += '<div class="pjm-translate-section-title">Custom Text</div>';
+      customHtml += '<textarea id="pjmCustomTranslateInput" class="pjm-translate-custom-input" maxlength="300" rows="2" placeholder="Type text to translate..." aria-label="Custom text to translate"></textarea>';
+      customHtml += '<button class="pjm-translate-custom-btn" onclick="pjmTranslateCustomText()"' + (!pjmTranslateLang ? ' disabled' : '') + '>Translate</button>';
+      customHtml += '<div id="pjmCustomTranslateResult" class="pjm-translate-custom-result"></div>';
+      customHtml += '</div>';
+
+      return selectHtml + captionsNote + contentHtml + customHtml;
+    }
+
+    function pjmChangeTranslateLang(lang) {
+      pjmTranslateLang = lang;
+      if (!lang) {
+        var contentEl = document.getElementById('pjmTranslateContent');
+        if (contentEl) contentEl.innerHTML = '<div class="pjm-translate-empty">Select a language above to translate lesson content.</div>';
+        var btn = document.querySelector('.pjm-translate-custom-btn');
+        if (btn) btn.disabled = true;
+        return;
+      }
+      var btn2 = document.querySelector('.pjm-translate-custom-btn');
+      if (btn2) btn2.disabled = false;
+      pjmLoadTranslations(lang);
+    }
+
+    function pjmLoadTranslations(lang) {
+      // Check cache first
+      if (pjmTranslationCache[lang]) {
+        var contentEl = document.getElementById('pjmTranslateContent');
+        if (contentEl) contentEl.innerHTML = pjmRenderTranslatedContent(lang, pjmTranslationCache[lang]);
+        return;
+      }
+
+      // Collect all translatable text from UBD data
+      var ubd = (currentMap && currentMap.ubdData) ? currentMap.ubdData : {};
+      var texts = [];
+      var textMap = { lis: [], liScs: [], eqs: [], vocabTerms: [], vocabDefs: [] };
+
+      // Learning Intentions + Success Criteria
+      var lis = (ubd.stage2 && ubd.stage2.learningIntentions) ? ubd.stage2.learningIntentions : [];
+      for (var i = 0; i < lis.length; i++) {
+        if (lis[i].intention) { textMap.lis.push(texts.length); texts.push(lis[i].intention); }
+        if (lis[i].successCriteria) { textMap.liScs.push(texts.length); texts.push(lis[i].successCriteria); }
+      }
+      // Essential Questions
+      var eqs = (ubd.stage2 && ubd.stage2.essentialQuestions) ? ubd.stage2.essentialQuestions : [];
+      for (var eq = 0; eq < eqs.length; eq++) {
+        if (eqs[eq].question) { textMap.eqs.push(texts.length); texts.push(eqs[eq].question); }
+      }
+      // Vocabulary terms and definitions
+      var vocab = ubd.vocabulary || [];
+      for (var v = 0; v < vocab.length; v++) {
+        if (vocab[v].term) { textMap.vocabTerms.push(texts.length); texts.push(vocab[v].term); }
+        if (vocab[v].definition) { textMap.vocabDefs.push(texts.length); texts.push(vocab[v].definition); }
+      }
+
+      if (texts.length === 0) {
+        var contentEl2 = document.getElementById('pjmTranslateContent');
+        if (contentEl2) contentEl2.innerHTML = '<div class="pjm-translate-empty">No lesson content available to translate. Add learning intentions and vocabulary in the UBD Planner.</div>';
+        return;
+      }
+
+      // Show loading
+      pjmTranslateLoading = true;
+      var contentEl3 = document.getElementById('pjmTranslateContent');
+      if (contentEl3) contentEl3.innerHTML = '<div class="pjm-translate-loading">\u231B Translating...</div>';
+
+      var expectedLang = lang;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (pjmTranslateLang !== expectedLang) return; // stale-response guard
+          pjmTranslateLoading = false;
+          var translations = (result && result.translations) ? result.translations : [];
+          pjmTranslationCache[lang] = { texts: texts, translations: translations, textMap: textMap };
+          var el = document.getElementById('pjmTranslateContent');
+          if (el) el.innerHTML = pjmRenderTranslatedContent(lang, pjmTranslationCache[lang]);
+        })
+        .withFailureHandler(function(err) {
+          if (pjmTranslateLang !== expectedLang) return;
+          pjmTranslateLoading = false;
+          var el = document.getElementById('pjmTranslateContent');
+          if (el) el.innerHTML = '<div class="pjm-translate-empty">Translation failed. Please try again.</div>';
+        })
+        .translateLessonContent(texts, lang);
+    }
+
+    function pjmRenderTranslatedContent(lang, cached) {
+      var ubd = (currentMap && currentMap.ubdData) ? currentMap.ubdData : {};
+      var texts = cached.texts;
+      var trans = cached.translations;
+      var tm = cached.textMap;
+      var html = '';
+
+      // Learning Intentions
+      if (tm.lis.length > 0) {
+        html += '<div class="pjm-translate-section-title">\uD83C\uDFAF Learning Intentions</div>';
+        var liNum = 0;
+        var lis = (ubd.stage2 && ubd.stage2.learningIntentions) ? ubd.stage2.learningIntentions : [];
+        for (var i = 0; i < lis.length; i++) {
+          if (!lis[i].intention) continue;
+          liNum++;
+          var liIdx = tm.lis.indexOf(liNum - 1 < tm.lis.length ? tm.lis[liNum - 1] : -1);
+          // Find the text index for this LI
+          var tIdx = tm.lis[liNum - 1];
+          if (tIdx === undefined) continue;
+          html += '<div class="pjm-translate-item">';
+          html += '<div class="pjm-translate-item-original">' + liNum + '. ' + escapeHtml(texts[tIdx]) + '</div>';
+          html += '<div class="pjm-translate-item-translated">' + escapeHtml(trans[tIdx] || '') + '</div>';
+          html += '</div>';
+          // Success criteria for this LI
+          if (tm.liScs.length > liNum - 1) {
+            var scIdx = tm.liScs[liNum - 1];
+            if (scIdx !== undefined && texts[scIdx]) {
+              html += '<div class="pjm-translate-item" style="padding-left:12px;">';
+              html += '<div class="pjm-translate-item-original">\u2713 ' + escapeHtml(texts[scIdx]) + '</div>';
+              html += '<div class="pjm-translate-item-translated">\u2713 ' + escapeHtml(trans[scIdx] || '') + '</div>';
+              html += '</div>';
+            }
+          }
+        }
+      }
+
+      // Essential Questions
+      if (tm.eqs.length > 0) {
+        html += '<div class="pjm-translate-section-title">\u2753 Essential Questions</div>';
+        for (var e = 0; e < tm.eqs.length; e++) {
+          var eIdx = tm.eqs[e];
+          html += '<div class="pjm-translate-item">';
+          html += '<div class="pjm-translate-item-original">' + (e + 1) + '. ' + escapeHtml(texts[eIdx]) + '</div>';
+          html += '<div class="pjm-translate-item-translated">' + escapeHtml(trans[eIdx] || '') + '</div>';
+          html += '</div>';
+        }
+      }
+
+      // Vocabulary
+      if (tm.vocabTerms.length > 0) {
+        html += '<div class="pjm-translate-section-title">\uD83D\uDCD6 Key Vocabulary</div>';
+        for (var vt = 0; vt < tm.vocabTerms.length; vt++) {
+          var termIdx = tm.vocabTerms[vt];
+          var defIdx = (vt < tm.vocabDefs.length) ? tm.vocabDefs[vt] : -1;
+          html += '<div class="pjm-translate-item">';
+          html += '<div class="pjm-translate-item-original">' + escapeHtml(texts[termIdx]);
+          if (defIdx >= 0 && texts[defIdx]) html += ' \u2014 ' + escapeHtml(texts[defIdx]);
+          html += '</div>';
+          html += '<div class="pjm-translate-item-translated">' + escapeHtml(trans[termIdx] || '');
+          if (defIdx >= 0 && trans[defIdx]) html += ' \u2014 ' + escapeHtml(trans[defIdx]);
+          html += '</div>';
+          html += '</div>';
+        }
+      }
+
+      if (!html) {
+        html = '<div class="pjm-translate-empty">No translatable content found.</div>';
+      }
+
+      return html;
+    }
+
+    function pjmTranslateCustomText() {
+      var input = document.getElementById('pjmCustomTranslateInput');
+      var resultEl = document.getElementById('pjmCustomTranslateResult');
+      if (!input || !resultEl || !pjmTranslateLang) return;
+
+      var text = input.value.trim();
+      if (!text) return;
+      if (text.length > 300) text = text.substring(0, 300);
+
+      resultEl.innerHTML = '<span class="pjm-translate-loading">\u231B Translating...</span>';
+      var expectedLang = pjmTranslateLang;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (pjmTranslateLang !== expectedLang) return;
+          var translations = (result && result.translations) ? result.translations : [];
+          if (resultEl) resultEl.textContent = translations[0] || '(No translation)';
+        })
+        .withFailureHandler(function(err) {
+          if (pjmTranslateLang !== expectedLang) return;
+          if (resultEl) resultEl.textContent = 'Translation failed.';
+        })
+        .translateLessonContent([text], pjmTranslateLang);
+    }
+
+    function pjmFullscreenSlides() {
+      var iframe = document.getElementById('pjmSlidesIframe');
+      if (!iframe) return;
+      if (iframe.requestFullscreen) {
+        iframe.requestFullscreen();
+      } else if (iframe.webkitRequestFullscreen) {
+        iframe.webkitRequestFullscreen();
+      } else if (iframe.mozRequestFullScreen) {
+        iframe.mozRequestFullScreen();
+      }
+    }
+
+
+    // ================================================
+    //  POLL VIEW — Quick Poll Results on Projector
+    // ================================================
+
+    function pjmRenderPollView() {
+      var container = document.getElementById('pjmViewContainer');
+      if (!container) return;
+
+      // Check for active poll
+      var pollData = (typeof qpActivePollData !== 'undefined') ? qpActivePollData : null;
+      var pollId = (typeof qpActivePollId !== 'undefined') ? qpActivePollId : null;
+
+      if (!pollData || !pollId) {
+        container.innerHTML = '<div class="pjm-empty">' +
+          '<div class="pjm-empty-icon">📊</div>' +
+          '<div class="pjm-empty-title">No Active Poll</div>' +
+          '<div class="pjm-empty-text">Launch a poll from the 📊 Poll button to display results here.</div>' +
+        '</div>';
+        return;
+      }
+
+      var html = '<div class="qp-pjm-container">';
+      html += '<div class="qp-pjm-question">' + escapeHtml(pollData.pollText || '') + '</div>';
+      html += '<div class="qp-pjm-count">' + escapeHtml(pollData.pollType === 'mc' ? 'Multiple Choice' : 'Open-Ended') +
+              ' \u00B7 ' + (pollData.respondentCount || 0) + ' response' + ((pollData.respondentCount || 0) !== 1 ? 's' : '') + '</div>';
+
+      if (pollData.pollType === 'mc') {
+        // Fetch results from teacher's local state
+        var options = [];
+        try { options = JSON.parse(pollData.optionsJson || '[]'); } catch (e) { options = []; }
+        var correctIdx = pollData.correctOptionIndex;
+        var hasCorrect = correctIdx !== null && correctIdx !== undefined && correctIdx >= 0;
+
+        // Try to get live result counts from qpActivePollData.results
+        var results = pollData.results || null;
+        var totalResponses = pollData.respondentCount || 0;
+
+        html += '<div class="qp-pjm-results">';
+        for (var i = 0; i < options.length; i++) {
+          var count = 0;
+          if (results && results.optionCounts) {
+            count = results.optionCounts[i] || 0;
+          }
+          var pct = totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0;
+          var isCorrect = hasCorrect && i === correctIdx;
+          var barClass = 'qp-pjm-result-bar' + (isCorrect ? ' qp-pjm-correct' : '');
+
+          html += '<div class="qp-pjm-result-row">';
+          html += '<div class="qp-pjm-result-label">' + escapeHtml(options[i] || '') + '</div>';
+          html += '<div class="' + barClass + '">';
+          html += '<div class="qp-pjm-result-fill" style="width:' + pct + '%"></div>';
+          html += '<span class="qp-pjm-result-count">' + count + ' (' + pct + '%)</span>';
+          html += '</div>';
+          html += '</div>';
+        }
+        html += '</div>';
+      } else {
+        // Open-ended: show response count as large display
+        html += '<div class="qp-pjm-open-responses">';
+        html += '<div class="qp-pjm-open-card" style="text-align:center;font-size:48px;font-weight:700;color:#14b8a6;padding:40px;">' + (pollData.respondentCount || 0) + '</div>';
+        html += '<div class="qp-pjm-count" style="margin-top:8px;">responses collected</div>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+
+      // Kick off poll results refresh if not already running
+      if (typeof qpRefreshTimer !== 'undefined' && !qpRefreshTimer && typeof qpStartResultsRefresh === 'function') {
+        qpStartResultsRefresh();
+      }
+    }
+
+
+    // ---- Auto-Refresh ----
+
+    function pjmStartRefresh() {
+      pjmStopRefresh();
+      pjmLastRefreshTime = Date.now();
+
+      // Start the "Updated X ago" interval
+      pjmUpdatedTimer = setInterval(pjmUpdateTimestamp, PJM_UPDATED_INTERVAL);
+
+      // Schedule first data refresh
+      pjmRefreshTimer = setTimeout(pjmRefreshData, PJM_REFRESH_INTERVAL);
+    }
+
+    function pjmStopRefresh() {
+      if (pjmRefreshTimer) {
+        clearTimeout(pjmRefreshTimer);
+        pjmRefreshTimer = null;
+      }
+      if (pjmUpdatedTimer) {
+        clearInterval(pjmUpdatedTimer);
+        pjmUpdatedTimer = null;
+      }
+    }
+
+    function pjmRefreshData() {
+      if (!pjmIsOpen) return;
+      if (!currentMap || !currentMap.mapId) return;
+
+      // Capture expected IDs for stale-response guard
+      var expectedMapId = currentMap.mapId;
+      var expectedClassId = typeof progressSelectedClassId !== 'undefined' ? progressSelectedClassId : null;
+
+      if (!expectedClassId) {
+        // No class selected, skip refresh
+        pjmRefreshTimer = setTimeout(pjmRefreshData, PJM_REFRESH_INTERVAL);
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          // Stale-response guard
+          if (!pjmIsOpen) return;
+          if (!currentMap || currentMap.mapId !== expectedMapId) return;
+
+          // Update global dashboard data
+          progressDashboardData = data;
+          pjmLastRefreshTime = Date.now();
+
+          // Recompute stats
+          pjmHexStats = null;  // Force recompute (don't reuse phm cache)
+          pjmComputeHexStats();
+
+          // Re-render
+          pjmRenderStatsBar();
+          pjmFlashUpdated();
+
+          // Re-render current view (skip slides — would reset iframe state)
+          if (pjmCurrentView === 'overview') {
+            pjmRenderOverview();
+          } else if (pjmCurrentView === 'focus') {
+            pjmRenderFocusHex(pjmFocusHexId);
+          } else if (pjmCurrentView === 'feed') {
+            pjmRenderFeed();
+          } else if (pjmCurrentView === 'timer') {
+            pjmRenderTimerView();
+          } else if (pjmCurrentView === 'poll') {
+            pjmRenderPollView();
+          }
+          // slides view intentionally skipped to preserve iframe state
+
+          // Restore keyboard hints after view re-render
+          pjmRenderKeyboardHints();
+
+          // Schedule next refresh
+          pjmRefreshTimer = setTimeout(pjmRefreshData, PJM_REFRESH_INTERVAL);
+        })
+        .withFailureHandler(function(err) {
+          console.error('PJM refresh failed:', err);
+          // Show failure in topbar
+          var updEl = document.getElementById('pjmUpdatedText');
+          if (updEl) updEl.textContent = 'Refresh failed \u2014 retrying';
+          // Schedule next refresh even on failure
+          if (pjmIsOpen) {
+            pjmRefreshTimer = setTimeout(pjmRefreshData, PJM_REFRESH_INTERVAL);
+          }
+        })
+        .getTeacherDashboardData(expectedClassId, expectedMapId);
+    }
+
+    function pjmFlashUpdated() {
+      var cards = document.querySelectorAll('.pjm-stat-card');
+      for (var i = 0; i < cards.length; i++) {
+        cards[i].classList.remove('pjm-updated');
+        // Force reflow
+        void cards[i].offsetWidth;
+        cards[i].classList.add('pjm-updated');
+      }
+    }
+
+    function pjmUpdateTimestamp() {
+      var el = document.getElementById('pjmUpdatedText');
+      if (!el || !pjmLastRefreshTime) return;
+      var ago = Math.floor((Date.now() - pjmLastRefreshTime) / 1000);
+      if (ago < 10) {
+        el.textContent = 'Updated just now';
+      } else if (ago < 60) {
+        el.textContent = 'Updated ' + ago + 's ago';
+      } else {
+        el.textContent = 'Updated ' + Math.floor(ago / 60) + 'm ago';
+      }
+    }
+
+
+    // ---- Keyboard Shortcuts ----
+
+    function pjmHandleKeydown(e) {
+      if (!pjmIsOpen) return false;
+
+      // Don't intercept if typing in an input
+      var tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return false;
+
+      var key = e.key;
+
+      if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        e.preventDefault();
+        var dir = key === 'ArrowRight' ? 1 : -1;
+        pjmCycleView(dir);
+        return true;
+      }
+
+      if (key === ' ' || key === 'Spacebar') {
+        e.preventDefault();
+        // Toggle timer pause/resume
+        if (typeof ctdTimerState !== 'undefined') {
+          if (ctdTimerState === 'running' && typeof ctdPause === 'function') {
+            ctdPause();
+            if (pjmCurrentView === 'timer') pjmRenderTimerView();
+          } else if (ctdTimerState === 'paused' && typeof ctdResume === 'function') {
+            ctdResume();
+            if (pjmCurrentView === 'timer') pjmRenderTimerView();
+          }
+        }
+        return true;
+      }
+
+      if (key === 't' || key === 'T') {
+        pjmSwitchView('timer');
+        return true;
+      }
+
+      if (key === 's' || key === 'S') {
+        pjmSwitchView('slides');
+        return true;
+      }
+
+      if (key === 'p' || key === 'P') {
+        pjmSwitchView('poll');
+        return true;
+      }
+
+      if (key === 'i' || key === 'I') {
+        if (pjmCurrentView === 'slides') {
+          pjmToggleSidebar();
+          return true;
+        }
+      }
+
+      if (key === 'b' || key === 'B') {
+        if (pjmCurrentView === 'focus') {
+          pjmGoBack();
+        }
+        return true;
+      }
+
+      if (key === 'r' || key === 'R') {
+        pjmRefreshData();
+        return true;
+      }
+
+      return false;
+    }
+
+    function pjmCycleView(direction) {
+      var idx = PJM_VIEWS.indexOf(pjmCurrentView);
+      if (idx === -1) idx = 0;
+      idx += direction;
+      if (idx < 0) idx = PJM_VIEWS.length - 1;
+      if (idx >= PJM_VIEWS.length) idx = 0;
+      pjmSwitchView(PJM_VIEWS[idx]);
+    }
+
+    function pjmRenderKeyboardHints() {
+      // Remove existing hints
+      var existing = document.querySelector('.pjm-keyboard-hints');
+      if (existing) existing.parentNode.removeChild(existing);
+
+      var container = document.getElementById('pjmViewContainer');
+      if (!container) return;
+
+      var hints = '<div class="pjm-keyboard-hints">';
+      hints += '<span class="pjm-key-hint"><kbd>←</kbd><kbd>→</kbd> Views</span>';
+      hints += '<span class="pjm-key-hint"><kbd>Space</kbd> Timer</span>';
+      hints += '<span class="pjm-key-hint"><kbd>R</kbd> Refresh</span>';
+      hints += '<span class="pjm-key-hint"><kbd>S</kbd> Slides</span>';
+      hints += '<span class="pjm-key-hint"><kbd>P</kbd> Poll</span>';
+      if (pjmCurrentView === 'slides') {
+        hints += '<span class="pjm-key-hint"><kbd>I</kbd> Info</span>';
+      }
+      if (pjmCurrentView === 'focus') {
+        hints += '<span class="pjm-key-hint"><kbd>B</kbd> Back</span>';
+      }
+      hints += '<span class="pjm-key-hint"><kbd>Esc</kbd> Close</span>';
+      hints += '</div>';
+
+      container.insertAdjacentHTML('beforeend', hints);
+    }
+</script>

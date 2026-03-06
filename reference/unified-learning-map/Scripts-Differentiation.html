@@ -1,0 +1,999 @@
+<script>
+// ============================================================================
+// DIFFERENTIATION — Group-based learning path customization
+// ES5 only. dif- prefix. Handles group overlay, hex assignment, student visibility.
+// ============================================================================
+(function() {
+
+  // ---- State vars (also declared in Scripts-Core.html) ----
+  // difGroupsData, difMemberships, difHexAssignments, difSelectedGroupId,
+  // difOverlayOpen, difScope, difVisibilityData, difOverridesExpanded
+
+  // ============================================================================
+  // OVERLAY LIFECYCLE
+  // ============================================================================
+
+  window.difOpenOverlay = function() {
+    if (!currentMap || !currentMap.mapId) {
+      showToast('Open a map first', 'error');
+      return;
+    }
+    difOverlayOpen = true;
+    difSelectedGroupId = null;
+    difScope = 'class';
+    var el = document.getElementById('difOverlay');
+    if (el) el.style.display = 'flex';
+    // Reset scope radios
+    var radios = document.querySelectorAll('input[name="difScope"]');
+    for (var i = 0; i < radios.length; i++) {
+      radios[i].checked = radios[i].value === 'class';
+    }
+    difLoadData();
+  };
+
+  window.difCloseOverlay = function() {
+    difOverlayOpen = false;
+    difProfilesCache = null;
+    dfaInitialized = false;
+    var el = document.getElementById('difOverlay');
+    if (el) el.style.display = 'none';
+    // Refresh hex grid to reflect any group changes
+    if (currentMap && typeof renderHexGrid === 'function') renderHexGrid();
+  };
+
+  window.difSetScope = function(scope) {
+    difScope = scope;
+    difSelectedGroupId = null;
+    difRenderGroupList();
+    difRenderRightPanel();
+  };
+
+  // ============================================================================
+  // DATA LOADING
+  // ============================================================================
+
+  function difLoadData() {
+    if (!currentMap || !currentMap.mapId) return;
+    var mapId = currentMap.mapId;
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (!currentMap || currentMap.mapId !== mapId) return; // stale guard
+        difGroupsData = data.groups || [];
+        difMemberships = data.memberships || [];
+        difHexAssignments = data.hexAssignments || [];
+        // Update mode select
+        var modeSelect = document.getElementById('difModeSelect');
+        if (modeSelect) modeSelect.value = data.mode || 'none';
+        difRenderGroupList();
+        difRenderRightPanel();
+        difUpdateToolbarVisibility();
+
+        // Load WIDA profiles in parallel (cached per overlay session)
+        var classId = difGetClassId();
+        if (classId && !difProfilesCache) {
+          google.script.run
+            .withSuccessHandler(function(profiles) {
+              difProfilesCache = profiles || [];
+              // Re-render right panel to pick up profiles
+              if (difSelectedGroupId) difRenderRightPanel();
+            })
+            .withFailureHandler(function() {
+              difProfilesCache = [];
+            })
+            .getClassSupportProfiles(classId);
+        }
+      })
+      .withFailureHandler(function(err) {
+        var msg = (err && err.message) ? err.message : '';
+        console.error('Differentiation load error:', msg);
+        // Hide toolbar elements gracefully on failure
+        var modeSelectEl = document.getElementById('difModeSelect');
+        if (modeSelectEl) modeSelectEl.style.display = 'none';
+        var manageBtnEl = document.getElementById('difManageBtn');
+        if (manageBtnEl) manageBtnEl.style.display = 'none';
+        var dividerEl = document.getElementById('difToolbarDivider');
+        if (dividerEl) dividerEl.style.display = 'none';
+        // Show friendly message for sheet-not-found errors (sheets not created yet)
+        if (msg.toLowerCase().indexOf('sheet not found') !== -1 || msg.toLowerCase().indexOf('cannot read') !== -1) {
+          showToast('Differentiation sheets not set up yet. Refresh the page to auto-create them.', 'error');
+        } else if (msg) {
+          showToast('Differentiation: ' + escapeHtml(msg), 'error');
+        }
+      })
+      .getMapDifferentiationData(mapId);
+  }
+
+  // Load data when map is opened (called from Scripts-MapBuilder)
+  window.difOnMapLoad = function() {
+    difGroupsData = [];
+    difMemberships = [];
+    difHexAssignments = [];
+    difSelectedGroupId = null;
+    difVisibilityData = null;
+    if (currentViewMode === 'teacher' && currentMap && currentMap.mapId) {
+      difLoadData();
+    } else if (currentViewMode === 'student' && currentMap && currentMap.mapId) {
+      difLoadVisibility();
+    }
+  };
+
+  // ============================================================================
+  // TOOLBAR VISIBILITY
+  // ============================================================================
+
+  function difUpdateToolbarVisibility() {
+    var show = (currentViewMode === 'teacher' && currentMap);
+    var divider = document.getElementById('difToolbarDivider');
+    var modeSelect = document.getElementById('difModeSelect');
+    var manageBtn = document.getElementById('difManageBtn');
+    if (divider) divider.style.display = show ? '' : 'none';
+    if (modeSelect) modeSelect.style.display = show ? '' : 'none';
+    if (manageBtn) manageBtn.style.display = show ? '' : 'none';
+  }
+
+  window.difOnModeChange = function(value) {
+    if (!currentMap || !currentMap.mapId) return;
+    // Save to map.meta.differentiationMode
+    if (!currentMap.meta) currentMap.meta = {};
+    currentMap.meta.differentiationMode = value;
+    // Mark map as unsaved — user must click Save Map
+    if (typeof updateUnsavedIndicator === 'function') updateUnsavedIndicator();
+    showToast('Differentiation mode set to "' + value + '". Save map to apply.', 'info');
+  };
+
+  // ============================================================================
+  // GROUP LIST RENDERING (left panel)
+  // ============================================================================
+
+  function difRenderGroupList() {
+    var listEl = document.getElementById('difGroupList');
+    if (!listEl) return;
+
+    var filtered = difFilterGroupsByScope();
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="dif-empty-note">No groups yet. Click "+ New Group" above.</div>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < filtered.length; i++) {
+      var g = filtered[i];
+      var memberCount = difCountMembers(g.groupId);
+      var scopeBadge = g.mapId ? 'Map' : 'Class';
+      var isSelected = difSelectedGroupId === g.groupId;
+      var isDefault = String(g.isDefault) === 'true';
+
+      html += '<div class="dif-group-card' + (isSelected ? ' selected' : '') + '" onclick="difSelectGroup(\'' + g.groupId + '\')">';
+      html += '<div class="dif-group-card-header">';
+      html += '<span class="dif-group-card-dot" style="background:' + escapeHtml(g.groupColor || '#3b82f6') + ';"></span>';
+      html += '<span class="dif-group-card-name">' + escapeHtml(g.groupName) + '</span>';
+      html += '</div>';
+      html += '<div class="dif-group-card-meta">';
+      html += '<span>' + memberCount + ' student' + (memberCount !== 1 ? 's' : '') + '</span>';
+      html += '<span class="dif-group-card-badge">' + scopeBadge + '</span>';
+      if (isDefault) html += '<span class="dif-group-card-badge">Default</span>';
+      html += '</div>';
+      if (!isDefault) {
+        html += '<div class="dif-group-card-actions">';
+        html += '<button onclick="event.stopPropagation();difDeleteGroup(\'' + g.groupId + '\')" title="Delete group">🗑</button>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    listEl.innerHTML = html;
+  }
+
+  function difFilterGroupsByScope() {
+    var result = [];
+    for (var i = 0; i < difGroupsData.length; i++) {
+      var g = difGroupsData[i];
+      if (difScope === 'class' && !g.mapId) result.push(g);
+      else if (difScope === 'map' && g.mapId && String(g.mapId) === String(currentMap.mapId)) result.push(g);
+    }
+    return result;
+  }
+
+  function difCountMembers(groupId) {
+    var count = 0;
+    for (var i = 0; i < difMemberships.length; i++) {
+      if (String(difMemberships[i].groupId) === String(groupId)) count++;
+    }
+    return count;
+  }
+
+  // ============================================================================
+  // GROUP DETAIL (right panel)
+  // ============================================================================
+
+  window.difSelectGroup = function(groupId) {
+    difSelectedGroupId = groupId;
+    difRenderGroupList();
+    difRenderRightPanel();
+  };
+
+  function difRenderRightPanel() {
+    var panel = document.getElementById('difRightPanel');
+    if (!panel) return;
+
+    if (!difSelectedGroupId) {
+      panel.innerHTML = '<div class="dif-select-prompt">Select a group to manage members</div>';
+      return;
+    }
+
+    var group = difFindGroup(difSelectedGroupId);
+    if (!group) {
+      panel.innerHTML = '<div class="dif-select-prompt">Group not found</div>';
+      return;
+    }
+
+    // Get class roster for member checkboxes
+    difRenderGroupDetailLoading(panel, group);
+    difLoadRosterForGroup(group);
+  }
+
+  function difRenderGroupDetailLoading(panel, group) {
+    panel.innerHTML = '<div class="dif-detail-header">' +
+      '<input class="dif-detail-name-input" id="difGroupNameInput" value="' + escapeHtml(group.groupName) + '" maxlength="100">' +
+      '</div>' +
+      '<div class="dif-color-picker" id="difColorPicker"></div>' +
+      '<textarea class="dif-detail-desc" id="difGroupDescInput" maxlength="200" placeholder="Description (optional)">' + escapeHtml(group.groupDescription || '') + '</textarea>' +
+      '<div class="dif-member-section-title">Members <span style="color:#9ca3af;">Loading roster...</span></div>';
+  }
+
+  function difLoadRosterForGroup(group) {
+    getCachedRoster(group.classId, function(roster) {
+      difRenderGroupDetailFull(group, roster);
+    }, function() {
+      var panel = document.getElementById('difRightPanel');
+      if (panel) panel.innerHTML += '<div class="dif-empty-note">Error loading roster</div>';
+    });
+  }
+
+  // Accommodation icon lookup
+  var DIF_ACCOM_ICONS = {
+    extendedTime: '\u23F0',
+    wordToWordDictionary: '\uD83D\uDCD6',
+    sentenceStarters: '\u270D\uFE0F',
+    reducedWorkload: '\uD83C\uDFAF',
+    preferentialSeating: '\uD83D\uDCBA',
+    readAloud: '\uD83D\uDD0A',
+    scribe: '\u2712\uFE0F',
+    visualSupports: '\uD83D\uDDBC\uFE0F',
+    simplifiedLanguage: '\uD83D\uDCDD',
+    translationSupport: '\uD83C\uDF10'
+  };
+
+  function difGetAccomIcons(accoms) {
+    if (!accoms) return '';
+    var icons = [];
+    var keys = ['extendedTime', 'wordToWordDictionary', 'sentenceStarters', 'reducedWorkload',
+      'preferentialSeating', 'readAloud', 'scribe', 'visualSupports', 'simplifiedLanguage', 'translationSupport'];
+    for (var i = 0; i < keys.length && icons.length < 3; i++) {
+      if (accoms[keys[i]]) icons.push(DIF_ACCOM_ICONS[keys[i]]);
+    }
+    return icons.join('');
+  }
+
+  function difRenderGroupDetailFull(group, roster) {
+    var panel = document.getElementById('difRightPanel');
+    if (!panel || difSelectedGroupId !== group.groupId) return;
+
+    // Get current members
+    var memberEmails = {};
+    for (var i = 0; i < difMemberships.length; i++) {
+      if (String(difMemberships[i].groupId) === String(group.groupId)) {
+        memberEmails[String(difMemberships[i].studentEmail).toLowerCase()] = true;
+      }
+    }
+
+    // Build profile lookup from cached WIDA data
+    var profileMap = {};
+    if (difProfilesCache && difProfilesCache.length > 0) {
+      for (var p = 0; p < difProfilesCache.length; p++) {
+        var pe = String(difProfilesCache[p].studentEmail || '').toLowerCase();
+        if (pe) profileMap[pe] = difProfilesCache[p];
+      }
+    }
+
+    // Build active roster
+    var activeStudents = [];
+    for (var i = 0; i < roster.length; i++) {
+      var s = roster[i];
+      if (s.status === 'removed') continue;
+      var email = String(s.email || s.studentEmail).toLowerCase();
+      activeStudents.push({ email: email, name: s.studentName || s.name || email });
+    }
+    activeStudents.sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+    var colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+    var colorHtml = '';
+    for (var c = 0; c < colors.length; c++) {
+      var isActive = (group.groupColor || '#3b82f6') === colors[c] ? ' active' : '';
+      colorHtml += '<div class="dif-color-swatch' + isActive + '" style="background:' + colors[c] + ';" onclick="difPickColor(\'' + colors[c] + '\')"></div>';
+    }
+
+    var memberHtml = '';
+    for (var i = 0; i < activeStudents.length; i++) {
+      var s = activeStudents[i];
+      var checked = memberEmails[s.email] ? ' checked' : '';
+      var prof = profileMap[s.email];
+
+      memberHtml += '<div class="dif-member-row">';
+      memberHtml += '<input type="checkbox" id="difMbr_' + i + '"' + checked + ' onchange="difToggleMember(\'' + escapeHtml(s.email) + '\', this.checked)">';
+      memberHtml += '<label class="dif-member-name" for="difMbr_' + i + '">' + escapeHtml(s.name) + '</label>';
+
+      // WIDA badge + accommodation icons
+      if (prof) {
+        if (prof.widaOverallLevel > 0) {
+          memberHtml += '<span class="dif-wida-badge">W' + prof.widaOverallLevel + '</span>';
+        }
+        var accomStr = difGetAccomIcons(prof.accommodations);
+        if (accomStr) {
+          memberHtml += '<span class="dif-accom-icons">' + accomStr + '</span>';
+        }
+      }
+
+      // Strategy chips row (max 3, below name)
+      if (prof && prof.strategies && prof.strategies.length > 0) {
+        memberHtml += '<div class="dif-member-strategies">';
+        var shown = 0;
+        for (var st = 0; st < prof.strategies.length && shown < 3; st++) {
+          var strat = prof.strategies[st];
+          if (strat && strat.strategy && strat.active !== false) {
+            memberHtml += '<span class="dif-strategy-chip">' + escapeHtml(strat.strategy) + '</span>';
+            shown++;
+          }
+        }
+        memberHtml += '</div>';
+      }
+
+      memberHtml += '</div>';
+    }
+
+    var isDefault = String(group.isDefault) === 'true';
+
+    panel.innerHTML = '<div class="dif-detail-header">' +
+      '<input class="dif-detail-name-input" id="difGroupNameInput" value="' + escapeHtml(group.groupName) + '" maxlength="100"' + (isDefault ? ' disabled' : '') + '>' +
+      '</div>' +
+      '<div class="dif-color-picker" id="difColorPicker">' + colorHtml + '</div>' +
+      '<textarea class="dif-detail-desc" id="difGroupDescInput" maxlength="200" placeholder="Description (optional)">' + escapeHtml(group.groupDescription || '') + '</textarea>' +
+      '<div class="dif-member-section-title">Members (' + Object.keys(memberEmails).length + '/' + activeStudents.length + ')' +
+      ' <a onclick="difSelectAll(true)">Select All</a> <a onclick="difSelectAll(false)">Deselect All</a></div>' +
+      '<div class="dif-member-list">' + memberHtml + '</div>' +
+      '<div class="dif-detail-actions">' +
+      '<button class="btn btn-primary btn-small" onclick="difSaveGroup()">Save Group</button>' +
+      (isDefault ? '' : '<button class="btn btn-outline btn-small" onclick="difDeleteGroup(\'' + group.groupId + '\')">Delete</button>') +
+      '<span class="dif-save-status" id="difSaveStatus"></span>' +
+      '</div>';
+  }
+
+  // ============================================================================
+  // GROUP INTERACTIONS
+  // ============================================================================
+
+  window.difCreateGroup = function() {
+    if (!currentMap || !currentMap.mapId) return;
+    if (document.getElementById('difInlineGroupNameRow')) return;
+
+    var classId = difGetClassId();
+    if (!classId) {
+      showToast('No class assigned to this map. Assign a class first.', 'error');
+      return;
+    }
+
+    var panel = document.querySelector('.dif-left-panel') || document.getElementById('difGroupList');
+    if (!panel) return;
+    var row = document.createElement('div');
+    row.id = 'difInlineGroupNameRow';
+    row.style.cssText = 'display:flex;gap:6px;padding:8px;align-items:center;';
+    row.innerHTML = '<input id="difNewGroupNameInput" type="text" placeholder="Group name..." '
+      + 'maxlength="100" style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+      + 'onkeydown="if(event.key===\'Enter\'){difConfirmCreateGroup();}if(event.key===\'Escape\'){difCancelCreateGroup();}">'
+      + '<button onclick="difConfirmCreateGroup()" style="padding:6px 12px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Create</button>'
+      + '<button onclick="difCancelCreateGroup()" style="padding:6px 12px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+    panel.insertBefore(row, panel.firstChild);
+    document.getElementById('difNewGroupNameInput').focus();
+  };
+
+  window.difConfirmCreateGroup = function() {
+    var input = document.getElementById('difNewGroupNameInput');
+    var name = (input ? input.value : '').trim();
+    if (!name) { showToast('Group name cannot be empty', 'error'); return; }
+    var row = document.getElementById('difInlineGroupNameRow');
+    if (row) row.parentNode.removeChild(row);
+
+    var classId = difGetClassId();
+    var mapId = (difScope === 'map') ? currentMap.mapId : null;
+
+    google.script.run
+      .withSuccessHandler(function(group) {
+        difGroupsData.push(group);
+        difSelectedGroupId = group.groupId;
+        difRenderGroupList();
+        difRenderRightPanel();
+        showToast('Group "' + group.groupName + '" created', 'success');
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error creating group: ' + escapeHtml(err.message), 'error');
+      })
+      .createGroup(classId, mapId, name, '#3b82f6', '');
+  };
+
+  window.difCancelCreateGroup = function() {
+    var row = document.getElementById('difInlineGroupNameRow');
+    if (row) row.parentNode.removeChild(row);
+  };
+
+  window.difDeleteGroup = function(groupId) {
+    if (!confirm('Delete this group? Members and hex assignments for this group will be removed.')) return;
+
+    google.script.run
+      .withSuccessHandler(function() {
+        // Remove from local state
+        difGroupsData = difGroupsData.filter(function(g) { return g.groupId !== groupId; });
+        difMemberships = difMemberships.filter(function(m) { return String(m.groupId) !== String(groupId); });
+        difHexAssignments = difHexAssignments.filter(function(a) { return String(a.groupId) !== String(groupId); });
+        if (difSelectedGroupId === groupId) difSelectedGroupId = null;
+        difRenderGroupList();
+        difRenderRightPanel();
+        showToast('Group deleted', 'success');
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error deleting group: ' + escapeHtml(err.message), 'error');
+      })
+      .deleteGroup(groupId);
+  };
+
+  window.difPickColor = function(color) {
+    // Update UI swatches
+    var swatches = document.querySelectorAll('.dif-color-swatch');
+    for (var i = 0; i < swatches.length; i++) {
+      swatches[i].classList.toggle('active', swatches[i].style.background === color || swatches[i].style.backgroundColor === color);
+    }
+  };
+
+  window.difSelectAll = function(checked) {
+    var checkboxes = document.querySelectorAll('.dif-member-list input[type="checkbox"]');
+    for (var i = 0; i < checkboxes.length; i++) {
+      checkboxes[i].checked = checked;
+    }
+  };
+
+  window.difToggleMember = function(email, checked) {
+    // No-op here; actual save happens on difSaveGroup()
+  };
+
+  window.difSaveGroup = function() {
+    if (!difSelectedGroupId) return;
+    var group = difFindGroup(difSelectedGroupId);
+    if (!group) return;
+
+    var nameInput = document.getElementById('difGroupNameInput');
+    var descInput = document.getElementById('difGroupDescInput');
+    var newName = nameInput ? nameInput.value.trim() : group.groupName;
+    var newDesc = descInput ? descInput.value.trim() : '';
+
+    // Get selected color
+    var activeSwatch = document.querySelector('.dif-color-swatch.active');
+    var newColor = activeSwatch ? (activeSwatch.style.backgroundColor || activeSwatch.style.background || group.groupColor) : group.groupColor;
+
+    // Collect checked emails
+    var emails = [];
+    var checkboxes = document.querySelectorAll('.dif-member-list input[type="checkbox"]');
+    for (var i = 0; i < checkboxes.length; i++) {
+      if (checkboxes[i].checked) {
+        var onChange = checkboxes[i].getAttribute('onchange') || '';
+        var match = onChange.match(/difToggleMember\('([^']+)'/);
+        if (match) emails.push(match[1]);
+      }
+    }
+
+    var statusEl = document.getElementById('difSaveStatus');
+    if (statusEl) { statusEl.textContent = 'Saving...'; statusEl.className = 'dif-save-status'; }
+
+    // Update group metadata
+    google.script.run
+      .withSuccessHandler(function() {
+        // Update local state
+        group.groupName = newName;
+        group.groupColor = newColor;
+        group.groupDescription = newDesc;
+        difRenderGroupList();
+      })
+      .withFailureHandler(function(err) {
+        if (statusEl) { statusEl.textContent = 'Error'; statusEl.className = 'dif-save-status error'; }
+        showToast('Error updating group: ' + escapeHtml(err.message), 'error');
+      })
+      .updateGroup(difSelectedGroupId, { groupName: newName, groupColor: newColor, groupDescription: newDesc });
+
+    // Save members
+    google.script.run
+      .withSuccessHandler(function(result) {
+        // Update local memberships
+        difMemberships = difMemberships.filter(function(m) { return String(m.groupId) !== String(difSelectedGroupId); });
+        for (var i = 0; i < emails.length; i++) {
+          difMemberships.push({ groupId: difSelectedGroupId, studentEmail: emails[i] });
+        }
+        if (statusEl) { statusEl.textContent = 'Saved'; statusEl.className = 'dif-save-status saved'; }
+      })
+      .withFailureHandler(function(err) {
+        if (statusEl) { statusEl.textContent = 'Error'; statusEl.className = 'dif-save-status error'; }
+        showToast('Error saving members: ' + escapeHtml(err.message), 'error');
+      })
+      .setGroupMembers(difSelectedGroupId, emails);
+  };
+
+  // ============================================================================
+  // HEX EDITOR: GROUP ASSIGNMENT CHIPS (Story 4)
+  // ============================================================================
+
+  window.difRenderHexGroups = function(hexId) {
+    var container = document.getElementById('difHexGroups');
+    var section = document.getElementById('difHexSection');
+    var overridesToggle = document.getElementById('difOverridesToggle');
+    if (!container || !section) return;
+
+    // Only show in teacher mode
+    if (currentViewMode !== 'teacher') {
+      section.style.display = 'none';
+      return;
+    }
+
+    section.style.display = '';
+
+    // All groups for this map
+    var allGroups = difGroupsData || [];
+    if (allGroups.length === 0) {
+      container.innerHTML = '<div class="dif-empty-note">No groups configured. Use the Groups button in the toolbar to create groups.</div>';
+      if (overridesToggle) overridesToggle.style.display = 'none';
+      return;
+    }
+
+    // Find which groups this hex is assigned to
+    var hexGroupMap = {};
+    var hexAssigns = difHexAssignments || [];
+    for (var i = 0; i < hexAssigns.length; i++) {
+      var a = hexAssigns[i];
+      if (String(a.hexId) === String(hexId) && a.groupId && !a.studentEmail) {
+        hexGroupMap[String(a.groupId)] = { isRequired: String(a.isRequired) === 'true' };
+      }
+    }
+
+    var html = '';
+    for (var i = 0; i < allGroups.length; i++) {
+      var g = allGroups[i];
+      var assigned = hexGroupMap[g.groupId];
+      var activeClass = assigned ? ' active' : '';
+      var bgStyle = assigned ? 'background:' + escapeHtml(g.groupColor || '#3b82f6') + ';' : '';
+      var reqLabel = assigned ? (assigned.isRequired ? 'Req' : 'Opt') : '';
+      var reqOnclick = assigned ? ' onclick="event.stopPropagation();difToggleRequired(\'' + hexId + '\',\'' + g.groupId + '\')"' : '';
+
+      html += '<span class="dif-group-chip' + activeClass + '" style="' + bgStyle + '" onclick="difToggleHexGroup(\'' + hexId + '\',\'' + g.groupId + '\')">';
+      html += '<span class="dif-chip-dot" style="background:' + escapeHtml(g.groupColor || '#3b82f6') + ';"></span>';
+      html += escapeHtml(g.groupName);
+      if (reqLabel) html += ' <span class="dif-chip-req"' + reqOnclick + '>' + reqLabel + '</span>';
+      html += '</span>';
+    }
+    container.innerHTML = html;
+
+    if (overridesToggle) overridesToggle.style.display = '';
+  };
+
+  window.difToggleHexGroup = function(hexId, groupId) {
+    // Check if currently assigned
+    var currentAssigns = [];
+    var removed = false;
+    for (var i = 0; i < difHexAssignments.length; i++) {
+      var a = difHexAssignments[i];
+      if (String(a.hexId) === String(hexId) && String(a.groupId) === String(groupId) && !a.studentEmail) {
+        removed = true;
+        continue; // Remove this assignment
+      }
+      currentAssigns.push(a);
+    }
+
+    if (!removed) {
+      // Add new assignment
+      currentAssigns.push({
+        assignmentId: 'temp_' + Date.now(),
+        mapId: currentMap.mapId,
+        hexId: hexId,
+        groupId: groupId,
+        studentEmail: '',
+        isRequired: 'true'
+      });
+    }
+
+    difHexAssignments = currentAssigns;
+
+    // Build group assignments for this hex
+    var groupAssignments = [];
+    for (var i = 0; i < difHexAssignments.length; i++) {
+      var a = difHexAssignments[i];
+      if (String(a.hexId) === String(hexId) && a.groupId && !a.studentEmail) {
+        groupAssignments.push({ groupId: a.groupId, isRequired: String(a.isRequired) === 'true' });
+      }
+    }
+
+    // Save to backend
+    google.script.run
+      .withSuccessHandler(function() {
+        difRenderHexGroups(hexId);
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error updating hex groups: ' + escapeHtml(err.message), 'error');
+        difLoadData(); // Reload to fix state
+      })
+      .setHexGroups(currentMap.mapId, hexId, groupAssignments);
+
+    // Optimistic UI update
+    difRenderHexGroups(hexId);
+  };
+
+  window.difToggleRequired = function(hexId, groupId) {
+    for (var i = 0; i < difHexAssignments.length; i++) {
+      var a = difHexAssignments[i];
+      if (String(a.hexId) === String(hexId) && String(a.groupId) === String(groupId) && !a.studentEmail) {
+        a.isRequired = String(a.isRequired) === 'true' ? 'false' : 'true';
+        break;
+      }
+    }
+
+    // Build and save
+    var groupAssignments = [];
+    for (var i = 0; i < difHexAssignments.length; i++) {
+      var a = difHexAssignments[i];
+      if (String(a.hexId) === String(hexId) && a.groupId && !a.studentEmail) {
+        groupAssignments.push({ groupId: a.groupId, isRequired: String(a.isRequired) === 'true' });
+      }
+    }
+
+    google.script.run
+      .withFailureHandler(function(err) {
+        showToast('Error updating requirement: ' + escapeHtml(err.message), 'error');
+      })
+      .setHexGroups(currentMap.mapId, hexId, groupAssignments);
+
+    difRenderHexGroups(hexId);
+  };
+
+  // ============================================================================
+  // INDIVIDUAL OVERRIDES
+  // ============================================================================
+
+  window.difToggleOverrides = function() {
+    difOverridesExpanded = !difOverridesExpanded;
+    var el = document.getElementById('difHexOverrides');
+    var btn = document.querySelector('#difOverridesToggle button');
+    if (el) el.style.display = difOverridesExpanded ? '' : 'none';
+    if (btn) btn.textContent = difOverridesExpanded ? 'Individual Overrides ▾' : 'Individual Overrides ▸';
+    if (difOverridesExpanded && selectedHexId) difRenderOverrides(selectedHexId);
+  };
+
+  function difRenderOverrides(hexId) {
+    var container = document.getElementById('difHexOverrides');
+    if (!container) return;
+
+    // Find existing overrides for this hex
+    var overrides = [];
+    for (var i = 0; i < difHexAssignments.length; i++) {
+      var a = difHexAssignments[i];
+      if (String(a.hexId) === String(hexId) && a.studentEmail && !a.groupId) {
+        var parts = String(a.isRequired).split('_');
+        overrides.push({
+          email: a.studentEmail,
+          visibility: parts[0] || 'show',
+          isRequired: parts[1] === 'true'
+        });
+      }
+    }
+
+    var html = '';
+    for (var i = 0; i < overrides.length; i++) {
+      var o = overrides[i];
+      var visClass = o.visibility === 'show' ? 'show' : 'hide';
+      html += '<div class="dif-override-row">';
+      html += '<span class="dif-override-name">' + escapeHtml(o.email) + '</span>';
+      html += '<span class="dif-override-vis ' + visClass + '">' + o.visibility + '</span>';
+      html += '<button class="dif-override-remove" onclick="difRemoveOverride(\'' + hexId + '\',\'' + escapeHtml(o.email) + '\')" title="Remove override">&times;</button>';
+      html += '</div>';
+    }
+
+    // Add override bar
+    html += '<div class="dif-add-override-bar">';
+    html += '<select id="difOverrideStudentSelect"><option value="">Add student...</option></select>';
+    html += '<select id="difOverrideVisSelect"><option value="show">Show</option><option value="hide">Hide</option></select>';
+    html += '<button class="btn btn-small" onclick="difAddOverride(\'' + hexId + '\')">Add</button>';
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // Populate student dropdown from any loaded roster
+    difPopulateOverrideDropdown();
+  }
+
+  function difPopulateOverrideDropdown() {
+    var select = document.getElementById('difOverrideStudentSelect');
+    if (!select) return;
+
+    var classId = difGetClassId();
+    if (!classId) return;
+
+    getCachedRoster(classId, function(roster) {
+      var html = '<option value="">Add student...</option>';
+      for (var i = 0; i < roster.length; i++) {
+        if (roster[i].status === 'removed') continue;
+        var email = String(roster[i].email || roster[i].studentEmail).toLowerCase();
+        var name = roster[i].studentName || roster[i].name || email;
+        html += '<option value="' + escapeHtml(email) + '">' + escapeHtml(name) + '</option>';
+      }
+      if (select) select.innerHTML = html;
+    }, function() {});
+  }
+
+  window.difAddOverride = function(hexId) {
+    var studentSelect = document.getElementById('difOverrideStudentSelect');
+    var visSelect = document.getElementById('difOverrideVisSelect');
+    if (!studentSelect || !visSelect) return;
+
+    var email = studentSelect.value;
+    var visibility = visSelect.value;
+    if (!email) { showToast('Select a student', 'error'); return; }
+
+    google.script.run
+      .withSuccessHandler(function(override) {
+        difHexAssignments.push(override);
+        difRenderOverrides(hexId);
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error adding override: ' + escapeHtml(err.message), 'error');
+      })
+      .setStudentHexOverride(currentMap.mapId, hexId, email, visibility, false);
+  };
+
+  window.difRemoveOverride = function(hexId, email) {
+    google.script.run
+      .withSuccessHandler(function() {
+        difHexAssignments = difHexAssignments.filter(function(a) {
+          return !(String(a.hexId) === String(hexId) && String(a.studentEmail).toLowerCase() === email.toLowerCase() && !a.groupId);
+        });
+        difRenderOverrides(hexId);
+      })
+      .withFailureHandler(function(err) {
+        showToast('Error removing override: ' + escapeHtml(err.message), 'error');
+      })
+      .removeStudentHexOverride(currentMap.mapId, hexId, email);
+  };
+
+  // ============================================================================
+  // STUDENT VISIBILITY (called from renderHexGrid)
+  // ============================================================================
+
+  window.difLoadVisibility = function(callback) {
+    if (!currentMap || !currentMap.mapId) {
+      if (callback) callback();
+      return;
+    }
+    var mapId = currentMap.mapId;
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (!currentMap || currentMap.mapId !== mapId) return; // stale guard
+        difVisibilityData = data;
+        if (callback) callback();
+      })
+      .withFailureHandler(function(err) {
+        console.error('Error loading visibility:', err);
+        difVisibilityData = null;
+        if (callback) callback();
+      })
+      .getStudentVisibleHexIds(mapId);
+  };
+
+  /**
+   * Check if a hex should be visible to the current student.
+   * Returns 'visible', 'dimmed', or 'hidden'.
+   */
+  window.difGetHexVisibility = function(hexId) {
+    if (!difVisibilityData || difVisibilityData.mode === 'none') return 'visible';
+
+    var visibleIds = difVisibilityData.visibleHexIds || [];
+    var isVisible = false;
+    for (var i = 0; i < visibleIds.length; i++) {
+      if (String(visibleIds[i]) === String(hexId)) { isVisible = true; break; }
+    }
+
+    if (isVisible) return 'visible';
+    return difVisibilityData.mode === 'hidden' ? 'hidden' : 'dimmed';
+  };
+
+  /**
+   * Check if a hex is required for the current student.
+   */
+  window.difIsHexRequired = function(hexId) {
+    if (!difVisibilityData) return false;
+    var reqIds = difVisibilityData.requiredHexIds || [];
+    for (var i = 0; i < reqIds.length; i++) {
+      if (String(reqIds[i]) === String(hexId)) return true;
+    }
+    return false;
+  };
+
+  /**
+   * Get group color dots for a hex (teacher mode badge rendering).
+   */
+  window.difGetHexGroupDots = function(hexId) {
+    if (!difHexAssignments || difHexAssignments.length === 0) return '';
+    var colors = [];
+    var seen = {};
+    for (var i = 0; i < difHexAssignments.length; i++) {
+      var a = difHexAssignments[i];
+      if (String(a.hexId) === String(hexId) && a.groupId && !a.studentEmail) {
+        var gId = String(a.groupId);
+        if (seen[gId]) continue;
+        seen[gId] = true;
+        var group = difFindGroup(gId);
+        if (group) colors.push(group.groupColor || '#3b82f6');
+      }
+    }
+    if (colors.length === 0) return '';
+    var html = '<div class="dif-hex-dots">';
+    for (var i = 0; i < colors.length; i++) {
+      html += '<span class="dif-hex-dot" style="background:' + escapeHtml(colors[i]) + ';"></span>';
+    }
+    html += '</div>';
+    return html;
+  };
+
+  // ============================================================================
+  // HELPERS
+  // ============================================================================
+
+  function difFindGroup(groupId) {
+    for (var i = 0; i < difGroupsData.length; i++) {
+      if (String(difGroupsData[i].groupId) === String(groupId)) return difGroupsData[i];
+    }
+    return null;
+  }
+
+  function difGetClassId() {
+    // Try to find classId from existing groups
+    for (var i = 0; i < difGroupsData.length; i++) {
+      if (difGroupsData[i].classId) return difGroupsData[i].classId;
+    }
+    // Fallback: look at classesData for teacher's first class
+    if (typeof classesData !== 'undefined' && classesData.length > 0) {
+      return classesData[0].classId;
+    }
+    return null;
+  }
+
+  // ============================================================================
+  // WIDA GROUP SUGGESTIONS
+  // ============================================================================
+
+  var _difSuggestions = null;
+
+  window.difShowSuggestions = function() {
+    var classId = difGetClassId();
+    if (!classId) {
+      showToast('No class found. Assign a class to this map first.', 'error');
+      return;
+    }
+
+    var panel = document.getElementById('difRightPanel');
+    if (panel) {
+      panel.innerHTML = '<div class="dif-loading">Loading WIDA suggestions...</div>';
+    }
+
+    google.script.run
+      .withSuccessHandler(function(suggestions) {
+        difRenderSuggestionPreview(suggestions);
+      })
+      .withFailureHandler(function(err) {
+        if (panel) {
+          panel.innerHTML = '<div class="dif-empty-note">Error: ' + escapeHtml(err.message) + '</div>';
+        }
+      })
+      .suggestGroupsFromWida(classId);
+  };
+
+  function difRenderSuggestionPreview(suggestions) {
+    var panel = document.getElementById('difRightPanel');
+    if (!panel) return;
+
+    if (!suggestions || suggestions.length === 0) {
+      panel.innerHTML = '<div class="dif-empty-note">No WIDA profiles found in this class. ' +
+        'Import student support profiles first.</div>';
+      return;
+    }
+
+    _difSuggestions = suggestions;
+
+    var html = '<div class="dif-suggest-header">';
+    html += '<span class="dif-suggest-title">Suggested Groups from WIDA</span>';
+    html += '<button class="btn btn-success btn-small" onclick="difCreateAllSuggested()">Create All</button>';
+    html += '</div>';
+
+    for (var i = 0; i < suggestions.length; i++) {
+      var sg = suggestions[i];
+      html += '<div class="dif-suggest-card" id="difSuggestCard_' + i + '">';
+      html += '<div class="dif-suggest-card-header">';
+      html += '<span class="dif-group-card-dot" style="background:' + escapeHtml(sg.color) + ';"></span>';
+      html += '<span class="dif-suggest-card-name">' + escapeHtml(sg.name) + '</span>';
+      html += '<span class="dif-suggest-card-count">' + sg.students.length + ' student' + (sg.students.length !== 1 ? 's' : '') + '</span>';
+      html += '<button class="btn btn-outline btn-small" id="difSuggestBtn_' + i + '" onclick="difCreateOneSuggested(' + i + ')">Create</button>';
+      html += '</div>';
+      html += '<div class="dif-suggest-students">';
+      for (var s = 0; s < sg.students.length; s++) {
+        html += '<span class="dif-suggest-student">' + escapeHtml(sg.students[s].name);
+        if (sg.students[s].widaLevel > 0) {
+          html += ' <span class="dif-wida-badge">W' + sg.students[s].widaLevel + '</span>';
+        }
+        html += '</span>';
+      }
+      html += '</div>';
+      html += '</div>';
+    }
+
+    html += '<div class="dif-suggest-footer">';
+    html += '<button class="btn btn-outline btn-small" onclick="difCancelSuggestions()">Cancel</button>';
+    html += '</div>';
+
+    panel.innerHTML = html;
+  }
+
+  window.difCreateOneSuggested = function(index) {
+    var sg = _difSuggestions ? _difSuggestions[index] : null;
+    if (!sg) return;
+
+    var btn = document.getElementById('difSuggestBtn_' + index);
+    if (btn) { btn.textContent = 'Creating...'; btn.disabled = true; }
+
+    var classId = difGetClassId();
+    var mapId = (difScope === 'map') ? currentMap.mapId : null;
+
+    google.script.run
+      .withSuccessHandler(function(group) {
+        difGroupsData.push(group);
+        // Set members
+        var emails = [];
+        for (var i = 0; i < sg.students.length; i++) {
+          emails.push(sg.students[i].email);
+        }
+        google.script.run
+          .withSuccessHandler(function() {
+            for (var i = 0; i < emails.length; i++) {
+              difMemberships.push({ groupId: group.groupId, studentEmail: emails[i] });
+            }
+            difRenderGroupList();
+            if (btn) { btn.textContent = 'Created'; btn.classList.remove('btn-outline'); btn.classList.add('btn-success'); }
+            showToast('Group "' + sg.name + '" created with ' + emails.length + ' members', 'success');
+          })
+          .withFailureHandler(function(err) {
+            if (btn) { btn.textContent = 'Error'; btn.disabled = false; }
+            showToast('Error setting members: ' + escapeHtml(err.message), 'error');
+          })
+          .setGroupMembers(group.groupId, emails);
+      })
+      .withFailureHandler(function(err) {
+        if (btn) { btn.textContent = 'Error'; btn.disabled = false; }
+        showToast('Error creating group: ' + escapeHtml(err.message), 'error');
+      })
+      .createGroup(classId, mapId, sg.name, sg.color, '');
+  };
+
+  window.difCreateAllSuggested = function() {
+    if (!_difSuggestions) return;
+    for (var i = 0; i < _difSuggestions.length; i++) {
+      difCreateOneSuggested(i);
+    }
+  };
+
+  window.difCancelSuggestions = function() {
+    _difSuggestions = null;
+    difSelectedGroupId = null;
+    difRenderRightPanel();
+  };
+
+})();
+</script>

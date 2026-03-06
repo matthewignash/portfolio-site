@@ -1,0 +1,352 @@
+<script>
+// ============================================================================
+// STUDENT CUSTOM TASKS — stl- prefix
+// Personal to-do list within the Student Planner tab
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+var _stlOrderDebounce = null;
+
+// E1: Bracket-adaptive text for EAL students
+var STL_BRACKET_TEXT = {
+  low: {
+    sectionTitle: 'My Tasks',
+    addPlaceholder: 'Write a task...',
+    addBtn: '+ Add',
+    emptyState: 'No tasks yet. Add one above! \u261D\uFE0F',
+    remaining: ' left',
+    allDone: 'All done! \u2705',
+    overdue: 'Late! \u26A0\uFE0F',
+    today: 'Today \uD83D\uDCC5',
+    inDays: ' days left',
+    deleteConfirm: 'Remove this task?'
+  }
+};
+
+function stlGetText(key, fallback) {
+  var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+  if (bracket && STL_BRACKET_TEXT[bracket] && STL_BRACKET_TEXT[bracket][key]) {
+    return STL_BRACKET_TEXT[bracket][key];
+  }
+  return fallback;
+}
+
+// ================================================
+// LIFECYCLE
+// ================================================
+
+function stlLoadTasks() {
+  google.script.run
+    .withSuccessHandler(function(tasks) {
+      stlTasksData = tasks || [];
+      stlRenderSection();
+    })
+    .withFailureHandler(function(err) {
+      console.error('Failed to load custom tasks:', err);
+      stlTasksData = [];
+      stlRenderSection();
+      if (typeof showToast === 'function') showToast(typeof friendlyError === 'function' ? friendlyError(err) : 'Could not load your tasks. Please try again.', 'error');
+    })
+    .getStudentTasks();
+}
+
+// ================================================
+// RENDERING
+// ================================================
+
+function stlRenderSection() {
+  var container = document.getElementById('stlSection');
+  if (!container) return;
+
+  // Count stats
+  var total = stlTasksData.length;
+  var done = 0;
+  for (var i = 0; i < total; i++) {
+    if (stlTasksData[i].isCompleted) done++;
+  }
+  var remaining = total - done;
+  var countText = remaining > 0 ? remaining + stlGetText('remaining', ' remaining') : (total > 0 ? stlGetText('allDone', 'All done!') : '0 tasks');
+  var countClass = 'stl-header-count' + (total > 0 && remaining === 0 ? ' stl-all-done' : '');
+
+  var html = '';
+  html += '<div class="stl-section' + (stlSectionCollapsed ? ' stl-collapsed' : '') + '" id="stlWrapper">';
+
+  // Header
+  html += '<div class="stl-header" role="button" tabindex="0" aria-expanded="' + (stlSectionCollapsed ? 'false' : 'true') + '" onclick="stlToggleSection()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();stlToggleSection();}">';
+  html += '<span class="stl-header-icon">&#9745;</span>';
+  html += '<span class="stl-header-title">' + stlGetText('sectionTitle', 'My To-Do List') + '</span>';
+  html += '<span class="' + countClass + '">' + countText + '</span>';
+  html += '<span class="stl-header-chevron">&#9660;</span>';
+  html += '</div>';
+
+  // Body
+  html += '<div class="stl-body">';
+
+  // Add bar
+  html += '<div class="stl-add-bar">';
+  html += '<input type="text" class="stl-add-input" id="stlAddInput" placeholder="' + stlGetText('addPlaceholder', 'Add a task...') + '" maxlength="200" onkeydown="stlHandleKeydown(event)">';
+  html += '<input type="date" class="stl-add-date" id="stlAddDate" title="Due date (optional)">';
+  html += '<button class="stl-add-btn" onclick="stlAddTask()">' + stlGetText('addBtn', 'Add') + '</button>';
+  html += '</div>';
+
+  // Task list
+  html += '<div class="stl-task-list" id="stlTaskList">';
+  html += stlRenderTaskList();
+  html += '</div>';
+
+  html += '</div>'; // body
+  html += '</div>'; // section
+
+  container.innerHTML = html;
+}
+
+function stlRenderTaskList() {
+  if (stlTasksData.length === 0) {
+    return '<div class="stl-empty">' + stlGetText('emptyState', 'Add your first task above') + '</div>';
+  }
+
+  // Separate incomplete and completed
+  var incomplete = [];
+  var completed = [];
+  for (var i = 0; i < stlTasksData.length; i++) {
+    if (stlTasksData[i].isCompleted) {
+      completed.push(stlTasksData[i]);
+    } else {
+      incomplete.push(stlTasksData[i]);
+    }
+  }
+
+  var ordered = incomplete.concat(completed);
+  var html = '';
+
+  for (var j = 0; j < ordered.length; j++) {
+    var task = ordered[j];
+    var isComp = task.isCompleted;
+    var dueBadge = stlFormatDueBadge(task.dueDate, isComp);
+
+    html += '<div class="stl-task-item' + (isComp ? ' stl-completed' : '') + '">';
+
+    // Checkbox
+    html += '<div class="stl-checkbox' + (isComp ? ' stl-checked' : '') + '" role="checkbox" tabindex="0" aria-checked="' + (isComp ? 'true' : 'false') + '" onclick="stlToggleComplete(\'' + task.taskId + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();stlToggleComplete(\'' + task.taskId + '\');}">';
+    if (isComp) html += '&#10003;';
+    html += '</div>';
+
+    // Title
+    html += '<span class="stl-task-title">' + escapeHtml(task.title) + '</span>';
+
+    // Due date
+    if (dueBadge) html += dueBadge;
+
+    // Actions
+    html += '<div class="stl-task-actions">';
+    if (!isComp && j > 0 && !ordered[j - 1].isCompleted) {
+      html += '<button class="stl-action-btn" onclick="stlMoveUp(\'' + task.taskId + '\')" title="Move up">&#9650;</button>';
+    }
+    if (!isComp && j < incomplete.length - 1) {
+      html += '<button class="stl-action-btn" onclick="stlMoveDown(\'' + task.taskId + '\')" title="Move down">&#9660;</button>';
+    }
+    html += '<button class="stl-action-btn stl-delete" onclick="stlDeleteTask(\'' + task.taskId + '\')" title="Delete">&times;</button>';
+    html += '</div>';
+
+    html += '</div>';
+  }
+
+  return html;
+}
+
+function stlFormatDueBadge(dueDate, isCompleted) {
+  if (!dueDate) return '';
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var due = new Date(dueDate + 'T00:00:00');
+  var diff = Math.floor((due - today) / 86400000);
+
+  var label = '';
+  var cls = 'stl-task-due';
+
+  if (diff < 0 && !isCompleted) {
+    label = stlGetText('overdue', 'Overdue');
+    cls += ' stl-overdue';
+  } else if (diff === 0) {
+    label = stlGetText('today', 'Today');
+    cls += ' stl-due-today';
+  } else if (diff === 1) {
+    label = 'Tomorrow';
+  } else if (diff > 1 && diff <= 7) {
+    label = diff + stlGetText('inDays', ' days');
+  } else {
+    // Format as Mon DD
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    label = months[due.getMonth()] + ' ' + due.getDate();
+  }
+
+  return '<span class="' + cls + '">' + label + '</span>';
+}
+
+// ================================================
+// INTERACTIONS
+// ================================================
+
+function stlToggleSection() {
+  stlSectionCollapsed = !stlSectionCollapsed;
+  var wrapper = document.getElementById('stlWrapper');
+  if (wrapper) {
+    if (stlSectionCollapsed) {
+      wrapper.className = 'stl-section stl-collapsed';
+    } else {
+      wrapper.className = 'stl-section';
+    }
+  }
+}
+
+function stlHandleKeydown(e) {
+  if (e.key === 'Enter' || e.keyCode === 13) {
+    e.preventDefault();
+    stlAddTask();
+  }
+}
+
+function stlAddTask() {
+  var input = document.getElementById('stlAddInput');
+  var dateInput = document.getElementById('stlAddDate');
+  if (!input) return;
+
+  var title = input.value.trim();
+  if (!title) {
+    input.focus();
+    return;
+  }
+
+  var dueDate = dateInput ? dateInput.value : '';
+
+  // Disable button
+  stlSaving = true;
+  var btn = input.parentNode.querySelector('.stl-add-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+
+  google.script.run
+    .withSuccessHandler(function(task) {
+      stlSaving = false;
+      stlTasksData.push(task);
+      input.value = '';
+      if (dateInput) dateInput.value = '';
+      if (btn) { btn.disabled = false; btn.textContent = stlGetText('addBtn', 'Add'); }
+      stlRenderSection();
+    })
+    .withFailureHandler(function(err) {
+      stlSaving = false;
+      if (btn) { btn.disabled = false; btn.textContent = stlGetText('addBtn', 'Add'); }
+      showToast(typeof friendlyError === 'function' ? friendlyError(err) : 'Could not save task. Please try again.', 'error');
+    })
+    .createStudentTask({ title: title, dueDate: dueDate });
+}
+
+function stlToggleComplete(taskId) {
+  // Find task in local data
+  var task = null;
+  for (var i = 0; i < stlTasksData.length; i++) {
+    if (stlTasksData[i].taskId === taskId) {
+      task = stlTasksData[i];
+      break;
+    }
+  }
+  if (!task) return;
+
+  var newState = !task.isCompleted;
+
+  // Optimistic update
+  task.isCompleted = newState;
+  var listEl = document.getElementById('stlTaskList');
+  if (listEl) listEl.innerHTML = stlRenderTaskList();
+
+  // Re-render header count
+  stlRenderSection();
+
+  google.script.run
+    .withSuccessHandler(function() {
+      // Already updated optimistically
+    })
+    .withFailureHandler(function(err) {
+      // Revert on failure
+      task.isCompleted = !newState;
+      stlRenderSection();
+      showToast('Error: ' + err.message, 'error');
+    })
+    .updateStudentTask(taskId, { isCompleted: newState });
+}
+
+function stlDeleteTask(taskId) {
+  if (!confirm(stlGetText('deleteConfirm', 'Delete this task?'))) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      for (var i = 0; i < stlTasksData.length; i++) {
+        if (stlTasksData[i].taskId === taskId) {
+          stlTasksData.splice(i, 1);
+          break;
+        }
+      }
+      stlRenderSection();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    })
+    .deleteStudentTask(taskId);
+}
+
+function stlMoveUp(taskId) {
+  // Work on incomplete tasks only
+  var incomplete = [];
+  for (var i = 0; i < stlTasksData.length; i++) {
+    if (!stlTasksData[i].isCompleted) incomplete.push(stlTasksData[i]);
+  }
+
+  var idx = -1;
+  for (var j = 0; j < incomplete.length; j++) {
+    if (incomplete[j].taskId === taskId) { idx = j; break; }
+  }
+  if (idx <= 0) return;
+
+  // Swap sortOrder
+  var tempOrder = incomplete[idx].sortOrder;
+  incomplete[idx].sortOrder = incomplete[idx - 1].sortOrder;
+  incomplete[idx - 1].sortOrder = tempOrder;
+
+  stlRenderSection();
+  stlDebounceSaveOrder();
+}
+
+function stlMoveDown(taskId) {
+  var incomplete = [];
+  for (var i = 0; i < stlTasksData.length; i++) {
+    if (!stlTasksData[i].isCompleted) incomplete.push(stlTasksData[i]);
+  }
+
+  var idx = -1;
+  for (var j = 0; j < incomplete.length; j++) {
+    if (incomplete[j].taskId === taskId) { idx = j; break; }
+  }
+  if (idx < 0 || idx >= incomplete.length - 1) return;
+
+  var tempOrder = incomplete[idx].sortOrder;
+  incomplete[idx].sortOrder = incomplete[idx + 1].sortOrder;
+  incomplete[idx + 1].sortOrder = tempOrder;
+
+  stlRenderSection();
+  stlDebounceSaveOrder();
+}
+
+function stlDebounceSaveOrder() {
+  if (_stlOrderDebounce) clearTimeout(_stlOrderDebounce);
+  _stlOrderDebounce = setTimeout(function() {
+    var orderData = [];
+    for (var i = 0; i < stlTasksData.length; i++) {
+      orderData.push({ taskId: stlTasksData[i].taskId, sortOrder: stlTasksData[i].sortOrder });
+    }
+    google.script.run
+      .withSuccessHandler(function() { /* saved */ })
+      .withFailureHandler(function(err) { console.error('Save order failed:', err); })
+      .saveStudentTaskOrder_Custom(orderData);
+  }, 500);
+}
+</script>

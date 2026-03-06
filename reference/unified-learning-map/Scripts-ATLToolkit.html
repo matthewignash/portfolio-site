@@ -1,0 +1,828 @@
+<script>
+    // ================================================
+    // ATL TOOLKIT — IB Approaches to Learning
+    // ES5 only — no const, let, =>, template literals, .includes()
+    // CSS prefix: atl-
+    // ================================================
+
+    var atlProgressData = null;
+    var atlFramework = null;
+    var atlTipsSession = [];  // dismissed tip IDs this session
+    var atlCurrentTerm = '';
+    var atlExpandedCategory = '';
+    var atlSavingSkill = '';
+    var atlSelectedRatings = {};  // { 'category.subSkill': rating }
+
+    // Rating labels (same scale as self-assessment)
+    var ATL_RATING_LABELS = {
+      1: 'Beginning',
+      2: 'Developing',
+      3: 'Proficient',
+      4: 'Extending'
+    };
+
+    // WIDA bracket-adaptive config (mirrors SA_BRACKET_CONFIG pattern)
+    var ATL_BRACKET_CONFIG = {
+      low: {
+        labels: { 1: 'I am starting', 2: 'I am learning', 3: 'I can do it', 4: 'I can teach it' },
+        reflectionPlaceholder: 'What did you learn? (You can write in any language.)',
+        goalPlaceholder: 'What do you want to do better?',
+        checkinHeading: 'How are you doing this week?',
+        showEmoji: true,
+        emojis: { 1: '\uD83E\uDD14', 2: '\uD83D\uDE42', 3: '\uD83D\uDE0A', 4: '\u2B50' }
+      },
+      mid: {
+        labels: { 1: 'Beginning', 2: 'Developing', 3: 'Proficient', 4: 'Extending' },
+        reflectionPlaceholder: 'Describe what you have learned about this skill.',
+        goalPlaceholder: 'What is your goal for improving this skill?',
+        checkinHeading: 'Weekly Skills Check-In',
+        showEmoji: false,
+        emojis: null
+      },
+      high: {
+        labels: { 1: 'Beginning', 2: 'Developing', 3: 'Proficient', 4: 'Extending' },
+        reflectionPlaceholder: 'Reflect on your growth in this skill area. What evidence shows your development?',
+        goalPlaceholder: 'Set a specific, measurable goal for skill development.',
+        checkinHeading: 'Weekly ATL Self-Assessment',
+        showEmoji: false,
+        emojis: null
+      }
+    };
+
+    // Simplified category labels for low bracket EAL students
+    var ATL_CATEGORY_SIMPLE = {
+      thinking: 'Thinking Skills',
+      communication: 'Communication Skills',
+      social: 'Working with Others',
+      selfManagement: 'Managing Yourself',
+      research: 'Finding Information'
+    };
+
+    /**
+     * Returns bracket-appropriate ATL config, or null for default behavior.
+     */
+    function atlGetConfig() {
+      var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+      if (bracket && ATL_BRACKET_CONFIG[bracket]) {
+        return { config: ATL_BRACKET_CONFIG[bracket], bracket: bracket };
+      }
+      return null;
+    }
+
+    // Category icons
+    var ATL_CAT_ICONS = {
+      thinking: '\uD83E\uDDE0',
+      communication: '\uD83D\uDCAC',
+      social: '\uD83E\uDD1D',
+      selfManagement: '\uD83C\uDFAF',
+      research: '\uD83D\uDD0D'
+    };
+
+    // ================================================
+    // LIFECYCLE
+    // ================================================
+
+    function loadATLData() {
+      atlCurrentTerm = computeCurrentTerm();
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          atlFramework = result.categories || {};
+          atlProgressData = result.progress || [];
+          buildATLRatingLookup();
+          renderATLToolkit();
+        })
+        .withFailureHandler(function() {
+          // Silently fail — toolkit just won't render
+          atlFramework = null;
+          atlProgressData = null;
+        })
+        .getATLProgress();
+    }
+
+    function computeCurrentTerm() {
+      var now = new Date();
+      var year = now.getFullYear();
+      var month = now.getMonth(); // 0-indexed
+      // Simple term computation: Aug-Dec = T1, Jan-Jun = T2
+      var term = (month >= 7) ? 'T1' : 'T2';
+      return year + '-' + term;
+    }
+
+    function buildATLRatingLookup() {
+      atlSelectedRatings = {};
+      if (!atlProgressData) return;
+      for (var i = 0; i < atlProgressData.length; i++) {
+        var p = atlProgressData[i];
+        if (p.term === atlCurrentTerm) {
+          var key = p.atlCategory + '.' + p.atlSubSkill;
+          atlSelectedRatings[key] = {
+            rating: p.rating,
+            reflectionNote: p.reflectionNote || '',
+            goalNote: p.goalNote || ''
+          };
+        }
+      }
+    }
+
+    // ================================================
+    // RENDER — Main Toolkit
+    // ================================================
+
+    function renderATLToolkit() {
+      var container = document.getElementById('atlToolkitContainer');
+      if (!container) return;
+      if (!atlFramework) {
+        container.innerHTML = '';
+        return;
+      }
+
+      var html = '';
+
+      // Contextual Tips (based on planner tasks)
+      html += renderATLTips();
+
+      // Deadline Timeline
+      html += renderATLTimeline();
+
+      // Weekly Check-In
+      html += renderATLWeeklyCheckin();
+
+      // ATL Self-Tracker
+      html += renderATLTracker();
+
+      container.innerHTML = html;
+
+      // Load server-sourced tips once (async, non-blocking)
+      if (!atlServerTipsLoaded) {
+        atlLoadServerTips();
+      }
+    }
+
+    // ================================================
+    // DEADLINE TIMELINE
+    // ================================================
+
+    function renderATLTimeline() {
+      if (!plannerTasks || plannerTasks.length === 0) return '';
+
+      // Get active tasks with due dates, sorted by date
+      var dated = [];
+      for (var i = 0; i < plannerTasks.length; i++) {
+        var t = plannerTasks[i];
+        if (t.effectiveDueDate && t.status !== 'completed' && t.status !== 'mastered') {
+          dated.push(t);
+        }
+      }
+      if (dated.length === 0) return '';
+
+      dated.sort(function(a, b) {
+        return a.effectiveDueDate < b.effectiveDueDate ? -1 : 1;
+      });
+
+      // Limit to 10 nearest
+      if (dated.length > 10) dated = dated.slice(0, 10);
+
+      var html = '<div class="atl-section-title">Deadline Timeline</div>';
+      html += '<div class="atl-timeline">';
+
+      for (var j = 0; j < dated.length; j++) {
+        var task = dated[j];
+        var urgency = task.isOverdue ? 'overdue' : (task.isDueToday ? 'today' : (task.isDueThisWeek ? 'this-week' : 'later'));
+        var icon = task.hexIcon || '\u2B21';
+        var dateLabel = formatATLDate(task.effectiveDueDate);
+
+        html += '<div class="atl-timeline-item ' + urgency + '">';
+        html += '<div class="atl-timeline-label"><span class="atl-timeline-icon">' + escapeHtml(icon) + '</span> ' + escapeHtml(task.hexLabel) + '</div>';
+        html += '<div class="atl-timeline-date">' + escapeHtml(dateLabel) + '</div>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    function formatATLDate(dateStr) {
+      if (!dateStr) return '';
+      var parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var monthIdx = parseInt(parts[1], 10) - 1;
+      return months[monthIdx] + ' ' + parseInt(parts[2], 10);
+    }
+
+    // ================================================
+    // CONTEXTUAL TIPS
+    // ================================================
+
+    function renderATLTips() {
+      if (!plannerTasks || plannerTasks.length === 0) return '';
+
+      var tips = [];
+
+      // Compute stats
+      var overdueCount = 0;
+      var dueTodayCount = 0;
+      var activeCount = 0;
+      for (var i = 0; i < plannerTasks.length; i++) {
+        var t = plannerTasks[i];
+        if (t.status !== 'completed' && t.status !== 'mastered') {
+          activeCount++;
+          if (t.isOverdue) overdueCount++;
+          if (t.isDueToday) dueTodayCount++;
+        }
+      }
+
+      // Overdue tip
+      if (overdueCount > 0 && atlTipsSession.indexOf('overdue') === -1) {
+        tips.push({
+          tipId: 'overdue',
+          category: 'Self-management',
+          icon: '\u23F0',
+          cssClass: 'overdue',
+          text: 'You have ' + overdueCount + ' overdue task' + (overdueCount !== 1 ? 's' : '') + '. Try the 2-minute rule: if a task takes less than 2 minutes, do it now.'
+        });
+      }
+
+      // Many due today
+      if (dueTodayCount >= 3 && atlTipsSession.indexOf('manyDue') === -1) {
+        tips.push({
+          tipId: 'manyDue',
+          category: 'Self-management',
+          icon: '\uD83D\uDCCB',
+          cssClass: 'manyDue',
+          text: 'You have ' + dueTodayCount + ' tasks due today. Focus on one task at a time \u2014 prioritize by importance.'
+        });
+      }
+
+      // ATL-tagged task tip (pick first active task with ATL tags)
+      for (var j = 0; j < plannerTasks.length; j++) {
+        var task = plannerTasks[j];
+        if (task.atlSkills && task.status === 'in_progress' && atlTipsSession.indexOf('atl_' + task.hexId) === -1) {
+          var tipObj = getATLTipForTags(task.atlSkills);
+          if (tipObj) {
+            tips.push({
+              tipId: 'atl_' + task.hexId,
+              category: tipObj.categoryLabel,
+              icon: '\uD83D\uDCA1',
+              cssClass: '',
+              text: tipObj.tip + ' (for: ' + escapeHtml(task.hexLabel) + ')'
+            });
+            break; // Only show 1 ATL-specific tip
+          }
+        }
+      }
+
+      var html = '';
+      if (tips.length > 0) {
+        html += '<div class="atl-tips-section">';
+        for (var k = 0; k < tips.length; k++) {
+          var tip = tips[k];
+          html += '<div class="atl-tip-card ' + tip.cssClass + '">';
+          html += '<div class="atl-tip-icon">' + tip.icon + '</div>';
+          html += '<div class="atl-tip-content">';
+          html += '<div class="atl-tip-category">' + escapeHtml(tip.category) + '</div>';
+          html += '<div class="atl-tip-text">' + escapeHtml(tip.text) + '</div>';
+          html += '</div>';
+          html += '<button class="atl-tip-dismiss" onclick="dismissATLTip(\'' + tip.tipId + '\')" title="Dismiss" aria-label="Dismiss tip">&times;</button>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      // Server tips container (populated async by atlLoadServerTips)
+      html += '<div id="atlServerTipsContainer"></div>';
+
+      return html;
+    }
+
+    function getATLTipForTags(atlTags) {
+      if (!atlTags) return null;
+      var tagsLower = atlTags.toLowerCase();
+
+      // Simple keyword matching (mirrors backend ATL_TIPS)
+      var tipSets = {
+        thinking: { keywords: ['think', 'critical', 'creative', 'transfer', 'analysis'], label: 'Thinking', tips: [
+          'Try looking at the problem from a different perspective.', 'Use a thinking routine: See-Think-Wonder or Claim-Support-Question.', 'Identify what you already know vs. what you need to find out.'
+        ]},
+        communication: { keywords: ['communicat', 'read', 'writ', 'speak', 'listen', 'present'], label: 'Communication', tips: [
+          'Before writing, create a quick outline with 3 main points.', 'When reading a complex text, annotate as you go.', 'Practice active listening: summarize before responding.'
+        ]},
+        social: { keywords: ['social', 'collaborat', 'group', 'team'], label: 'Social', tips: [
+          'In group work, assign clear roles: facilitator, note-taker, timekeeper.', 'Check in with your team: is everyone contributing?'
+        ]},
+        selfManagement: { keywords: ['self', 'manag', 'organiz', 'reflect', 'plan', 'time'], label: 'Self-management', tips: [
+          'Use the Pomodoro technique: 25 min focused work, then 5 min break.', 'Write down 3 things you want to accomplish this session.'
+        ]},
+        research: { keywords: ['research', 'information', 'media', 'source', 'inquiry'], label: 'Research', tips: [
+          'Break research into steps: Question, Sources, Notes, Synthesis.', 'Use the CRAAP test to evaluate sources.'
+        ]}
+      };
+
+      var categories = ['thinking', 'communication', 'social', 'selfManagement', 'research'];
+      for (var c = 0; c < categories.length; c++) {
+        var cat = categories[c];
+        var set = tipSets[cat];
+        for (var k = 0; k < set.keywords.length; k++) {
+          if (tagsLower.indexOf(set.keywords[k]) !== -1) {
+            var idx = Math.floor(Math.random() * set.tips.length);
+            return { categoryLabel: set.label, tip: set.tips[idx] };
+          }
+        }
+      }
+      return null;
+    }
+
+    function dismissATLTip(tipId) {
+      atlTipsSession.push(tipId);
+      renderATLToolkit();
+      // Also re-render server tips (they use the same dismissed list)
+      if (typeof atlRenderServerTips === 'function') {
+        atlRenderServerTips();
+      }
+    }
+
+    // ================================================
+    // SERVER-SOURCED TIPS
+    // ================================================
+
+    /**
+     * Load contextual tips from backend (fire-and-forget).
+     * Calls getContextualTaskTips + getATLSuggestions in parallel.
+     */
+    function atlLoadServerTips() {
+      if (atlServerTipsLoaded) return;
+      atlServerTipsLoaded = true; // Guard re-entry
+
+      // Compute task stats from plannerTasks
+      var overdueCount = 0;
+      var dueTodayCount = 0;
+      var totalActive = 0;
+      if (typeof plannerTasks !== 'undefined' && plannerTasks) {
+        for (var i = 0; i < plannerTasks.length; i++) {
+          var t = plannerTasks[i];
+          if (t.status !== 'completed' && t.status !== 'mastered') {
+            totalActive++;
+            if (t.isOverdue) overdueCount++;
+            if (t.isDueToday) dueTodayCount++;
+          }
+        }
+      }
+
+      // Collect ATL tags from planner tasks
+      var allTags = [];
+      if (typeof plannerTasks !== 'undefined' && plannerTasks) {
+        for (var j = 0; j < plannerTasks.length; j++) {
+          if (plannerTasks[j].atlSkills && plannerTasks[j].status === 'in_progress') {
+            var skills = plannerTasks[j].atlSkills;
+            if (typeof skills === 'string') {
+              allTags.push(skills);
+            } else if (skills && skills.length) {
+              allTags.push(skills.join(','));
+            }
+          }
+        }
+      }
+      var tagsString = allTags.join(',');
+
+      var loadedCount = 0;
+      var tipsResult = [];
+      var suggestionsResult = [];
+
+      function checkDone() {
+        loadedCount++;
+        if (loadedCount < 2) return;
+        // Merge and deduplicate by tipId
+        var merged = [];
+        var seenIds = {};
+        var allResults = tipsResult.concat(suggestionsResult);
+        for (var m = 0; m < allResults.length; m++) {
+          var item = allResults[m];
+          var id = item.tipId || ('srv_' + item.category + '_' + m);
+          if (!seenIds[id]) {
+            seenIds[id] = true;
+            item.tipId = id;
+            merged.push(item);
+          }
+        }
+        atlServerTips = merged;
+        atlRenderServerTips();
+      }
+
+      // RPC 1: Contextual task tips
+      google.script.run
+        .withSuccessHandler(function(tips) {
+          tipsResult = tips || [];
+          checkDone();
+        })
+        .withFailureHandler(function() { checkDone(); })
+        .getContextualTaskTips({ overdueCount: overdueCount, dueTodayCount: dueTodayCount, totalActive: totalActive });
+
+      // RPC 2: ATL tag suggestions
+      if (tagsString) {
+        google.script.run
+          .withSuccessHandler(function(suggestions) {
+            suggestionsResult = suggestions || [];
+            checkDone();
+          })
+          .withFailureHandler(function() { checkDone(); })
+          .getATLSuggestions(tagsString);
+      } else {
+        // No tags to query — skip this RPC
+        checkDone();
+      }
+    }
+
+    /**
+     * Render server-sourced tips into #atlServerTipsContainer.
+     */
+    function atlRenderServerTips() {
+      var container = document.getElementById('atlServerTipsContainer');
+      if (!container) return;
+
+      if (!atlServerTips || atlServerTips.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      // Filter out dismissed tips
+      var visible = [];
+      for (var i = 0; i < atlServerTips.length; i++) {
+        var tip = atlServerTips[i];
+        if (atlTipsSession.indexOf(tip.tipId) === -1) {
+          visible.push(tip);
+        }
+      }
+
+      if (visible.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      var html = '<div class="atl-server-tips-header">Personalized Tips</div>';
+      for (var j = 0; j < visible.length; j++) {
+        var t = visible[j];
+        html += '<div class="atl-tip-card server">';
+        html += '<div class="atl-tip-icon">\uD83D\uDCA1</div>';
+        html += '<div class="atl-tip-content">';
+        html += '<div class="atl-tip-category">' + escapeHtml(t.categoryLabel || t.category || '') + '</div>';
+        html += '<div class="atl-tip-text">' + escapeHtml(t.tip || '') + '</div>';
+        html += '</div>';
+        html += '<button class="atl-tip-dismiss" onclick="dismissATLTip(\'' + escapeHtml(t.tipId) + '\')" title="Dismiss" aria-label="Dismiss tip">&times;</button>';
+        html += '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    // ================================================
+    // WEEKLY CHECK-IN
+    // ================================================
+
+    function renderATLWeeklyCheckin() {
+      // Show check-in prompt on Fridays, or if student hasn't rated this term
+      var now = new Date();
+      var dayOfWeek = now.getDay(); // 0=Sun, 5=Fri
+      var showCheckin = (dayOfWeek === 5);
+
+      // Also show if student has zero ratings this term
+      if (!showCheckin && atlProgressData) {
+        var hasRatings = false;
+        for (var i = 0; i < atlProgressData.length; i++) {
+          if (atlProgressData[i].term === atlCurrentTerm && atlProgressData[i].rating > 0) {
+            hasRatings = true;
+            break;
+          }
+        }
+        if (!hasRatings) showCheckin = true;
+      }
+
+      if (!showCheckin) return '';
+
+      // Pick category to prompt (rotate based on week number)
+      var weekNum = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
+      var categories = ['thinking', 'communication', 'social', 'selfManagement', 'research'];
+      var focusCat = categories[weekNum % categories.length];
+      var focusLabel = atlFramework && atlFramework[focusCat] ? atlFramework[focusCat].label : focusCat;
+      var icon = ATL_CAT_ICONS[focusCat] || '\uD83C\uDF1F';
+
+      // Bracket-adaptive heading
+      var atlCfg = atlGetConfig();
+      var checkinTitle = (atlCfg && atlCfg.config.checkinHeading) ? atlCfg.config.checkinHeading : 'Weekly ATL Check-In';
+
+      var html = '<div class="atl-checkin-card">';
+      html += '<div class="atl-checkin-title">' + icon + ' ' + escapeHtml(checkinTitle) + '</div>';
+      html += '<div class="atl-checkin-prompt">This week\'s focus: <strong>' + escapeHtml(focusLabel) + '</strong>. Take a moment to rate your skills and set a goal below.</div>';
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // ATL SELF-TRACKER
+    // ================================================
+
+    function renderATLTracker() {
+      if (!atlFramework) return '';
+
+      // Get bracket config for adaptive labels
+      var atlCfg = atlGetConfig();
+
+      var html = '<div class="atl-tracker-section">';
+      html += '<div class="atl-section-title">ATL Self-Tracker</div>';
+
+      // Term selector
+      html += '<div class="atl-term-row">';
+      html += '<span class="atl-term-label">Term:</span>';
+      html += '<select class="atl-term-select" onchange="onATLTermChange(this.value)">';
+      html += '<option value="' + escapeHtml(atlCurrentTerm) + '">' + escapeHtml(atlCurrentTerm) + '</option>';
+      // Add previous terms if student has data
+      var seenTerms = {};
+      seenTerms[atlCurrentTerm] = true;
+      if (atlProgressData) {
+        for (var t = 0; t < atlProgressData.length; t++) {
+          var term = atlProgressData[t].term;
+          if (term && !seenTerms[term]) {
+            html += '<option value="' + escapeHtml(term) + '">' + escapeHtml(term) + '</option>';
+            seenTerms[term] = true;
+          }
+        }
+      }
+      html += '</select>';
+      html += '</div>';
+
+      // Category cards
+      html += '<div class="atl-category-cards">';
+      var catKeys = ['thinking', 'communication', 'social', 'selfManagement', 'research'];
+      for (var c = 0; c < catKeys.length; c++) {
+        html += renderATLCategoryCard(catKeys[c]);
+      }
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    function renderATLCategoryCard(catKey) {
+      var cat = atlFramework[catKey];
+      if (!cat) return '';
+
+      var isExpanded = (atlExpandedCategory === catKey);
+      var icon = ATL_CAT_ICONS[catKey] || '';
+      var subSkills = cat.subSkills || [];
+
+      // Bracket-adaptive category label (low bracket gets simplified names)
+      var atlCfg = atlGetConfig();
+      var catLabel = cat.label;
+      if (atlCfg && atlCfg.bracket === 'low' && ATL_CATEGORY_SIMPLE[catKey]) {
+        catLabel = ATL_CATEGORY_SIMPLE[catKey];
+      }
+
+      // Build summary dots (one per sub-skill)
+      var dotsHtml = '';
+      var lastReflection = '';
+      for (var s = 0; s < subSkills.length; s++) {
+        var sk = subSkills[s];
+        var ratingKey = catKey + '.' + sk.key;
+        var ratingData = atlSelectedRatings[ratingKey];
+        var rating = ratingData ? ratingData.rating : 0;
+        var dotClass = rating > 0 ? 'rated-' + rating : '';
+        dotsHtml += '<div class="atl-cat-dot ' + dotClass + '"></div>';
+        if (!lastReflection && ratingData && ratingData.reflectionNote) {
+          lastReflection = ratingData.reflectionNote;
+        }
+      }
+
+      var snippet = lastReflection ? lastReflection.substring(0, 40) + (lastReflection.length > 40 ? '...' : '') : 'Tap to rate';
+
+      var html = '<div class="atl-category-card' + (isExpanded ? ' expanded' : '') + '" onclick="toggleATLCategory(\'' + catKey + '\')">';
+      html += '<div class="atl-cat-header">';
+      html += '<div class="atl-cat-name">' + icon + ' ' + escapeHtml(catLabel) + '</div>';
+      html += '<span class="atl-cat-chevron">\u25BC</span>';
+      html += '</div>';
+      html += '<div class="atl-cat-summary">' + dotsHtml + '</div>';
+      html += '<div class="atl-cat-snippet">' + escapeHtml(snippet) + '</div>';
+
+      // Expanded detail
+      html += '<div class="atl-cat-detail" onclick="event.stopPropagation()">';
+      for (var i = 0; i < subSkills.length; i++) {
+        html += renderATLSubSkillRow(catKey, subSkills[i]);
+      }
+      html += '<button class="atl-save-btn" id="atlSaveBtn_' + catKey + '" onclick="saveATLCategory(\'' + catKey + '\')">Save ' + escapeHtml(catLabel) + '</button>';
+      html += '<div id="atlSaveStatus_' + catKey + '"></div>';
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    function renderATLSubSkillRow(catKey, subSkill) {
+      var ratingKey = catKey + '.' + subSkill.key;
+      var ratingData = atlSelectedRatings[ratingKey] || {};
+      var currentRating = ratingData.rating || 0;
+      var reflection = ratingData.reflectionNote || '';
+      var goal = ratingData.goalNote || '';
+
+      // Bracket-adaptive labels and placeholders
+      var atlCfg = atlGetConfig();
+      var ratingLabels = ATL_RATING_LABELS;
+      var reflPlaceholder = 'What have you learned about this skill?';
+      var goalPlaceholder = 'What are you working on?';
+      var showEmoji = false;
+      var emojis = null;
+      var emojiClass = '';
+      if (atlCfg) {
+        ratingLabels = atlCfg.config.labels;
+        reflPlaceholder = atlCfg.config.reflectionPlaceholder;
+        goalPlaceholder = atlCfg.config.goalPlaceholder;
+        showEmoji = atlCfg.config.showEmoji;
+        emojis = atlCfg.config.emojis;
+        if (showEmoji) emojiClass = ' atl-emoji-labels';
+      }
+
+      var html = '<div class="atl-subskill-row">';
+      html += '<div class="atl-subskill-label">' + escapeHtml(subSkill.label) + '</div>';
+
+      // Rating buttons
+      html += '<div class="atl-rating-bar' + emojiClass + '">';
+      for (var r = 1; r <= 4; r++) {
+        var selected = (currentRating === r) ? ' selected' : '';
+        var btnLabel = ratingLabels[r] || ATL_RATING_LABELS[r];
+        var emojiPrefix = (showEmoji && emojis && emojis[r]) ? emojis[r] + ' ' : '';
+        html += '<button class="atl-rating-btn' + selected + '" onclick="selectATLRating(\'' + catKey + '\', \'' + subSkill.key + '\', ' + r + ')">' + r + '<br>' + emojiPrefix + escapeHtml(btnLabel) + '</button>';
+      }
+      html += '</div>';
+
+      // Reflection textarea
+      html += '<div class="atl-input-group">';
+      html += '<div class="atl-input-label">Reflection</div>';
+      html += '<textarea class="atl-textarea" id="atlReflection_' + catKey + '_' + subSkill.key + '" maxlength="300" placeholder="' + escapeHtml(reflPlaceholder) + '" oninput="updateATLCharCount(\'' + catKey + '\', \'' + subSkill.key + '\', \'reflection\', 300)">' + escapeHtml(reflection) + '</textarea>';
+      html += '<div class="atl-char-count" id="atlReflectionCount_' + catKey + '_' + subSkill.key + '">' + reflection.length + ' / 300</div>';
+      html += '</div>';
+
+      // Goal textarea
+      html += '<div class="atl-input-group">';
+      html += '<div class="atl-input-label">Goal</div>';
+      html += '<textarea class="atl-textarea" id="atlGoal_' + catKey + '_' + subSkill.key + '" maxlength="150" placeholder="' + escapeHtml(goalPlaceholder) + '" oninput="updateATLCharCount(\'' + catKey + '\', \'' + subSkill.key + '\', \'goal\', 150)" style="min-height:28px;">' + escapeHtml(goal) + '</textarea>';
+      html += '<div class="atl-char-count" id="atlGoalCount_' + catKey + '_' + subSkill.key + '">' + goal.length + ' / 150</div>';
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // INTERACTIONS
+    // ================================================
+
+    function toggleATLCategory(catKey) {
+      if (atlExpandedCategory === catKey) {
+        atlExpandedCategory = '';
+      } else {
+        atlExpandedCategory = catKey;
+      }
+      renderATLToolkit();
+    }
+
+    function selectATLRating(catKey, subSkillKey, rating) {
+      var ratingKey = catKey + '.' + subSkillKey;
+      if (!atlSelectedRatings[ratingKey]) {
+        atlSelectedRatings[ratingKey] = { rating: 0, reflectionNote: '', goalNote: '' };
+      }
+
+      // Preserve textarea values before re-render
+      preserveATLTextareas(catKey);
+
+      atlSelectedRatings[ratingKey].rating = rating;
+      renderATLToolkit();
+    }
+
+    function preserveATLTextareas(catKey) {
+      if (!atlFramework || !atlFramework[catKey]) return;
+      var subSkills = atlFramework[catKey].subSkills || [];
+      for (var s = 0; s < subSkills.length; s++) {
+        var sk = subSkills[s];
+        var ratingKey = catKey + '.' + sk.key;
+        var reflEl = document.getElementById('atlReflection_' + catKey + '_' + sk.key);
+        var goalEl = document.getElementById('atlGoal_' + catKey + '_' + sk.key);
+        if (!atlSelectedRatings[ratingKey]) {
+          atlSelectedRatings[ratingKey] = { rating: 0, reflectionNote: '', goalNote: '' };
+        }
+        if (reflEl) atlSelectedRatings[ratingKey].reflectionNote = reflEl.value;
+        if (goalEl) atlSelectedRatings[ratingKey].goalNote = goalEl.value;
+      }
+    }
+
+    function updateATLCharCount(catKey, subSkillKey, field, max) {
+      var prefix = (field === 'reflection') ? 'atlReflection' : 'atlGoal';
+      var textarea = document.getElementById(prefix + '_' + catKey + '_' + subSkillKey);
+      var counter = document.getElementById(prefix + 'Count_' + catKey + '_' + subSkillKey);
+      if (textarea && counter) {
+        counter.textContent = textarea.value.length + ' / ' + max;
+      }
+    }
+
+    function onATLTermChange(newTerm) {
+      atlCurrentTerm = newTerm;
+      buildATLRatingLookup();
+      atlExpandedCategory = '';
+      renderATLToolkit();
+    }
+
+    // ================================================
+    // SAVE
+    // ================================================
+
+    function saveATLCategory(catKey) {
+      if (!atlFramework || !atlFramework[catKey]) return;
+
+      // Preserve current textarea values
+      preserveATLTextareas(catKey);
+
+      var subSkills = atlFramework[catKey].subSkills || [];
+      var toSave = [];
+
+      for (var s = 0; s < subSkills.length; s++) {
+        var sk = subSkills[s];
+        var ratingKey = catKey + '.' + sk.key;
+        var data = atlSelectedRatings[ratingKey];
+        if (data && data.rating > 0) {
+          toSave.push({
+            category: catKey,
+            subSkill: sk.key,
+            rating: data.rating,
+            reflectionNote: data.reflectionNote || '',
+            goalNote: data.goalNote || ''
+          });
+        }
+      }
+
+      if (toSave.length === 0) {
+        showToast('Please rate at least one sub-skill before saving.', 'warning');
+        return;
+      }
+
+      var btn = document.getElementById('atlSaveBtn_' + catKey);
+      var statusEl = document.getElementById('atlSaveStatus_' + catKey);
+      if (btn) btn.disabled = true;
+      if (statusEl) statusEl.innerHTML = '<div class="atl-saving-indicator">Saving...</div>';
+
+      var savedCount = 0;
+      var errorCount = 0;
+      var total = toSave.length;
+
+      for (var i = 0; i < toSave.length; i++) {
+        (function(item) {
+          google.script.run
+            .withSuccessHandler(function() {
+              savedCount++;
+              if (savedCount + errorCount === total) {
+                onATLSaveComplete(catKey, savedCount, errorCount);
+              }
+            })
+            .withFailureHandler(function(err) {
+              errorCount++;
+              if (savedCount + errorCount === total) {
+                onATLSaveComplete(catKey, savedCount, errorCount);
+              }
+            })
+            .saveATLRating(item.category, item.subSkill, item.rating, item.reflectionNote, item.goalNote, atlCurrentTerm);
+        })(toSave[i]);
+      }
+    }
+
+    function onATLSaveComplete(catKey, savedCount, errorCount) {
+      var btn = document.getElementById('atlSaveBtn_' + catKey);
+      var statusEl = document.getElementById('atlSaveStatus_' + catKey);
+      if (btn) btn.disabled = false;
+
+      if (errorCount === 0) {
+        if (statusEl) statusEl.innerHTML = '<div class="atl-saved-indicator">\u2713 Saved ' + savedCount + ' rating' + (savedCount !== 1 ? 's' : '') + '</div>';
+        showToast('ATL ratings saved!', 'success');
+      } else {
+        if (statusEl) statusEl.innerHTML = '<div class="atl-saving-indicator">' + errorCount + ' error(s) — try again</div>';
+        showToast('Some ATL ratings failed to save.', 'error');
+      }
+
+      // Clear status after 3 seconds
+      setTimeout(function() {
+        if (statusEl) statusEl.innerHTML = '';
+      }, 3000);
+    }
+
+    // ================================================
+    // ATL TOGGLE (show/hide toolkit)
+    // ================================================
+
+    var atlToolkitVisible = true;
+
+    function toggleATLToolkit() {
+      atlToolkitVisible = !atlToolkitVisible;
+      var container = document.getElementById('atlToolkitContainer');
+      var toggleBtn = document.getElementById('atlToggleBtn');
+      if (container) {
+        container.style.display = atlToolkitVisible ? 'block' : 'none';
+      }
+      if (toggleBtn) {
+        toggleBtn.textContent = atlToolkitVisible ? 'Hide ATL Toolkit' : 'Show ATL Toolkit';
+      }
+    }
+</script>

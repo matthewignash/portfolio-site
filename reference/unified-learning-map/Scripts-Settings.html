@@ -1,0 +1,273 @@
+<script>
+    // ================================================
+    // ADMIN SETTINGS DASHBOARD (ES5)
+    // ================================================
+
+    var adminSettingsData = null;
+
+    function loadAdminSettings() {
+      var container = document.getElementById('settingsContent');
+      container.innerHTML = '<div class="loading"><span class="loading-spinner"></span> Loading settings...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          adminSettingsData = data;
+          renderSettingsView();
+        })
+        .withFailureHandler(function(err) {
+          container.innerHTML = '<p style="color:#dc2626; padding:20px;">Error loading settings: ' + escapeHtml(err.message) + '</p>';
+        })
+        .getAdminSettings();
+    }
+
+    function renderSettingsView() {
+      var data = adminSettingsData;
+      var html = '<div class="set-sections">';
+
+      // Section 1: System Information (read-only)
+      html += '<div class="set-section">';
+      html += '<div class="set-section-header"><h3 class="set-section-title">System Information</h3></div>';
+      html += '<div class="set-section-body">';
+      html += '<div class="set-info-row"><span class="set-info-label">Schema Version</span><span class="set-info-value">' + escapeHtml(data.schemaVersion || '--') + '</span></div>';
+      html += '<div class="set-info-row"><span class="set-info-label">App Version</span><span class="set-info-value">' + escapeHtml(data.appVersion || '--') + '</span></div>';
+      html += '<div class="set-info-row"><span class="set-info-label">Database Created</span><span class="set-info-value">' + escapeHtml(data.createdAt || '--') + '</span></div>';
+      html += '<div class="set-info-row"><span class="set-info-label">Last Setup Run</span><span class="set-info-value">' + escapeHtml(data.setupCompletedAt || '--') + '</span></div>';
+      html += '<div class="set-info-row"><span class="set-info-label">Setup By</span><span class="set-info-value">' + escapeHtml(data.setupBy || '--') + '</span></div>';
+      html += '</div></div>';
+
+      // Section 2: Application Settings (editable)
+      html += '<div class="set-section">';
+      html += '<div class="set-section-header"><h3 class="set-section-title">Application Settings</h3></div>';
+      html += '<div class="set-section-body">';
+
+      html += '<div class="set-field">';
+      html += '<label class="set-field-label">Application Name</label>';
+      html += '<div class="set-field-input"><input type="text" class="form-input" id="set-appName" value="' + escapeHtml(data.appName || '') + '"></div>';
+      html += '</div>';
+
+      html += '<div class="set-field">';
+      html += '<label class="set-field-label">Owner Email</label>';
+      html += '<div class="set-field-input"><input type="email" class="form-input" id="set-ownerEmail" value="' + escapeHtml(data.ownerEmail || '') + '"></div>';
+      html += '</div>';
+
+      html += '<div class="set-field">';
+      html += '<label class="set-field-label">Default Role for New Users</label>';
+      html += '<div class="set-field-input"><select class="form-select" id="set-defaultRole">';
+      var roles = ['student', 'teacher', 'administrator'];
+      var roleLabels = ['Student', 'Teacher', 'Administrator'];
+      for (var r = 0; r < roles.length; r++) {
+        var sel = (data.defaultRole || 'student').toLowerCase() === roles[r] ? ' selected' : '';
+        html += '<option value="' + roles[r] + '"' + sel + '>' + roleLabels[r] + '</option>';
+      }
+      html += '</select></div>';
+      html += '</div>';
+
+      html += '</div>';
+      html += '<div class="set-section-footer"><button class="btn btn-success btn-small" data-save-section="app" onclick="saveSettingsSection(\'app\')">Save</button></div>';
+      html += '</div>';
+
+      // Section 3: Map Configuration (editable)
+      html += '<div class="set-section">';
+      html += '<div class="set-section-header"><h3 class="set-section-title">Map Configuration</h3></div>';
+      html += '<div class="set-section-body">';
+
+      html += '<div class="set-field">';
+      html += '<label class="set-field-label">Default Grid Rows</label>';
+      html += '<div class="set-field-input"><input type="number" class="form-input" id="set-gridRows" min="4" max="50" value="' + escapeHtml(data.gridRows || '10') + '"><span class="set-field-help">Range: 4–50</span></div>';
+      html += '</div>';
+
+      html += '<div class="set-field">';
+      html += '<label class="set-field-label">Default Grid Columns</label>';
+      html += '<div class="set-field-input"><input type="number" class="form-input" id="set-gridCols" min="4" max="50" value="' + escapeHtml(data.gridCols || '10') + '"><span class="set-field-help">Range: 4–50</span></div>';
+      html += '</div>';
+
+      html += '<div class="set-field">';
+      html += '<label class="set-field-label">Maximum Hexes Per Map</label>';
+      html += '<div class="set-field-input"><input type="number" class="form-input" id="set-maxHexesPerMap" min="10" max="500" value="' + escapeHtml(data.maxHexesPerMap || '100') + '"><span class="set-field-help">Range: 10–500</span></div>';
+      html += '</div>';
+
+      html += '</div>';
+      html += '<div class="set-section-footer"><button class="btn btn-success btn-small" data-save-section="map" onclick="saveSettingsSection(\'map\')">Save</button></div>';
+      html += '</div>';
+
+      // Section 4: Feature Flags (editable)
+      html += '<div class="set-section">';
+      html += '<div class="set-section-header"><h3 class="set-section-title">Feature Flags</h3></div>';
+      html += '<div class="set-section-body">';
+
+      var flags = [
+        { key: 'enableBranching', label: 'Enable Conditional Branching', help: 'Allow branching paths between hexes' },
+        { key: 'requireTeacherApproval', label: 'Require Teacher Approval', help: 'Students must get teacher approval for progress submissions' },
+        { key: 'allowSelfRegistration', label: 'Allow Self-Registration', help: 'Allow new users to register without admin invitation' },
+        { key: 'debugMode', label: 'Debug Mode', help: 'Enable detailed logging for troubleshooting' },
+        { key: 'enableGuidedTour', label: 'Enable Guided Tour', help: 'Show interactive onboarding tour for new users' }
+      ];
+
+      for (var i = 0; i < flags.length; i++) {
+        var flag = flags[i];
+        var isOn = data[flag.key] === 'true' || data[flag.key] === true;
+        html += '<div class="set-field">';
+        html += '<span class="set-field-label">' + escapeHtml(flag.label) + '</span>';
+        html += '<div class="set-field-input">';
+        html += '<div class="set-toggle" role="switch" tabindex="0" aria-checked="' + (isOn ? 'true' : 'false') + '" onclick="toggleSettingSwitch(this)" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();toggleSettingSwitch(this);}">';
+        html += '<div class="set-toggle-track' + (isOn ? ' active' : '') + '">';
+        html += '<div class="set-toggle-thumb"></div>';
+        html += '</div>';
+        html += '<span class="set-toggle-label">' + (isOn ? 'On' : 'Off') + '</span>';
+        html += '<input type="hidden" id="set-' + flag.key + '" value="' + (isOn ? 'true' : 'false') + '">';
+        html += '</div>';
+        html += '<span class="set-field-help">' + escapeHtml(flag.help) + '</span>';
+        html += '</div>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      html += '<div class="set-section-footer"><button class="btn btn-success btn-small" data-save-section="features" onclick="saveSettingsSection(\'features\')">Save</button></div>';
+      html += '</div>';
+
+      // Section 5: Lab Reports Info (read-only)
+      var lrUrl = data.labReportsSpreadsheetUrl || '';
+      var lrConnected = !!lrUrl;
+      var lrInit = data.labReportsLastInitialized || '';
+      html += '<div class="set-section">';
+      html += '<div class="set-section-header"><h3 class="set-section-title">Lab Reports</h3></div>';
+      html += '<div class="set-section-body">';
+      html += '<div class="set-field"><span class="set-field-label">Status</span>';
+      html += '<div class="set-field-input"><span style="font-size:13px; font-weight:600; color:' + (lrConnected ? '#10b981' : '#94a3b8') + ';">' + (lrConnected ? 'Connected' : 'Not Configured') + '</span>';
+      html += '<span class="set-field-help">Configure in the Integrations tab</span></div></div>';
+      if (lrUrl) {
+        html += '<div class="set-field"><span class="set-field-label">Spreadsheet</span>';
+        html += '<div class="set-field-input"><span style="font-size:12px; color:#64748b; word-break:break-all;">' + escapeHtml(lrUrl) + '</span></div></div>';
+      }
+      if (lrInit) {
+        html += '<div class="set-field"><span class="set-field-label">Last Initialized</span>';
+        html += '<div class="set-field-input"><span style="font-size:12px; color:#64748b;">' + escapeHtml(lrInit) + '</span></div></div>';
+      }
+      html += '</div></div>';
+
+      // Section 6: Data Maintenance
+      html += '<div class="set-section">';
+      html += '<div class="set-section-header"><h3 class="set-section-title">Data Maintenance</h3></div>';
+      html += '<div class="set-section-body">';
+      html += '<div class="set-field">';
+      html += '<span class="set-field-label">Repair Student Progress</span>';
+      html += '<div class="set-field-input">';
+      html += '<button class="btn btn-small" id="set-repairProgressBtn" onclick="repairStudentProgress()" style="background:#f59e0b;color:white;border:none;">Run Repair</button>';
+      html += '<span class="set-field-help">Creates missing progress records for students assigned to maps. Run this if students see maps but all hexes are locked.</span>';
+      html += '<span id="set-repairResult" style="display:none; font-size:12px; margin-top:4px; color:#059669; font-weight:600;"></span>';
+      html += '</div></div>';
+      html += '</div></div>';
+
+      html += '</div>'; // close .set-sections
+      document.getElementById('settingsContent').innerHTML = html;
+    }
+
+    function toggleSettingSwitch(el) {
+      var track = el.querySelector('.set-toggle-track');
+      var label = el.querySelector('.set-toggle-label');
+      var input = el.querySelector('input[type="hidden"]');
+      if (track.classList.contains('active')) {
+        track.classList.remove('active');
+        label.textContent = 'Off';
+        input.value = 'false';
+      } else {
+        track.classList.add('active');
+        label.textContent = 'On';
+        input.value = 'true';
+      }
+    }
+
+    function saveSettingsSection(sectionId) {
+      var updates = {};
+      var btn = document.querySelector('[data-save-section="' + sectionId + '"]');
+
+      if (sectionId === 'app') {
+        updates.appName = document.getElementById('set-appName').value.trim();
+        updates.ownerEmail = document.getElementById('set-ownerEmail').value.trim();
+        updates.defaultRole = document.getElementById('set-defaultRole').value;
+        if (!updates.appName) {
+          showToast('Application name is required', 'error');
+          return;
+        }
+        if (!updates.ownerEmail) {
+          showToast('Owner email is required', 'error');
+          return;
+        }
+      } else if (sectionId === 'map') {
+        var rows = parseInt(document.getElementById('set-gridRows').value);
+        var cols = parseInt(document.getElementById('set-gridCols').value);
+        var maxHexes = parseInt(document.getElementById('set-maxHexesPerMap').value);
+        if (isNaN(rows) || rows < 4 || rows > 50) {
+          showToast('Grid rows must be between 4 and 50', 'error');
+          return;
+        }
+        if (isNaN(cols) || cols < 4 || cols > 50) {
+          showToast('Grid columns must be between 4 and 50', 'error');
+          return;
+        }
+        if (isNaN(maxHexes) || maxHexes < 10 || maxHexes > 500) {
+          showToast('Max hexes must be between 10 and 500', 'error');
+          return;
+        }
+        updates.gridRows = String(rows);
+        updates.gridCols = String(cols);
+        updates.maxHexesPerMap = String(maxHexes);
+      } else if (sectionId === 'features') {
+        updates.enableBranching = document.getElementById('set-enableBranching').value;
+        updates.requireTeacherApproval = document.getElementById('set-requireTeacherApproval').value;
+        updates.allowSelfRegistration = document.getElementById('set-allowSelfRegistration').value;
+        updates.debugMode = document.getElementById('set-debugMode').value;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+      }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Saved!';
+            setTimeout(function() { btn.textContent = 'Save'; }, 2000);
+          }
+          for (var key in updates) {
+            if (updates.hasOwnProperty(key)) {
+              adminSettingsData[key] = updates[key];
+            }
+          }
+          showToast('Settings saved', 'success');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Save';
+          }
+          showToast('Error: ' + err.message, 'error');
+        })
+        .saveAdminSettings(updates);
+    }
+
+    function repairStudentProgress() {
+      var btn = document.getElementById('set-repairProgressBtn');
+      var result = document.getElementById('set-repairResult');
+      if (btn) { btn.disabled = true; btn.textContent = 'Repairing...'; }
+      if (result) result.style.display = 'none';
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Run Repair'; }
+          var msg = data.studentsRepaired + ' student(s) repaired across ' + data.mapsProcessed + ' map(s).';
+          if (result) {
+            result.textContent = msg;
+            result.style.display = 'block';
+          }
+          showToast(msg, data.studentsRepaired > 0 ? 'success' : 'info');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Run Repair'; }
+          showToast('Repair failed: ' + escapeHtml(err.message), 'error');
+        })
+        .repairMissingProgress();
+    }
+</script>

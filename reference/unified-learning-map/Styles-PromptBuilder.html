@@ -1,0 +1,422 @@
+<style>
+/* =====================================================
+   PROMPT BUILDER & ENHANCED SUPPORT STYLES (pb- prefix)
+   Stories: E1-S1 (Info Bar), E1-S2 (Detail Panel),
+            E2-S1 (UDL Selector), E2-S2 (Prompt Builder),
+            E2-S3 (Badge + Save)
+   ===================================================== */
+
+/* --- E1-S1: Enhanced Info Bar Children --- */
+.pb-info-bar-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.pb-info-count {
+  font-weight: 600;
+  font-size: 12px;
+  color: #744210;
+  margin-right: 4px;
+}
+.pb-info-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pb-info-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  background: #fefce8;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  white-space: nowrap;
+}
+.pb-info-chip-more {
+  background: transparent;
+  border-color: #d4a559;
+  color: #92400e;
+  font-style: italic;
+}
+.pb-info-wida {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  white-space: nowrap;
+}
+.pb-info-details-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid #d97706;
+  background: transparent;
+  color: #d97706;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pb-info-details-btn:hover {
+  background: #fffbeb;
+}
+
+/* --- E1-S2: Support Detail Panel --- */
+.pb-detail-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin: 0 12px 12px;
+  background: #ffffff;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.pb-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+}
+.pb-detail-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e293b;
+}
+.pb-detail-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.pb-detail-close:hover { color: #475569; }
+.pb-detail-body {
+  padding: 12px;
+}
+.pb-detail-section {
+  margin-bottom: 16px;
+}
+.pb-detail-section:last-child { margin-bottom: 0; }
+.pb-detail-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+.pb-detail-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Accommodation groups */
+.pb-accom-group {
+  margin-bottom: 10px;
+}
+.pb-accom-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 4px;
+}
+.pb-accom-count { font-weight: 400; color: #94a3b8; }
+.pb-accom-students {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pb-student-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* WIDA cards */
+.pb-wida-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.pb-wida-card:last-child { margin-bottom: 0; }
+.pb-wida-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.pb-wida-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e293b;
+}
+.pb-wida-level {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.pb-wida-level-1, .pb-wida-level-2 { background: #fed7e2; color: #97266d; }
+.pb-wida-level-3 { background: #fefcbf; color: #975a16; }
+.pb-wida-level-4 { background: #c6f6d5; color: #276749; }
+.pb-wida-level-5, .pb-wida-level-6 { background: #bee3f8; color: #2a4365; }
+
+/* Domain mini-bars */
+.pb-wida-domains {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.pb-domain-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pb-domain-abbr {
+  width: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+}
+.pb-domain-bar {
+  flex: 1;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.pb-domain-fill {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.pb-domain-val {
+  width: 14px;
+  font-size: 10px;
+  color: #64748b;
+  text-align: right;
+}
+
+/* Strategies */
+.pb-wida-strategies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pb-strategy-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+/* --- E2-S1: UDL Selector in Hex Editor --- */
+.pb-udl-legend {
+  display: flex;
+  gap: 16px;
+  padding: 0 0 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+.pb-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pb-legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.pb-dot-suggested { background: transparent; border: 2px solid #d97706; }
+.pb-dot-confirmed { background: #3b82f6; border: 2px solid #3b82f6; }
+
+.pb-udl-principle {
+  margin-bottom: 12px;
+}
+.pb-udl-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.pb-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pb-udl-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 11px;
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.pb-udl-chip:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.pb-udl-chip.pb-suggested {
+  border-color: #d97706;
+  border-style: dashed;
+  color: #92400e;
+  background: #fffbeb;
+}
+.pb-udl-chip.pb-suggested:hover {
+  background: #fef3c7;
+}
+.pb-udl-chip.pb-confirmed {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+.pb-udl-chip.pb-confirmed:hover {
+  background: #dbeafe;
+}
+
+.pb-udl-section-badge {
+  display: inline-block;
+  font-size: 11px;
+  color: #94a3b8;
+}
+.pb-udl-section-badge.pb-has-selections {
+  background: #3b82f6;
+  color: #ffffff;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 10px;
+}
+
+/* --- E2-S2: Prompt Builder Modal --- */
+.pb-prompt-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pb-depth-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pb-depth-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+.pb-depth-btn {
+  padding: 6px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.pb-depth-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.pb-depth-btn.pb-depth-active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.pb-context-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.pb-ctx-item {
+  font-size: 12px;
+  color: #475569;
+}
+.pb-ctx-item strong {
+  color: #1e293b;
+}
+
+.pb-prompt-textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #334155;
+  background: #ffffff;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.pb-prompt-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.pb-copy-btn {
+  min-width: 180px;
+}
+
+/* --- E2-S3: UDL Hex Badge --- */
+.pb-hex-udl-badge {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  border: 1px solid #bfdbfe;
+}
+
+/* Focus-visible parity (WCAG 2.4.7) */
+.pb-info-details-btn:focus-visible,
+.pb-detail-close:focus-visible,
+.pb-udl-chip:focus-visible,
+.pb-depth-btn:focus-visible {
+  outline: 3px solid #0d9488;
+  outline-offset: 2px;
+}
+</style>

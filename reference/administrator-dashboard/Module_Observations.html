@@ -1,0 +1,1265 @@
+<script>
+/**
+ * Observations Module — Learning Walks & Observations
+ *
+ * Sub-views: Dashboard, New Observation, Drop-in Planner, Schedule, Teacher History
+ * Registers as App.ModuleRegistry.observations
+ */
+
+App.ModuleRegistry.observations = {
+
+  init: function(container) {
+    var state = {
+      currentView: 'dashboard',
+      dashboardData: null,
+      config: null,
+      prefill: null,        // Pre-fill data for entry form (from drop-in)
+      selectedTeacherId: null // For teacher history view
+    };
+
+    // ── DOM structure ──
+    var subNav = ClientUtils.el('nav', { className: 'sub-nav', role: 'tablist' });
+    var viewContainer = ClientUtils.el('div', { className: 'relative' });
+    container.appendChild(subNav);
+    container.appendChild(viewContainer);
+
+    var views = [
+      { key: 'dashboard',  label: 'Dashboard' },
+      { key: 'entry',      label: 'New Observation' },
+      { key: 'dropin',     label: 'Drop-in Planner' },
+      { key: 'schedule',   label: 'Schedule' },
+      { key: 'history',    label: 'Teacher History' }
+    ];
+
+    // ── Sub-nav rendering ──
+    function renderSubNav() {
+      subNav.innerHTML = '';
+      views.forEach(function(v) {
+        var btn = ClientUtils.el('button', {
+          className: 'sub-nav-btn' + (state.currentView === v.key ? ' active' : ''),
+          onClick: function() { switchView(v.key); }
+        }, [v.label]);
+        subNav.appendChild(btn);
+      });
+    }
+
+    function switchView(viewKey, opts) {
+      state.currentView = viewKey;
+      renderSubNav();
+      viewContainer.innerHTML = '';
+
+      switch (viewKey) {
+        case 'dashboard':  renderDashboard(); break;
+        case 'entry':      renderEntryForm(opts); break;
+        case 'dropin':     renderDropInPlanner(); break;
+        case 'schedule':   renderScheduleView(); break;
+        case 'history':    renderTeacherHistory(opts); break;
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Sub-view 1: Dashboard
+    // ═══════════════════════════════════════════════
+
+    function renderDashboard() {
+      LoadingSpinner.show(viewContainer);
+
+      ServerAPI.getObservationDashboard().then(function(data) {
+        LoadingSpinner.hide(viewContainer);
+        state.dashboardData = data;
+        state.config = App.getConfig();
+        buildDashboardDOM(data);
+      }).catch(function(e) {
+        LoadingSpinner.hide(viewContainer);
+        viewContainer.innerHTML = '<div class="empty-state"><div class="empty-state__text">Failed to load dashboard</div><div class="empty-state__sub">' + ClientUtils.escapeHtml(e.message) + '</div></div>';
+      });
+    }
+
+    function buildDashboardDOM(data) {
+      viewContainer.innerHTML = '';
+
+      // Filter bar
+      var filterBar = buildFilterBar(data);
+      viewContainer.appendChild(filterBar);
+
+      // Stats grid
+      var statsGrid = ClientUtils.el('div', { className: 'stats-grid' });
+      var statItems = [
+        { label: 'Total Observations', value: data.stats.totalThisTerm || 0 },
+        { label: 'Teachers Visited', value: data.stats.teachersVisited || 0 },
+        { label: 'Teachers Overdue', value: data.stats.teachersOverdue || 0 },
+        { label: 'Avg Per Teacher', value: data.stats.averagePerTeacher || 0 }
+      ];
+      statItems.forEach(function(s) {
+        statsGrid.appendChild(ClientUtils.el('div', { className: 'stat-card' }, [
+          ClientUtils.el('div', { className: 'stat-card__label' }, [s.label]),
+          ClientUtils.el('div', { className: 'stat-card__value' }, [String(s.value)])
+        ]));
+      });
+      viewContainer.appendChild(statsGrid);
+
+      // Heat map
+      if (data.heatMap && data.heatMap.length > 0) {
+        var heatSection = ClientUtils.el('div', { className: 'card mb-lg' });
+        heatSection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+          ClientUtils.el('h3', { className: 'card__title' }, ['Observation Heat Map'])
+        ]));
+        heatSection.appendChild(buildHeatMap(data.heatMap));
+        viewContainer.appendChild(heatSection);
+      }
+
+      // Priority list
+      if (data.priorityList && data.priorityList.length > 0) {
+        var prioritySection = ClientUtils.el('div', { className: 'card mb-lg' });
+        prioritySection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+          ClientUtils.el('h3', { className: 'card__title' }, ['Who Needs a Visit?'])
+        ]));
+        var tableContainer = ClientUtils.el('div');
+        prioritySection.appendChild(tableContainer);
+        viewContainer.appendChild(prioritySection);
+
+        var config = App.getConfig();
+        var overdueWeeks = parseInt(config.observation_overdue_weeks) || 5;
+        var overdueDays = overdueWeeks * 7;
+
+        DataTable.render(tableContainer, {
+          columns: [
+            { key: 'teacherName', label: 'Teacher' },
+            { key: 'department', label: 'Department' },
+            { key: 'daysSinceLastVisit', label: 'Days Since Visit', render: function(val) {
+              var cls = val > overdueDays ? 'badge-danger' : (val > (overdueWeeks * 5) ? 'badge-warning' : 'badge-neutral');
+              return '<span class="badge ' + cls + '">' + (val >= 999 ? 'Never' : val + 'd') + '</span>';
+            }},
+            { key: 'lastType', label: 'Last Type', render: function(val) {
+              return val ? StatusBadge.html(val) : '<span class="text-muted">-</span>';
+            }},
+            { key: 'followUp', label: 'Follow-up', render: function(val) {
+              return val ? '<span class="badge badge-warning">Pending</span>' : '';
+            }}
+          ],
+          data: data.priorityList.map(function(p) {
+            return {
+              teacherName: p.teacher.name,
+              teacherId: p.teacher.id,
+              department: p.teacher.department,
+              daysSinceLastVisit: p.daysSinceLastVisit,
+              lastType: p.lastObservation ? p.lastObservation.type : null,
+              followUp: p.followUpPending
+            };
+          }),
+          onRowClick: function(row) {
+            switchView('entry', { teacherId: row.teacherId });
+          },
+          pageSize: 15
+        });
+      }
+
+      // Department chart
+      if (data.departmentChart && data.departmentChart.labels.length > 0) {
+        var chartSection = ClientUtils.el('div', { className: 'card mb-lg' });
+        chartSection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+          ClientUtils.el('h3', { className: 'card__title' }, ['Visits by Department (Avg per Teacher)'])
+        ]));
+        var chartDiv = ClientUtils.el('div', { className: 'chart-container' });
+        var canvas = ClientUtils.el('canvas');
+        chartDiv.appendChild(canvas);
+        chartSection.appendChild(chartDiv);
+        viewContainer.appendChild(chartSection);
+
+        new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: data.departmentChart.labels,
+            datasets: [{
+              label: 'Avg Visits per Teacher',
+              data: data.departmentChart.data,
+              backgroundColor: 'rgba(37, 99, 235, 0.7)',
+              borderRadius: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, title: { display: true, text: 'Avg Visits' } }
+            }
+          }
+        });
+      }
+    }
+
+    function buildFilterBar(data) {
+      var bar = ClientUtils.el('div', { className: 'filter-bar' });
+
+      // Department filter
+      var deptGroup = ClientUtils.el('div', { className: 'form-group' });
+      deptGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Department']));
+      var deptSelect = ClientUtils.el('select', { className: 'form-select' });
+      deptSelect.appendChild(ClientUtils.el('option', { value: '' }, ['All Departments']));
+      // Extract unique departments from heat map
+      var depts = {};
+      (data.heatMap || []).forEach(function(h) { depts[h.teacher.department] = true; });
+      Object.keys(depts).sort().forEach(function(d) {
+        deptSelect.appendChild(ClientUtils.el('option', { value: d }, [d]));
+      });
+      deptGroup.appendChild(deptSelect);
+      bar.appendChild(deptGroup);
+
+      // Apply filters button
+      var applyBtn = ClientUtils.el('button', {
+        className: 'btn btn-primary',
+        style: 'align-self: flex-end;',
+        onClick: function() {
+          var filters = {};
+          if (deptSelect.value) filters.department = deptSelect.value;
+          LoadingSpinner.show(viewContainer);
+          ServerAPI.getObservationDashboard(filters).then(function(newData) {
+            LoadingSpinner.hide(viewContainer);
+            state.dashboardData = newData;
+            buildDashboardDOM(newData);
+          }).catch(function(e) {
+            LoadingSpinner.hide(viewContainer);
+            Toast.error('Filter failed: ' + e.message);
+          });
+        }
+      }, ['Apply']);
+      bar.appendChild(applyBtn);
+
+      return bar;
+    }
+
+    function buildHeatMap(heatMapData) {
+      var wrapper = ClientUtils.el('div', { className: 'heatmap' });
+      var table = ClientUtils.el('table', { className: 'heatmap-table' });
+
+      // Header row: blank + week dates
+      var thead = ClientUtils.el('thead');
+      var headerRow = ClientUtils.el('tr');
+      headerRow.appendChild(ClientUtils.el('th', { className: 'heatmap-name' }, ['']));
+
+      if (heatMapData.length > 0 && heatMapData[0].weeks) {
+        heatMapData[0].weeks.forEach(function(w) {
+          var label = w.weekStart.slice(5); // MM-DD
+          headerRow.appendChild(ClientUtils.el('th', {}, [label]));
+        });
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      // Body rows: teacher name + cells
+      var tbody = ClientUtils.el('tbody');
+      var currentDept = '';
+      heatMapData.forEach(function(row) {
+        // Department separator
+        if (row.teacher.department !== currentDept) {
+          currentDept = row.teacher.department;
+          var sepRow = ClientUtils.el('tr');
+          var sepCell = ClientUtils.el('td', {
+            colspan: String((row.weeks ? row.weeks.length : 0) + 1),
+            style: 'padding: var(--space-xs) 0; font-weight: 600; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: none;'
+          }, [currentDept]);
+          sepRow.appendChild(sepCell);
+          tbody.appendChild(sepRow);
+        }
+
+        var tr = ClientUtils.el('tr');
+        tr.appendChild(ClientUtils.el('td', { className: 'heatmap-name' }, [row.teacher.name]));
+
+        (row.weeks || []).forEach(function(w) {
+          var cell = ClientUtils.el('td', { style: 'padding: 1px;' });
+          var dot = ClientUtils.el('div', {
+            className: 'heatmap-cell ' + w.status,
+            title: row.teacher.name + ' — Week of ' + w.weekStart + (w.count > 0 ? ' (' + w.count + ' visit' + (w.count > 1 ? 's' : '') + ')' : ''),
+            onClick: function() {
+              switchView('history', { teacherId: row.teacher.id });
+            }
+          });
+          cell.appendChild(dot);
+          tr.appendChild(cell);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      wrapper.appendChild(table);
+      return wrapper;
+    }
+
+    // ═══════════════════════════════════════════════
+    // Sub-view 2: New Observation (Entry Form)
+    // ═══════════════════════════════════════════════
+
+    function renderEntryForm(opts) {
+      opts = opts || {};
+      var config = App.getConfig() || {};
+
+      var form = ClientUtils.el('div', { className: 'obs-form' });
+      form.appendChild(ClientUtils.el('h2', { style: 'margin-bottom: var(--space-lg); font-size: var(--font-size-xl); font-weight: 600;' }, ['New Observation']));
+
+      // Teacher selector
+      var teacherGroup = ClientUtils.el('div', { className: 'form-group' });
+      teacherGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Teacher']));
+      var teacherContainer = ClientUtils.el('div');
+      teacherGroup.appendChild(teacherContainer);
+      form.appendChild(teacherGroup);
+
+      var staffSelector = StaffSelector.render(teacherContainer, {
+        name: 'teacher_id',
+        selectedId: opts.teacherId || '',
+        placeholder: 'Select teacher...',
+        onSelect: function(s) {
+          // Auto-populate course/room from timetable
+          autoFillFromTimetable(s.id);
+        }
+      });
+
+      // Type selector
+      var typeGroup = ClientUtils.el('div', { className: 'form-group' });
+      typeGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Observation Type']));
+      var typeSelect = ClientUtils.el('select', { className: 'form-select', name: 'observation_type' });
+      [
+        { value: 'learning_walk', label: 'Learning Walk' },
+        { value: 'formal',       label: 'Formal Observation' },
+        { value: 'informal',     label: 'Informal Visit' },
+        { value: 'peer',         label: 'Peer Observation' }
+      ].forEach(function(opt) {
+        typeSelect.appendChild(ClientUtils.el('option', { value: opt.value }, [opt.label]));
+      });
+      typeSelect.addEventListener('change', function() {
+        var defaults = { learning_walk: 15, formal: 45, informal: 25, peer: 30 };
+        durationInput.value = defaults[typeSelect.value] || 15;
+      });
+      typeGroup.appendChild(typeSelect);
+      form.appendChild(typeGroup);
+
+      // Duration
+      var durGroup = ClientUtils.el('div', { className: 'form-group' });
+      durGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Duration (minutes)']));
+      var durationInput = ClientUtils.el('input', {
+        type: 'number', className: 'form-input', name: 'duration_minutes', value: '15', min: '1', max: '120'
+      });
+      durGroup.appendChild(durationInput);
+      form.appendChild(durGroup);
+
+      // Course & Room (side by side)
+      var courseRoomRow = ClientUtils.el('div', { className: 'flex gap-md' });
+
+      var courseGroup = ClientUtils.el('div', { className: 'form-group', style: 'flex:1;' });
+      courseGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Course']));
+      var courseInput = ClientUtils.el('input', {
+        type: 'text', className: 'form-input', name: 'course_observed',
+        value: opts.courseName || '', placeholder: 'e.g. Biology 10'
+      });
+      courseGroup.appendChild(courseInput);
+      courseRoomRow.appendChild(courseGroup);
+
+      var roomGroup = ClientUtils.el('div', { className: 'form-group', style: 'flex:1;' });
+      roomGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Room']));
+      var roomInput = ClientUtils.el('input', {
+        type: 'text', className: 'form-input', name: 'room',
+        value: opts.room || '', placeholder: 'e.g. A101'
+      });
+      roomGroup.appendChild(roomInput);
+      courseRoomRow.appendChild(roomGroup);
+      form.appendChild(courseRoomRow);
+
+      // Rating scales
+      var ratingDimensions = parseRatingDimensions(config.rating_dimensions);
+      var ratingsSection = ClientUtils.el('div', { className: 'obs-form__ratings mt-md' });
+      var ratingHandles = {};
+
+      ratingDimensions.forEach(function(dim) {
+        var group = ClientUtils.el('div', { className: 'obs-form__rating-group' });
+        group.appendChild(ClientUtils.el('label', {}, [dim.label]));
+        var ratingContainer = ClientUtils.el('div');
+        group.appendChild(ratingContainer);
+        ratingsSection.appendChild(group);
+
+        ratingHandles[dim.key] = RatingScale.render(ratingContainer, {
+          name: dim.key,
+          max: 5
+        });
+      });
+      form.appendChild(ratingsSection);
+
+      // Tags
+      var tagsGroup = ClientUtils.el('div', { className: 'form-group mt-md' });
+      tagsGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Focus Areas']));
+      var tagsContainer = ClientUtils.el('div');
+      tagsGroup.appendChild(tagsContainer);
+      form.appendChild(tagsGroup);
+
+      var predefinedTags = config.predefined_tags ? config.predefined_tags.split(',').map(function(t) { return t.trim(); }) : [];
+      var tagChips = TagChips.render(tagsContainer, { tags: predefinedTags });
+
+      // Multiplier Effect Ratings (collapsible, config-gated)
+      var multiplierEnabled = config.multiplier_ratings_enabled !== 'false';
+      var multiplierSection = ClientUtils.el('div', { className: 'obs-form__multiplier mt-md', style: multiplierEnabled ? '' : 'display:none' });
+      var multiplierToggle = ClientUtils.el('button', {
+        type: 'button',
+        className: 'btn btn-ghost btn-sm',
+        style: 'display:flex;align-items:center;gap:6px;margin-bottom:var(--space-sm)',
+        onClick: function() {
+          var body = document.getElementById('multiplier-body');
+          var isHidden = body.style.display === 'none';
+          body.style.display = isHidden ? 'block' : 'none';
+          multiplierToggle.textContent = (isHidden ? '\u25BC' : '\u25B6') + ' Multiplier Effect Ratings (optional)';
+        }
+      }, ['\u25B6 Multiplier Effect Ratings (optional)']);
+      multiplierSection.appendChild(multiplierToggle);
+
+      var multiplierBody = ClientUtils.el('div', { id: 'multiplier-body', style: 'display:none' });
+      multiplierBody.appendChild(ClientUtils.el('p', { className: 'text-sm text-muted', style: 'margin-bottom:var(--space-sm)' }, [
+        'Rate the observed multiplier behaviors (1=Diminisher, 3=Neutral, 5=Strong Multiplier)'
+      ]));
+
+      var multiplierDisciplines = [
+        { key: 'multiplier_talent_finder', label: 'Talent Finder', desc: 'Identifies and develops people\'s natural strengths' },
+        { key: 'multiplier_liberator', label: 'Liberator', desc: 'Creates space for people to think and contribute' },
+        { key: 'multiplier_challenger', label: 'Challenger', desc: 'Extends challenges that stretch people beyond their comfort zone' },
+        { key: 'multiplier_debate_maker', label: 'Debate Maker', desc: 'Drives rigorous debate before making decisions' },
+        { key: 'multiplier_investor', label: 'Investor', desc: 'Gives people ownership and invests in their growth' }
+      ];
+
+      var multiplierHandles = {};
+      multiplierDisciplines.forEach(function(disc) {
+        var group = ClientUtils.el('div', { className: 'obs-form__rating-group' });
+        group.appendChild(ClientUtils.el('label', {}, [disc.label]));
+        group.appendChild(ClientUtils.el('span', { className: 'text-sm text-muted', style: 'display:block;margin-bottom:4px' }, [disc.desc]));
+        var ratingContainer = ClientUtils.el('div');
+        group.appendChild(ratingContainer);
+        multiplierBody.appendChild(group);
+        multiplierHandles[disc.key] = RatingScale.render(ratingContainer, { name: disc.key, max: 5 });
+      });
+
+      multiplierSection.appendChild(multiplierBody);
+      form.appendChild(multiplierSection);
+
+      // Notes
+      var notesGroup = ClientUtils.el('div', { className: 'form-group' });
+      notesGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Notes']));
+      var notesInput = ClientUtils.el('textarea', { className: 'form-textarea', name: 'notes', placeholder: 'General observations...' });
+      notesGroup.appendChild(notesInput);
+      form.appendChild(notesGroup);
+
+      // Commendations
+      var commGroup = ClientUtils.el('div', { className: 'form-group' });
+      commGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Commendations']));
+      var commInput = ClientUtils.el('textarea', { className: 'form-textarea', name: 'commendations', placeholder: 'What went well...' });
+      commGroup.appendChild(commInput);
+      form.appendChild(commGroup);
+
+      // Recommendations
+      var recGroup = ClientUtils.el('div', { className: 'form-group' });
+      recGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Recommendations']));
+      var recInput = ClientUtils.el('textarea', { className: 'form-textarea', name: 'recommendations', placeholder: 'Areas for growth...' });
+      recGroup.appendChild(recInput);
+      form.appendChild(recGroup);
+
+      // Follow-up toggle
+      var followUpGroup = ClientUtils.el('div', { className: 'form-group' });
+      var followUpLabel = ClientUtils.el('label', { className: 'obs-form__toggle' });
+      var followUpCheck = ClientUtils.el('input', { type: 'checkbox', name: 'follow_up_needed' });
+      followUpLabel.appendChild(followUpCheck);
+      followUpLabel.appendChild(document.createTextNode('Follow-up needed'));
+      followUpGroup.appendChild(followUpLabel);
+
+      var followUpDateGroup = ClientUtils.el('div', { className: 'form-group hidden', id: 'follow-up-date-group' });
+      followUpDateGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Follow-up Date']));
+      var followUpDateInput = ClientUtils.el('input', { type: 'date', className: 'form-input', name: 'follow_up_date' });
+      followUpDateGroup.appendChild(followUpDateInput);
+
+      followUpCheck.addEventListener('change', function() {
+        followUpDateGroup.classList.toggle('hidden', !followUpCheck.checked);
+      });
+      followUpGroup.appendChild(followUpDateGroup);
+      form.appendChild(followUpGroup);
+
+      // Share with teacher
+      var shareGroup = ClientUtils.el('div', { className: 'form-group' });
+      var shareLabel = ClientUtils.el('label', { className: 'obs-form__toggle' });
+      var shareCheck = ClientUtils.el('input', { type: 'checkbox', name: 'shared_with_teacher' });
+      shareLabel.appendChild(shareCheck);
+      shareLabel.appendChild(document.createTextNode('Share with teacher'));
+      shareGroup.appendChild(shareLabel);
+      form.appendChild(shareGroup);
+
+      // Submit button
+      var submitBtn = ClientUtils.el('button', {
+        className: 'btn btn-primary btn-lg mt-md',
+        onClick: function() { submitObservation(); }
+      }, ['Save Observation']);
+      form.appendChild(submitBtn);
+
+      viewContainer.appendChild(form);
+
+      // ── Auto-fill from timetable ──
+      function autoFillFromTimetable(teacherId) {
+        var todayCode = ClientUtils.todayCode();
+        var period = ClientUtils.currentPeriod(config.period_times);
+        if (!period || todayCode === 'SAT' || todayCode === 'SUN') return;
+
+        ServerAPI.getDropInData(todayCode, period).then(function(entries) {
+          var match = entries.find(function(e) { return e.staffId === teacherId; });
+          if (match) {
+            courseInput.value = match.courseName || '';
+            roomInput.value = match.room || '';
+          }
+        }).catch(function() { /* silent */ });
+      }
+
+      // ── Submit ──
+      function submitObservation() {
+        var teacherId = staffSelector.getValue();
+        if (!teacherId) {
+          Toast.error('Please select a teacher.');
+          return;
+        }
+
+        var data = {
+          teacher_id: teacherId,
+          observation_type: typeSelect.value,
+          duration_minutes: parseInt(durationInput.value) || 15,
+          course_observed: courseInput.value,
+          room: roomInput.value,
+          student_engagement_rating: ratingHandles.student_engagement_rating ? ratingHandles.student_engagement_rating.getValue() : 0,
+          instructional_strategy_rating: ratingHandles.instructional_strategy_rating ? ratingHandles.instructional_strategy_rating.getValue() : 0,
+          environment_rating: ratingHandles.environment_rating ? ratingHandles.environment_rating.getValue() : 0,
+          multiplier_talent_finder: multiplierHandles.multiplier_talent_finder ? multiplierHandles.multiplier_talent_finder.getValue() : 0,
+          multiplier_liberator: multiplierHandles.multiplier_liberator ? multiplierHandles.multiplier_liberator.getValue() : 0,
+          multiplier_challenger: multiplierHandles.multiplier_challenger ? multiplierHandles.multiplier_challenger.getValue() : 0,
+          multiplier_debate_maker: multiplierHandles.multiplier_debate_maker ? multiplierHandles.multiplier_debate_maker.getValue() : 0,
+          multiplier_investor: multiplierHandles.multiplier_investor ? multiplierHandles.multiplier_investor.getValue() : 0,
+          tags: tagChips.getSelected().join(', '),
+          notes: notesInput.value,
+          commendations: commInput.value,
+          recommendations: recInput.value,
+          follow_up_needed: followUpCheck.checked,
+          follow_up_date: followUpCheck.checked ? followUpDateInput.value : '',
+          shared_with_teacher: shareCheck.checked
+        };
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving...';
+
+        ServerAPI.createObservation(data).then(function() {
+          Toast.success('Observation saved successfully.');
+          switchView('dashboard');
+        }).catch(function(e) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save Observation';
+          Toast.error('Save failed: ' + e.message);
+        });
+      }
+    }
+
+    function parseRatingDimensions(configStr) {
+      if (!configStr) {
+        return [
+          { key: 'student_engagement_rating', label: 'Student Engagement' },
+          { key: 'instructional_strategy_rating', label: 'Instructional Strategy' },
+          { key: 'environment_rating', label: 'Learning Environment' }
+        ];
+      }
+      var labels = configStr.split(',').map(function(s) { return s.trim(); });
+      var keys = ['student_engagement_rating', 'instructional_strategy_rating', 'environment_rating'];
+      return labels.map(function(label, i) {
+        return { key: keys[i] || ('rating_' + i), label: label };
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // Sub-view 3: Drop-in Planner
+    // ═══════════════════════════════════════════════
+
+    function renderDropInPlanner() {
+      var config = App.getConfig() || {};
+      var periodsPerDay = parseInt(config.periods_per_day) || 8;
+
+      var planner = ClientUtils.el('div');
+      planner.appendChild(ClientUtils.el('h2', { style: 'margin-bottom: var(--space-lg); font-size: var(--font-size-xl); font-weight: 600;' }, ['Drop-in Planner']));
+
+      var todayCode = ClientUtils.todayCode();
+      var currentPeriod = ClientUtils.currentPeriod(config.period_times);
+      var selectedDay = (todayCode === 'SAT' || todayCode === 'SUN') ? 'MON' : todayCode;
+      var selectedPeriod = currentPeriod || 1;
+
+      // "Right Now" button
+      var rightNowBtn = ClientUtils.el('button', {
+        className: 'btn btn-primary mb-md',
+        onClick: function() {
+          var tc = ClientUtils.todayCode();
+          var cp = ClientUtils.currentPeriod(config.period_times);
+          if (tc === 'SAT' || tc === 'SUN' || !cp) {
+            Toast.info('Outside school hours — select manually.');
+            return;
+          }
+          selectedDay = tc;
+          selectedPeriod = cp;
+          renderSelectors();
+          loadDropInData();
+        }
+      }, ['Right Now']);
+      planner.appendChild(rightNowBtn);
+
+      // Day selector
+      var dayLabel = ClientUtils.el('label', { className: 'form-label' }, ['Day']);
+      planner.appendChild(dayLabel);
+      var daySelector = ClientUtils.el('div', { className: 'period-selector mb-md' });
+      planner.appendChild(daySelector);
+
+      // Period selector
+      var periodLabel = ClientUtils.el('label', { className: 'form-label' }, ['Period']);
+      planner.appendChild(periodLabel);
+      var periodSelector = ClientUtils.el('div', { className: 'period-selector mb-lg' });
+      planner.appendChild(periodSelector);
+
+      // Results area
+      var resultsContainer = ClientUtils.el('div', { className: 'relative' });
+      planner.appendChild(resultsContainer);
+
+      viewContainer.appendChild(planner);
+
+      function renderSelectors() {
+        var days = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+        daySelector.innerHTML = '';
+        days.forEach(function(d) {
+          var isCurrent = d === todayCode;
+          var cls = 'period-btn' + (d === selectedDay ? ' active' : '') + (isCurrent ? ' current' : '');
+          daySelector.appendChild(ClientUtils.el('button', {
+            className: cls,
+            onClick: function() { selectedDay = d; renderSelectors(); loadDropInData(); }
+          }, [d]));
+        });
+
+        periodSelector.innerHTML = '';
+        for (var p = 1; p <= periodsPerDay; p++) {
+          (function(period) {
+            var isCurrent = period === currentPeriod && selectedDay === todayCode;
+            var cls = 'period-btn' + (period === selectedPeriod ? ' active' : '') + (isCurrent ? ' current' : '');
+            periodSelector.appendChild(ClientUtils.el('button', {
+              className: cls,
+              onClick: function() { selectedPeriod = period; renderSelectors(); loadDropInData(); }
+            }, [String(period)]));
+          })(p);
+        }
+      }
+
+      function loadDropInData() {
+        LoadingSpinner.show(resultsContainer);
+        ServerAPI.getDropInData(selectedDay, selectedPeriod).then(function(entries) {
+          LoadingSpinner.hide(resultsContainer);
+          resultsContainer.innerHTML = '';
+
+          if (!entries || entries.length === 0) {
+            resultsContainer.innerHTML = '<div class="empty-state"><div class="empty-state__text">No teachers scheduled</div><div class="empty-state__sub">No classes found for ' + selectedDay + ' Period ' + selectedPeriod + '</div></div>';
+            return;
+          }
+
+          var config = App.getConfig() || {};
+          var overdueDays = (parseInt(config.observation_overdue_weeks) || 5) * 7;
+          var freqDays = (parseInt(config.observation_frequency_weeks) || 3) * 7;
+
+          DataTable.render(resultsContainer, {
+            columns: [
+              { key: 'teacherName', label: 'Teacher' },
+              { key: 'department', label: 'Department' },
+              { key: 'courseName', label: 'Course' },
+              { key: 'room', label: 'Room' },
+              { key: 'daysSinceLastVisit', label: 'Days Since Visit', render: function(val) {
+                var cls = val > overdueDays ? 'badge-danger' : (val > freqDays ? 'badge-warning' : 'badge-success');
+                return '<span class="badge ' + cls + '">' + (val >= 999 ? 'Never' : val + 'd') + '</span>';
+              }},
+              { key: '_action', label: '', sortable: false, render: function(_, row) {
+                return ClientUtils.el('button', {
+                  className: 'btn btn-sm btn-primary',
+                  onClick: function(e) {
+                    e.stopPropagation();
+                    switchView('entry', {
+                      teacherId: row.staffId,
+                      courseName: row.courseName,
+                      room: row.room
+                    });
+                  }
+                }, ['Observe']);
+              }}
+            ],
+            data: entries
+          });
+        }).catch(function(e) {
+          LoadingSpinner.hide(resultsContainer);
+          resultsContainer.innerHTML = '<div class="empty-state"><div class="empty-state__sub">' + ClientUtils.escapeHtml(e.message) + '</div></div>';
+        });
+      }
+
+      renderSelectors();
+      loadDropInData();
+    }
+
+    // ═══════════════════════════════════════════════
+    // Sub-view 4: Schedule
+    // ═══════════════════════════════════════════════
+
+    function renderScheduleView() {
+      var scheduleDiv = ClientUtils.el('div');
+      scheduleDiv.appendChild(ClientUtils.el('h2', { style: 'margin-bottom: var(--space-lg); font-size: var(--font-size-xl); font-weight: 600;' }, ['Observation Schedule']));
+
+      // Upcoming table
+      var upcomingSection = ClientUtils.el('div', { className: 'card mb-lg' });
+      upcomingSection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+        ClientUtils.el('h3', { className: 'card__title' }, ['Upcoming Observations'])
+      ]));
+      var tableContainer = ClientUtils.el('div', { className: 'relative' });
+      upcomingSection.appendChild(tableContainer);
+      scheduleDiv.appendChild(upcomingSection);
+
+      // Schedule form
+      var formSection = ClientUtils.el('div', { className: 'card' });
+      formSection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+        ClientUtils.el('h3', { className: 'card__title' }, ['Schedule New Observation'])
+      ]));
+      var formContent = ClientUtils.el('div', { className: 'obs-form' });
+      formSection.appendChild(formContent);
+      scheduleDiv.appendChild(formSection);
+
+      viewContainer.appendChild(scheduleDiv);
+
+      // Load schedule
+      loadSchedule();
+
+      function loadSchedule() {
+        LoadingSpinner.show(tableContainer);
+        ServerAPI.getObservationSchedule().then(function(result) {
+          LoadingSpinner.hide(tableContainer);
+          var data = result.data || result;
+
+          // Hydrate teacher names
+          var staffList = StaffSelector._cache || [];
+
+          DataTable.render(tableContainer, {
+            columns: [
+              { key: 'planned_date', label: 'Date', render: function(val) {
+                return ClientUtils.formatDate(val);
+              }},
+              { key: 'planned_period', label: 'Period' },
+              { key: 'teacher_id', label: 'Teacher', render: function(val) {
+                return ClientUtils.escapeHtml(val ? val.substring(0, 8) + '...' : '-');
+              }},
+              { key: 'observation_type', label: 'Type', render: function(val) {
+                return StatusBadge.html(val || 'learning_walk');
+              }},
+              { key: 'status', label: 'Status', render: function(val) {
+                return StatusBadge.html(val || 'scheduled');
+              }}
+            ],
+            data: Array.isArray(data) ? data : [],
+            pageSize: 10
+          });
+        }).catch(function(e) {
+          LoadingSpinner.hide(tableContainer);
+          tableContainer.innerHTML = '<div class="empty-state"><div class="empty-state__sub">' + ClientUtils.escapeHtml(e.message) + '</div></div>';
+        });
+      }
+
+      // Build schedule form
+      buildScheduleForm(formContent, loadSchedule);
+    }
+
+    function buildScheduleForm(container, onSuccess) {
+      container.innerHTML = '';
+      var config = App.getConfig() || {};
+      var periodsPerDay = parseInt(config.periods_per_day) || 8;
+
+      // Teacher
+      var teacherGroup = ClientUtils.el('div', { className: 'form-group' });
+      teacherGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Teacher']));
+      var teacherContainer = ClientUtils.el('div');
+      teacherGroup.appendChild(teacherContainer);
+      container.appendChild(teacherGroup);
+      var staffSel = StaffSelector.render(teacherContainer, { name: 'teacher_id', placeholder: 'Select teacher...' });
+
+      // Date
+      var dateGroup = ClientUtils.el('div', { className: 'form-group' });
+      dateGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Date']));
+      var dateInput = ClientUtils.el('input', { type: 'date', className: 'form-input', name: 'planned_date' });
+      dateGroup.appendChild(dateInput);
+      container.appendChild(dateGroup);
+
+      // Period
+      var periodGroup = ClientUtils.el('div', { className: 'form-group' });
+      periodGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Period']));
+      var periodSelect = ClientUtils.el('select', { className: 'form-select', name: 'planned_period' });
+      periodSelect.appendChild(ClientUtils.el('option', { value: '' }, ['Any']));
+      for (var p = 1; p <= periodsPerDay; p++) {
+        periodSelect.appendChild(ClientUtils.el('option', { value: String(p) }, ['Period ' + p]));
+      }
+      periodGroup.appendChild(periodSelect);
+      container.appendChild(periodGroup);
+
+      // Type
+      var typeGroup = ClientUtils.el('div', { className: 'form-group' });
+      typeGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Type']));
+      var typeSelect = ClientUtils.el('select', { className: 'form-select', name: 'observation_type' });
+      ['learning_walk', 'formal', 'informal', 'peer'].forEach(function(t) {
+        typeSelect.appendChild(ClientUtils.el('option', { value: t }, [t.replace(/_/g, ' ')]));
+      });
+      typeGroup.appendChild(typeSelect);
+      container.appendChild(typeGroup);
+
+      // Notify checkbox
+      var notifyGroup = ClientUtils.el('div', { className: 'form-group' });
+      var notifyLabel = ClientUtils.el('label', { className: 'obs-form__toggle' });
+      var notifyCheck = ClientUtils.el('input', { type: 'checkbox', name: 'notify' });
+      notifyLabel.appendChild(notifyCheck);
+      notifyLabel.appendChild(document.createTextNode('Email notification to teacher'));
+      notifyGroup.appendChild(notifyLabel);
+      container.appendChild(notifyGroup);
+
+      // Submit
+      var submitBtn = ClientUtils.el('button', {
+        className: 'btn btn-primary mt-sm',
+        onClick: function() {
+          var teacherId = staffSel.getValue();
+          if (!teacherId) { Toast.error('Please select a teacher.'); return; }
+          if (!dateInput.value) { Toast.error('Please select a date.'); return; }
+
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Scheduling...';
+
+          ServerAPI.scheduleObservation({
+            teacher_id: teacherId,
+            planned_date: dateInput.value,
+            planned_period: periodSelect.value,
+            observation_type: typeSelect.value,
+            notify: notifyCheck.checked
+          }).then(function() {
+            Toast.success('Observation scheduled.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Schedule';
+            onSuccess();
+          }).catch(function(e) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Schedule';
+            Toast.error('Schedule failed: ' + e.message);
+          });
+        }
+      }, ['Schedule']);
+      container.appendChild(submitBtn);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Sub-view 5: Teacher History
+    // ═══════════════════════════════════════════════
+
+    function renderTeacherHistory(opts) {
+      opts = opts || {};
+      var historyDiv = ClientUtils.el('div');
+      historyDiv.appendChild(ClientUtils.el('h2', { style: 'margin-bottom: var(--space-lg); font-size: var(--font-size-xl); font-weight: 600;' }, ['Teacher History']));
+
+      // Teacher selector
+      var selectorGroup = ClientUtils.el('div', { className: 'form-group', style: 'max-width: 400px;' });
+      selectorGroup.appendChild(ClientUtils.el('label', { className: 'form-label' }, ['Select Teacher']));
+      var selectorContainer = ClientUtils.el('div');
+      selectorGroup.appendChild(selectorContainer);
+      historyDiv.appendChild(selectorGroup);
+
+      var contentArea = ClientUtils.el('div', { className: 'relative' });
+      historyDiv.appendChild(contentArea);
+      viewContainer.appendChild(historyDiv);
+
+      StaffSelector.render(selectorContainer, {
+        name: 'history_teacher',
+        selectedId: opts.teacherId || '',
+        placeholder: 'Search teacher...',
+        onSelect: function(s) { loadTeacherHistory(s.id, contentArea); }
+      });
+
+      // Auto-load if teacher pre-selected
+      if (opts.teacherId) {
+        loadTeacherHistory(opts.teacherId, contentArea);
+      }
+    }
+
+    function loadTeacherHistory(teacherId, container) {
+      LoadingSpinner.show(container);
+      ServerAPI.getTeacherHistory(teacherId).then(function(data) {
+        LoadingSpinner.hide(container);
+        container.innerHTML = '';
+        buildTeacherHistoryDOM(data, container);
+      }).catch(function(e) {
+        LoadingSpinner.hide(container);
+        container.innerHTML = '<div class="empty-state"><div class="empty-state__sub">' + ClientUtils.escapeHtml(e.message) + '</div></div>';
+      });
+    }
+
+    function buildTeacherHistoryDOM(data, container) {
+      // Teacher header
+      container.appendChild(ClientUtils.el('h3', { style: 'margin-bottom: var(--space-sm);' }, [data.teacher.name]));
+      container.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm mb-lg' }, [data.teacher.department]));
+
+      // Summary stats
+      var statsGrid = ClientUtils.el('div', { className: 'stats-grid' });
+      [
+        { label: 'Total Observations', value: data.summary.totalObservations },
+        { label: 'Avg Engagement', value: data.summary.avgEngagement },
+        { label: 'Avg Strategy', value: data.summary.avgStrategy },
+        { label: 'Avg Environment', value: data.summary.avgEnvironment }
+      ].forEach(function(s) {
+        statsGrid.appendChild(ClientUtils.el('div', { className: 'stat-card' }, [
+          ClientUtils.el('div', { className: 'stat-card__label' }, [s.label]),
+          ClientUtils.el('div', { className: 'stat-card__value' }, [String(s.value)])
+        ]));
+      });
+      container.appendChild(statsGrid);
+
+      // Rating trends chart
+      if (data.ratingTrends && data.ratingTrends.labels.length > 1) {
+        var trendSection = ClientUtils.el('div', { className: 'card mb-lg' });
+        trendSection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+          ClientUtils.el('h3', { className: 'card__title' }, ['Rating Trends'])
+        ]));
+        var chartDiv = ClientUtils.el('div', { className: 'chart-container' });
+        var canvas = ClientUtils.el('canvas');
+        chartDiv.appendChild(canvas);
+        trendSection.appendChild(chartDiv);
+        container.appendChild(trendSection);
+
+        new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: data.ratingTrends.labels,
+            datasets: [
+              { label: 'Engagement', data: data.ratingTrends.engagement, borderColor: '#2563eb', tension: 0.3, fill: false },
+              { label: 'Strategy', data: data.ratingTrends.strategy, borderColor: '#16a34a', tension: 0.3, fill: false },
+              { label: 'Environment', data: data.ratingTrends.environment, borderColor: '#d97706', tension: 0.3, fill: false }
+            ]
+          },
+          options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 1 } } },
+            plugins: { legend: { position: 'bottom' } }
+          }
+        });
+      }
+
+      // Tag frequency chart
+      if (data.tagFrequency && data.tagFrequency.labels.length > 0) {
+        var tagSection = ClientUtils.el('div', { className: 'card mb-lg' });
+        tagSection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+          ClientUtils.el('h3', { className: 'card__title' }, ['Focus Area Frequency'])
+        ]));
+        var tagChartDiv = ClientUtils.el('div', { className: 'chart-container' });
+        var tagCanvas = ClientUtils.el('canvas');
+        tagChartDiv.appendChild(tagCanvas);
+        tagSection.appendChild(tagChartDiv);
+        container.appendChild(tagSection);
+
+        new Chart(tagCanvas, {
+          type: 'bar',
+          data: {
+            labels: data.tagFrequency.labels.map(function(t) { return t.replace(/_/g, ' '); }),
+            datasets: [{
+              label: 'Occurrences',
+              data: data.tagFrequency.data,
+              backgroundColor: 'rgba(37, 99, 235, 0.7)',
+              borderRadius: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            indexAxis: 'y',
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+          }
+        });
+      }
+
+      // Multiplier Effect radar chart
+      if (data.multiplierProfile) {
+        var multiplierSection = ClientUtils.el('div', { className: 'card mb-lg obs-multiplier-card' });
+        multiplierSection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+          ClientUtils.el('h3', { className: 'card__title' }, ['\uD83C\uDF1F Multiplier Effect Profile'])
+        ]));
+
+        var multiplierContent = ClientUtils.el('div', { className: 'obs-multiplier-content' });
+
+        // Radar chart
+        var radarWrap = ClientUtils.el('div', { className: 'obs-multiplier-chart' });
+        var radarCanvas = ClientUtils.el('canvas');
+        radarWrap.appendChild(radarCanvas);
+        multiplierContent.appendChild(radarWrap);
+
+        // Discipline breakdown list
+        var breakdownWrap = ClientUtils.el('div', { className: 'obs-multiplier-breakdown' });
+        var disciplineDescriptions = [
+          'Identifies and develops natural strengths',
+          'Creates space for thinking and contributing',
+          'Stretches people beyond their comfort zone',
+          'Drives rigorous debate before decisions',
+          'Gives ownership and invests in growth'
+        ];
+
+        data.multiplierProfile.labels.forEach(function(label, idx) {
+          var val = data.multiplierProfile.values[idx];
+          var count = data.multiplierProfile.counts[idx];
+          var row = ClientUtils.el('div', { className: 'obs-multiplier-row' });
+          row.appendChild(ClientUtils.el('div', { className: 'obs-multiplier-row__label' }, [label]));
+          row.appendChild(ClientUtils.el('div', { className: 'obs-multiplier-row__desc text-sm text-muted' }, [disciplineDescriptions[idx]]));
+
+          // Progress bar
+          var barOuter = ClientUtils.el('div', { className: 'obs-multiplier-bar' });
+          var barInner = ClientUtils.el('div', {
+            className: 'obs-multiplier-bar__fill',
+            style: 'width:' + (val / 5 * 100) + '%'
+          });
+          barOuter.appendChild(barInner);
+          row.appendChild(barOuter);
+
+          row.appendChild(ClientUtils.el('div', { className: 'obs-multiplier-row__value' }, [
+            val > 0 ? val + '/5' : '-'
+          ]));
+          row.appendChild(ClientUtils.el('div', { className: 'obs-multiplier-row__count text-sm text-muted' }, [
+            '(' + count + ' obs)'
+          ]));
+          breakdownWrap.appendChild(row);
+        });
+
+        multiplierContent.appendChild(breakdownWrap);
+        multiplierSection.appendChild(multiplierContent);
+        container.appendChild(multiplierSection);
+
+        // Render radar chart
+        new Chart(radarCanvas, {
+          type: 'radar',
+          data: {
+            labels: data.multiplierProfile.labels,
+            datasets: [{
+              label: 'Multiplier Profile',
+              data: data.multiplierProfile.values,
+              backgroundColor: 'rgba(124, 58, 237, 0.15)',
+              borderColor: 'rgba(124, 58, 237, 0.8)',
+              borderWidth: 2,
+              pointBackgroundColor: 'rgba(124, 58, 237, 1)',
+              pointRadius: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+              r: {
+                beginAtZero: true,
+                max: 5,
+                ticks: { stepSize: 1, display: true, backdropColor: 'transparent' },
+                grid: { color: 'rgba(0,0,0,0.08)' },
+                pointLabels: { font: { size: 12, weight: 'bold' } }
+              }
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) { return ctx.label + ': ' + ctx.raw + '/5'; }
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Observation timeline
+      var timelineSection = ClientUtils.el('div', { className: 'card' });
+      timelineSection.appendChild(ClientUtils.el('div', { className: 'card__header' }, [
+        ClientUtils.el('h3', { className: 'card__title' }, ['Observation Timeline'])
+      ]));
+
+      if (!data.observations || data.observations.length === 0) {
+        timelineSection.appendChild(ClientUtils.el('div', { className: 'empty-state' }, [
+          ClientUtils.el('div', { className: 'empty-state__text' }, ['No observations recorded'])
+        ]));
+      } else {
+        var timeline = ClientUtils.el('div');
+        data.observations.forEach(function(obs) {
+          timeline.appendChild(buildObsCard(obs));
+        });
+        timelineSection.appendChild(timeline);
+      }
+      container.appendChild(timelineSection);
+    }
+
+    function buildObsCard(obs) {
+      var card = ClientUtils.el('div', { className: 'obs-card', onClick: function() { showObsDetail(obs); } });
+
+      // Header: date, type badge, observer
+      var header = ClientUtils.el('div', { className: 'obs-card__header' });
+      header.appendChild(ClientUtils.el('span', { className: 'obs-card__date' }, [ClientUtils.formatDate(obs.date)]));
+      var typeBadge = ClientUtils.el('span');
+      typeBadge.innerHTML = StatusBadge.html(obs.type);
+      header.appendChild(typeBadge);
+      header.appendChild(ClientUtils.el('span', { className: 'obs-card__observer' }, [obs.observerName]));
+      card.appendChild(header);
+
+      // Ratings
+      var ratings = ClientUtils.el('div', { className: 'obs-card__ratings' });
+      [
+        { val: obs.engagement, label: 'E' },
+        { val: obs.strategy, label: 'S' },
+        { val: obs.environment, label: 'L' }
+      ].forEach(function(r) {
+        if (r.val) {
+          var dot = ClientUtils.el('div', {
+            className: 'obs-card__rating-dot',
+            title: r.label + ': ' + r.val + '/5',
+            style: 'background: var(--color-rating-' + r.val + ');'
+          }, [String(r.val)]);
+          ratings.appendChild(dot);
+        }
+      });
+      card.appendChild(ratings);
+
+      // Tags
+      if (obs.tags && obs.tags.length > 0) {
+        var tagsDiv = ClientUtils.el('div', { className: 'obs-card__tags' });
+        obs.tags.forEach(function(tag) {
+          tagsDiv.appendChild(ClientUtils.el('span', { className: 'obs-card__tag' }, [tag.replace(/_/g, ' ')]));
+        });
+        card.appendChild(tagsDiv);
+      }
+
+      // Notes (truncated)
+      if (obs.notes) {
+        card.appendChild(ClientUtils.el('div', { className: 'obs-card__notes' }, [obs.notes]));
+      }
+
+      return card;
+    }
+
+    function showObsDetail(obs) {
+      var body = ClientUtils.el('div');
+
+      // Ratings
+      var ratingsSection = ClientUtils.el('div', { className: 'obs-detail-section' });
+      ratingsSection.appendChild(ClientUtils.el('h4', {}, ['Ratings']));
+      var ratingsRow = ClientUtils.el('div', { className: 'obs-card__ratings', style: 'margin-bottom: 0;' });
+      [
+        { val: obs.engagement, label: 'Engagement' },
+        { val: obs.strategy, label: 'Strategy' },
+        { val: obs.environment, label: 'Environment' }
+      ].forEach(function(r) {
+        if (r.val) {
+          var dot = ClientUtils.el('div', {
+            className: 'obs-card__rating-dot',
+            style: 'background: var(--color-rating-' + r.val + ');',
+            title: r.label
+          }, [String(r.val)]);
+          ratingsRow.appendChild(dot);
+          ratingsRow.appendChild(ClientUtils.el('span', { className: 'text-sm', style: 'margin-right: var(--space-md);' }, [r.label]));
+        }
+      });
+      ratingsSection.appendChild(ratingsRow);
+      body.appendChild(ratingsSection);
+
+      // Multiplier ratings (if any exist)
+      var hasMultiplier = obs.multiplierTalentFinder || obs.multiplierLiberator || obs.multiplierChallenger || obs.multiplierDebateMaker || obs.multiplierInvestor;
+      if (hasMultiplier) {
+        var multiplierSection = ClientUtils.el('div', { className: 'obs-detail-section' });
+        multiplierSection.appendChild(ClientUtils.el('h4', {}, ['Multiplier Ratings']));
+        var mRatings = ClientUtils.el('div', { className: 'obs-card__ratings', style: 'margin-bottom: 0; flex-wrap: wrap;' });
+        [
+          { val: obs.multiplierTalentFinder, label: 'Talent Finder' },
+          { val: obs.multiplierLiberator, label: 'Liberator' },
+          { val: obs.multiplierChallenger, label: 'Challenger' },
+          { val: obs.multiplierDebateMaker, label: 'Debate Maker' },
+          { val: obs.multiplierInvestor, label: 'Investor' }
+        ].forEach(function(r) {
+          if (r.val) {
+            var dot = ClientUtils.el('div', {
+              className: 'obs-card__rating-dot',
+              style: 'background: var(--color-rating-' + r.val + ');',
+              title: r.label
+            }, [String(r.val)]);
+            mRatings.appendChild(dot);
+            mRatings.appendChild(ClientUtils.el('span', { className: 'text-sm', style: 'margin-right: var(--space-md);' }, [r.label]));
+          }
+        });
+        multiplierSection.appendChild(mRatings);
+        body.appendChild(multiplierSection);
+      }
+
+      // Info
+      var infoSection = ClientUtils.el('div', { className: 'obs-detail-section' });
+      infoSection.appendChild(ClientUtils.el('h4', {}, ['Details']));
+      var infoText = 'Observer: ' + obs.observerName + '\n' +
+        'Type: ' + (obs.type || '').replace(/_/g, ' ') + '\n' +
+        'Duration: ' + (obs.duration || '-') + ' min\n' +
+        'Course: ' + (obs.course || '-') + '\n' +
+        'Room: ' + (obs.room || '-');
+      var infoPre = ClientUtils.el('p', { style: 'white-space: pre-line;' }, [infoText]);
+      infoSection.appendChild(infoPre);
+      body.appendChild(infoSection);
+
+      // Tags
+      if (obs.tags && obs.tags.length > 0) {
+        var tagsSection = ClientUtils.el('div', { className: 'obs-detail-section' });
+        tagsSection.appendChild(ClientUtils.el('h4', {}, ['Focus Areas']));
+        var tagsDiv = ClientUtils.el('div', { className: 'obs-card__tags' });
+        obs.tags.forEach(function(tag) {
+          tagsDiv.appendChild(ClientUtils.el('span', { className: 'obs-card__tag' }, [tag.replace(/_/g, ' ')]));
+        });
+        tagsSection.appendChild(tagsDiv);
+        body.appendChild(tagsSection);
+      }
+
+      // Notes
+      if (obs.notes) {
+        var notesSection = ClientUtils.el('div', { className: 'obs-detail-section' });
+        notesSection.appendChild(ClientUtils.el('h4', {}, ['Notes']));
+        notesSection.appendChild(ClientUtils.el('p', {}, [obs.notes]));
+        body.appendChild(notesSection);
+      }
+
+      // Commendations
+      if (obs.commendations) {
+        var commSection = ClientUtils.el('div', { className: 'obs-detail-section' });
+        commSection.appendChild(ClientUtils.el('h4', {}, ['Commendations']));
+        commSection.appendChild(ClientUtils.el('p', {}, [obs.commendations]));
+        body.appendChild(commSection);
+      }
+
+      // Recommendations
+      if (obs.recommendations) {
+        var recSection = ClientUtils.el('div', { className: 'obs-detail-section' });
+        recSection.appendChild(ClientUtils.el('h4', {}, ['Recommendations']));
+        recSection.appendChild(ClientUtils.el('p', {}, [obs.recommendations]));
+        body.appendChild(recSection);
+      }
+
+      // Follow-up status
+      if (obs.followUpNeeded) {
+        var fuSection = ClientUtils.el('div', { className: 'obs-detail-section' });
+        fuSection.appendChild(ClientUtils.el('h4', {}, ['Follow-up']));
+        fuSection.appendChild(ClientUtils.el('p', {}, [
+          obs.followUpCompleted ? 'Completed' : 'Pending'
+        ]));
+        body.appendChild(fuSection);
+      }
+
+      Modal.open(ClientUtils.formatDate(obs.date) + ' — ' + (obs.type || '').replace(/_/g, ' '), body);
+    }
+
+    // ── Initialize with dashboard view ──
+    renderSubNav();
+    switchView('dashboard');
+
+    // ── Module handle ──
+    return {
+      onActivate: function() {
+        if (state.currentView === 'dashboard') {
+          renderDashboard();
+        }
+      }
+    };
+  }
+};
+</script>

@@ -1,0 +1,427 @@
+<script>
+    // ============================================================================
+    // PROCESS JOURNAL (pjr- prefix) — Research Alignment Phase 2
+    // Student thinking timeline in Planner tab
+    // ES5 ONLY — no const, let, =>, template literals, .includes()
+    // ============================================================================
+
+    // Project Zero thinking routines
+    var PJR_THINKING_ROUTINES = [
+      { id: 'pz_used_to_think', label: 'I used to think... Now I think...', prompt: 'I used to think...\nNow I think...' },
+      { id: 'pz_what_makes_you_say', label: 'What makes you say that?', prompt: 'What makes you say that?\n\nI noticed... because...' },
+      { id: 'pz_connect_extend_challenge', label: 'Connect-Extend-Challenge', prompt: 'Connect: How does this connect to what you already know?\nExtend: What new ideas push your thinking further?\nChallenge: What is still challenging or confusing?' }
+    ];
+
+    // Entry type icons
+    var PJR_ENTRY_ICONS = {
+      reflection: '\uD83E\uDE9E',
+      checkpoint: '\uD83C\uDFC1',
+      phase_transition: '\uD83D\uDD04',
+      freeform: '\u270F\uFE0F',
+      goal_update: '\uD83C\uDFAF',
+      emotion_checkin: '\uD83C\uDFA8'
+    };
+
+    // WIDA bracket-adaptive text
+    var PJR_BRACKET_TEXT = {
+      low: {
+        sectionTitle: 'My Journal \uD83D\uDCD3',
+        writeEntry: 'Write Something \u270D\uFE0F',
+        placeholder: 'What are you thinking about?',
+        save: 'Save',
+        cancel: 'Cancel',
+        emptyState: 'Your journal is empty. Write your first entry!',
+        filterAll: 'All',
+        chipFreeform: 'Free Write'
+      }
+    };
+
+    var pjrSelectedRoutine = '';
+    var pjrSaving = false;
+    var pjrExpandedCards = {};
+
+    // ================================================
+    // WIDA BRACKET TEXT HELPER
+    // ================================================
+    function pjrGetText(key, fallback) {
+      var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+      if (bracket && PJR_BRACKET_TEXT[bracket] && PJR_BRACKET_TEXT[bracket][key]) {
+        return PJR_BRACKET_TEXT[bracket][key];
+      }
+      return fallback;
+    }
+
+    // ================================================
+    // DATA LOADING
+    // ================================================
+    function pjrLoadJournal() {
+      var expectedEmail = (typeof userData !== 'undefined' && userData) ? userData.email : null;
+      google.script.run
+        .withSuccessHandler(function(entries) {
+          // Stale-response guard
+          var currentEmail = (typeof userData !== 'undefined' && userData) ? userData.email : null;
+          if (currentEmail !== expectedEmail) return;
+          pjrJournalData = entries || [];
+          pjrJournalLoaded = true;
+          pjrRenderSection();
+        })
+        .withFailureHandler(function(err) {
+          pjrJournalLoaded = true;
+          pjrJournalData = [];
+          if (typeof showToast === 'function') {
+            showToast(typeof friendlyError === 'function' ? friendlyError(err) : 'Could not load journal.', 'error');
+          }
+          pjrRenderSection();
+        })
+        .getStudentJournalAll();
+    }
+
+    // ================================================
+    // SECTION RENDERING (follows uclRenderSection pattern)
+    // ================================================
+    function pjrRenderSection() {
+      var container = document.getElementById('pjrSection');
+      if (!container) return;
+
+      // Hide if not loaded yet or student has no data and hasn't loaded
+      if (!pjrJournalLoaded) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = 'block';
+
+      var entryCount = pjrJournalData.length;
+      var html = '<div class="pjr-section">';
+
+      // Header — collapsible
+      html += '<div class="pjr-section-header" role="button" tabindex="0" ';
+      html += 'aria-expanded="' + (!pjrSectionCollapsed ? 'true' : 'false') + '" ';
+      html += 'onclick="pjrToggleSection()" ';
+      html += 'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click();}">';
+      html += '<span class="pjr-section-title">' + pjrGetText('sectionTitle', '\uD83D\uDCD3 Process Journal');
+      if (entryCount > 0) {
+        html += '<span class="pjr-count-badge">' + entryCount + '</span>';
+      }
+      html += '</span>';
+      html += '<span class="pjr-chevron">' + (pjrSectionCollapsed ? '\u25B6' : '\u25BC') + '</span>';
+      html += '</div>';
+
+      if (!pjrSectionCollapsed) {
+        html += '<div class="pjr-section-body">';
+
+        // Filter chips (only if entries exist)
+        if (entryCount > 0) {
+          html += pjrRenderFilterChips();
+        }
+
+        // Write entry button / form
+        if (pjrEntryFormOpen) {
+          html += pjrRenderEntryForm();
+        } else {
+          html += '<button type="button" class="pjr-write-btn" onclick="pjrToggleEntryForm()">';
+          html += pjrGetText('writeEntry', '\u270D\uFE0F Write an entry');
+          html += '</button>';
+        }
+
+        // Timeline
+        if (entryCount > 0) {
+          var filtered = pjrFilterEntries();
+          html += pjrRenderTimeline(filtered);
+        } else {
+          html += '<div class="pjr-empty">' + pjrGetText('emptyState', 'Your process journal is empty. Reflections you write when completing hexes will appear here, or write your own entry above!') + '</div>';
+        }
+
+        html += '</div>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function pjrToggleSection() {
+      pjrSectionCollapsed = !pjrSectionCollapsed;
+      pjrRenderSection();
+    }
+
+    // ================================================
+    // FILTER CHIPS
+    // ================================================
+    function pjrRenderFilterChips() {
+      // Collect unique map titles from journal data
+      var mapNames = {};
+      for (var i = 0; i < pjrJournalData.length; i++) {
+        var entry = pjrJournalData[i];
+        if (entry.mapId) {
+          // Try to resolve map title from mapsData
+          var title = pjrResolveMapTitle(entry.mapId);
+          if (title) {
+            mapNames[entry.mapId] = title;
+          }
+        }
+      }
+
+      var html = '<div class="pjr-filter-bar">';
+      html += '<button type="button" class="pjr-filter-chip' + (pjrSelectedMap === 'all' ? ' pjr-filter-active' : '') + '" ';
+      html += 'onclick="pjrSetFilter(\'all\')">' + pjrGetText('filterAll', 'All') + '</button>';
+
+      var mapIds = Object.keys(mapNames);
+      for (var j = 0; j < mapIds.length; j++) {
+        var mid = mapIds[j];
+        var isActive = pjrSelectedMap === mid;
+        html += '<button type="button" class="pjr-filter-chip' + (isActive ? ' pjr-filter-active' : '') + '" ';
+        html += 'onclick="pjrSetFilter(\'' + escapeHtml(mid).replace(/'/g, "\\'") + '\')">';
+        html += escapeHtml(mapNames[mid]);
+        html += '</button>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function pjrSetFilter(mapId) {
+      pjrSelectedMap = mapId;
+      pjrRenderSection();
+    }
+
+    function pjrResolveMapTitle(mapId) {
+      if (typeof mapsData === 'undefined' || !mapsData) return '';
+      for (var i = 0; i < mapsData.length; i++) {
+        if (String(mapsData[i].mapId) === String(mapId)) {
+          return mapsData[i].title || '';
+        }
+      }
+      return '';
+    }
+
+    function pjrFilterEntries() {
+      if (pjrSelectedMap === 'all') return pjrJournalData;
+      var filtered = [];
+      for (var i = 0; i < pjrJournalData.length; i++) {
+        if (String(pjrJournalData[i].mapId) === String(pjrSelectedMap)) {
+          filtered.push(pjrJournalData[i]);
+        }
+      }
+      return filtered;
+    }
+
+    // ================================================
+    // TIMELINE RENDERING
+    // ================================================
+    function pjrRenderTimeline(entries) {
+      if (!entries || entries.length === 0) {
+        return '<div class="pjr-empty">No entries for this filter.</div>';
+      }
+
+      var html = '<div class="pjr-timeline">';
+      for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        var icon = PJR_ENTRY_ICONS[e.entryType] || '\u270F\uFE0F';
+        var dateStr = pjrFormatRelativeTime(e.createdAt);
+        var content = e.content || '';
+        var isExpanded = pjrExpandedCards[e.journalId];
+        var isTruncated = content.length > 150 && !isExpanded;
+        var displayContent = isTruncated ? content.substring(0, 150) + '...' : content;
+
+        // Resolve hex label from metadata
+        var hexLabel = '';
+        if (e.metadata && e.metadata.hexLabel) {
+          hexLabel = e.metadata.hexLabel;
+        }
+
+        html += '<div class="pjr-card">';
+        html += '<div class="pjr-card-header">';
+        html += '<span class="pjr-card-icon">' + icon + '</span>';
+        html += '<span class="pjr-card-date">' + escapeHtml(dateStr) + '</span>';
+        if (hexLabel) {
+          html += '<span class="pjr-card-hex">' + escapeHtml(hexLabel) + '</span>';
+        }
+        html += '</div>';
+        html += '<div class="pjr-card-content' + (isTruncated ? ' pjr-card-truncated' : '') + '">';
+        html += escapeHtml(displayContent);
+        html += '</div>';
+        if (content.length > 150) {
+          html += '<button type="button" class="pjr-show-more" onclick="pjrToggleCardExpand(\'' + escapeHtml(e.journalId).replace(/'/g, "\\'") + '\')">';
+          html += isExpanded ? 'Show less' : 'Show more';
+          html += '</button>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function pjrToggleCardExpand(journalId) {
+      pjrExpandedCards[journalId] = !pjrExpandedCards[journalId];
+      pjrRenderSection();
+    }
+
+    function pjrFormatRelativeTime(isoStr) {
+      if (!isoStr) return '';
+      try {
+        var then = new Date(isoStr);
+        var now = new Date();
+        var diffMs = now.getTime() - then.getTime();
+        var diffMins = Math.floor(diffMs / 60000);
+        var diffHours = Math.floor(diffMs / 3600000);
+        var diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return diffMins + 'm ago';
+        if (diffHours < 24) return diffHours + 'h ago';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return diffDays + 'd ago';
+        // Fall back to short date
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[then.getMonth()] + ' ' + then.getDate();
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // ================================================
+    // ENTRY FORM
+    // ================================================
+    function pjrToggleEntryForm() {
+      pjrEntryFormOpen = !pjrEntryFormOpen;
+      pjrSelectedRoutine = '';
+      pjrRenderSection();
+    }
+
+    function pjrRenderEntryForm() {
+      var html = '<div class="pjr-entry-form">';
+
+      // Thinking routine chips
+      html += '<div class="pjr-routine-bar">';
+      for (var i = 0; i < PJR_THINKING_ROUTINES.length; i++) {
+        var r = PJR_THINKING_ROUTINES[i];
+        var isActive = pjrSelectedRoutine === r.id;
+        html += '<button type="button" class="pjr-routine-chip' + (isActive ? ' active' : '') + '" ';
+        html += 'onclick="pjrSelectRoutine(\'' + r.id + '\')">';
+        html += escapeHtml(r.label);
+        html += '</button>';
+      }
+      // Free write chip
+      html += '<button type="button" class="pjr-routine-chip' + (pjrSelectedRoutine === 'freeform' ? ' active' : '') + '" ';
+      html += 'onclick="pjrSelectRoutine(\'freeform\')">';
+      html += pjrGetText('chipFreeform', '\u270F\uFE0F Free Write');
+      html += '</button>';
+      html += '</div>';
+
+      // Optional map selector
+      if (typeof mapsData !== 'undefined' && mapsData && mapsData.length > 1) {
+        html += '<select class="pjr-map-select" id="pjrMapSelect">';
+        html += '<option value="">No map (general reflection)</option>';
+        for (var m = 0; m < mapsData.length; m++) {
+          html += '<option value="' + escapeHtml(mapsData[m].mapId) + '">' + escapeHtml(mapsData[m].title || 'Untitled Map') + '</option>';
+        }
+        html += '</select>';
+      }
+
+      // Textarea
+      var placeholder = pjrGetText('placeholder', 'What are you thinking about? What did you learn? What was challenging?');
+      if (pjrSelectedRoutine && pjrSelectedRoutine !== 'freeform') {
+        for (var k = 0; k < PJR_THINKING_ROUTINES.length; k++) {
+          if (PJR_THINKING_ROUTINES[k].id === pjrSelectedRoutine) {
+            placeholder = PJR_THINKING_ROUTINES[k].prompt;
+            break;
+          }
+        }
+      }
+      html += '<textarea class="pjr-textarea" id="pjrEntryTextarea" placeholder="' + escapeHtml(placeholder) + '" ';
+      html += 'maxlength="1000" oninput="pjrUpdateCharCount()"></textarea>';
+
+      // Footer: char count + actions
+      html += '<div class="pjr-form-footer">';
+      html += '<span class="pjr-char-count" id="pjrCharCount">0 / 1000</span>';
+      html += '<div class="pjr-form-actions">';
+      html += '<button type="button" class="pjr-cancel-btn" onclick="pjrToggleEntryForm()">' + pjrGetText('cancel', 'Cancel') + '</button>';
+      html += '<button type="button" class="pjr-save-btn" id="pjrSaveBtn" onclick="pjrSaveEntry()">' + pjrGetText('save', 'Save') + '</button>';
+      html += '</div>';
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    function pjrSelectRoutine(routineId) {
+      pjrSelectedRoutine = routineId;
+      pjrRenderSection();
+      // Focus textarea after re-render
+      setTimeout(function() {
+        var ta = document.getElementById('pjrEntryTextarea');
+        if (ta) ta.focus();
+      }, 50);
+    }
+
+    function pjrUpdateCharCount() {
+      var ta = document.getElementById('pjrEntryTextarea');
+      var countEl = document.getElementById('pjrCharCount');
+      if (ta && countEl) {
+        countEl.textContent = ta.value.length + ' / 1000';
+      }
+    }
+
+    // ================================================
+    // SAVE ENTRY
+    // ================================================
+    function pjrSaveEntry() {
+      if (pjrSaving) return;
+
+      var ta = document.getElementById('pjrEntryTextarea');
+      if (!ta) return;
+      var content = ta.value.trim();
+      if (!content) {
+        if (typeof showToast === 'function') showToast('Please write something before saving.', 'error');
+        return;
+      }
+
+      // Determine map context
+      var mapId = '';
+      var mapSelect = document.getElementById('pjrMapSelect');
+      if (mapSelect) {
+        mapId = mapSelect.value || '';
+      }
+
+      // Determine entry type + promptId
+      var entryType = 'freeform';
+      var promptId = pjrSelectedRoutine || 'freeform';
+
+      pjrSaving = true;
+      var saveBtn = document.getElementById('pjrSaveBtn');
+      if (saveBtn) saveBtn.disabled = true;
+
+      var expectedEmail = (typeof userData !== 'undefined' && userData) ? userData.email : null;
+
+      google.script.run
+        .withSuccessHandler(function(entry) {
+          pjrSaving = false;
+          // Stale-response guard
+          var currentEmail = (typeof userData !== 'undefined' && userData) ? userData.email : null;
+          if (currentEmail !== expectedEmail) return;
+
+          // Add to front of local data
+          if (entry) {
+            pjrJournalData.unshift(entry);
+          }
+          pjrEntryFormOpen = false;
+          pjrSelectedRoutine = '';
+          pjrRenderSection();
+          if (typeof showToast === 'function') showToast('Journal entry saved!', 'success');
+        })
+        .withFailureHandler(function(err) {
+          pjrSaving = false;
+          if (saveBtn) saveBtn.disabled = false;
+          if (typeof showToast === 'function') {
+            showToast(typeof friendlyError === 'function' ? friendlyError(err) : 'Could not save entry.', 'error');
+          }
+        })
+        .saveJournalEntry({
+          mapId: mapId,
+          hexId: '',
+          entryType: entryType,
+          content: content,
+          promptId: promptId,
+          metadata: {}
+        });
+    }
+</script>

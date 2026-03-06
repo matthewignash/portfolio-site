@@ -1,0 +1,572 @@
+<script>
+// ============================================================================
+// DESIGN THINKING VISUALIZATION — dtk- prefix (shared with Story 1)
+// Phase progress bar, phase filter, student journey panel, phase guidance
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+var dtkPhaseFilter = '';        // Active phase filter (teacher mode)
+var dtkJourneyOpen = false;     // Journey panel collapsed/expanded
+var dtkPhaseStats = null;       // Computed phase stats cache
+
+// ================================================
+// PHASE PROGRESS BAR (Student view — top of map)
+// ================================================
+
+function dtkRenderPhaseProgressBar() {
+  var container = document.getElementById('dtkPhaseProgressBar');
+  if (!container) return;
+
+  var framework = dtkGetFrameworkForCurrentMap();
+  if (!framework || !framework.isActive || !currentMap) {
+    container.style.display = 'none';
+    return;
+  }
+
+  var phases = framework.phases || [];
+  if (phases.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  // Compute stats
+  var stats = dtkComputePhaseStats(phases);
+  dtkPhaseStats = stats;
+
+  container.style.display = '';
+
+  var html = '<div class="dtk-progress-container">';
+  html += '<div class="dtk-progress-label">Design Progress</div>';
+  html += '<div class="dtk-progress-bar-wrap">';
+
+  for (var i = 0; i < phases.length; i++) {
+    var p = phases[i];
+    var ps = stats.byPhase[p.id] || { total: 0, completed: 0 };
+    var pct = ps.total > 0 ? Math.round((ps.completed / ps.total) * 100) : 0;
+    var segClass = pct === 100 ? 'dtk-seg-done' : (pct > 0 ? 'dtk-seg-partial' : 'dtk-seg-empty');
+
+    html += '<div class="dtk-progress-segment ' + segClass + '" style="flex:1;" title="' + escapeHtml(p.label) + ': ' + pct + '% complete">';
+    html += '<div class="dtk-seg-fill" style="width:' + pct + '%; background:' + escapeHtml(p.color || '#64748b') + ';"></div>';
+    html += '<span class="dtk-seg-label">' + escapeHtml(p.label) + '</span>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .dtk-progress-bar-wrap
+  html += '</div>'; // .dtk-progress-container
+
+  container.innerHTML = html;
+}
+
+// ================================================
+// PHASE FILTER CHIPS (Teacher view)
+// ================================================
+
+function dtkRenderPhaseFilter() {
+  var container = document.getElementById('dtkPhaseFilter');
+  if (!container) return;
+
+  var framework = dtkGetFrameworkForCurrentMap();
+  if (!framework || !framework.isActive || currentViewMode !== 'teacher') {
+    container.style.display = 'none';
+    return;
+  }
+
+  var phases = framework.phases || [];
+  if (phases.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = '';
+
+  var html = '<div class="dtk-filter-chips">';
+  html += '<button type="button" class="dtk-filter-chip' + (dtkPhaseFilter === '' ? ' dtk-filter-active' : '') + '" onclick="dtkApplyPhaseFilter(\'\')">All</button>';
+
+  for (var i = 0; i < phases.length; i++) {
+    var p = phases[i];
+    var isActive = dtkPhaseFilter === p.id;
+    html += '<button type="button" class="dtk-filter-chip' + (isActive ? ' dtk-filter-active' : '') + '" style="' + (isActive ? 'background:' + escapeHtml(p.color || '#64748b') + ';color:#fff;border-color:' + escapeHtml(p.color || '#64748b') : '') + '" onclick="dtkApplyPhaseFilter(\'' + escapeHtml(p.id) + '\')">' + escapeHtml(p.label) + '</button>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function dtkApplyPhaseFilter(phaseId) {
+  dtkPhaseFilter = phaseId;
+  dtkRenderPhaseFilter();
+
+  // Dim hexes not matching filter
+  if (!currentMap || !currentMap.hexes) return;
+  var allNodes = document.querySelectorAll('.hex-node');
+  for (var i = 0; i < allNodes.length; i++) {
+    var node = allNodes[i];
+    var hexId = node.getAttribute('data-hex-id');
+    if (!hexId) continue;
+    var hex = findHexById(hexId);
+    if (!hex) continue;
+
+    if (phaseId === '' || hex.designPhase === phaseId) {
+      node.style.opacity = '1';
+      node.style.pointerEvents = '';
+    } else {
+      node.style.opacity = '0.25';
+      node.style.pointerEvents = 'none';
+    }
+  }
+}
+
+// ================================================
+// STUDENT JOURNEY PANEL (collapsible)
+// ================================================
+
+function dtkRenderJourneyPanel() {
+  var container = document.getElementById('dtkJourneyPanel');
+  if (!container) return;
+
+  var framework = dtkGetFrameworkForCurrentMap();
+  if (!framework || !framework.isActive || currentViewMode !== 'student' || !currentMap) {
+    container.style.display = 'none';
+    return;
+  }
+
+  var phases = framework.phases || [];
+  if (phases.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  var stats = dtkPhaseStats || dtkComputePhaseStats(phases);
+  container.style.display = '';
+
+  var html = '<div class="dtk-journey-header" role="button" tabindex="0" aria-expanded="' + (dtkJourneyOpen ? 'true' : 'false') + '" onclick="dtkToggleJourney()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();dtkToggleJourney();}">';
+  html += '<span class="dtk-journey-title">My Design Journey</span>';
+  html += '<span class="dtk-journey-toggle">' + (dtkJourneyOpen ? '&#9650;' : '&#9660;') + '</span>';
+  html += '</div>';
+
+  if (dtkJourneyOpen) {
+    html += '<div class="dtk-journey-body">';
+
+    for (var i = 0; i < phases.length; i++) {
+      var p = phases[i];
+      var ps = stats.byPhase[p.id] || { total: 0, completed: 0, hexes: [] };
+      var pct = ps.total > 0 ? Math.round((ps.completed / ps.total) * 100) : 0;
+      var phaseStatus = pct === 100 ? 'dtk-phase-done' : (pct > 0 ? 'dtk-phase-active' : 'dtk-phase-pending');
+
+      html += '<div class="dtk-journey-phase ' + phaseStatus + '">';
+      html += '<div class="dtk-journey-phase-icon" style="background:' + escapeHtml(p.color || '#64748b') + ';">' + (p.icon || (i + 1)) + '</div>';
+      html += '<div class="dtk-journey-phase-info">';
+      html += '<div class="dtk-journey-phase-name">' + escapeHtml(p.label) + '</div>';
+      html += '<div class="dtk-journey-phase-progress">' + ps.completed + '/' + ps.total + ' hexes';
+      if (pct === 100) html += ' &#10003;';
+      html += '</div>';
+
+      // Show hex names
+      if (ps.hexes && ps.hexes.length > 0) {
+        html += '<div class="dtk-journey-hex-list">';
+        for (var h = 0; h < ps.hexes.length; h++) {
+          var hx = ps.hexes[h];
+          var statusDot = hx.status === 'completed' || hx.status === 'mastered' ? 'dtk-dot-done' : (hx.status === 'in_progress' ? 'dtk-dot-active' : 'dtk-dot-pending');
+          html += '<span class="dtk-journey-hex ' + statusDot + '">' + escapeHtml(hx.label) + '</span>';
+        }
+        html += '</div>';
+      }
+
+      html += '</div>'; // .dtk-journey-phase-info
+      html += '</div>'; // .dtk-journey-phase
+    }
+
+    // Phase guidance for current phase
+    var currentPhase = dtkGetCurrentPhase(phases, stats);
+    if (currentPhase) {
+      html += dtkRenderPhaseGuidance(currentPhase);
+    }
+
+    html += '</div>'; // .dtk-journey-body
+  }
+
+  container.innerHTML = html;
+}
+
+function dtkToggleJourney() {
+  dtkJourneyOpen = !dtkJourneyOpen;
+  dtkRenderJourneyPanel();
+}
+
+// ================================================
+// PHASE GUIDANCE
+// ================================================
+
+function dtkRenderPhaseGuidance(phase) {
+  var guidance = DTK_PHASE_GUIDANCE[phase.id] || null;
+  if (!guidance) return '';
+
+  var html = '<div class="dtk-guidance-card" style="border-left-color:' + escapeHtml(phase.color || '#64748b') + ';">';
+  html += '<div class="dtk-guidance-title">' + escapeHtml(phase.label) + ' Phase</div>';
+  html += '<div class="dtk-guidance-question">' + escapeHtml(guidance.question) + '</div>';
+  html += '<div class="dtk-guidance-tips">';
+  for (var t = 0; t < guidance.tips.length; t++) {
+    html += '<div class="dtk-guidance-tip">' + escapeHtml(guidance.tips[t]) + '</div>';
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+var DTK_PHASE_GUIDANCE = {
+  empathize: {
+    question: 'Who are you designing for? What do they need?',
+    tips: ['Interview or observe the people affected', 'Take notes on what surprises you', 'Look for unspoken needs, not just stated ones'],
+    transitionPrompt: 'You completed the Empathize phase! What did you learn about the people you are designing for?'
+  },
+  define: {
+    question: 'What is the core problem you are trying to solve?',
+    tips: ['Write a clear problem statement', 'Focus on one specific challenge', 'Consider: who, what, why?'],
+    transitionPrompt: 'You completed the Define phase! How has your understanding of the problem changed since you started?'
+  },
+  ideate: {
+    question: 'What are all the possible solutions?',
+    tips: ['Brainstorm without judging ideas', 'Aim for quantity over quality', 'Build on each other\'s ideas'],
+    transitionPrompt: 'You completed the Ideate phase! Which idea are you most excited about, and why?'
+  },
+  prototype: {
+    question: 'How can you make your idea real enough to test?',
+    tips: ['Create a quick, rough version', 'Focus on the core features first', 'It doesn\'t need to be perfect'],
+    transitionPrompt: 'You completed the Prototype phase! What was the hardest part of making your idea real?'
+  },
+  test: {
+    question: 'Does your solution actually work for users?',
+    tips: ['Get feedback from real people', 'Watch how they interact with it', 'Be ready to iterate based on what you learn'],
+    transitionPrompt: 'You completed the Test phase! What surprised you about how people used your solution?'
+  },
+  discover: {
+    question: 'What is happening in this space? What opportunities exist?',
+    tips: ['Research broadly before narrowing down', 'Look at existing solutions', 'Gather diverse perspectives'],
+    transitionPrompt: 'You completed the Discover phase! What was the most interesting thing you found during your research?'
+  },
+  develop: {
+    question: 'How will you bring your best idea to life?',
+    tips: ['Sketch out your approach', 'Plan the key steps', 'Think about what resources you need'],
+    transitionPrompt: 'You completed the Develop phase! How did your plan change as you worked on it?'
+  },
+  deliver: {
+    question: 'Is your solution ready for the real world?',
+    tips: ['Refine and polish your work', 'Test one more time', 'Present clearly and confidently'],
+    transitionPrompt: 'You completed the Deliver phase! What are you most proud of in your final solution?'
+  },
+  inquiring: {
+    question: 'What do you need to find out? What do you already know?',
+    tips: ['Identify what you need to research', 'Explore existing designs and solutions', 'Define the problem clearly'],
+    transitionPrompt: 'You completed the Inquiring phase! What was the most important thing you learned during your research?'
+  },
+  developing: {
+    question: 'What are your design ideas? How will they meet the need?',
+    tips: ['Generate multiple design ideas', 'Evaluate against your criteria', 'Select the most promising approach'],
+    transitionPrompt: 'You completed the Developing phase! Why did you choose this approach over other ideas?'
+  },
+  creating: {
+    question: 'How are you building your solution?',
+    tips: ['Follow your plan, but stay flexible', 'Document your process', 'Test as you build'],
+    transitionPrompt: 'You completed the Creating phase! What did you have to change from your original plan?'
+  },
+  evaluating: {
+    question: 'How well does your solution work? What would you change?',
+    tips: ['Test against your original criteria', 'Get honest feedback', 'Reflect on what you learned'],
+    transitionPrompt: 'You completed the Evaluating phase! If you could start over, what would you do differently?'
+  },
+  reflect: {
+    question: 'What did you learn through this process?',
+    tips: ['Consider both successes and failures', 'Think about how your thinking changed', 'Document lessons for next time'],
+    transitionPrompt: 'You completed the Reflect phase! How has your thinking changed through this entire design process?'
+  }
+};
+
+// ================================================
+// COMPUTE PHASE STATS
+// ================================================
+
+function dtkComputePhaseStats(phases) {
+  var byPhase = {};
+  for (var i = 0; i < phases.length; i++) {
+    byPhase[phases[i].id] = { total: 0, completed: 0, hexes: [] };
+  }
+
+  if (!currentMap || !currentMap.hexes) return { byPhase: byPhase, overallPct: 0 };
+
+  var totalPhaseHexes = 0;
+  var completedPhaseHexes = 0;
+
+  for (var h = 0; h < currentMap.hexes.length; h++) {
+    var hex = currentMap.hexes[h];
+    if (!hex.designPhase) continue;
+
+    var ps = byPhase[hex.designPhase];
+    if (!ps) continue;
+
+    ps.total++;
+    totalPhaseHexes++;
+
+    // Get progress status
+    var progressStatus = 'not_started';
+    if (studentProgressData && studentProgressData[hex.id]) {
+      progressStatus = studentProgressData[hex.id].status || 'not_started';
+    }
+
+    if (progressStatus === 'completed' || progressStatus === 'mastered') {
+      ps.completed++;
+      completedPhaseHexes++;
+    }
+
+    ps.hexes.push({ label: hex.label || hex.id, status: progressStatus });
+  }
+
+  var overallPct = totalPhaseHexes > 0 ? Math.round((completedPhaseHexes / totalPhaseHexes) * 100) : 0;
+  return { byPhase: byPhase, overallPct: overallPct };
+}
+
+// ================================================
+// DETERMINE CURRENT PHASE
+// ================================================
+
+function dtkGetCurrentPhase(phases, stats) {
+  // The current phase is the first one that isn't fully complete
+  for (var i = 0; i < phases.length; i++) {
+    var ps = stats.byPhase[phases[i].id] || { total: 0, completed: 0 };
+    if (ps.total > 0 && ps.completed < ps.total) {
+      return phases[i];
+    }
+  }
+  // All done — return last phase
+  return phases.length > 0 ? phases[phases.length - 1] : null;
+}
+
+// ================================================
+// RENDER ALL DESIGN THINKING UI
+// ================================================
+
+function dtkRenderVisualization() {
+  if (!currentMap) return;
+  var framework = dtkGetFrameworkForCurrentMap();
+  if (!framework || !framework.isActive) {
+    // Hide all dtk containers
+    var ppb = document.getElementById('dtkPhaseProgressBar');
+    if (ppb) ppb.style.display = 'none';
+    var pf = document.getElementById('dtkPhaseFilter');
+    if (pf) pf.style.display = 'none';
+    var jp = document.getElementById('dtkJourneyPanel');
+    if (jp) jp.style.display = 'none';
+    return;
+  }
+
+  if (currentViewMode === 'student') {
+    dtkRenderPhaseProgressBar();
+    dtkRenderJourneyPanel();
+    // Hide teacher filter
+    var pf2 = document.getElementById('dtkPhaseFilter');
+    if (pf2) pf2.style.display = 'none';
+  } else {
+    dtkRenderPhaseFilter();
+    // Hide student UI
+    var ppb2 = document.getElementById('dtkPhaseProgressBar');
+    if (ppb2) ppb2.style.display = 'none';
+    var jp2 = document.getElementById('dtkJourneyPanel');
+    if (jp2) jp2.style.display = 'none';
+  }
+}
+
+// ================================================
+// PHASE TRANSITION REFLECTION (Story 1.3)
+// Shown when all hexes in a design phase are completed.
+// Saves to the last completed hex's reflectionNote.
+// ================================================
+
+// Track which phases have already been prompted this session
+var dtkTransitionPrompted = {};
+var dtkTransitionSaving = false;
+
+function dtkCheckPhaseTransition(hexId, newStatus) {
+  if (newStatus !== 'completed' && newStatus !== 'mastered') return;
+  if (currentViewMode !== 'student') return;
+  if (!currentMap || !currentMap.hexes) return;
+
+  var framework = dtkGetFrameworkForCurrentMap();
+  if (!framework || !framework.isActive) return;
+
+  // Find which phase the completed hex belongs to
+  var hex = findHexById(hexId);
+  if (!hex || !hex.designPhase) return;
+
+  var phaseId = hex.designPhase;
+
+  // Already prompted for this phase this session?
+  var cacheKey = (currentMap.mapId || '') + '_' + phaseId;
+  if (dtkTransitionPrompted[cacheKey]) return;
+
+  // Check if ALL hexes in this phase are now completed
+  var phases = framework.phases || [];
+  var phaseExists = false;
+  for (var p = 0; p < phases.length; p++) {
+    if (phases[p].id === phaseId) { phaseExists = true; break; }
+  }
+  if (!phaseExists) return;
+
+  var phaseHexes = [];
+  for (var i = 0; i < currentMap.hexes.length; i++) {
+    if (currentMap.hexes[i].designPhase === phaseId) {
+      phaseHexes.push(currentMap.hexes[i]);
+    }
+  }
+  if (phaseHexes.length === 0) return;
+
+  // Check completion status of all hexes in the phase
+  var allDone = true;
+  var lastCompletedHexId = hexId; // default to the just-completed hex
+  for (var j = 0; j < phaseHexes.length; j++) {
+    var ph = phaseHexes[j];
+    var pStatus = 'not_started';
+    if (studentProgressData && studentProgressData[ph.id]) {
+      pStatus = studentProgressData[ph.id].status || 'not_started';
+    }
+    // The hex we just completed might not be in studentProgressData yet
+    if (ph.id === hexId) {
+      pStatus = newStatus;
+    }
+    if (pStatus !== 'completed' && pStatus !== 'mastered') {
+      allDone = false;
+      break;
+    }
+  }
+
+  if (!allDone) return;
+
+  // All hexes in phase complete — show transition prompt
+  dtkTransitionPrompted[cacheKey] = true;
+
+  // Find the phase object for label/color
+  var phaseObj = null;
+  for (var k = 0; k < phases.length; k++) {
+    if (phases[k].id === phaseId) { phaseObj = phases[k]; break; }
+  }
+  if (!phaseObj) return;
+
+  var guidance = DTK_PHASE_GUIDANCE[phaseId];
+  if (!guidance || !guidance.transitionPrompt) return;
+
+  // Delay to let hex completion toast clear
+  setTimeout(function() {
+    dtkShowTransitionCard(phaseObj, guidance, lastCompletedHexId);
+  }, 1200);
+}
+
+function dtkShowTransitionCard(phase, guidance, targetHexId) {
+  // Remove any existing transition card
+  var existing = document.getElementById('dtkTransitionCard');
+  if (existing) existing.remove();
+
+  var card = document.createElement('div');
+  card.id = 'dtkTransitionCard';
+  card.className = 'dtk-transition-card';
+  card.style.position = 'fixed';
+  card.style.bottom = '20px';
+  card.style.left = '50%';
+  card.style.transform = 'translateX(-50%)';
+  card.style.zIndex = '500';
+  card.style.maxWidth = '420px';
+  card.style.width = '90%';
+  card.style.boxShadow = '0 8px 32px rgba(0,0,0,0.18)';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
+  card.setAttribute('aria-label', escapeHtml(phase.label) + ' phase complete');
+
+  var html = '';
+  html += '<div class="dtk-transition-header">';
+  html += '<span class="dtk-transition-icon" style="color:' + escapeHtml(phase.color || '#7c3aed') + ';">&#10004;</span>';
+  html += '<span class="dtk-transition-title">' + escapeHtml(phase.label) + ' Phase Complete!</span>';
+  html += '</div>';
+  html += '<div class="dtk-transition-prompt">' + escapeHtml(guidance.transitionPrompt) + '</div>';
+  html += '<textarea class="dtk-transition-textarea" id="dtkTransitionText" placeholder="Reflect on what you learned in this phase..." maxlength="300"></textarea>';
+  html += '<div class="dtk-transition-actions">';
+  html += '<button class="dtk-transition-skip" onclick="dtkDismissTransition()" type="button">Skip for now</button>';
+  html += '<button class="dtk-transition-save" id="dtkTransitionSaveBtn" data-phase="' + escapeHtml(phase.id || '') + '" onclick="dtkSaveTransition(\'' + escapeHtml(targetHexId) + '\')" type="button">Save Reflection</button>';
+  html += '</div>';
+
+  card.innerHTML = html;
+
+  // Append to builder view or body
+  var builderView = document.getElementById('builderView');
+  if (builderView) {
+    builderView.appendChild(card);
+  } else {
+    document.body.appendChild(card);
+  }
+
+  // Focus textarea after brief delay
+  setTimeout(function() {
+    var ta = document.getElementById('dtkTransitionText');
+    if (ta) ta.focus();
+  }, 100);
+}
+
+function dtkDismissTransition() {
+  var card = document.getElementById('dtkTransitionCard');
+  if (card) card.remove();
+}
+
+function dtkSaveTransition(targetHexId) {
+  if (dtkTransitionSaving) return;
+
+  var textarea = document.getElementById('dtkTransitionText');
+  var note = textarea ? textarea.value.trim() : '';
+
+  if (!note) {
+    dtkDismissTransition();
+    return;
+  }
+
+  if (!currentMap || !currentMap.mapId) {
+    dtkDismissTransition();
+    return;
+  }
+
+  var btn = document.getElementById('dtkTransitionSaveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  dtkTransitionSaving = true;
+
+  // Capture phase key for dual-write
+  var phaseKey = '';
+  var saveBtn = document.getElementById('dtkTransitionSaveBtn');
+  if (saveBtn) { phaseKey = saveBtn.getAttribute('data-phase') || ''; }
+
+  // Save to the last completed hex's reflectionNote via existing RPC
+  google.script.run
+    .withSuccessHandler(function() {
+      dtkTransitionSaving = false;
+      dtkDismissTransition();
+      if (typeof showToast === 'function') {
+        showToast('Phase reflection saved!');
+      }
+      // Dual-write to ProcessJournal (fire-and-forget)
+      if (typeof google !== 'undefined' && currentMap && currentMap.mapId) {
+        google.script.run
+          .withSuccessHandler(function(){})
+          .withFailureHandler(function(){})
+          .saveJournalEntry({
+            mapId: currentMap.mapId,
+            hexId: '',
+            entryType: 'phase_transition',
+            content: note,
+            promptId: 'dtk_phase_' + phaseKey,
+            metadataJson: JSON.stringify({ sourceType: 'phase_transition', phase: phaseKey })
+          });
+      }
+    })
+    .withFailureHandler(function(err) {
+      dtkTransitionSaving = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Reflection'; }
+      if (typeof showToast === 'function') {
+        showToast('Could not save reflection. Try again.', 'error');
+      }
+    })
+    .saveReflectionNote(currentMap.mapId, targetHexId, note);
+}
+</script>

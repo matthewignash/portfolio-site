@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Science Dept Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f6f8;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== Header Bar ===== */
+    .header-bar {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 0 20px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .header-bar .title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1a3c6e;
+      white-space: nowrap;
+    }
+    .header-bar .title i { color: #1a73e8; margin-right: 6px; }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .quick-links-dropdown .btn {
+      padding: 4px 8px;
+      font-size: 0.85rem;
+      color: #555;
+      border: 1px solid #ddd;
+      background: #fff;
+    }
+    .quick-links-dropdown .btn:hover { background: #f0f0f0; }
+    .quick-links-dropdown .dropdown-item i { width: 20px; text-align: center; margin-right: 6px; }
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: #333;
+    }
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #1a73e8;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .admin-badge {
+      background: #dc3545;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.04em;
+    }
+
+    /* ===== Tab Bar ===== */
+    .tab-bar {
+      background: #fff;
+      border-bottom: 2px solid #e0e0e0;
+      display: flex;
+      overflow-x: auto;
+      flex-shrink: 0;
+      padding: 0 12px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      padding: 10px 16px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: #666;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: #1a73e8; }
+    .tab-btn.active {
+      color: #1a73e8;
+      border-bottom-color: #1a73e8;
+      font-weight: 600;
+    }
+    .tab-btn i { margin-right: 5px; }
+
+    /* ===== Content Area ===== */
+    .content-area {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+    #app-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: none;
+    }
+    #dashboard-content {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      padding: 24px 20px;
+    }
+
+    /* ===== Dashboard Cards ===== */
+    .dashboard-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .metric-card {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e0e0e0;
+      border-left: 4px solid #ddd;
+      padding: 16px 20px;
+      height: 100%;
+      cursor: pointer;
+      transition: box-shadow 0.2s, transform 0.1s;
+    }
+    .metric-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+      transform: translateY(-1px);
+    }
+    .metric-card .card-icon {
+      font-size: 1.3rem;
+      margin-bottom: 8px;
+    }
+    .metric-card .metric-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #1a1a1a;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .metric-card .metric-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #888;
+      margin-bottom: 4px;
+    }
+    .metric-card .metric-sub {
+      font-size: 0.78rem;
+      color: #999;
+    }
+    .metric-card .metric-sub.warn { color: #dc3545; }
+    .metric-card .metric-sub.ok   { color: #198754; }
+
+    /* Card border colors */
+    .metric-card.tasks      { border-left-color: #34a853; }
+    .metric-card.kanban     { border-left-color: #ea4335; }
+    .metric-card.meetings   { border-left-color: #6f42c1; }
+    .metric-card.announce   { border-left-color: #1a73e8; }
+    .metric-card.newsletter { border-left-color: #f9a825; }
+    .metric-card.schedule   { border-left-color: #00897b; }
+    .metric-card.curriculum { border-left-color: #7b1fa2; }
+    .metric-card.staff      { border-left-color: #ff5722; }
+
+    /* Staff Management Modal */
+    .staff-table th { font-size: 0.78rem; text-transform: uppercase; color: #888; letter-spacing: 0.04em; }
+    .staff-table td { font-size: 0.85rem; vertical-align: middle; }
+    .staff-role-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; display: inline-block; }
+    .staff-role-badge.admin { background: #dc3545; color: #fff; }
+    .staff-role-badge.teacher { background: #0d6efd; color: #fff; }
+    .staff-role-badge.support { background: #198754; color: #fff; }
+    .staff-role-badge.hod { background: #6f42c1; color: #fff; }
+    .staff-inactive { opacity: 0.5; }
+    .staff-inactive td:first-child { text-decoration: line-through; }
+    .staff-count-badge { background: #1a73e8; color: #fff; font-size: 0.65rem; border-radius: 50%; padding: 2px 6px; margin-left: 4px; }
+
+    .section-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    .updated-label {
+      font-size: 0.75rem;
+      color: #aaa;
+      margin-bottom: 20px;
+    }
+
+    /* Loading shimmer for cards */
+    .shimmer {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 4px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .shimmer-value { width: 60px; height: 32px; margin-bottom: 6px; }
+    .shimmer-label { width: 100px; height: 12px; margin-bottom: 4px; }
+    .shimmer-sub   { width: 80px; height: 11px; }
+
+    @media (max-width: 768px) {
+      .header-bar { padding: 0 12px; }
+      .header-bar .title { font-size: 0.95rem; }
+      .user-name-text { display: none; }
+      .tab-btn { padding: 10px 12px; font-size: 0.78rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== Header Bar ===== -->
+  <div class="header-bar">
+    <div class="title"><i class="bi bi-mortarboard-fill"></i>Science Department Dashboard</div>
+    <div class="header-right">
+      <!-- Quick Links Dropdown -->
+      <div class="dropdown quick-links-dropdown">
+        <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-link-45deg"></i> Links
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="https://classroom.google.com" target="_blank"><i class="bi bi-google"></i> Google Classroom</a></li>
+          <li><a class="dropdown-item" href="#" target="_blank"><i class="bi bi-flask"></i> LabLogger</a></li>
+          <li><a class="dropdown-item" href="#" target="_blank"><i class="bi bi-cart3"></i> Purchasing</a></li>
+          <li><a class="dropdown-item" href="#" target="_blank"><i class="bi bi-file-earmark-check"></i> IA Moderation</a></li>
+        </ul>
+      </div>
+      <!-- Settings (admin only) -->
+      <button class="btn btn-sm" id="settings-btn" style="display:none;color:#555;border:1px solid #ddd;background:#fff;padding:4px 8px;font-size:0.85rem;" onclick="openStaffPanel()" title="Staff Management">
+        <i class="bi bi-people-fill"></i>
+      </button>
+      <!-- User Info -->
+      <div class="user-info" id="user-info" style="display:none">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <span class="user-name-text" id="user-name"></span>
+        <span class="admin-badge" id="admin-badge" style="display:none">ADMIN</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Tab Bar ===== -->
+  <div class="tab-bar" id="tab-bar">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+      <i class="bi bi-grid-1x2-fill"></i>Dashboard
+    </button>
+    <button class="tab-btn" data-tab="announcements" onclick="switchTab('announcements')">
+      <i class="bi bi-megaphone-fill"></i>Announcements
+    </button>
+    <button class="tab-btn" data-tab="tasks" onclick="switchTab('tasks')">
+      <i class="bi bi-check2-square"></i>Tasks
+    </button>
+    <button class="tab-btn" data-tab="kanban" onclick="switchTab('kanban')">
+      <i class="bi bi-kanban-fill"></i>Kanban
+    </button>
+    <button class="tab-btn" data-tab="meetings" onclick="switchTab('meetings')">
+      <i class="bi bi-journal-text"></i>Meetings
+    </button>
+    <button class="tab-btn" data-tab="newsletter" onclick="switchTab('newsletter')">
+      <i class="bi bi-newspaper"></i>Newsletter
+    </button>
+    <button class="tab-btn" data-tab="waterfall" onclick="switchTab('waterfall')">
+      <i class="bi bi-calendar-week-fill"></i>Schedule
+    </button>
+    <button class="tab-btn" data-tab="curriculum" onclick="switchTab('curriculum')">
+      <i class="bi bi-journal-bookmark-fill"></i>Curriculum
+    </button>
+  </div>
+
+  <!-- ===== Content Area ===== -->
+  <div class="content-area">
+    <!-- Dashboard (inline) -->
+    <div id="dashboard-content">
+      <div class="dashboard-grid">
+        <div class="section-title">Executive Dashboard</div>
+        <div class="updated-label" id="updated-label"></div>
+
+        <div class="row g-3 mb-4">
+          <!-- Tasks Card -->
+          <div class="col-sm-6 col-lg-4">
+            <div class="metric-card tasks" onclick="switchTab('tasks')">
+              <div class="card-icon"><i class="bi bi-check2-square" style="color:#34a853"></i></div>
+              <div id="tasks-value" class="metric-value"><div class="shimmer shimmer-value"></div></div>
+              <div class="metric-label">Open Tasks</div>
+              <div id="tasks-sub" class="metric-sub"><div class="shimmer shimmer-sub"></div></div>
+            </div>
+          </div>
+          <!-- Kanban Card -->
+          <div class="col-sm-6 col-lg-4">
+            <div class="metric-card kanban" onclick="switchTab('kanban')">
+              <div class="card-icon"><i class="bi bi-kanban-fill" style="color:#ea4335"></i></div>
+              <div id="kanban-value" class="metric-value"><div class="shimmer shimmer-value"></div></div>
+              <div class="metric-label">Active Cards</div>
+              <div id="kanban-sub" class="metric-sub"><div class="shimmer shimmer-sub"></div></div>
+            </div>
+          </div>
+          <!-- Meetings Card -->
+          <div class="col-sm-6 col-lg-4">
+            <div class="metric-card meetings" onclick="switchTab('meetings')">
+              <div class="card-icon"><i class="bi bi-journal-text" style="color:#6f42c1"></i></div>
+              <div id="meetings-value" class="metric-value"><div class="shimmer shimmer-value"></div></div>
+              <div class="metric-label">Meetings</div>
+              <div id="meetings-sub" class="metric-sub"><div class="shimmer shimmer-sub"></div></div>
+            </div>
+          </div>
+          <!-- Announcements Card -->
+          <div class="col-sm-6 col-lg-4">
+            <div class="metric-card announce" onclick="switchTab('announcements')">
+              <div class="card-icon"><i class="bi bi-megaphone-fill" style="color:#1a73e8"></i></div>
+              <div id="announce-value" class="metric-value"><div class="shimmer shimmer-value"></div></div>
+              <div class="metric-label">Announcements</div>
+              <div id="announce-sub" class="metric-sub"><div class="shimmer shimmer-sub"></div></div>
+            </div>
+          </div>
+          <!-- Newsletter Card -->
+          <div class="col-sm-6 col-lg-4">
+            <div class="metric-card newsletter" onclick="switchTab('newsletter')">
+              <div class="card-icon"><i class="bi bi-newspaper" style="color:#f9a825"></i></div>
+              <div id="newsletter-value" class="metric-value"><div class="shimmer shimmer-value"></div></div>
+              <div class="metric-label">Newsletter</div>
+              <div id="newsletter-sub" class="metric-sub"><div class="shimmer shimmer-sub"></div></div>
+            </div>
+          </div>
+          <!-- Schedule Card -->
+          <div class="col-sm-6 col-lg-4">
+            <div class="metric-card schedule" onclick="switchTab('waterfall')">
+              <div class="card-icon"><i class="bi bi-calendar-week-fill" style="color:#00897b"></i></div>
+              <div id="schedule-value" class="metric-value">Today</div>
+              <div class="metric-label">Waterfall Schedule</div>
+              <div id="schedule-sub" class="metric-sub">View today's rotation</div>
+            </div>
+          </div>
+          <!-- Curriculum Card -->
+          <div class="col-sm-6 col-lg-4">
+            <div class="metric-card curriculum" onclick="switchTab('curriculum')">
+              <div class="card-icon"><i class="bi bi-journal-bookmark-fill" style="color:#7b1fa2"></i></div>
+              <div id="curriculum-value" class="metric-value"><div class="shimmer shimmer-value"></div></div>
+              <div class="metric-label">Curriculum</div>
+              <div id="curriculum-sub" class="metric-sub"><div class="shimmer shimmer-sub"></div></div>
+            </div>
+          </div>
+          <!-- Staff Card (admin only) -->
+          <div class="col-sm-6 col-lg-4" id="staff-card-col" style="display:none">
+            <div class="metric-card staff" onclick="openStaffPanel()">
+              <div class="card-icon"><i class="bi bi-people-fill" style="color:#ff5722"></i></div>
+              <div id="staff-value" class="metric-value">--</div>
+              <div class="metric-label">Team Members</div>
+              <div id="staff-sub" class="metric-sub">Manage staff</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- App iframe (hidden until a tab is clicked) -->
+    <iframe id="app-iframe"></iframe>
+  </div>
+
+  <!-- Staff Management Modal -->
+  <div class="modal fade" id="staffModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-people-fill"></i> Staff Management <span class="staff-count-badge" id="staff-count">0</span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Add Staff Form -->
+          <div class="card mb-3">
+            <div class="card-body py-2">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label small mb-1">Email</label>
+                  <input type="email" id="staff-email" class="form-control form-control-sm" placeholder="teacher@school.edu">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small mb-1">Display Name</label>
+                  <input type="text" id="staff-name" class="form-control form-control-sm" placeholder="First Last">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small mb-1">Role</label>
+                  <select id="staff-role" class="form-select form-select-sm">
+                    <option value="Teacher">Teacher</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Support">Support</option>
+                    <option value="Head of Department">Head of Dept</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-sm btn-primary w-100" id="add-staff-btn" onclick="handleAddStaff()">
+                    <i class="bi bi-plus"></i> Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Staff List Table -->
+          <div id="staff-table-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // ===== State =====
+    var baseUrl = '';
+    var currentTab = 'dashboard';
+    var iframeCache = {};  // track which pages have been loaded
+
+    // ===== Tab Switching =====
+    function switchTab(tabName) {
+      currentTab = tabName;
+
+      // Update active tab button
+      var btns = document.querySelectorAll('.tab-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('active', btns[i].getAttribute('data-tab') === tabName);
+      }
+
+      var dashContent = document.getElementById('dashboard-content');
+      var iframe = document.getElementById('app-iframe');
+
+      if (tabName === 'dashboard') {
+        iframe.style.display = 'none';
+        dashContent.style.display = 'block';
+      } else {
+        dashContent.style.display = 'none';
+        iframe.style.display = 'block';
+
+        // Build iframe URL
+        var url;
+        if (baseUrl) {
+          url = baseUrl + '?page=' + tabName;
+        } else {
+          // Local dev: use relative file paths
+          var fileMap = {
+            announcements: 'announcements.html',
+            tasks: 'tasks.html',
+            kanban: 'kanban.html',
+            meetings: 'meetings.html',
+            newsletter: 'newsletter.html',
+            waterfall: 'waterfall.html',
+            curriculum: 'curriculum.html'
+          };
+          url = fileMap[tabName] || tabName + '.html';
+        }
+
+        // Only reload if URL changed
+        if (iframe.src !== url && iframe.getAttribute('src') !== url) {
+          iframe.src = url;
+        }
+      }
+    }
+
+    // ===== Populate Dashboard Cards =====
+    function populateDashboard(data) {
+      if (!data) return;
+
+      // Tasks
+      if (data.tasks) {
+        var t = data.tasks;
+        document.getElementById('tasks-value').textContent = t.totalOpen;
+        var sub = t.totalCompleted + ' completed';
+        if (t.totalOverdue > 0) {
+          sub = t.totalOverdue + ' overdue';
+          document.getElementById('tasks-sub').className = 'metric-sub warn';
+        } else {
+          document.getElementById('tasks-sub').className = 'metric-sub ok';
+        }
+        document.getElementById('tasks-sub').textContent = sub;
+      } else {
+        document.getElementById('tasks-value').textContent = '--';
+        document.getElementById('tasks-sub').textContent = 'No data';
+      }
+
+      // Kanban
+      if (data.board) {
+        var cards = data.board.cards || [];
+        document.getElementById('kanban-value').textContent = cards.length;
+        var cols = data.board.columns || [];
+        var inProg = 0;
+        for (var i = 0; i < cards.length; i++) {
+          for (var j = 0; j < cols.length; j++) {
+            if (cols[j].ColumnId === cards[i].ColumnId && cols[j].Title === 'In Progress') {
+              inProg++;
+            }
+          }
+        }
+        document.getElementById('kanban-sub').textContent = inProg + ' in progress';
+      } else {
+        document.getElementById('kanban-value').textContent = '--';
+        document.getElementById('kanban-sub').textContent = 'No data';
+      }
+
+      // Meetings
+      if (data.meetings && data.meetings.length > 0) {
+        var upcoming = [];
+        var today = new Date().toISOString().split('T')[0];
+        for (var i = 0; i < data.meetings.length; i++) {
+          if (data.meetings[i].Date >= today) {
+            upcoming.push(data.meetings[i]);
+          }
+        }
+        document.getElementById('meetings-value').textContent = data.meetings.length;
+        if (upcoming.length > 0) {
+          var next = upcoming[upcoming.length - 1]; // sorted desc, so last is earliest upcoming
+          document.getElementById('meetings-sub').textContent = 'Next: ' + (next.Title || '').substring(0, 25);
+        } else {
+          document.getElementById('meetings-sub').textContent = 'No upcoming';
+        }
+      } else {
+        document.getElementById('meetings-value').textContent = '0';
+        document.getElementById('meetings-sub').textContent = 'No meetings yet';
+      }
+
+      // Announcements
+      if (data.posts && data.posts.length > 0) {
+        var recent = 0;
+        var pinned = 0;
+        var weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        var weekAgoStr = weekAgo.toISOString();
+        for (var i = 0; i < data.posts.length; i++) {
+          if (data.posts[i].Timestamp >= weekAgoStr) recent++;
+          if (data.posts[i].Pinned === true || data.posts[i].Pinned === 'TRUE') pinned++;
+        }
+        document.getElementById('announce-value').textContent = recent;
+        document.getElementById('announce-sub').textContent = 'this week, ' + pinned + ' pinned';
+      } else {
+        document.getElementById('announce-value').textContent = '0';
+        document.getElementById('announce-sub').textContent = 'No posts yet';
+      }
+
+      // Newsletter
+      if (data.newsletters && data.newsletters.length > 0) {
+        var drafts = 0;
+        var sent = 0;
+        for (var i = 0; i < data.newsletters.length; i++) {
+          if (data.newsletters[i].Status === 'Draft') drafts++;
+          if (data.newsletters[i].Status === 'Sent') sent++;
+        }
+        if (drafts > 0) {
+          document.getElementById('newsletter-value').textContent = drafts;
+          document.getElementById('newsletter-sub').textContent = 'draft' + (drafts > 1 ? 's' : '') + ' in progress';
+        } else {
+          document.getElementById('newsletter-value').textContent = sent;
+          document.getElementById('newsletter-sub').textContent = 'sent total';
+        }
+      } else {
+        document.getElementById('newsletter-value').textContent = '0';
+        document.getElementById('newsletter-sub').textContent = 'No newsletters yet';
+      }
+
+      // Curriculum
+      if (data.curriculum) {
+        var courses = data.curriculum.courses || [];
+        var unitsByC = data.curriculum.units || {};
+        var totalUnits = 0;
+        var approvedUnits = 0;
+        var courseIds = Object.keys(unitsByC);
+        for (var i = 0; i < courseIds.length; i++) {
+          var cu = unitsByC[courseIds[i]] || [];
+          totalUnits += cu.length;
+          for (var j = 0; j < cu.length; j++) {
+            if (cu[j].Status === 'Approved') approvedUnits++;
+          }
+        }
+        document.getElementById('curriculum-value').textContent = courses.length;
+        document.getElementById('curriculum-sub').textContent = totalUnits + ' units, ' + approvedUnits + ' approved';
+      } else {
+        document.getElementById('curriculum-value').textContent = '0';
+        document.getElementById('curriculum-sub').textContent = 'No curriculum data';
+      }
+
+      // Staff (admin only — card hidden for non-admins)
+      if (data.staff && data.staff.length > 0) {
+        document.getElementById('staff-value').textContent = data.staff.length;
+        document.getElementById('staff-sub').textContent = 'active members';
+      } else {
+        document.getElementById('staff-value').textContent = '0';
+        document.getElementById('staff-sub').textContent = 'Add team members';
+      }
+
+      // Timestamp
+      var now = new Date();
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var hours = now.getHours();
+      var ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      var mins = now.getMinutes();
+      var timeStr = months[now.getMonth()] + ' ' + now.getDate() + ', ' +
+        hours + ':' + (mins < 10 ? '0' : '') + mins + ' ' + ampm;
+      document.getElementById('updated-label').textContent = 'Updated: ' + timeStr;
+    }
+
+    // ===== Boot =====
+    function boot() {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        // Production: Apps Script
+        google.script.run.withSuccessHandler(function(user) {
+          document.getElementById('user-info').style.display = 'flex';
+          document.getElementById('user-name').textContent = user.name;
+          // Initials for avatar
+          var parts = user.name.split(' ');
+          var initials = parts[0].charAt(0).toUpperCase();
+          if (parts.length > 1) initials += parts[parts.length - 1].charAt(0).toUpperCase();
+          document.getElementById('user-avatar').textContent = initials;
+          if (user.isAdmin) {
+            document.getElementById('admin-badge').style.display = 'inline';
+            document.getElementById('settings-btn').style.display = 'inline-block';
+            document.getElementById('staff-card-col').style.display = '';
+          }
+        }).withFailureHandler(function() {}).getCurrentUser();
+
+        // Get the actual deployment URL for iframe routing
+        // (window.location.href returns googleusercontent.com, not the script.google.com URL)
+        google.script.run.withSuccessHandler(function(url) {
+          baseUrl = url;
+        }).withFailureHandler(function() {}).getScriptUrl();
+
+        // Fetch dashboard summary
+        google.script.run.withSuccessHandler(function(data) {
+          populateDashboard(data);
+        }).withFailureHandler(function(err) {
+          // Show dashes on failure
+          populateDashboard(null);
+        }).getDashboardSummary();
+
+      }
+    }
+
+    // ===== Staff Management =====
+    var staffList = [];
+    var staffModalInstance = null;
+
+    function getStaffModal() {
+      if (!staffModalInstance) staffModalInstance = new bootstrap.Modal(document.getElementById('staffModal'));
+      return staffModalInstance;
+    }
+
+    function openStaffPanel() {
+      google.script.run
+        .withSuccessHandler(function(data) {
+          staffList = data || [];
+          renderStaffTable();
+          var active = 0;
+          for (var i = 0; i < staffList.length; i++) {
+            if (staffList[i].IsActive === true || staffList[i].IsActive === 'TRUE') active++;
+          }
+          document.getElementById('staff-count').textContent = active;
+          getStaffModal().show();
+        })
+        .withFailureHandler(function(err) {
+          alert('Failed to load staff: ' + (err.message || err));
+        })
+        .getAllStaff();
+    }
+
+    function renderStaffTable() {
+      if (staffList.length === 0) {
+        document.getElementById('staff-table-container').innerHTML =
+          '<div style="text-align:center;color:#999;padding:20px;"><i class="bi bi-people" style="font-size:2rem;"></i>' +
+          '<p>No staff members yet. Add your first team member above.</p></div>';
+        return;
+      }
+
+      var html = '<table class="table table-sm staff-table"><thead><tr>';
+      html += '<th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th>';
+      html += '</tr></thead><tbody>';
+
+      for (var i = 0; i < staffList.length; i++) {
+        var s = staffList[i];
+        var active = s.IsActive === true || s.IsActive === 'TRUE';
+        html += '<tr' + (active ? '' : ' class="staff-inactive"') + '>';
+        html += '<td>' + escapeHtml(s.DisplayName) + '</td>';
+        html += '<td>' + escapeHtml(s.Email) + '</td>';
+
+        var roleClass = s.Role === 'Admin' ? 'admin' : s.Role === 'Teacher' ? 'teacher' : s.Role === 'Support' ? 'support' : 'hod';
+        html += '<td><span class="staff-role-badge ' + roleClass + '">' + escapeHtml(s.Role) + '</span></td>';
+        html += '<td>' + (active ? '<span style="color:#198754">Active</span>' : '<span style="color:#dc3545">Inactive</span>') + '</td>';
+
+        html += '<td class="text-end">';
+        if (active) {
+          html += '<button class="btn btn-sm btn-outline-secondary me-1" style="font-size:0.7rem;padding:1px 6px;" onclick="handleEditStaff(\'' + s.StaffId + '\')" title="Edit"><i class="bi bi-pencil"></i></button>';
+          html += '<button class="btn btn-sm btn-outline-danger" style="font-size:0.7rem;padding:1px 6px;" onclick="handleDeactivateStaff(\'' + s.StaffId + '\')" title="Deactivate"><i class="bi bi-person-dash"></i></button>';
+        } else {
+          html += '<button class="btn btn-sm btn-outline-success" style="font-size:0.7rem;padding:1px 6px;" onclick="handleReactivateStaff(\'' + s.StaffId + '\')" title="Reactivate"><i class="bi bi-person-check"></i></button>';
+        }
+        html += '</td></tr>';
+      }
+
+      html += '</tbody></table>';
+      document.getElementById('staff-table-container').innerHTML = html;
+    }
+
+    function handleAddStaff() {
+      var email = document.getElementById('staff-email').value.trim();
+      var name = document.getElementById('staff-name').value.trim();
+      var role = document.getElementById('staff-role').value;
+      if (!email || !name) { alert('Email and Display Name are required.'); return; }
+
+      var btn = document.getElementById('add-staff-btn');
+      btn.disabled = true;
+
+      google.script.run
+        .withSuccessHandler(function() {
+          btn.disabled = false;
+          document.getElementById('staff-email').value = '';
+          document.getElementById('staff-name').value = '';
+          openStaffPanel(); // Refresh
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          alert(err.message || 'Failed to add staff.');
+        })
+        .addStaff({ email: email, displayName: name, role: role });
+    }
+
+    function handleEditStaff(staffId) {
+      var s = null;
+      for (var i = 0; i < staffList.length; i++) {
+        if (staffList[i].StaffId === staffId) { s = staffList[i]; break; }
+      }
+      if (!s) return;
+
+      var newName = prompt('Display Name:', s.DisplayName);
+      if (newName === null || !newName.trim()) return;
+      var newRole = prompt('Role (Teacher / Admin / Support / Head of Department):', s.Role);
+      if (newRole === null || !newRole.trim()) return;
+
+      google.script.run
+        .withSuccessHandler(function() { openStaffPanel(); })
+        .withFailureHandler(function(err) { alert(err.message || 'Failed to update.'); })
+        .updateStaff(staffId, { displayName: newName.trim(), role: newRole.trim() });
+    }
+
+    function handleDeactivateStaff(staffId) {
+      if (!confirm('Deactivate this staff member? They will be removed from dropdown lists.')) return;
+      google.script.run
+        .withSuccessHandler(function() { openStaffPanel(); })
+        .withFailureHandler(function(err) { alert(err.message || 'Failed to deactivate.'); })
+        .deactivateStaff(staffId);
+    }
+
+    function handleReactivateStaff(staffId) {
+      google.script.run
+        .withSuccessHandler(function() { openStaffPanel(); })
+        .withFailureHandler(function(err) { alert(err.message || 'Failed to reactivate.'); })
+        .reactivateStaff(staffId);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      var div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // ===== Boot =====
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot);
+    } else {
+      boot();
+    }
+  </script>
+</body>
+</html>

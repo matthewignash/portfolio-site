@@ -1,0 +1,1346 @@
+<script>
+    // ================================================
+    // PROGRESS DASHBOARD - Frontend Logic (ES5)
+    // Story: Student Progress Dashboard
+    // ================================================
+
+    // Self-assessment rating labels (shared with teacher views)
+    var saRatingLabels = { 1: 'Beginning', 2: 'Developing', 3: 'Proficient', 4: 'Extending' };
+
+    // ================================================
+    // INITIALIZATION
+    // ================================================
+
+    /**
+     * Initialize the progress dashboard.
+     * Called from loadAllData() in Scripts-Core.html.
+     * Detects user role and renders appropriate view.
+     */
+    function loadProgressDashboard() {
+      if (!userData) {
+        // userData not ready — will retry on tab switch
+        return;
+      }
+
+      var content = document.getElementById('progressContent');
+      var selectorBar = document.getElementById('progressSelectorBar');
+      var toolbar = document.getElementById('progressToolbar');
+
+      if (currentViewMode === 'student' && userData.canEdit) {
+        // Teacher preview mode: show student picker
+        selectorBar.style.display = 'none';
+        var subNav = document.getElementById('progressSubNav');
+        if (subNav) subNav.style.display = 'none';
+        var exportBtn = document.getElementById('progressExportBtn');
+        if (exportBtn) exportBtn.style.display = 'none';
+        // Show student portfolio sub-nav in preview mode
+        var pfSubNav = document.getElementById('pfStudentSubNav');
+        if (pfSubNav) pfSubNav.style.display = 'flex';
+        // Reset portfolio view state for new preview
+        pfInitialized = false;
+        var pfContainer = document.getElementById('pfPortfolioContainer');
+        if (pfContainer) pfContainer.style.display = 'none';
+        var pfExport = document.getElementById('pfExportBtn');
+        if (pfExport) pfExport.style.display = 'none';
+        // Ensure classProgressContainer is visible (may be hidden by Course Analytics sub-nav)
+        var classContainer = document.getElementById('classProgressContainer');
+        if (classContainer) classContainer.style.display = 'block';
+        var analyticsContainer = document.getElementById('courseAnalyticsContainer');
+        if (analyticsContainer) analyticsContainer.style.display = 'none';
+        document.getElementById('progressViewTitle').textContent = 'Student Progress Preview';
+        closeProgressDetail();
+        renderTeacherPreviewSelector(content);
+      } else if (userData.canEdit) {
+        // Teacher/Admin view: show class selector
+        selectorBar.style.display = 'block';
+        document.getElementById('progressViewTitle').textContent = 'Class Progress Dashboard';
+
+        // Show sub-nav for teacher/admin, hide student sub-nav
+        var subNav2 = document.getElementById('progressSubNav');
+        if (subNav2) subNav2.style.display = 'flex';
+        var pfSubNav2 = document.getElementById('pfStudentSubNav');
+        if (pfSubNav2) pfSubNav2.style.display = 'none';
+
+        // Populate class dropdown from classesData
+        populateProgressClassDropdown();
+
+        content.innerHTML = '<div class="pgd-empty"><div class="icon">📊</div>' +
+          '<p>Select a class and map to view progress data.</p></div>';
+      } else {
+        // Student view: load personal dashboard
+        selectorBar.style.display = 'none';
+        document.getElementById('progressViewTitle').textContent = 'My Progress';
+        // Show student portfolio sub-nav
+        var pfSubNav3 = document.getElementById('pfStudentSubNav');
+        if (pfSubNav3) pfSubNav3.style.display = 'flex';
+
+        // If batch data already loaded (from getStudentBatchData), render immediately
+        if (progressDashboardData && progressDashboardData.maps) {
+          renderProgressStudentView(progressDashboardData);
+        } else {
+          content.innerHTML = '<div class="loading"><span class="loading-spinner"></span> Loading your progress...</div>';
+
+          google.script.run
+            .withSuccessHandler(function(data) {
+              progressDashboardData = data;
+              renderProgressStudentView(data);
+            })
+            .withFailureHandler(function(err) {
+              content.innerHTML = '<div class="pgd-empty"><div class="icon">⚠️</div>' +
+                '<p>Error loading progress: ' + escapeHtml(err.message) + '</p></div>';
+            })
+            .getStudentDashboardData();
+        }
+      }
+    }
+
+    // ================================================
+    // TEACHER: CLASS & MAP SELECTION
+    // ================================================
+
+    /**
+     * Populate the class dropdown with user's classes.
+     */
+    function populateProgressClassDropdown() {
+      var select = document.getElementById('progressClassSelect');
+      select.innerHTML = '<option value="">-- Select Class --</option>';
+
+      var classes = classesData || [];
+      for (var i = 0; i < classes.length; i++) {
+        var cls = classes[i];
+        if (cls.status === 'removed' || cls.status === 'archived') continue;
+        var opt = document.createElement('option');
+        opt.value = cls.classId;
+        opt.textContent = cls.className + (cls.subject ? ' (' + cls.subject + ')' : '');
+        select.appendChild(opt);
+      }
+    }
+
+    /**
+     * Handle class selection change.
+     * Fetches available maps for the selected class.
+     */
+    var _progressClassDebounce = null;
+    var _progressMapDebounce = null;
+
+    function onProgressClassChange(classId) {
+      // Debounce rapid dropdown changes — only fire RPC for the last selection
+      if (_progressClassDebounce) clearTimeout(_progressClassDebounce);
+      _progressClassDebounce = setTimeout(function() {
+        _progressClassDebounce = null;
+        _onProgressClassChangeImpl(classId);
+      }, 300);
+    }
+
+    function _onProgressClassChangeImpl(classId) {
+      progressSelectedClassId = classId;
+      progressSelectedMapId = null;
+      progressSelectedStudent = null;
+      progressDashboardData = null;
+      previewStudentEmail = null;
+      previewClassId = null;
+
+      // Invalidate Teacher Support Dashboard cache
+      tsdInitialized = false;
+      tsdProfilesCache = null;
+      tsdComputedData = null;
+
+      // Invalidate PBL Dashboard cache
+      pblDashboardData = null;
+      pblComputedData = null;
+      pblInitialized = false;
+
+      // Invalidate Note Coaching Dashboard cache
+      cncComputedData = null;
+      cncInitialized = false;
+
+      // Invalidate Portfolio Insights cache
+      piaComputedData = null;
+      piaExpandedStudents = {};
+      piaInitialized = false;
+
+      // Invalidate Lab Insights cache
+      linData = null;
+      linInitialized = false;
+      linSelectedAssignment = 'all';
+      linExpandedStudents = {};
+
+      // Invalidate Review Insights cache
+      rviIterationData = null;
+      rviFeedbackData = null;
+      rviInitialized = false;
+      rviExpandedHexes = {};
+      rviDataLoading = false;
+
+      // Invalidate Competency & ATL cache
+      catCompData = null;
+      catAtlData = null;
+      catInitialized = false;
+      catExpandedStudents = {};
+      catCompLoading = false;
+      catAtlLoading = false;
+
+      // Invalidate Lesson Insights cache
+      lsmtData = null;
+      lsmtInitialized = false;
+      lsmtExpandedStudents = {};
+
+      // Invalidate Differentiation Analytics cache
+      dfaComputedData = null;
+      dfaInitialized = false;
+      dfaExpandedGroups = {};
+      dfaGroupsData = [];
+      dfaMemberships = [];
+      dfaHexAssignments = [];
+      dfaProfilesData = [];
+      dfaMapId = null;
+      grvQueueData = null;
+      grvInitialized = false;
+      if (typeof grvStopPolling === 'function') grvStopPolling();
+      phmDashboardData = null;
+      phmHexStats = null;
+
+      var mapSelect = document.getElementById('progressMapSelect');
+      var content = document.getElementById('progressContent');
+      var exportBtn = document.getElementById('progressExportBtn');
+
+      // Close detail panel
+      closeProgressDetail();
+
+      if (!classId) {
+        mapSelect.innerHTML = '<option value="">-- Select Map --</option>';
+        mapSelect.disabled = true;
+        if (exportBtn) exportBtn.style.display = 'none';
+        content.innerHTML = '<div class="pgd-empty"><div class="icon">📊</div>' +
+          '<p>Select a class and map to view progress data.</p></div>';
+        return;
+      }
+
+      // Show loading in map dropdown
+      mapSelect.innerHTML = '<option value="">Loading maps...</option>';
+      mapSelect.disabled = true;
+
+      google.script.run
+        .withSuccessHandler(function(maps) {
+          progressClassMaps = maps || [];
+          mapSelect.innerHTML = '<option value="">-- Select Map --</option>';
+
+          if (maps.length === 0) {
+            mapSelect.innerHTML = '<option value="">No maps found</option>';
+            content.innerHTML = '<div class="pgd-empty"><div class="icon">🗺️</div>' +
+              '<p>No maps with student progress found for this class.</p>' +
+              '<p style="font-size:12px;color:#94a3b8;">Students need to have progress records on a map for it to appear here.</p></div>';
+            return;
+          }
+
+          for (var i = 0; i < maps.length; i++) {
+            var opt = document.createElement('option');
+            opt.value = maps[i].mapId;
+            opt.textContent = maps[i].title;
+            mapSelect.appendChild(opt);
+          }
+          mapSelect.disabled = false;
+        })
+        .withFailureHandler(function(err) {
+          mapSelect.innerHTML = '<option value="">Error loading maps</option>';
+          showToast('Error loading maps: ' + err.message, 'error');
+        })
+        .getClassMaps(classId);
+    }
+
+    /**
+     * Handle map selection change.
+     * Fetches full dashboard data for class+map.
+     */
+    function onProgressMapChange(mapId) {
+      // Debounce rapid dropdown changes
+      if (_progressMapDebounce) clearTimeout(_progressMapDebounce);
+      _progressMapDebounce = setTimeout(function() {
+        _progressMapDebounce = null;
+        _onProgressMapChangeImpl(mapId);
+      }, 300);
+    }
+
+    function _onProgressMapChangeImpl(mapId) {
+      progressSelectedMapId = mapId;
+      progressSelectedStudent = null;
+      progressDashboardData = null;
+
+      var content = document.getElementById('progressContent');
+      var exportBtn = document.getElementById('progressExportBtn');
+
+      closeProgressDetail();
+
+      if (!mapId) {
+        if (exportBtn) exportBtn.style.display = 'none';
+        content.innerHTML = '<div class="pgd-empty"><div class="icon">📊</div>' +
+          '<p>Select a map to view progress data.</p></div>';
+        return;
+      }
+
+      content.innerHTML = '<div class="loading"><span class="loading-spinner"></span> Loading dashboard data...</div>';
+
+      var expectedMapId = mapId;
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (progressSelectedMapId !== expectedMapId) return; // stale response
+          progressDashboardData = data;
+          if (exportBtn) exportBtn.style.display = 'inline-flex';
+          renderProgressTeacherView(data);
+        })
+        .withFailureHandler(function(err) {
+          if (progressSelectedMapId !== expectedMapId) return; // stale response
+          content.innerHTML = '<div class="pgd-empty"><div class="icon">⚠️</div>' +
+            '<p>Error loading dashboard: ' + escapeHtml(err.message) + '</p></div>';
+          showToast('Error: ' + err.message, 'error');
+        })
+        .getTeacherDashboardData(progressSelectedClassId, mapId);
+    }
+
+    // ================================================
+    // TEACHER: OVERVIEW RENDERING
+    // ================================================
+
+    /**
+     * Orchestrate rendering of the full teacher dashboard.
+     */
+    function renderProgressTeacherView(data) {
+      var content = document.getElementById('progressContent');
+      var html = '';
+
+      // Overview cards
+      html += renderProgressOverviewCards(data.overview);
+
+      // Student completion grid
+      html += '<div class="pgd-section-title">Student Progress Grid <button class="csv-export-btn" onclick="csvExportClassProgress()" title="Export as CSV" aria-label="Export class progress as CSV">&#128229; Export</button></div>';
+      html += renderProgressGrid(data);
+
+      // Score distribution
+      if (data.students.length > 0) {
+        html += '<div class="pgd-section-title">Score Distribution</div>';
+        html += renderScoreDistribution(data);
+      }
+
+      // Pending approvals
+      if (!appConfig.requireTeacherApproval) {
+        html += '<div class="pgd-section-title">Pending Approvals</div>';
+        html += '<div style="padding:12px 16px;background:#f8fafc;border-radius:8px;font-size:13px;color:#64748b;border:1px solid #e2e8f0;">';
+        html += '<span style="font-weight:600;color:#475569;">&#9432; Teacher approval is disabled.</span> ';
+        html += 'Submissions are auto-approved. Change this in Admin Settings.';
+        html += '</div>';
+      } else if (data.pendingApprovals.length > 0) {
+        html += '<div class="pgd-section-title">';
+        html += 'Pending Approvals';
+        html += '<span style="background:#fef3c7;color:#b45309;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px;">' + data.pendingApprovals.length + '</span>';
+        html += '</div>';
+        html += renderPendingApprovals(data.pendingApprovals);
+      }
+
+      // Self-Assessment Insights
+      if (data.selfAssessmentSummary && data.selfAssessmentSummary.ratedHexes > 0) {
+        html += '<div class="pgd-section-title">Self-Assessment Insights</div>';
+        html += renderSelfAssessmentSummary(data.selfAssessmentSummary);
+      }
+
+      content.innerHTML = html;
+    }
+
+    /**
+     * Render 4 overview stat cards.
+     */
+    function renderProgressOverviewCards(overview) {
+      var scoreDisplay = overview.avgScore !== null ? overview.avgScore + '%' : '—';
+
+      var html = '<div class="pgd-overview-cards">';
+
+      html += '<div class="pgd-overview-card">';
+      html += '<div class="pgd-overview-value">' + overview.totalStudents + '</div>';
+      html += '<div class="pgd-overview-label">Students</div>';
+      html += '</div>';
+
+      html += '<div class="pgd-overview-card">';
+      html += '<div class="pgd-overview-value">' + overview.avgCompletion + '%</div>';
+      html += '<div class="pgd-overview-label">Avg Completion</div>';
+      html += '</div>';
+
+      html += '<div class="pgd-overview-card">';
+      html += '<div class="pgd-overview-value">' + scoreDisplay + '</div>';
+      html += '<div class="pgd-overview-label">Avg Score</div>';
+      html += '</div>';
+
+      html += '<div class="pgd-overview-card' + (overview.pendingApprovals > 0 ? ' highlight' : '') + '">';
+      html += '<div class="pgd-overview-value">' + overview.pendingApprovals + '</div>';
+      html += '<div class="pgd-overview-label">Pending Approvals</div>';
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // TEACHER: STUDENT COMPLETION GRID
+    // ================================================
+
+    /**
+     * Render the color-coded student × hex grid table.
+     */
+    function renderProgressGrid(data) {
+      if (!data.students || data.students.length === 0) {
+        return '<div class="pgd-empty"><p>No students enrolled in this class.</p></div>';
+      }
+
+      var hexes = data.hexes || [];
+
+      var html = '<div class="pgd-grid-container">';
+      html += '<table class="pgd-grid">';
+
+      // Header row
+      html += '<thead><tr>';
+      html += '<th class="pgd-student-col">Student</th>';
+      for (var h = 0; h < hexes.length; h++) {
+        var label = escapeHtml(hexes[h].label || '');
+        if (label.length > 10) label = label.substring(0, 10) + '…';
+        html += '<th class="pgd-hex-col" title="' + escapeHtml(hexes[h].label || '') + '">' + label + '</th>';
+      }
+      html += '<th style="min-width:60px;">Completion</th>';
+      html += '</tr></thead>';
+
+      // Body rows
+      html += '<tbody>';
+      for (var s = 0; s < data.students.length; s++) {
+        var student = data.students[s];
+        var selectedClass = progressSelectedStudent === student.email ? ' selected' : '';
+        html += '<tr class="' + selectedClass + '" onclick="selectProgressStudent(\'' + escapeHtml(student.email) + '\')">';
+        html += '<td class="pgd-student-cell">' + escapeHtml(student.name) + '</td>';
+
+        for (var h2 = 0; h2 < hexes.length; h2++) {
+          var hexId = hexes[h2].id;
+          var hp = student.hexProgress[hexId];
+          var status = hp ? hp.status : 'not_started';
+          var isPending = hp && (status === 'completed' || status === 'mastered') && !hp.teacherApproved;
+          var cellClass = isPending ? 'pending' : status;
+          var cellText = '';
+
+          if (hp && hp.score !== null && hp.maxScore !== null) {
+            cellText = hp.score + '/' + hp.maxScore;
+          }
+
+          html += '<td><div class="pgd-cell ' + cellClass + '" title="' + status + (isPending ? ' (pending)' : '') + '">' + cellText + '</div></td>';
+        }
+
+        // Completion %
+        html += '<td style="font-weight:600;font-size:12px;color:#475569;">' + student.percentComplete + '%</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+
+      // Status legend
+      html += '<div class="pgd-status-legend" style="margin-top:8px;">';
+      html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot not_started"></div> Not Started</div>';
+      html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot in_progress"></div> In Progress</div>';
+      html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot completed"></div> Completed</div>';
+      html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot mastered"></div> Mastered</div>';
+      html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot" style="background:#fef3c7;border:1px solid #fde68a;"></div> Pending</div>';
+      html += '</div>';
+
+      return html;
+    }
+
+    /**
+     * CSV Export: Class Progress — student x hex grid with status and scores
+     */
+    function csvExportClassProgress() {
+      if (!progressDashboardData) { showToast('No data to export', 'error'); return; }
+      var data = progressDashboardData;
+      var hexes = data.hexes || [];
+      var headers = ['Student'];
+      for (var h = 0; h < hexes.length; h++) {
+        headers.push(hexes[h].label || hexes[h].id);
+      }
+      headers.push('Completion %');
+
+      var rows = [];
+      for (var s = 0; s < data.students.length; s++) {
+        var stu = data.students[s];
+        var row = [stu.name || stu.email];
+        for (var h2 = 0; h2 < hexes.length; h2++) {
+          var hp = (stu.hexProgress || {})[String(hexes[h2].id)];
+          if (hp) {
+            var cell = hp.status || 'not_started';
+            if (hp.score !== null && hp.maxScore !== null) {
+              cell += ' (' + hp.score + '/' + hp.maxScore + ')';
+            }
+            row.push(cell);
+          } else {
+            row.push('not_started');
+          }
+        }
+        row.push(stu.percentComplete + '%');
+        rows.push(row);
+      }
+
+      var mapTitle = currentMap ? (currentMap.title || 'map') : 'map';
+      csvExportData(headers, rows, 'class-progress-' + mapTitle.replace(/[^a-zA-Z0-9]/g, '_') + '.csv');
+    }
+
+    // ================================================
+    // TEACHER: STUDENT DRILL-DOWN
+    // ================================================
+
+    /**
+     * Select a student to view in the detail panel.
+     */
+    function selectProgressStudent(email) {
+      progressSelectedStudent = email;
+
+      // Highlight row in grid
+      var rows = document.querySelectorAll('.pgd-grid tbody tr');
+      for (var i = 0; i < rows.length; i++) {
+        rows[i].classList.remove('selected');
+      }
+      // Find and select the clicked row
+      var allRows = document.querySelectorAll('.pgd-grid tbody tr');
+      for (var j = 0; j < allRows.length; j++) {
+        if (allRows[j].getAttribute('onclick') &&
+            allRows[j].getAttribute('onclick').indexOf(email) > -1) {
+          allRows[j].classList.add('selected');
+          break;
+        }
+      }
+
+      // Open detail panel
+      var panel = document.getElementById('progressDetailPanel');
+      panel.classList.add('active');
+
+      var data = progressDashboardData;
+      if (!data) return;
+
+      // Find student
+      var student = null;
+      for (var s = 0; s < data.students.length; s++) {
+        if (data.students[s].email === email) {
+          student = data.students[s];
+          break;
+        }
+      }
+
+      if (!student) return;
+
+      document.getElementById('progressDetailTitle').textContent = student.name;
+
+      var body = document.getElementById('progressDetailBody');
+      var html = '';
+
+      // Summary stats
+      html += '<div class="pgd-overview-cards" style="margin-bottom:16px;">';
+      html += '<div class="pgd-overview-card" style="padding:12px;">';
+      html += '<div class="pgd-overview-value" style="font-size:20px;">' + student.percentComplete + '%</div>';
+      html += '<div class="pgd-overview-label">Complete</div>';
+      html += '</div>';
+      html += '<div class="pgd-overview-card" style="padding:12px;">';
+      html += '<div class="pgd-overview-value" style="font-size:20px;">' + (student.averageScore !== null ? student.averageScore + '%' : '—') + '</div>';
+      html += '<div class="pgd-overview-label">Avg Score</div>';
+      html += '</div>';
+      html += '</div>';
+
+      // Status bar
+      var total = data.hexes.length;
+      if (total > 0) {
+        html += '<div class="pgd-status-bar" style="margin-bottom:12px;">';
+        var segments = ['mastered', 'completed', 'in_progress', 'not_started'];
+        for (var seg = 0; seg < segments.length; seg++) {
+          var count = student.statusCounts[segments[seg]] || 0;
+          var pct = (count / total * 100).toFixed(1);
+          if (count > 0) {
+            html += '<div class="pgd-status-segment ' + segments[seg] + '" style="width:' + pct + '%" title="' + segments[seg].replace('_', ' ') + ': ' + count + '"></div>';
+          }
+        }
+        html += '</div>';
+      }
+
+      // Hex-by-hex list
+      html += '<div class="pgd-section-title" style="margin-top:16px;">Hex Progress</div>';
+      html += '<div class="pgd-hex-list">';
+      for (var h = 0; h < data.hexes.length; h++) {
+        var hex = data.hexes[h];
+        var hp = student.hexProgress[hex.id];
+        var status = hp ? hp.status : 'not_started';
+        var scoreText = '';
+        if (hp && hp.score !== null && hp.maxScore !== null) {
+          scoreText = hp.score + '/' + hp.maxScore;
+        }
+
+        html += '<div class="pgd-hex-item">';
+        html += '<div class="pgd-hex-item-label">' + escapeHtml(hex.label) + '</div>';
+        if (scoreText) {
+          html += '<div class="pgd-hex-item-score">' + scoreText + '</div>';
+        }
+        html += '<div class="pgd-hex-item-status ' + status + '">' + status.replace('_', ' ') + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // SBAR breakdown (load async)
+      html += '<div id="progressSbarContainer"></div>';
+
+      body.innerHTML = html;
+
+      // Load SBAR if applicable
+      if (data.gradingSystem && data.gradingSystem.strands && data.gradingSystem.strands.length > 0) {
+        loadSbarBreakdown(email);
+      }
+    }
+
+    /**
+     * Load SBAR breakdown asynchronously for the detail panel.
+     */
+    function loadSbarBreakdown(studentEmail) {
+      var container = document.getElementById('progressSbarContainer');
+      if (!container) return;
+
+      container.innerHTML = '<div class="loading" style="padding:12px;"><span class="loading-spinner"></span> Loading SBAR...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(sbarData) {
+          if (!sbarData || !sbarData.hasSbar) {
+            container.innerHTML = '';
+            return;
+          }
+          container.innerHTML = renderSbarBreakdown(sbarData);
+        })
+        .withFailureHandler(function(err) {
+          container.innerHTML = '';
+          console.log('SBAR load error: ' + err.message);
+        })
+        .getSbarBreakdown(progressSelectedMapId, studentEmail);
+    }
+
+    // ================================================
+    // SBAR STRAND BREAKDOWN
+    // ================================================
+
+    /**
+     * Render SBAR strand bars (KU, TT, C).
+     */
+    function renderSbarBreakdown(sbarData) {
+      if (!sbarData || !sbarData.hasSbar) return '';
+
+      var gs = sbarData.gradingSystem;
+      var scale = gs.scale || 8;
+      var html = '<div class="pgd-section-title" style="margin-top:16px;">SBAR Strand Breakdown</div>';
+      html += '<div class="pgd-sbar-section">';
+
+      var strandNames = { KU: 'Knowledge & Understanding', TT: 'Transfer & Thinking', C: 'Communication' };
+      var strandKeys = Object.keys(sbarData.strands);
+
+      for (var i = 0; i < strandKeys.length; i++) {
+        var key = strandKeys[i];
+        var strand = sbarData.strands[key];
+        var pct = scale > 0 ? (strand.avgScore / scale * 100).toFixed(1) : 0;
+        var displayName = strandNames[key] || key;
+
+        html += '<div class="pgd-sbar-row">';
+        html += '<div class="pgd-sbar-label">' + escapeHtml(key) + '</div>';
+        html += '<div class="pgd-sbar-bar-container" title="' + escapeHtml(displayName) + '">';
+        html += '<div class="pgd-sbar-bar-fill ' + key.toLowerCase() + '" style="width:' + pct + '%;"></div>';
+        html += '</div>';
+        html += '<div class="pgd-sbar-value">' + strand.avgScore + '/' + scale + '</div>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // SCORE DISTRIBUTION
+    // ================================================
+
+    /**
+     * Render score distribution histogram (pure CSS).
+     * Dynamically creates buckets based on grading system scale.
+     */
+    function renderScoreDistribution(data) {
+      // Collect all student scores (as percentages)
+      var scores = [];
+      for (var s = 0; s < data.students.length; s++) {
+        if (data.students[s].averageScore !== null) {
+          scores.push(data.students[s].averageScore);
+        }
+      }
+
+      if (scores.length === 0) {
+        return '<div class="pgd-empty" style="padding:16px;"><p>No scored data available yet.</p></div>';
+      }
+
+      // Create buckets (0-20, 20-40, 40-60, 60-80, 80-100)
+      var buckets = [
+        { label: '0-20%', min: 0, max: 20, count: 0 },
+        { label: '20-40%', min: 20, max: 40, count: 0 },
+        { label: '40-60%', min: 40, max: 60, count: 0 },
+        { label: '60-80%', min: 60, max: 80, count: 0 },
+        { label: '80-100%', min: 80, max: 100.1, count: 0 }
+      ];
+
+      // If SBAR 8-point, use different buckets
+      if (data.gradingSystem && data.gradingSystem.type === 'sbar_8point') {
+        buckets = [
+          { label: '1-2', min: 0, max: 25, count: 0 },
+          { label: '3-4', min: 25, max: 50, count: 0 },
+          { label: '5-6', min: 50, max: 75, count: 0 },
+          { label: '7-8', min: 75, max: 100.1, count: 0 }
+        ];
+      }
+
+      for (var i = 0; i < scores.length; i++) {
+        for (var b = 0; b < buckets.length; b++) {
+          if (scores[i] >= buckets[b].min && scores[i] < buckets[b].max) {
+            buckets[b].count++;
+            break;
+          }
+        }
+      }
+
+      // Find max count for scaling
+      var maxCount = 0;
+      for (var b2 = 0; b2 < buckets.length; b2++) {
+        if (buckets[b2].count > maxCount) maxCount = buckets[b2].count;
+      }
+      if (maxCount === 0) maxCount = 1;
+
+      var html = '<div style="margin-bottom:16px;">';
+      html += '<div class="pgd-histogram">';
+      for (var b3 = 0; b3 < buckets.length; b3++) {
+        var heightPct = (buckets[b3].count / maxCount * 100).toFixed(0);
+        html += '<div class="pgd-histogram-bar" style="height:100px;">';
+        html += '<div class="pgd-histogram-bar-fill" style="height:' + heightPct + '%;"></div>';
+        if (buckets[b3].count > 0) {
+          html += '<div class="pgd-histogram-bar-count" style="bottom:' + (parseInt(heightPct) + 5) + '%;">' + buckets[b3].count + '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      html += '<div class="pgd-histogram-labels">';
+      for (var b4 = 0; b4 < buckets.length; b4++) {
+        html += '<div class="pgd-histogram-label">' + buckets[b4].label + '</div>';
+      }
+      html += '</div>';
+      html += '</div>';
+
+      return html;
+    }
+
+    // ================================================
+    // TEACHER: SELF-ASSESSMENT SUMMARY
+    // ================================================
+
+    /**
+     * Render self-assessment insights summary for teachers.
+     * 3 stat cards + distribution bars + confidence gap alert.
+     */
+    function renderSelfAssessmentSummary(summary) {
+      if (!summary) return '';
+
+      var html = '<div class="sa-summary-section">';
+
+      // 3 stat cards
+      var ratedPct = summary.totalHexes > 0 ? Math.round(summary.ratedHexes / summary.totalHexes * 100) : 0;
+      html += '<div class="sa-summary-cards">';
+
+      html += '<div class="sa-summary-card">';
+      html += '<div class="sa-summary-value">' + summary.ratedHexes + '/' + summary.totalHexes + '</div>';
+      html += '<div class="sa-summary-label">Self-Assessed</div>';
+      html += '</div>';
+
+      html += '<div class="sa-summary-card">';
+      html += '<div class="sa-summary-value">' + (summary.avgConfidence !== null ? summary.avgConfidence + '/4' : '\u2014') + '</div>';
+      html += '<div class="sa-summary-label">Avg Confidence</div>';
+      html += '</div>';
+
+      html += '<div class="sa-summary-card">';
+      html += '<div class="sa-summary-value">' + ratedPct + '%</div>';
+      html += '<div class="sa-summary-label">Rated</div>';
+      html += '</div>';
+
+      html += '</div>';
+
+      // 4-bar confidence distribution
+      if (summary.distribution) {
+        var distLabels = { 1: 'Beginning', 2: 'Developing', 3: 'Proficient', 4: 'Extending' };
+        var maxCount = 0;
+        for (var dk = 1; dk <= 4; dk++) {
+          if ((summary.distribution[dk] || 0) > maxCount) maxCount = summary.distribution[dk];
+        }
+
+        html += '<div class="sa-distribution-bar">';
+        for (var dl = 1; dl <= 4; dl++) {
+          var count = summary.distribution[dl] || 0;
+          var pct = maxCount > 0 ? Math.round(count / maxCount * 100) : 0;
+          html += '<div class="sa-distribution-row">';
+          html += '<div class="sa-distribution-label">' + distLabels[dl] + '</div>';
+          html += '<div class="sa-distribution-track">';
+          html += '<div class="sa-distribution-fill sa-level-' + dl + '" style="width:' + pct + '%;"></div>';
+          html += '</div>';
+          html += '<div class="sa-distribution-count">' + count + '</div>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      // Confidence gap alert
+      if (summary.confidenceGaps && summary.confidenceGaps.length > 0) {
+        html += '<div class="sa-gap-alert">';
+        html += '<div class="sa-gap-title">&#9888; Confidence Gaps: Students with low self-rating on completed hexes</div>';
+        for (var gi = 0; gi < summary.confidenceGaps.length; gi++) {
+          var gap = summary.confidenceGaps[gi];
+          html += '<div class="sa-gap-item">';
+          html += '<span class="sa-gap-student">' + escapeHtml(gap.name) + '</span>';
+          html += '<span class="sa-gap-hex">' + escapeHtml(gap.hexLabel || gap.hexId) + '</span>';
+          html += '<span class="sa-teacher-rating-badge sa-level-' + gap.rating + '">' + saRatingLabels[gap.rating] + '</span>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // TEACHER: PENDING APPROVALS
+    // ================================================
+
+    /**
+     * Render pending approvals list with action buttons.
+     */
+    function renderPendingApprovals(approvals) {
+      if (!approvals || approvals.length === 0) return '';
+
+      var html = '<div class="pgd-approval-list">';
+      for (var i = 0; i < approvals.length; i++) {
+        var a = approvals[i];
+        var scoreText = '';
+        if (a.score !== null && a.maxScore !== null) {
+          scoreText = a.score + '/' + a.maxScore;
+        }
+
+        html += '<div class="pgd-approval-item" id="approval-' + i + '">';
+        html += '<div class="pgd-approval-info">';
+        html += '<div class="pgd-approval-student">' + escapeHtml(a.studentName) + '</div>';
+        html += '<div class="pgd-approval-hex">' + escapeHtml(a.hexLabel) + '</div>';
+        if (scoreText) {
+          html += '<div class="pgd-approval-score">' + scoreText + '</div>';
+        }
+        if (a.selfAssessRating) {
+          html += '<div class="sa-teacher-display">';
+          html += '<span class="sa-teacher-rating-badge sa-level-' + a.selfAssessRating + '">' + saRatingLabels[a.selfAssessRating] + '</span>';
+          if (a.selfAssessNote) {
+            html += '<span class="sa-teacher-note">' + escapeHtml(a.selfAssessNote) + '</span>';
+          }
+          html += '</div>';
+        }
+        if (a.selfAssessGoal) {
+          html += '<div class="sa-teacher-goal">Goal: ' + escapeHtml(a.selfAssessGoal) + '</div>';
+        }
+        if (a.selfAssessEvidence && a.selfAssessEvidence.length > 0) {
+          html += '<div class="sa-teacher-evidence-list">';
+          for (var ev = 0; ev < a.selfAssessEvidence.length; ev++) {
+            html += '<a class="sa-teacher-evidence-link" href="' + escapeHtml(a.selfAssessEvidence[ev].url) + '" target="_blank">' + escapeHtml(a.selfAssessEvidence[ev].label || 'Evidence') + ' &#8599;</a>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+        html += '<div class="pgd-approval-actions">';
+        html += '<button class="btn btn-success btn-small" onclick="approveProgressSubmission(\'' + escapeHtml(a.email) + '\', \'' + escapeHtml(a.hexId) + '\', ' + i + ')">Approve</button>';
+        html += '<button class="btn btn-outline btn-small" onclick="toggleRevisionFeedback(' + i + ')">Revise</button>';
+        html += '</div>';
+        html += '</div>';
+        html += '<div class="pgd-feedback-input" id="feedback-' + i + '">';
+        html += '<input type="text" placeholder="Feedback for student..." id="feedbackText-' + i + '" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;width:calc(100% - 80px);margin-right:8px;">';
+        html += '<button class="btn btn-outline btn-small" onclick="sendRevisionRequest(\'' + escapeHtml(a.email) + '\', \'' + escapeHtml(a.hexId) + '\', ' + i + ')">Send</button>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * Toggle the feedback input for a revision request.
+     */
+    function toggleRevisionFeedback(index) {
+      var el = document.getElementById('feedback-' + index);
+      if (el) {
+        if (el.style.display === 'flex') {
+          el.style.display = 'none';
+        } else {
+          el.style.display = 'flex';
+          el.style.alignItems = 'center';
+          el.style.padding = '8px 14px';
+          el.style.marginBottom = '8px';
+          var input = document.getElementById('feedbackText-' + index);
+          if (input) input.focus();
+        }
+      }
+    }
+
+    /**
+     * Approve a student submission.
+     */
+    function approveProgressSubmission(email, hexId, index) {
+      var item = document.getElementById('approval-' + index);
+      if (item) {
+        item.style.opacity = '0.5';
+        item.style.pointerEvents = 'none';
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Submission approved', 'success');
+          if (item) item.style.display = 'none';
+          var feedback = document.getElementById('feedback-' + index);
+          if (feedback) feedback.style.display = 'none';
+          // Refresh dashboard
+          onProgressMapChange(progressSelectedMapId);
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + err.message, 'error');
+          if (item) {
+            item.style.opacity = '1';
+            item.style.pointerEvents = 'auto';
+          }
+        })
+        .approveSubmission(progressSelectedMapId, hexId, email);
+    }
+
+    /**
+     * Send a revision request to a student.
+     */
+    function sendRevisionRequest(email, hexId, index) {
+      var feedbackInput = document.getElementById('feedbackText-' + index);
+      var feedback = feedbackInput ? feedbackInput.value : '';
+
+      var item = document.getElementById('approval-' + index);
+      if (item) {
+        item.style.opacity = '0.5';
+        item.style.pointerEvents = 'none';
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Revision requested', 'success');
+          if (item) item.style.display = 'none';
+          var feedbackEl = document.getElementById('feedback-' + index);
+          if (feedbackEl) feedbackEl.style.display = 'none';
+          // Refresh dashboard
+          onProgressMapChange(progressSelectedMapId);
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + err.message, 'error');
+          if (item) {
+            item.style.opacity = '1';
+            item.style.pointerEvents = 'auto';
+          }
+        })
+        .requestRevision(progressSelectedMapId, hexId, email, feedback);
+    }
+
+    // ================================================
+    // STUDENT VIEW
+    // ================================================
+
+    /**
+     * Render the student's personal progress dashboard.
+     */
+    function renderProgressStudentView(data) {
+      var content = document.getElementById('progressContent');
+
+      if (!data || !data.maps || data.maps.length === 0) {
+        content.innerHTML = '<div class="pgd-empty"><div class="icon">🗺️</div>' +
+          '<p>You don\'t have any progress yet.</p>' +
+          '<p style="font-size:12px;color:#94a3b8;">Start working on your learning maps to see progress here.</p></div>';
+        return;
+      }
+
+      var html = renderStudentOverviewCards(data.maps);
+      for (var m = 0; m < data.maps.length; m++) {
+        var map = data.maps[m];
+        html += renderStudentMapCard(map, m);
+      }
+
+      content.innerHTML = html;
+    }
+
+    /**
+     * Render a single map card for student view.
+     */
+    function renderStudentMapCard(map, index) {
+      var html = '<div class="pgd-map-card spa-map-card-clickable" onclick="openStudentMapDetail(' + index + ')">';
+      html += '<div class="pgd-map-card-header">';
+      html += '<div class="pgd-map-card-title">' + escapeHtml(map.mapTitle) + '</div>';
+      html += '<div class="pgd-map-card-pct">' + map.percentComplete + '%</div>';
+      html += '</div>';
+
+      // Status bar
+      var total = map.totalHexes;
+      if (total > 0) {
+        html += '<div class="pgd-status-bar">';
+        var segments = ['mastered', 'completed', 'in_progress', 'not_started'];
+        for (var seg = 0; seg < segments.length; seg++) {
+          var count = map.statusCounts[segments[seg]] || 0;
+          var pct = (count / total * 100).toFixed(1);
+          if (count > 0) {
+            html += '<div class="pgd-status-segment ' + segments[seg] + '" style="width:' + pct + '%;"></div>';
+          }
+        }
+        html += '</div>';
+      }
+
+      // Status counts summary
+      html += '<div class="pgd-status-legend">';
+      if (map.statusCounts.mastered > 0) {
+        html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot mastered"></div> Mastered: ' + map.statusCounts.mastered + '</div>';
+      }
+      if (map.statusCounts.completed > 0) {
+        html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot completed"></div> Completed: ' + map.statusCounts.completed + '</div>';
+      }
+      if (map.statusCounts.in_progress > 0) {
+        html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot in_progress"></div> In Progress: ' + map.statusCounts.in_progress + '</div>';
+      }
+      if (map.statusCounts.not_started > 0) {
+        html += '<div class="pgd-status-legend-item"><div class="pgd-status-legend-dot not_started"></div> Not Started: ' + map.statusCounts.not_started + '</div>';
+      }
+      html += '</div>';
+
+      // Score (if available)
+      if (map.averageScore !== null) {
+        html += '<div style="margin-top:8px;font-size:13px;color:#64748b;">Average Score: <strong style="color:#1e293b;">' + map.averageScore + '%</strong></div>';
+      }
+
+      // Class average (Student Progress Analytics)
+      if (map.classAvgCompletion !== null && map.classAvgCompletion !== undefined) {
+        html += '<div class="spa-class-avg">Class Average: ' + Math.round(map.classAvgCompletion) + '%</div>';
+      }
+
+      // Recent activity
+      if (map.recentActivity && map.recentActivity.length > 0) {
+        html += '<div class="pgd-map-detail" id="mapDetail-' + index + '">';
+        html += '<div style="font-size:13px;font-weight:600;color:#475569;margin-bottom:8px;">Recent Activity</div>';
+        html += '<div class="pgd-activity-list">';
+        for (var a = 0; a < map.recentActivity.length; a++) {
+          var activity = map.recentActivity[a];
+          var dateStr = '';
+          if (activity.completedAt) {
+            try {
+              var d = new Date(activity.completedAt);
+              dateStr = d.toLocaleDateString();
+            } catch (e) {
+              dateStr = activity.completedAt;
+            }
+          }
+          html += '<div class="pgd-activity-item">';
+          html += '<div class="pgd-activity-status-dot ' + activity.status + '"></div>';
+          html += '<div class="pgd-activity-label">' + escapeHtml(activity.hexLabel) + '</div>';
+          html += '<div class="pgd-activity-date">' + dateStr + '</div>';
+          html += '</div>';
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * Toggle map detail section in student view.
+     */
+    function toggleStudentMapDetail(index) {
+      var el = document.getElementById('mapDetail-' + index);
+      if (!el) return;
+
+      if (el.classList.contains('active')) {
+        el.classList.remove('active');
+      } else {
+        el.classList.add('active');
+      }
+    }
+
+    // ================================================
+    // CSV EXPORT
+    // ================================================
+
+    /**
+     * Export progress data as CSV.
+     */
+    function exportProgressCsv() {
+      if (!progressSelectedClassId || !progressSelectedMapId) {
+        showToast('Select a class and map first', 'error');
+        return;
+      }
+
+      var btn = document.getElementById('progressExportBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Exporting...';
+      }
+
+      google.script.run
+        .withSuccessHandler(function(csvString) {
+          // Download via Blob
+          try {
+            var blob = new Blob([csvString], { type: 'text/csv' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'progress-export.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('CSV exported', 'success');
+          } catch (e) {
+            showToast('Export error: ' + e.message, 'error');
+          }
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Export CSV';
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast('Export error: ' + err.message, 'error');
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Export CSV';
+          }
+        })
+        .exportProgressCsv(progressSelectedClassId, progressSelectedMapId);
+    }
+
+    // ================================================
+    // CLOSE DETAIL PANEL
+    // ================================================
+
+    /**
+     * Close the student detail panel.
+     */
+    function closeProgressDetail() {
+      progressSelectedStudent = null;
+      var panel = document.getElementById('progressDetailPanel');
+      if (panel) {
+        panel.classList.remove('active');
+      }
+
+      // Deselect grid rows
+      var rows = document.querySelectorAll('.pgd-grid tbody tr');
+      for (var i = 0; i < rows.length; i++) {
+        rows[i].classList.remove('selected');
+      }
+    }
+
+    // ================================================
+    // TEACHER PREVIEW MODE
+    // ================================================
+
+    /**
+     * Render the class + student selector for teacher preview mode.
+     */
+    function renderTeacherPreviewSelector(container) {
+      var html = '<div class="tpv-selector-bar">';
+      html += '<div class="tpv-selector-group">';
+      html += '<label>Class</label>';
+      html += '<select id="tpvClassSelect" onchange="onPreviewClassChange(this.value)">';
+      html += '<option value="">-- Select Class --</option>';
+
+      var classes = classesData || [];
+      for (var i = 0; i < classes.length; i++) {
+        var cls = classes[i];
+        if (cls.status === 'removed' || cls.status === 'archived') continue;
+        var selected = (previewClassId && String(cls.classId) === String(previewClassId)) ? ' selected' : '';
+        html += '<option value="' + escapeHtml(cls.classId) + '"' + selected + '>';
+        html += escapeHtml(cls.className) + (cls.subject ? ' (' + cls.subject + ')' : '');
+        html += '</option>';
+      }
+
+      html += '</select>';
+      html += '</div>';
+      html += '<div class="tpv-selector-group">';
+      html += '<label>Student</label>';
+      html += '<select id="tpvStudentSelect" onchange="onPreviewStudentChange(this.value)" disabled>';
+      html += '<option value="">-- Select Student --</option>';
+      html += '</select>';
+      html += '</div>';
+      html += '</div>';
+      html += '<div id="tpvContent">';
+      html += '<div class="pgd-empty"><div class="icon">&#128065;</div>';
+      html += '<p>Select a class and student to preview their progress view.</p></div>';
+      html += '</div>';
+
+      container.innerHTML = html;
+
+      // If a class was already selected (from global banner), sync local selectors
+      if (previewClassId) {
+        var localClass = document.getElementById('tpvClassSelect');
+        if (localClass) localClass.value = previewClassId;
+        onPreviewClassChange(previewClassId);
+      }
+      // If student was already selected (from global banner), render data immediately
+      if (previewStudentEmail && progressDashboardData) {
+        var tpvContent2 = document.getElementById('tpvContent');
+        if (tpvContent2) {
+          var html2 = '';
+          if (!progressDashboardData.maps || progressDashboardData.maps.length === 0) {
+            html2 = '<div class="pgd-empty"><div class="icon">&#128506;</div>' +
+              '<p>This student has no progress data yet.</p></div>';
+          } else {
+            html2 = renderStudentOverviewCards(progressDashboardData.maps);
+            for (var mk = 0; mk < progressDashboardData.maps.length; mk++) {
+              html2 += renderStudentMapCard(progressDashboardData.maps[mk], mk);
+            }
+          }
+          tpvContent2.innerHTML = html2;
+        }
+      }
+    }
+
+    /**
+     * Handle class selection in teacher preview mode.
+     * Fetches the class roster to populate the student dropdown.
+     */
+    function onPreviewClassChange(classId) {
+      // Sync global banner class selector
+      var globalClassSel = document.getElementById('tpvGlobalClassSelect');
+      if (globalClassSel && String(globalClassSel.value) !== String(classId || '')) {
+        globalClassSel.value = classId || '';
+        // Trigger global handler to populate global student dropdown
+        if (typeof onGlobalPreviewClassChange === 'function') {
+          onGlobalPreviewClassChange(classId);
+        }
+      }
+
+      previewClassId = classId;
+      previewStudentEmail = null;
+      progressDashboardData = null;
+      spaSelectedMapIndex = null;
+
+      var studentSelect = document.getElementById('tpvStudentSelect');
+      var tpvContent = document.getElementById('tpvContent');
+
+      closeProgressDetail();
+
+      if (!classId) {
+        studentSelect.innerHTML = '<option value="">-- Select Student --</option>';
+        studentSelect.disabled = true;
+        tpvContent.innerHTML = '<div class="pgd-empty"><div class="icon">&#128065;</div>' +
+          '<p>Select a class and student to preview their progress view.</p></div>';
+        return;
+      }
+
+      studentSelect.innerHTML = '<option value="">Loading students...</option>';
+      studentSelect.disabled = true;
+
+      getCachedRoster(classId, function(roster) {
+          studentSelect.innerHTML = '<option value="">-- Select Student --</option>';
+          var activeStudents = [];
+          for (var i = 0; i < roster.length; i++) {
+            if (roster[i].status !== 'removed') {
+              activeStudents.push(roster[i]);
+            }
+          }
+          if (activeStudents.length === 0) {
+            studentSelect.innerHTML = '<option value="">No students in class</option>';
+            return;
+          }
+          // Sort alphabetically by name
+          activeStudents.sort(function(a, b) {
+            var na = (a.studentName || a.email || '').toLowerCase();
+            var nb = (b.studentName || b.email || '').toLowerCase();
+            return na < nb ? -1 : (na > nb ? 1 : 0);
+          });
+          for (var j = 0; j < activeStudents.length; j++) {
+            var opt = document.createElement('option');
+            opt.value = activeStudents[j].studentEmail || activeStudents[j].email;
+            opt.textContent = activeStudents[j].studentName || activeStudents[j].studentEmail || activeStudents[j].email;
+            studentSelect.appendChild(opt);
+          }
+          studentSelect.disabled = false;
+      }, function(err) {
+          studentSelect.innerHTML = '<option value="">Error loading roster</option>';
+          showToast('Error: ' + err.message, 'error');
+      });
+    }
+
+    /**
+     * Handle student selection in teacher preview mode.
+     * Loads the selected student's dashboard data and renders it.
+     */
+    function onPreviewStudentChange(email) {
+      // Sync global banner student selector if value differs
+      var globalStudentSel = document.getElementById('tpvGlobalStudentSelect');
+      if (globalStudentSel && String(globalStudentSel.value) !== String(email || '')) {
+        globalStudentSel.value = email || '';
+      }
+      // Update global name span
+      var gName = document.getElementById('tpvGlobalStudentName');
+      if (gName) {
+        if (globalStudentSel && globalStudentSel.selectedIndex > 0) {
+          gName.textContent = globalStudentSel.options[globalStudentSel.selectedIndex].textContent;
+        } else {
+          gName.textContent = '';
+        }
+      }
+
+      previewStudentEmail = email;
+      progressDashboardData = null;
+      spaSelectedMapIndex = null;
+
+      var tpvContent = document.getElementById('tpvContent');
+
+      closeProgressDetail();
+
+      if (!email) {
+        tpvContent.innerHTML = '<div class="pgd-empty"><div class="icon">&#128065;</div>' +
+          '<p>Select a student to preview their progress view.</p></div>';
+        return;
+      }
+
+      tpvContent.innerHTML = '<div class="loading"><span class="loading-spinner"></span> Loading student progress...</div>';
+
+      var expectedEmail = email;
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (previewStudentEmail !== expectedEmail) return; // stale response
+          progressDashboardData = data;
+          var html = '';
+          if (!data || !data.maps || data.maps.length === 0) {
+            html = '<div class="pgd-empty"><div class="icon">&#128506;</div>' +
+              '<p>This student has no progress data yet.</p>' +
+              '<p style="font-size:12px;color:#94a3b8;">The student needs to start working on a learning map first.</p></div>';
+          } else {
+            html = renderStudentOverviewCards(data.maps);
+            for (var m = 0; m < data.maps.length; m++) {
+              html += renderStudentMapCard(data.maps[m], m);
+            }
+          }
+          tpvContent.innerHTML = html;
+          // Also load batch data for other tabs (Study Dashboard, Planner)
+          var batchEmail = expectedEmail;
+          google.script.run
+            .withSuccessHandler(function(batch) {
+              if (previewStudentEmail !== batchEmail) return;
+              celData = batch.celebrations;
+              plannerData = batch.planner;
+              plannerTasks = (batch.planner && batch.planner.tasks) ? batch.planner.tasks : [];
+              if (typeof uclChecklistData !== 'undefined') uclChecklistData = batch.unitChecklists || [];
+            })
+            .withFailureHandler(function() { /* non-fatal */ })
+            .getStudentBatchDataForPreview(batchEmail);
+        })
+        .withFailureHandler(function(err) {
+          if (previewStudentEmail !== expectedEmail) return; // stale response
+          tpvContent.innerHTML = '<div class="pgd-empty"><div class="icon">&#9888;</div>' +
+            '<p>Error: ' + escapeHtml(err.message) + '</p></div>';
+        })
+        .getStudentDashboardData(email);
+    }
+
+</script>

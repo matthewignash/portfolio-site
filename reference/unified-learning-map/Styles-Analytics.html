@@ -1,0 +1,399 @@
+<style>
+/* ================================================
+   COURSE ANALYTICS DASHBOARD STYLES (cad- prefix)
+   ================================================ */
+
+/* Sub-navigation (within Progress tab) */
+.cad-subnav {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: #f8fafc;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.cad-subnav::-webkit-scrollbar { display: none; }
+
+.cad-subnav-btn {
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cad-subnav-btn:hover {
+  color: #334155;
+}
+
+.cad-subnav-btn.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+/* Container */
+.cad-container {
+  padding: 20px 24px;
+}
+
+/* Selector row */
+.cad-selector {
+  padding: 16px 0;
+}
+
+/* Section titles */
+.cad-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 28px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.cad-section-title:first-child {
+  margin-top: 0;
+}
+
+/* Overview cards */
+.cad-overview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.cad-overview-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+
+.cad-overview-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #667eea;
+  line-height: 1.2;
+}
+
+.cad-overview-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 4px;
+}
+
+/* Standards coverage bars */
+.cad-coverage-section {
+  margin-bottom: 8px;
+}
+
+.cad-coverage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cad-coverage-row:hover {
+  background: #f8fafc;
+}
+
+.cad-coverage-row:last-child {
+  border-bottom: none;
+}
+
+.cad-coverage-label {
+  width: 180px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cad-coverage-bar-container {
+  flex: 1;
+  height: 20px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.cad-coverage-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 10px;
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.cad-coverage-value {
+  width: 48px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  text-align: right;
+}
+
+/* Coverage drilldown (detail chips) */
+.cad-coverage-detail {
+  display: none;
+  padding: 8px 0 12px 192px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cad-coverage-detail.open {
+  display: flex;
+}
+
+.cad-coverage-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  display: inline-block;
+}
+
+.cad-coverage-chip.covered {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.cad-coverage-chip.gap {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* Heatmap */
+.cad-heatmap-container {
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+
+.cad-heatmap {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+  min-width: 400px;
+}
+
+.cad-heatmap th {
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  text-align: center;
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cad-heatmap th:first-child {
+  text-align: left;
+  min-width: 140px;
+}
+
+.cad-heatmap td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: center;
+}
+
+.cad-heatmap td:first-child {
+  text-align: left;
+  font-weight: 600;
+  color: #334155;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.cad-heatmap-cell {
+  display: inline-block;
+  width: 36px;
+  height: 24px;
+  border-radius: 4px;
+  line-height: 24px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+  cursor: default;
+}
+
+.cad-heatmap-cell.bucket-0 { background: #f1f5f9; color: #94a3b8; }
+.cad-heatmap-cell.bucket-1 { background: #fee2e2; color: #991b1b; }
+.cad-heatmap-cell.bucket-2 { background: #fef3c7; color: #92400e; }
+.cad-heatmap-cell.bucket-3 { background: #dbeafe; color: #1e40af; }
+.cad-heatmap-cell.bucket-4 { background: #d1fae5; color: #065f46; }
+
+.cad-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 4px 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.cad-heatmap-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cad-heatmap-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* Histogram */
+.cad-histogram {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  height: 120px;
+  padding: 0 20px;
+  margin-bottom: 4px;
+}
+
+.cad-histogram-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.cad-histogram-bar-fill {
+  width: 100%;
+  max-width: 80px;
+  background: linear-gradient(180deg, #667eea, #764ba2);
+  border-radius: 6px 6px 0 0;
+  transition: height 0.4s ease;
+  min-height: 2px;
+  position: relative;
+}
+
+.cad-histogram-bar-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 4px;
+}
+
+.cad-histogram-labels {
+  display: flex;
+  gap: 16px;
+  padding: 8px 20px 0 20px;
+}
+
+.cad-histogram-label {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+/* At-risk students */
+.cad-atrisk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cad-atrisk-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cad-atrisk-item:hover {
+  background: #fee2e2;
+}
+
+.cad-atrisk-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #991b1b;
+}
+
+.cad-atrisk-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #fecaca;
+  color: #991b1b;
+}
+
+/* Empty / loading states */
+.cad-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+}
+
+.cad-empty .icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.cad-empty p {
+  font-size: 13px;
+  margin: 0;
+}
+
+.cad-loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* Course Standards Report (csr- prefix) */
+.csr-std-row { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
+.csr-std-row:last-child { border-bottom: none; }
+.csr-std-row.csr-gap { background: #fef2f2; border-radius: 4px; margin-bottom: 2px; }
+.csr-std-code { font-size: 12px; font-weight: 600; color: #4338ca; margin-right: 6px; }
+.csr-std-desc { font-size: 12px; color: #64748b; }
+.csr-std-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.csr-ref-chip { font-size: 12px; padding: 2px 6px; background: #eff6ff; color: #2563eb; border-radius: 4px; }
+.csr-ref-more { font-size: 12px; color: #94a3b8; padding: 2px 4px; }
+</style>

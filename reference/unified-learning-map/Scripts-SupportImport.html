@@ -1,0 +1,219 @@
+<script>
+// ============================================================================
+// SUPPORT DATA IMPORT — Integrations tab config card
+// ES5 only — matches Scripts-ScheduleImport.html pattern (int- CSS classes)
+// ============================================================================
+
+var sspImportConfig = null;
+
+function loadSupportImportCard() {
+  var container = document.getElementById('supportImportCardContainer');
+  if (!container) return;
+  container.innerHTML = '<div class="loading">Loading support data config...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(config) {
+      sspImportConfig = config;
+      renderSupportImportCard(config);
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = '<div class="error">Failed to load config: ' + escapeHtml(err.message) + '</div>';
+    })
+    .getSupportDataConfig();
+}
+
+function renderSupportImportCard(config) {
+  var container = document.getElementById('supportImportCardContainer');
+  if (!container) return;
+
+  var canEdit = userData && userData.canEdit;
+  var hasUrl = !!(config.spreadsheetUrl);
+
+  var html = '<div class="int-section" id="intCard-supportData">';
+
+  // Header
+  html += '<div class="int-section-header">';
+  html += '<h3 class="int-section-title">Student Support Data (IEP / WIDA)</h3>';
+  var badgeClass = hasUrl ? 'connected' : 'disabled';
+  var badgeText = hasUrl ? 'Connected' : 'Not Connected';
+  html += '<span class="int-card-badge ' + badgeClass + '" id="ssp-badge">' + badgeText + '</span>';
+  html += '</div>';
+
+  html += '<div class="int-section-body">';
+
+  // Description
+  html += '<p style="font-size:13px; color:#64748b; margin:0 0 16px;">Connect a protected spreadsheet to import IEP accommodations, WIDA levels, and support strategies for students.</p>';
+
+  // Spreadsheet URL
+  html += '<div class="int-field">';
+  html += '<span class="int-field-label">Spreadsheet URL</span>';
+  html += '<div class="int-field-input">';
+  html += '<input type="text" class="form-input" id="sspImportUrl" value="' + escapeHtml(config.spreadsheetUrl || '') + '" placeholder="https://docs.google.com/spreadsheets/d/..."' + (!canEdit ? ' disabled' : '') + '>';
+  html += '<span class="int-field-help">Paste a Google Sheets URL to connect, or clear to disconnect</span>';
+  html += '</div></div>';
+
+  // Connection status
+  html += '<div class="int-field">';
+  html += '<span class="int-field-label">Connection</span>';
+  html += '<div class="int-field-input">';
+  html += '<div class="int-status-row">';
+  html += '<span class="int-status-dot untested" id="ssp-dot"></span>';
+  html += '<span class="int-status-msg" id="ssp-msg">Not tested</span>';
+  html += '</div></div></div>';
+
+  // Last imported
+  html += '<div class="int-field">';
+  html += '<span class="int-field-label">Last Import</span>';
+  html += '<div class="int-field-input">';
+  html += '<span id="ssp-last-import" style="font-size:13px;color:#6b7280;">';
+  if (config.lastImported) {
+    html += escapeHtml(config.lastImported);
+  } else {
+    html += 'Never imported';
+  }
+  html += '</span>';
+  html += '</div></div>';
+
+  // Result area
+  html += '<div id="sspImportResult"></div>';
+
+  html += '</div>'; // section-body
+
+  // Footer buttons
+  if (canEdit) {
+    html += '<div class="int-section-footer">';
+    html += '<div class="int-btn-row" style="justify-content:flex-end; gap:8px;">';
+    html += '<button class="btn btn-small btn-outline" onclick="testSupportConnection()">Test Connection</button>';
+    html += '<button class="btn btn-small btn-outline" onclick="initSupportSpreadsheet()">Initialize Spreadsheet</button>';
+    html += '<button class="btn btn-small btn-success" onclick="importSupportData()">Import Now</button>';
+    html += '<button class="btn btn-small btn-success" id="ssp-save-btn" onclick="saveSupportImportConfig()">Save</button>';
+    html += '</div></div>';
+  }
+
+  html += '</div>'; // int-section
+
+  container.innerHTML = html;
+}
+
+function saveSupportImportConfig() {
+  var url = document.getElementById('sspImportUrl').value.trim();
+  var btn = document.getElementById('ssp-save-btn');
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+      showToast('Support data config saved');
+
+      // Update badge
+      var badge = document.getElementById('ssp-badge');
+      if (badge) {
+        badge.className = 'int-card-badge ' + (url ? 'connected' : 'disabled');
+        badge.textContent = url ? 'Connected' : 'Not Connected';
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .saveSupportDataConfig({ spreadsheetUrl: url });
+}
+
+function testSupportConnection() {
+  var dot = document.getElementById('ssp-dot');
+  var msg = document.getElementById('ssp-msg');
+  var resultDiv = document.getElementById('sspImportResult');
+
+  if (dot) { dot.className = 'int-status-dot testing'; }
+  if (msg) { msg.textContent = 'Testing...'; }
+  if (resultDiv) { resultDiv.innerHTML = ''; }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        if (dot) { dot.className = 'int-status-dot connected'; }
+        if (msg) { msg.textContent = 'Connected'; }
+        var details = '<div style="margin-top:8px; padding:10px 14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; font-size:13px; color:#166534;">';
+        details += '&#10003; ' + escapeHtml(result.message);
+        if (result.hasProfilesTab) {
+          details += '<br>&#10003; "Student Profiles" tab found — ready for import.';
+        } else {
+          details += '<br>&#9888; "Student Profiles" tab not found. Click "Initialize Spreadsheet" to create it.';
+        }
+        details += '</div>';
+        if (resultDiv) { resultDiv.innerHTML = details; }
+      } else {
+        if (dot) { dot.className = 'int-status-dot disconnected'; }
+        if (msg) { msg.textContent = 'Failed'; }
+        if (resultDiv) {
+          resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; font-size:13px; color:#991b1b;">&#10007; ' + escapeHtml(result.message) + '</div>';
+        }
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (dot) { dot.className = 'int-status-dot disconnected'; }
+      if (msg) { msg.textContent = 'Error'; }
+      if (resultDiv) {
+        resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; font-size:13px; color:#991b1b;">&#10007; ' + escapeHtml(err.message) + '</div>';
+      }
+    })
+    .testSupportDataConnection();
+}
+
+function initSupportSpreadsheet() {
+  var resultDiv = document.getElementById('sspImportResult');
+  if (resultDiv) {
+    resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:13px; color:#64748b;">Initializing spreadsheet tabs...</div>';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!resultDiv) return;
+      if (result.success) {
+        resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; font-size:13px; color:#166534;">&#10003; ' + escapeHtml(result.message) + '</div>';
+      } else {
+        resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; font-size:13px; color:#991b1b;">&#10007; Failed to initialize.</div>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (resultDiv) {
+        resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; font-size:13px; color:#991b1b;">&#10007; ' + escapeHtml(err.message) + '</div>';
+      }
+    })
+    .initializeSupportSpreadsheet();
+}
+
+function importSupportData() {
+  var resultDiv = document.getElementById('sspImportResult');
+  if (resultDiv) {
+    resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:13px; color:#64748b;">Importing support profiles...</div>';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!resultDiv) return;
+      if (result.success) {
+        var msg = '&#10003; Import complete: ' + result.imported + ' new, ' + result.updated + ' updated, ' + result.skipped + ' skipped.';
+        if (result.errors && result.errors.length > 0) {
+          msg += '<br>&#9888; ' + result.errors.length + ' error(s): ' + escapeHtml(result.errors.slice(0, 3).join('; '));
+        }
+        resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; font-size:13px; color:#166534;">' + msg + '</div>';
+
+        // Update last imported timestamp
+        var lastEl = document.getElementById('ssp-last-import');
+        if (lastEl && result.importedAt) {
+          lastEl.textContent = result.importedAt;
+        }
+      } else {
+        resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; font-size:13px; color:#991b1b;">&#10007; Import failed.</div>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (resultDiv) {
+        resultDiv.innerHTML = '<div style="margin-top:8px; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; font-size:13px; color:#991b1b;">&#10007; ' + escapeHtml(err.message) + '</div>';
+      }
+    })
+    .importSupportProfiles();
+}
+</script>

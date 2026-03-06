@@ -1,0 +1,1105 @@
+<script>
+    // ================================================
+    // INTEGRATION SETTINGS PANEL (ES5)
+    // ================================================
+
+    var integrationConfig = null;
+    var integrationBrowserData = [];
+    var integrationBrowserType = '';
+    var integrationMapsCache = [];
+    var integrationCoursesCache = [];
+
+    // ---- Load & Render ----
+
+    function loadIntegrationSettings() {
+      var container = document.getElementById('integrationsContent');
+      container.innerHTML = '<div class="loading"><span class="loading-spinner"></span> Loading integrations...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          integrationConfig = data;
+          renderIntegrationView();
+        })
+        .withFailureHandler(function(err) {
+          container.innerHTML = '<p style="color:#dc2626; padding:20px;">Error loading integrations: ' + escapeHtml(err.message) + '</p>';
+        })
+        .getIntegrationConfig();
+    }
+
+    function renderIntegrationView() {
+      var cfg = integrationConfig;
+      var isAdmin = userData && userData.isAdmin;
+      var html = '<div class="int-sections">';
+
+      // Section 1: Configuration Cards
+      html += renderConfigCard('learningTracker', 'Learning Tracker', cfg.learningTracker, isAdmin);
+      html += renderConfigCard('assessmentTracker', 'Assessment Tracker', cfg.assessmentTracker, isAdmin);
+      html += renderConfigCard('curriculumMap', 'Curriculum Map', cfg.curriculumMap, isAdmin);
+
+      // Section 4: Waterfall Scheduler (loaded async)
+      html += '<div id="waterfallCardContainer"><div class="loading"><span class="loading-spinner"></span> Loading waterfall config...</div></div>';
+
+      // Section 5: Student Support Data (loaded async)
+      html += '<div id="supportImportCardContainer"><div class="loading"><span class="loading-spinner"></span> Loading support data config...</div></div>';
+
+      // Section 6: Lab Reports (loaded async)
+      html += '<div id="labReportsCardContainer"><div class="loading"><span class="loading-spinner"></span> Loading lab reports config...</div></div>';
+
+      // Section 7: CollabSpace (loaded async)
+      html += '<div id="collabCardContainer"><div class="loading"><span class="loading-spinner"></span> Loading collaboration config...</div></div>';
+
+      // Section 2: Data Browser
+      html += '<div class="int-section">';
+      html += '<div class="int-section-header"><h3 class="int-section-title">Data Browser</h3></div>';
+      html += '<div class="int-section-body">';
+      html += '<div class="int-browser-controls">';
+      html += '<select class="form-select" id="intBrowserType" onchange="onBrowserTypeChange()">';
+      html += '<option value="">-- Select Integration --</option>';
+      if (cfg.learningTracker && cfg.learningTracker.enabled) {
+        html += '<option value="learningTracker">Learning Tracker</option>';
+      }
+      if (cfg.assessmentTracker && cfg.assessmentTracker.enabled) {
+        html += '<option value="assessmentTracker">Assessment Tracker</option>';
+      }
+      if (cfg.curriculumMap && cfg.curriculumMap.enabled) {
+        html += '<option value="curriculumMap">Curriculum Map</option>';
+      }
+      html += '</select>';
+      html += '<input type="text" class="form-input" id="intBrowserFilter" placeholder="Unit ID or Course ID filter" style="max-width:200px;">';
+      html += '<button class="btn btn-small" onclick="loadBrowserData()">Load Data</button>';
+      html += '</div>';
+      html += '<div id="intBrowserResults">';
+      html += '<div class="int-browser-empty">Select an integration type and click Load Data</div>';
+      html += '</div>';
+      html += '</div></div>';
+
+      // Section 3: Bulk Import
+      html += '<div class="int-section">';
+      html += '<div class="int-section-header"><h3 class="int-section-title">Bulk Import</h3></div>';
+      html += '<div class="int-section-body">';
+
+      // Map selector for lessons/assessments
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">Target Map</span>';
+      html += '<div class="int-field-input">';
+      html += '<select class="form-select" id="intBulkMap"><option value="">-- Select Map --</option></select>';
+      html += '<span class="int-field-help">For lesson and assessment imports</span>';
+      html += '</div></div>';
+
+      // Unit filter
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">Unit Filter</span>';
+      html += '<div class="int-field-input">';
+      html += '<input type="text" class="form-input" id="intBulkUnit" placeholder="Unit ID (optional)">';
+      html += '<span class="int-field-help">Filter by unit ID when importing</span>';
+      html += '</div></div>';
+
+      // Course selector for standards
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">Target Course</span>';
+      html += '<div class="int-field-input">';
+      html += '<select class="form-select" id="intBulkCourse"><option value="">-- Select Course --</option></select>';
+      html += '<span class="int-field-help">For standards import</span>';
+      html += '</div></div>';
+
+      // Bulk action buttons
+      if (cfg.learningTracker && cfg.learningTracker.enabled) {
+        html += '<div class="int-bulk-row">';
+        html += '<span class="int-bulk-label">Import Lessons</span>';
+        html += '<button class="btn btn-small btn-success" id="intBulkLessonsBtn" onclick="bulkImportLessons()">Import All Lessons</button>';
+        html += '<span class="int-bulk-result" id="intBulkLessonsResult"></span>';
+        html += '</div>';
+      }
+
+      if (cfg.assessmentTracker && cfg.assessmentTracker.enabled) {
+        html += '<div class="int-bulk-row">';
+        html += '<span class="int-bulk-label">Import Assessments</span>';
+        html += '<button class="btn btn-small btn-success" id="intBulkAssessBtn" onclick="bulkImportAssessments()">Import All Assessments</button>';
+        html += '<span class="int-bulk-result" id="intBulkAssessResult"></span>';
+        html += '</div>';
+      }
+
+      if (cfg.curriculumMap && cfg.curriculumMap.enabled) {
+        html += '<div class="int-bulk-row">';
+        html += '<span class="int-bulk-label">Import Standards</span>';
+        html += '<button class="btn btn-small btn-success" id="intBulkStdsBtn" onclick="bulkImportStandards()">Import All Standards</button>';
+        html += '<span class="int-bulk-result" id="intBulkStdsResult"></span>';
+        html += '</div>';
+      }
+
+      if ((!cfg.learningTracker || !cfg.learningTracker.enabled) &&
+          (!cfg.assessmentTracker || !cfg.assessmentTracker.enabled) &&
+          (!cfg.curriculumMap || !cfg.curriculumMap.enabled)) {
+        html += '<div class="int-browser-empty">Enable at least one integration above to use bulk import</div>';
+      }
+
+      html += '</div></div>';
+
+      html += '</div>'; // close int-sections
+      document.getElementById('integrationsContent').innerHTML = html;
+
+      // Load maps and courses for bulk selectors
+      loadMapsForIntegration();
+      loadCoursesForIntegration();
+
+      // Load waterfall config and render card
+      if (typeof loadWaterfallConfig === 'function') {
+        loadWaterfallConfig(function() {
+          var wfContainer = document.getElementById('waterfallCardContainer');
+          if (wfContainer && typeof renderWaterfallConfigCard === 'function') {
+            wfContainer.innerHTML = renderWaterfallConfigCard();
+          }
+        });
+      }
+
+      // Load support data import card
+      if (typeof loadSupportImportCard === 'function') {
+        loadSupportImportCard();
+      }
+
+      // Load lab reports config card
+      if (typeof loadLabReportsCard === 'function') {
+        loadLabReportsCard();
+      }
+
+      // Load collab config card
+      if (typeof loadCollabCard === 'function') {
+        loadCollabCard();
+      }
+    }
+
+    // ---- Config Card Renderer ----
+
+    function renderConfigCard(key, label, systemCfg, isAdmin) {
+      // URL = enabled: no toggle, badge derived from URL presence
+      var url = (systemCfg && systemCfg.url) || '';
+      var badgeClass = url ? 'connected' : 'disabled';
+      var badgeText = url ? 'Connected' : 'Not Connected';
+
+      var html = '<div class="int-section" id="intCard-' + key + '">';
+
+      // Header with title + badge
+      html += '<div class="int-section-header">';
+      html += '<h3 class="int-section-title">' + escapeHtml(label) + '</h3>';
+      html += '<span class="int-card-badge ' + badgeClass + '">' + badgeText + '</span>';
+      html += '</div>';
+
+      html += '<div class="int-section-body">';
+
+      // Spreadsheet URL (no toggle — URL presence = enabled)
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">Spreadsheet URL</span>';
+      html += '<div class="int-field-input">';
+      html += '<input type="text" class="form-input" id="int-url-' + key + '" value="' + escapeHtml(url) + '" placeholder="https://docs.google.com/spreadsheets/d/..."' + (!isAdmin ? ' disabled' : '') + '>';
+      html += '<span class="int-field-help">Paste a Google Sheets URL to connect, or clear to disconnect</span>';
+      html += '</div></div>';
+
+      // Status indicator
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">Connection Status</span>';
+      html += '<div class="int-field-input">';
+      html += '<div class="int-status-row">';
+      html += '<span class="int-status-dot untested" id="int-dot-' + key + '"></span>';
+      html += '<span class="int-status-msg" id="int-msg-' + key + '">Not tested</span>';
+      html += '</div></div></div>';
+
+      html += '</div>'; // close section-body
+
+      // Footer with test + save buttons
+      html += '<div class="int-section-footer">';
+      html += '<div class="int-btn-row" style="justify-content:flex-end;">';
+      html += '<button class="btn btn-small btn-outline" id="int-test-' + key + '" onclick="testConnection(\'' + key + '\')">Test Connection</button>';
+      if (isAdmin) {
+        html += '<button class="btn btn-small btn-success" id="int-save-' + key + '" onclick="saveIntegrationCard(\'' + key + '\')">Save</button>';
+      }
+      html += '</div></div>';
+
+      html += '</div>'; // close int-section
+      return html;
+    }
+
+    // ---- Save ----
+
+    function extractSpreadsheetId(url) {
+      // Extract ID from Google Sheets URL: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/...
+      if (!url) return '';
+      var match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) return match[1];
+      // If it looks like a raw ID already
+      if (url.match(/^[a-zA-Z0-9_-]{20,}$/) && url.indexOf('/') === -1) return url;
+      return '';
+    }
+
+    function saveIntegrationCard(system) {
+      // URL = enabled: no toggle, derive enabled from URL presence
+      var urlVal = document.getElementById('int-url-' + system).value.trim();
+      var spreadsheetId = extractSpreadsheetId(urlVal);
+
+      if (urlVal && !spreadsheetId) {
+        showToast('Invalid Google Sheets URL format', 'error');
+        return;
+      }
+
+      // Build full config (preserve other integrations)
+      var cfg = integrationConfig || {};
+      cfg[system] = {
+        enabled: !!spreadsheetId,
+        url: urlVal,
+        spreadsheetId: spreadsheetId
+      };
+
+      var btn = document.getElementById('int-save-' + system);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          integrationConfig = cfg;
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Saved!';
+            setTimeout(function() { btn.textContent = 'Save'; }, 2000);
+          }
+          // Update badge — URL presence = connected
+          var badge = document.querySelector('#intCard-' + system + ' .int-card-badge');
+          if (badge) {
+            if (cfg[system].url) {
+              badge.className = 'int-card-badge connected';
+              badge.textContent = 'Connected';
+            } else {
+              badge.className = 'int-card-badge disabled';
+              badge.textContent = 'Not Connected';
+            }
+          }
+          showToast('Integration saved', 'success');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Save';
+          }
+          showToast('Error: ' + err.message, 'error');
+        })
+        .saveIntegrationConfig(cfg);
+    }
+
+    // ---- Test Connection ----
+
+    function testConnection(system) {
+      var dot = document.getElementById('int-dot-' + system);
+      var msg = document.getElementById('int-msg-' + system);
+      var btn = document.getElementById('int-test-' + system);
+
+      if (dot) {
+        dot.className = 'int-status-dot testing';
+      }
+      if (msg) {
+        msg.className = 'int-status-msg';
+        msg.textContent = 'Testing...';
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Testing...';
+      }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Test Connection';
+          }
+          if (result && result.success) {
+            if (dot) dot.className = 'int-status-dot connected';
+            if (msg) {
+              msg.className = 'int-status-msg success';
+              msg.textContent = result.message || 'Connected';
+            }
+          } else {
+            if (dot) dot.className = 'int-status-dot disconnected';
+            if (msg) {
+              msg.className = 'int-status-msg error';
+              msg.textContent = (result && result.message) || 'Connection failed';
+            }
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Test Connection';
+          }
+          if (dot) dot.className = 'int-status-dot disconnected';
+          if (msg) {
+            msg.className = 'int-status-msg error';
+            msg.textContent = 'Error: ' + err.message;
+          }
+        })
+        .testIntegrationConnection(system);
+    }
+
+    // ---- Data Browser ----
+
+    function onBrowserTypeChange() {
+      var resultsEl = document.getElementById('intBrowserResults');
+      if (resultsEl) {
+        resultsEl.innerHTML = '<div class="int-browser-empty">Click Load Data to fetch records</div>';
+      }
+      integrationBrowserData = [];
+      integrationBrowserType = '';
+    }
+
+    function loadBrowserData() {
+      var typeEl = document.getElementById('intBrowserType');
+      var filterEl = document.getElementById('intBrowserFilter');
+      var resultsEl = document.getElementById('intBrowserResults');
+
+      var type = typeEl ? typeEl.value : '';
+      var filter = filterEl ? filterEl.value.trim() : '';
+
+      if (!type) {
+        showToast('Select an integration type first', 'error');
+        return;
+      }
+
+      integrationBrowserType = type;
+      if (resultsEl) {
+        resultsEl.innerHTML = '<div class="loading"><span class="loading-spinner"></span> Loading data...</div>';
+      }
+
+      if (type === 'learningTracker') {
+        google.script.run
+          .withSuccessHandler(function(data) { handleBrowserData(data, type); })
+          .withFailureHandler(function(err) { handleBrowserError(err); })
+          .getLessonsFromTracker(filter || null);
+      } else if (type === 'assessmentTracker') {
+        google.script.run
+          .withSuccessHandler(function(data) { handleBrowserData(data, type); })
+          .withFailureHandler(function(err) { handleBrowserError(err); })
+          .getAssessmentsFromTracker(filter || null);
+      } else if (type === 'curriculumMap') {
+        google.script.run
+          .withSuccessHandler(function(data) { handleBrowserData(data, type); })
+          .withFailureHandler(function(err) { handleBrowserError(err); })
+          .getStandardsFromCurriculumMap(filter || null);
+      }
+    }
+
+    function handleBrowserData(data, type) {
+      integrationBrowserData = data || [];
+      renderBrowserTable(data || [], type);
+    }
+
+    function handleBrowserError(err) {
+      var resultsEl = document.getElementById('intBrowserResults');
+      if (resultsEl) {
+        resultsEl.innerHTML = '<div class="int-browser-empty" style="color:#ef4444;">Error: ' + escapeHtml(err.message) + '</div>';
+      }
+    }
+
+    function renderBrowserTable(data, type) {
+      var resultsEl = document.getElementById('intBrowserResults');
+      if (!resultsEl) return;
+
+      if (!data || data.length === 0) {
+        resultsEl.innerHTML = '<div class="int-browser-empty">No records found</div>';
+        return;
+      }
+
+      var html = '<table class="int-browser-table"><thead><tr>';
+
+      // Headers vary by type
+      if (type === 'learningTracker') {
+        html += '<th class="int-browser-th">Title</th>';
+        html += '<th class="int-browser-th">Unit</th>';
+        html += '<th class="int-browser-th">Standards</th>';
+        html += '<th class="int-browser-th">Action</th>';
+      } else if (type === 'assessmentTracker') {
+        html += '<th class="int-browser-th">Title</th>';
+        html += '<th class="int-browser-th">Type</th>';
+        html += '<th class="int-browser-th">Unit</th>';
+        html += '<th class="int-browser-th">Action</th>';
+      } else if (type === 'curriculumMap') {
+        html += '<th class="int-browser-th">Code</th>';
+        html += '<th class="int-browser-th">Description</th>';
+        html += '<th class="int-browser-th">Course</th>';
+        html += '<th class="int-browser-th">Action</th>';
+      }
+
+      html += '</tr></thead><tbody>';
+
+      for (var i = 0; i < data.length; i++) {
+        var item = data[i];
+        html += '<tr class="int-browser-row">';
+
+        if (type === 'learningTracker') {
+          html += '<td class="int-browser-td">' + escapeHtml(item.title || item.Title || '--') + '</td>';
+          html += '<td class="int-browser-td">' + escapeHtml(item.unitId || item.UnitId || item['Unit ID'] || '--') + '</td>';
+          html += '<td class="int-browser-td">' + escapeHtml(item.standards || item.Standards || '--') + '</td>';
+          html += '<td class="int-browser-td"><button class="int-browser-action" onclick="importSingleLesson(' + i + ')">Import as Hex</button></td>';
+        } else if (type === 'assessmentTracker') {
+          html += '<td class="int-browser-td">' + escapeHtml(item.title || item.Title || '--') + '</td>';
+          html += '<td class="int-browser-td">' + escapeHtml(item.type || item.Type || '--') + '</td>';
+          html += '<td class="int-browser-td">' + escapeHtml(item.unitId || item.UnitId || item['Unit ID'] || '--') + '</td>';
+          html += '<td class="int-browser-td"><button class="int-browser-action" onclick="importSingleAssessment(' + i + ')">Link to Hex</button></td>';
+        } else if (type === 'curriculumMap') {
+          html += '<td class="int-browser-td">' + escapeHtml(item.code || item.Code || '--') + '</td>';
+          html += '<td class="int-browser-td">' + escapeHtml(item.description || item.Description || '--') + '</td>';
+          html += '<td class="int-browser-td">' + escapeHtml(item.courseId || item.CourseId || item['Course ID'] || '--') + '</td>';
+          html += '<td class="int-browser-td"><span style="color:#94a3b8; font-size:11px;">Use bulk import</span></td>';
+        }
+
+        html += '</tr>';
+      }
+
+      html += '</tbody></table>';
+      html += '<div style="padding:8px 0; font-size:12px; color:#64748b;">' + data.length + ' record' + (data.length !== 1 ? 's' : '') + ' loaded</div>';
+      resultsEl.innerHTML = html;
+    }
+
+    // ---- Single Item Import ----
+
+    function importSingleLesson(idx) {
+      if (idx < 0 || idx >= integrationBrowserData.length) return;
+      var item = integrationBrowserData[idx];
+      var lessonId = item.lessonId || item.LessonId || item['Lesson ID'] || item.id || String(idx);
+      var mapId = getSelectedBulkMap();
+
+      if (!mapId) {
+        showToast('Select a target map in the Bulk Import section first', 'error');
+        return;
+      }
+
+      showToast('Importing lesson...', 'info');
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Lesson imported as hex!', 'success');
+        })
+        .withFailureHandler(function(err) {
+          showToast('Import error: ' + err.message, 'error');
+        })
+        .importLessonAsHex(lessonId, mapId, 0, idx);
+    }
+
+    function importSingleAssessment(idx) {
+      if (idx < 0 || idx >= integrationBrowserData.length) return;
+      var rowId = 'intInlineHexIdRow-' + idx;
+      if (document.getElementById(rowId)) return;
+      var item = integrationBrowserData[idx];
+      var assessmentId = item.assessmentId || item.AssessmentId || item['Assessment ID'] || item.id || String(idx);
+
+      // Insert inline input near the import button
+      var btn = document.querySelector('[onclick*="importSingleAssessment(' + idx + ')"]');
+      var container = btn ? btn.parentNode : document.getElementById('integrationBrowserResults');
+      if (!container) return;
+
+      var row = document.createElement('div');
+      row.id = rowId;
+      row.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;';
+      row.innerHTML = '<input id="intHexIdInput-' + idx + '" type="text" placeholder="Hex ID..." '
+        + 'style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+        + 'onkeydown="if(event.key===\'Enter\'){intConfirmLinkAssessment(' + idx + ',\'' + escapeHtml(assessmentId) + '\');}if(event.key===\'Escape\'){intCancelLinkAssessment(' + idx + ');}">'
+        + '<button onclick="intConfirmLinkAssessment(' + idx + ',\'' + escapeHtml(assessmentId) + '\')" style="padding:6px 12px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Link</button>'
+        + '<button onclick="intCancelLinkAssessment(' + idx + ')" style="padding:6px 12px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+      container.appendChild(row);
+      document.getElementById('intHexIdInput-' + idx).focus();
+    }
+
+    function intConfirmLinkAssessment(idx, assessmentId) {
+      var input = document.getElementById('intHexIdInput-' + idx);
+      var hexId = (input ? input.value : '').trim();
+      if (!hexId) { showToast('Hex ID cannot be empty', 'error'); return; }
+      var row = document.getElementById('intInlineHexIdRow-' + idx);
+      if (row) row.parentNode.removeChild(row);
+
+      showToast('Linking assessment...', 'info');
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Assessment linked to hex!', 'success');
+        })
+        .withFailureHandler(function(err) {
+          showToast('Link error: ' + err.message, 'error');
+        })
+        .linkAssessmentToHex(hexId, assessmentId);
+    }
+
+    function intCancelLinkAssessment(idx) {
+      var row = document.getElementById('intInlineHexIdRow-' + idx);
+      if (row) row.parentNode.removeChild(row);
+    }
+
+    // ---- Bulk Import ----
+
+    function getSelectedBulkMap() {
+      var sel = document.getElementById('intBulkMap');
+      return sel ? sel.value : '';
+    }
+
+    function getSelectedBulkUnit() {
+      var input = document.getElementById('intBulkUnit');
+      return input ? input.value.trim() : '';
+    }
+
+    function getSelectedBulkCourse() {
+      var sel = document.getElementById('intBulkCourse');
+      return sel ? sel.value : '';
+    }
+
+    function loadMapsForIntegration() {
+      google.script.run
+        .withSuccessHandler(function(maps) {
+          integrationMapsCache = maps || [];
+          var sel = document.getElementById('intBulkMap');
+          if (!sel) return;
+          var html = '<option value="">-- Select Map --</option>';
+          for (var i = 0; i < maps.length; i++) {
+            html += '<option value="' + escapeHtml(maps[i].mapId) + '">' + escapeHtml(maps[i].title || 'Untitled') + '</option>';
+          }
+          sel.innerHTML = html;
+        })
+        .withFailureHandler(function() {
+          // Silent — maps list not critical
+        })
+        .getMaps();
+    }
+
+    function loadCoursesForIntegration() {
+      google.script.run
+        .withSuccessHandler(function(courses) {
+          integrationCoursesCache = courses || [];
+          var sel = document.getElementById('intBulkCourse');
+          if (!sel) return;
+          var html = '<option value="">-- Select Course --</option>';
+          for (var i = 0; i < courses.length; i++) {
+            html += '<option value="' + escapeHtml(courses[i].courseId) + '">' + escapeHtml(courses[i].title || 'Untitled') + '</option>';
+          }
+          sel.innerHTML = html;
+        })
+        .withFailureHandler(function() {
+          // Silent
+        })
+        .getCourses();
+    }
+
+    function bulkImportLessons() {
+      var mapId = getSelectedBulkMap();
+      var unitId = getSelectedBulkUnit();
+      var resultEl = document.getElementById('intBulkLessonsResult');
+      var btn = document.getElementById('intBulkLessonsBtn');
+
+      if (!mapId) {
+        showToast('Select a target map first', 'error');
+        return;
+      }
+      if (!unitId) {
+        showToast('Enter a unit ID to filter lessons', 'error');
+        return;
+      }
+
+      if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
+      if (resultEl) { resultEl.textContent = ''; resultEl.className = 'int-bulk-result'; }
+
+      google.script.run
+        .withSuccessHandler(function(count) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Import All Lessons'; }
+          if (resultEl) {
+            resultEl.textContent = count + ' lesson' + (count !== 1 ? 's' : '') + ' imported';
+            resultEl.className = 'int-bulk-result success';
+          }
+          showToast(count + ' lessons imported!', 'success');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Import All Lessons'; }
+          if (resultEl) {
+            resultEl.textContent = 'Error: ' + err.message;
+            resultEl.className = 'int-bulk-result error';
+          }
+          showToast('Import error: ' + err.message, 'error');
+        })
+        .syncUnitLessons(unitId, mapId);
+    }
+
+    function bulkImportAssessments() {
+      var mapId = getSelectedBulkMap();
+      var unitId = getSelectedBulkUnit();
+      var resultEl = document.getElementById('intBulkAssessResult');
+      var btn = document.getElementById('intBulkAssessBtn');
+
+      if (!mapId) {
+        showToast('Select a target map first', 'error');
+        return;
+      }
+      if (!unitId) {
+        showToast('Enter a unit ID to filter assessments', 'error');
+        return;
+      }
+
+      if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
+      if (resultEl) { resultEl.textContent = ''; resultEl.className = 'int-bulk-result'; }
+
+      google.script.run
+        .withSuccessHandler(function(count) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Import All Assessments'; }
+          if (resultEl) {
+            resultEl.textContent = count + ' assessment' + (count !== 1 ? 's' : '') + ' imported';
+            resultEl.className = 'int-bulk-result success';
+          }
+          showToast(count + ' assessments imported!', 'success');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Import All Assessments'; }
+          if (resultEl) {
+            resultEl.textContent = 'Error: ' + err.message;
+            resultEl.className = 'int-bulk-result error';
+          }
+          showToast('Import error: ' + err.message, 'error');
+        })
+        .syncUnitAssessments(unitId, mapId);
+    }
+
+    function bulkImportStandards() {
+      var courseId = getSelectedBulkCourse();
+      var resultEl = document.getElementById('intBulkStdsResult');
+      var btn = document.getElementById('intBulkStdsBtn');
+
+      if (!courseId) {
+        showToast('Select a target course first', 'error');
+        return;
+      }
+
+      if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
+      if (resultEl) { resultEl.textContent = ''; resultEl.className = 'int-bulk-result'; }
+
+      google.script.run
+        .withSuccessHandler(function(count) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Import All Standards'; }
+          if (resultEl) {
+            resultEl.textContent = count + ' standard' + (count !== 1 ? 's' : '') + ' imported';
+            resultEl.className = 'int-bulk-result success';
+          }
+          showToast(count + ' standards imported!', 'success');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Import All Standards'; }
+          if (resultEl) {
+            resultEl.textContent = 'Error: ' + err.message;
+            resultEl.className = 'int-bulk-result error';
+          }
+          showToast('Import error: ' + err.message, 'error');
+        })
+        .importStandardsToCourse(courseId);
+    }
+
+    // ---- Lab Reports Config Card ----
+
+    var labReportsConfig = null;
+
+    function loadLabReportsCard() {
+      var container = document.getElementById('labReportsCardContainer');
+      if (!container) return;
+
+      google.script.run
+        .withSuccessHandler(function(config) {
+          labReportsConfig = config || { enabled: false, spreadsheetUrl: '', lastInitialized: '' };
+          if (container) {
+            container.innerHTML = renderLabReportsConfigCard();
+          }
+        })
+        .withFailureHandler(function(err) {
+          labReportsConfig = { enabled: false, spreadsheetUrl: '', lastInitialized: '' };
+          if (container) {
+            container.innerHTML = '<div class="int-section"><div class="int-section-header"><h3 class="int-section-title">Lab Reports</h3><span class="int-card-badge disabled">Error</span></div><div class="int-section-body"><p style="color:#dc2626; font-size:13px;">Failed to load: ' + escapeHtml(err.message) + '</p></div></div>';
+          }
+        })
+        .getLabConfig();
+    }
+
+    function renderLabReportsConfigCard() {
+      var cfg = labReportsConfig || { enabled: false, spreadsheetUrl: '', lastInitialized: '' };
+      var isAdmin = userData && userData.isAdmin;
+      // URL = enabled: badge derived from URL presence
+      var hasUrl = !!(cfg.spreadsheetUrl);
+      var badgeClass = hasUrl ? 'connected' : 'disabled';
+      var badgeText = hasUrl ? 'Connected' : 'Not Connected';
+
+      var html = '<div class="int-section" id="intCard-labReports">';
+
+      // Header
+      html += '<div class="int-section-header">';
+      html += '<h3 class="int-section-title">🧪 Lab Reports</h3>';
+      html += '<span class="int-card-badge ' + badgeClass + '">' + badgeText + '</span>';
+      html += '</div>';
+
+      html += '<div class="int-section-body">';
+
+      // Spreadsheet URL (no toggle — URL presence = enabled)
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">LabReports Spreadsheet URL</span>';
+      html += '<div class="int-field-input">';
+      html += '<input type="text" class="form-input" id="lr-url" value="' + escapeHtml(cfg.spreadsheetUrl || '') + '" placeholder="https://docs.google.com/spreadsheets/d/..."' + (!isAdmin ? ' disabled' : '') + '>';
+      html += '<span class="int-field-help">Dedicated spreadsheet for lab templates, rubrics, submissions, and scores</span>';
+      html += '</div></div>';
+
+      // Connection status
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">Connection Status</span>';
+      html += '<div class="int-field-input">';
+      html += '<div class="int-status-row">';
+      html += '<span class="int-status-dot untested" id="lr-dot"></span>';
+      html += '<span class="int-status-msg" id="lr-msg">Not tested</span>';
+      html += '</div></div></div>';
+
+      // Last initialized info
+      if (cfg.lastInitialized) {
+        html += '<div class="int-field">';
+        html += '<span class="int-field-label">Last Initialized</span>';
+        html += '<div class="int-field-input">';
+        html += '<span style="font-size:12px; color:#64748b;" id="lr-last-init">' + escapeHtml(cfg.lastInitialized) + '</span>';
+        html += '</div></div>';
+      }
+
+      // Info text
+      html += '<div style="padding:8px 0 0; font-size:12px; color:#64748b; line-height:1.4;">';
+      html += 'The Lab Reports spreadsheet stores templates, rubrics, assignments, submissions, and scores in 7 dedicated sheets. ';
+      html += 'Click <strong>Initialize Spreadsheet</strong> after connecting to create the required sheets.';
+      html += '</div>';
+
+      html += '</div>'; // close section-body
+
+      // Footer with buttons
+      html += '<div class="int-section-footer">';
+      html += '<div class="int-btn-row" style="justify-content:flex-end; gap:8px;">';
+      html += '<button class="btn btn-small btn-outline" id="lr-test-btn" onclick="testLabReportsConnection()">Test Connection</button>';
+      html += '<button class="btn btn-small btn-outline" id="lr-init-btn" onclick="initLabReportsSpreadsheet()">Initialize Spreadsheet</button>';
+      if (isAdmin || (userData && userData.canEdit)) {
+        html += '<button class="btn btn-small btn-success" id="lr-save-btn" onclick="saveLabReportsConfig()">Save</button>';
+      }
+      html += '</div></div>';
+
+      html += '</div>'; // close int-section
+      return html;
+    }
+
+    function testLabReportsConnection() {
+      var dot = document.getElementById('lr-dot');
+      var msg = document.getElementById('lr-msg');
+      var btn = document.getElementById('lr-test-btn');
+
+      if (dot) dot.className = 'int-status-dot testing';
+      if (msg) { msg.className = 'int-status-msg'; msg.textContent = 'Testing...'; }
+      if (btn) { btn.disabled = true; btn.textContent = 'Testing...'; }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Test Connection'; }
+          if (result && result.success) {
+            if (dot) dot.className = 'int-status-dot connected';
+            if (msg) {
+              msg.className = 'int-status-msg success';
+              var statusText = result.message || 'Connected';
+              if (result.initialized) {
+                statusText += ' (All 7 sheets present)';
+              } else {
+                statusText += ' (Needs initialization)';
+              }
+              msg.textContent = statusText;
+            }
+          } else {
+            if (dot) dot.className = 'int-status-dot disconnected';
+            if (msg) {
+              msg.className = 'int-status-msg error';
+              msg.textContent = (result && result.message) || 'Connection failed';
+            }
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Test Connection'; }
+          if (dot) dot.className = 'int-status-dot disconnected';
+          if (msg) {
+            msg.className = 'int-status-msg error';
+            msg.textContent = 'Error: ' + err.message;
+          }
+        })
+        .testLabConnection();
+    }
+
+    function initLabReportsSpreadsheet() {
+      var btn = document.getElementById('lr-init-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Initializing...'; }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Initialize Spreadsheet'; }
+          if (result && result.success) {
+            showToast(result.message, 'success');
+            // Update last initialized display
+            var lastInit = document.getElementById('lr-last-init');
+            if (lastInit) {
+              lastInit.textContent = new Date().toISOString();
+            }
+            // Re-test connection to update status
+            testLabReportsConnection();
+          } else {
+            showToast('Initialization failed', 'error');
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Initialize Spreadsheet'; }
+          showToast('Error: ' + err.message, 'error');
+        })
+        .initializeLabSpreadsheet();
+    }
+
+    function saveLabReportsConfig() {
+      // URL = enabled: no toggle, just URL
+      var urlVal = document.getElementById('lr-url');
+      var btn = document.getElementById('lr-save-btn');
+
+      if (!urlVal) return;
+
+      var config = {
+        spreadsheetUrl: urlVal.value.trim()
+      };
+
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          labReportsConfig = {
+            enabled: !!(config.spreadsheetUrl),
+            spreadsheetUrl: config.spreadsheetUrl,
+            lastInitialized: (labReportsConfig && labReportsConfig.lastInitialized) || ''
+          };
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Saved!';
+            setTimeout(function() { btn.textContent = 'Save'; }, 2000);
+          }
+          // Update badge — URL presence = connected
+          var badge = document.querySelector('#intCard-labReports .int-card-badge');
+          if (badge) {
+            if (config.spreadsheetUrl) {
+              badge.className = 'int-card-badge connected';
+              badge.textContent = 'Connected';
+            } else {
+              badge.className = 'int-card-badge disabled';
+              badge.textContent = 'Not Connected';
+            }
+          }
+          showToast('Lab Reports config saved', 'success');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+          showToast('Error: ' + err.message, 'error');
+        })
+        .saveLabConfig(config);
+    }
+
+    // ===========================================================
+    // COLLABSPACE CONFIG CARD (Section 7)
+    // ===========================================================
+
+    var collabConfig = null;
+
+    function loadCollabCard() {
+      var container = document.getElementById('collabCardContainer');
+      if (!container) return;
+
+      google.script.run
+        .withSuccessHandler(function(config) {
+          collabConfig = config || { enabled: false, spreadsheetUrl: '', lastInitialized: '' };
+          if (container) {
+            container.innerHTML = renderCollabConfigCard();
+          }
+        })
+        .withFailureHandler(function(err) {
+          collabConfig = { enabled: false, spreadsheetUrl: '', lastInitialized: '' };
+          if (container) {
+            container.innerHTML = '<div class="int-section"><div class="int-section-header"><h3 class="int-section-title">Collaboration</h3><span class="int-card-badge disabled">Error</span></div><div class="int-section-body"><p style="color:#dc2626; font-size:13px;">Failed to load: ' + escapeHtml(err.message) + '</p></div></div>';
+          }
+        })
+        .getCollabConfig();
+    }
+
+    function renderCollabConfigCard() {
+      var cfg = collabConfig || { enabled: false, spreadsheetUrl: '', lastInitialized: '' };
+      var isAdmin = userData && userData.isAdmin;
+      // URL = enabled: badge derived from URL presence
+      var hasUrl = !!(cfg.spreadsheetUrl);
+      var badgeClass = hasUrl ? 'connected' : 'disabled';
+      var badgeText = hasUrl ? 'Connected' : 'Not Connected';
+
+      var html = '<div class="int-section" id="intCard-collab">';
+
+      // Header
+      html += '<div class="int-section-header">';
+      html += '<h3 class="int-section-title">CollabSpace</h3>';
+      html += '<span class="int-card-badge ' + badgeClass + '">' + badgeText + '</span>';
+      html += '</div>';
+
+      html += '<div class="int-section-body">';
+
+      // Spreadsheet URL (no toggle — URL presence = enabled)
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">CollabSpace Spreadsheet URL</span>';
+      html += '<div class="int-field-input">';
+      html += '<input type="text" class="form-input" id="collab-url" value="' + escapeHtml(cfg.spreadsheetUrl || '') + '" placeholder="https://docs.google.com/spreadsheets/d/..."' + (!isAdmin ? ' disabled' : '') + '>';
+      html += '<span class="int-field-help">Dedicated spreadsheet for collaboration boards, posts, comments, and reactions</span>';
+      html += '</div></div>';
+
+      // Connection status
+      html += '<div class="int-field">';
+      html += '<span class="int-field-label">Connection Status</span>';
+      html += '<div class="int-field-input">';
+      html += '<div class="int-status-row">';
+      html += '<span class="int-status-dot untested" id="collab-dot"></span>';
+      html += '<span class="int-status-msg" id="collab-msg">Not tested</span>';
+      html += '</div></div></div>';
+
+      // Last initialized info
+      if (cfg.lastInitialized) {
+        html += '<div class="int-field">';
+        html += '<span class="int-field-label">Last Initialized</span>';
+        html += '<div class="int-field-input">';
+        html += '<span style="font-size:12px; color:#64748b;" id="collab-last-init">' + escapeHtml(cfg.lastInitialized) + '</span>';
+        html += '</div></div>';
+      }
+
+      // Info text
+      html += '<div style="padding:8px 0 0; font-size:12px; color:#64748b; line-height:1.4;">';
+      html += 'The CollabSpace spreadsheet stores boards, posts, comments, reactions, members, and activity logs in 6 dedicated sheets. ';
+      html += 'Click <strong>Initialize Spreadsheet</strong> after connecting to create the required sheets.';
+      html += '</div>';
+
+      html += '</div>'; // close section-body
+
+      // Footer with buttons
+      html += '<div class="int-section-footer">';
+      html += '<div class="int-btn-row" style="justify-content:flex-end; gap:8px;">';
+      html += '<button class="btn btn-small btn-outline" id="collab-test-btn" onclick="testCollabConnectionUI()">Test Connection</button>';
+      html += '<button class="btn btn-small btn-outline" id="collab-init-btn" onclick="initCollabSpreadsheetUI()">Initialize Spreadsheet</button>';
+      if (isAdmin || (userData && userData.canEdit)) {
+        html += '<button class="btn btn-small btn-success" id="collab-save-btn" onclick="saveCollabConfigUI()">Save</button>';
+      }
+      html += '</div></div>';
+
+      html += '</div>'; // close int-section
+      return html;
+    }
+
+    function testCollabConnectionUI() {
+      var dot = document.getElementById('collab-dot');
+      var msg = document.getElementById('collab-msg');
+      var btn = document.getElementById('collab-test-btn');
+
+      if (dot) dot.className = 'int-status-dot testing';
+      if (msg) { msg.className = 'int-status-msg'; msg.textContent = 'Testing...'; }
+      if (btn) { btn.disabled = true; btn.textContent = 'Testing...'; }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Test Connection'; }
+          if (result && result.success) {
+            if (dot) dot.className = 'int-status-dot connected';
+            if (msg) {
+              msg.className = 'int-status-msg success';
+              var statusText = result.message || 'Connected';
+              if (result.initialized) {
+                statusText += ' (All 6 sheets present)';
+              } else {
+                statusText += ' (Needs initialization)';
+              }
+              msg.textContent = statusText;
+            }
+          } else {
+            if (dot) dot.className = 'int-status-dot disconnected';
+            if (msg) {
+              msg.className = 'int-status-msg error';
+              msg.textContent = (result && result.message) || 'Connection failed';
+            }
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Test Connection'; }
+          if (dot) dot.className = 'int-status-dot disconnected';
+          if (msg) {
+            msg.className = 'int-status-msg error';
+            msg.textContent = 'Error: ' + escapeHtml(err.message);
+          }
+        })
+        .testCollabConnection();
+    }
+
+    function initCollabSpreadsheetUI() {
+      var btn = document.getElementById('collab-init-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Initializing...'; }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Initialize Spreadsheet'; }
+          if (result && result.success) {
+            showToast(result.message, 'success');
+            // Update last initialized display
+            var lastInit = document.getElementById('collab-last-init');
+            if (lastInit) {
+              lastInit.textContent = new Date().toISOString();
+            }
+            // Re-test connection to update status
+            testCollabConnectionUI();
+          } else {
+            showToast('Initialization failed', 'error');
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Initialize Spreadsheet'; }
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+        })
+        .initializeCollabSpreadsheet();
+    }
+
+    function saveCollabConfigUI() {
+      // URL = enabled: no toggle, just URL
+      var urlVal = document.getElementById('collab-url');
+      var btn = document.getElementById('collab-save-btn');
+
+      if (!urlVal) return;
+
+      var config = {
+        spreadsheetUrl: urlVal.value.trim()
+      };
+
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          collabConfig = {
+            enabled: !!(config.spreadsheetUrl),
+            spreadsheetUrl: config.spreadsheetUrl,
+            lastInitialized: (collabConfig && collabConfig.lastInitialized) || ''
+          };
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Saved!';
+            setTimeout(function() { btn.textContent = 'Save'; }, 2000);
+          }
+          // Update badge — URL presence = connected
+          var badge = document.querySelector('#intCard-collab .int-card-badge');
+          if (badge) {
+            if (config.spreadsheetUrl) {
+              badge.className = 'int-card-badge connected';
+              badge.textContent = 'Connected';
+            } else {
+              badge.className = 'int-card-badge disabled';
+              badge.textContent = 'Not Connected';
+            }
+          }
+          showToast('Collaboration config saved', 'success');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+        })
+        .saveCollabConfig(config);
+    }
+
+</script>

@@ -1,0 +1,1917 @@
+<script>
+/**
+ * Change Management Module — Knoster & Lippitt frameworks for change initiatives
+ *
+ * Registers as App.ModuleRegistry.change_management.
+ * Admin-only: initiative list, initiative detail (Knoster + Lippitt + Stakeholders), comparison view.
+ */
+
+App.ModuleRegistry.change_management = {
+
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      overviewData: null,
+      currentInitiativeId: null,
+      detail: null,
+      comparisonData: null,
+      config: null,
+      filters: { status: '', champion_id: '' },
+      selectedPhaseId: null,
+      communicationsData: null,
+      trendsData: null,
+      timelineData: null,
+      heatMapData: null,
+      chartInstances: {}
+    };
+
+    // ── DOM Refs ──
+    var subNav, viewContainer;
+
+    // ── Build Layout ──
+    function buildLayout() {
+      container.innerHTML = '';
+
+      // Sub-nav
+      subNav = ClientUtils.el('div', { className: 'filter-bar', style: 'margin-bottom: var(--space-md);' });
+      var btnInitiatives = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { switchView('list'); }
+      }, ['Initiatives']);
+      var btnComparison = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { switchView('comparison'); }
+      }, ['Comparison']);
+      subNav.appendChild(btnInitiatives);
+      subNav.appendChild(btnComparison);
+      container.appendChild(subNav);
+
+      viewContainer = ClientUtils.el('div', { className: 'relative' });
+      container.appendChild(viewContainer);
+
+      // Load config first, then show list
+      ServerAPI.getChangeMgmtConfig().then(function(cfg) {
+        state.config = cfg;
+        switchView('list');
+      }).catch(function() {
+        state.config = { useConsensus: true };
+        switchView('list');
+      });
+    }
+
+    function destroyCharts() {
+      Object.keys(state.chartInstances).forEach(function(key) {
+        if (state.chartInstances[key]) {
+          state.chartInstances[key].destroy();
+          delete state.chartInstances[key];
+        }
+      });
+    }
+
+    function switchView(viewKey, opts) {
+      destroyCharts();
+      viewContainer.innerHTML = '';
+      // Update sub-nav active state
+      var btns = subNav.querySelectorAll('.btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].className = 'btn btn-sm ' + (
+          (i === 0 && viewKey === 'list') || (i === 0 && viewKey === 'detail') ||
+          (i === 1 && viewKey === 'comparison') ? 'btn-primary' : 'btn-secondary'
+        );
+      }
+
+      if (viewKey === 'list') renderInitiativeList();
+      else if (viewKey === 'detail') renderInitiativeDetail(opts && opts.initiativeId);
+      else if (viewKey === 'comparison') renderComparison();
+    }
+
+    // ═══════════════════════════════════════════════
+    // Initiative List (Overview)
+    // ═══════════════════════════════════════════════
+
+    async function renderInitiativeList() {
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getChangeMgmtOverview(state.filters);
+        state.overviewData = data;
+        LoadingSpinner.hide(viewContainer);
+        buildInitiativeListUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load initiatives: ' + err.message);
+      }
+    }
+
+    function buildInitiativeListUI(data) {
+      viewContainer.innerHTML = '';
+      var initiatives = data.initiatives || [];
+      var stats = data.stats || {};
+
+      // ── Filter Bar ──
+      var filterBar = ClientUtils.el('div', { className: 'filter-bar' });
+
+      var statusSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() { state.filters.status = this.value; renderInitiativeList(); }
+      });
+      statusSelect.innerHTML = '<option value="">All Statuses</option>' +
+        '<option value="proposed">Proposed</option>' +
+        '<option value="active">Active</option>' +
+        '<option value="stalled">Stalled</option>' +
+        '<option value="completed">Completed</option>' +
+        '<option value="abandoned">Abandoned</option>';
+      statusSelect.value = state.filters.status;
+
+      // Build champion dropdown from loaded initiatives
+      var champMap = {};
+      initiatives.forEach(function(i) { champMap[i.championId] = i.championName; });
+      var champSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() { state.filters.champion_id = this.value; renderInitiativeList(); }
+      });
+      champSelect.innerHTML = '<option value="">All Champions</option>';
+      Object.keys(champMap).forEach(function(id) {
+        var opt = ClientUtils.el('option', { value: id }, [champMap[id]]);
+        champSelect.appendChild(opt);
+      });
+      champSelect.value = state.filters.champion_id;
+
+      var clearBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { state.filters = { status: '', champion_id: '' }; renderInitiativeList(); }
+      }, ['Clear']);
+
+      var spacer = ClientUtils.el('div', { style: 'flex:1' });
+
+      var newBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showCreateInitiativeModal(); }
+      }, ['+ New Initiative']);
+
+      filterBar.appendChild(statusSelect);
+      filterBar.appendChild(champSelect);
+      filterBar.appendChild(clearBtn);
+      filterBar.appendChild(spacer);
+      filterBar.appendChild(newBtn);
+      viewContainer.appendChild(filterBar);
+
+      // ── Stats Grid ──
+      var statsGrid = ClientUtils.el('div', { className: 'cm-stats' });
+      var statItems = [
+        { label: 'Total', value: stats.total || 0 },
+        { label: 'Active', value: stats.active || 0 },
+        { label: 'Stalled', value: stats.stalled || 0 },
+        { label: 'Completed', value: stats.completed || 0 }
+      ];
+      statItems.forEach(function(s) {
+        var card = ClientUtils.el('div', { className: 'cm-stat-card' });
+        card.innerHTML = '<div class="cm-stat-card__value">' + s.value + '</div>' +
+          '<div class="cm-stat-card__label">' + s.label + '</div>';
+        statsGrid.appendChild(card);
+      });
+      viewContainer.appendChild(statsGrid);
+
+      // ── Data Table ──
+      if (initiatives.length === 0) {
+        var empty = ClientUtils.el('div', { className: 'cm-empty' });
+        empty.innerHTML = '<div class="cm-empty__icon">&#128640;</div>' +
+          '<div class="cm-empty__text">No initiatives found. Create one to get started.</div>';
+        viewContainer.appendChild(empty);
+        return;
+      }
+
+      var tableCard = ClientUtils.el('div', { className: 'card' });
+      viewContainer.appendChild(tableCard);
+
+      DataTable.render(tableCard, {
+        columns: [
+          { key: 'title', label: 'Initiative', sortable: true, render: function(val) {
+            return '<span style="color:var(--color-primary);font-weight:500;cursor:pointer">' + ClientUtils.escapeHtml(val) + '</span>';
+          }},
+          { key: 'championName', label: 'Champion', sortable: true },
+          { key: 'status', label: 'Status', sortable: true, render: function(val) {
+            return StatusBadge.html(val);
+          }},
+          { key: 'latestReadiness', label: 'Readiness', sortable: true, width: '100px', render: function(val) {
+            if (val === null || val === undefined) return '<span style="color:var(--color-text-muted)">—</span>';
+            var cls = val <= 2 ? 'cm-knoster__score--danger' : val <= 3 ? 'cm-knoster__score--warning' : 'cm-knoster__score--success';
+            return '<span class="cm-knoster__score ' + cls + '" style="width:32px;height:32px;font-size:0.85rem;display:inline-flex">' + val + '</span>';
+          }},
+          { key: 'currentLippittPhase', label: 'Lippitt Phase', sortable: true, render: function(val) {
+            return val ? ClientUtils.escapeHtml(val) : '<span style="color:var(--color-text-muted)">Not started</span>';
+          }},
+          { key: 'stakeholderCount', label: 'Stakeholders', sortable: true, width: '100px' }
+        ],
+        data: initiatives,
+        onRowClick: function(row) {
+          state.currentInitiativeId = row.id;
+          switchView('detail', { initiativeId: row.id });
+        },
+        emptyMessage: 'No initiatives match the current filters.'
+      });
+    }
+
+    // ── Create Initiative Modal ──
+
+    function showCreateInitiativeModal() {
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Title *</label>' +
+          '<input type="text" class="form-input" id="cm-init-title" placeholder="Initiative title">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Description</label>' +
+          '<textarea class="form-input" id="cm-init-desc" rows="3" placeholder="Brief description"></textarea>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Champion *</label>' +
+          '<div id="cm-init-champion"></div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md)">' +
+          '<div class="form-group">' +
+            '<label class="form-label">Start Date</label>' +
+            '<input type="date" class="form-input" id="cm-init-start">' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Target Date</label>' +
+            '<input type="date" class="form-input" id="cm-init-target">' +
+          '</div>' +
+        '</div>';
+
+      Modal.open('New Initiative', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Create', className: 'btn-primary', onClick: handleCreateInitiative }
+      ]);
+
+      var champContainer = document.getElementById('cm-init-champion');
+      StaffSelector.render(champContainer, { placeholder: 'Select champion...' });
+    }
+
+    async function handleCreateInitiative() {
+      var title = document.getElementById('cm-init-title').value.trim();
+      var desc = document.getElementById('cm-init-desc').value.trim();
+      var champContainer = document.getElementById('cm-init-champion');
+      var championId = champContainer.querySelector('input[type=hidden]').value;
+      var startDate = document.getElementById('cm-init-start').value;
+      var targetDate = document.getElementById('cm-init-target').value;
+
+      if (!title || !championId) {
+        Toast.error('Title and Champion are required.');
+        return;
+      }
+
+      try {
+        await ServerAPI.createInitiative({
+          title: title,
+          description: desc,
+          champion_id: championId,
+          start_date: startDate,
+          target_date: targetDate
+        });
+        Modal.close();
+        Toast.success('Initiative created successfully.');
+        renderInitiativeList();
+      } catch (err) {
+        Toast.error('Failed to create initiative: ' + err.message);
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Initiative Detail — Combined Power View
+    // ═══════════════════════════════════════════════
+
+    async function renderInitiativeDetail(initiativeId) {
+      if (!initiativeId) initiativeId = state.currentInitiativeId;
+      if (!initiativeId) { switchView('list'); return; }
+      state.currentInitiativeId = initiativeId;
+
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getInitiativeDetail(initiativeId);
+        state.detail = data;
+        state.selectedPhaseId = null;
+        LoadingSpinner.hide(viewContainer);
+        buildDetailUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load initiative: ' + err.message);
+      }
+    }
+
+    function buildDetailUI(data) {
+      viewContainer.innerHTML = '';
+      var init = data.initiative;
+      var assessments = data.assessments || [];
+      var phases = data.lippittPhases || [];
+      var stakeholders = data.stakeholders || [];
+      var useConsensus = data.useConsensus;
+
+      // ── Back link ──
+      var backLink = ClientUtils.el('a', {
+        href: '#',
+        style: 'display:inline-flex;align-items:center;gap:4px;font-size:var(--font-size-sm);color:var(--color-primary);margin-bottom:var(--space-md);text-decoration:none;',
+        onClick: function(e) { e.preventDefault(); switchView('list'); }
+      }, ['\u2190 Back to Initiatives']);
+      viewContainer.appendChild(backLink);
+
+      // ── Health Score (loaded async, placeholder first) ──
+      var healthContainer = ClientUtils.el('div', { id: 'cm-health-container' });
+      viewContainer.appendChild(healthContainer);
+      loadAndDisplayHealthScore(init.id, healthContainer);
+
+      // ── Header Card ──
+      var header = ClientUtils.el('div', { className: 'cm-header' });
+      var headerTop = ClientUtils.el('div', { className: 'cm-header__top' });
+
+      var titleDiv = ClientUtils.el('div');
+      titleDiv.innerHTML = '<h2 class="cm-header__title">' + ClientUtils.escapeHtml(init.title) + '</h2>';
+      if (init.description) {
+        titleDiv.innerHTML += '<p class="cm-header__desc">' + ClientUtils.escapeHtml(init.description) + '</p>';
+      }
+
+      var actionsDiv = ClientUtils.el('div', { className: 'cm-header__actions' });
+
+      // Status dropdown
+      var statusSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() { updateInitiativeStatus(init.id, this.value); }
+      });
+      ['proposed', 'active', 'stalled', 'completed', 'abandoned'].forEach(function(s) {
+        var opt = ClientUtils.el('option', { value: s }, [s.replace(/_/g, ' ')]);
+        statusSelect.appendChild(opt);
+      });
+      statusSelect.value = init.status;
+
+      var deleteBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-danger',
+        onClick: function() { confirmDeleteInitiative(init.id, init.title); }
+      }, ['Delete']);
+
+      actionsDiv.appendChild(statusSelect);
+      actionsDiv.appendChild(deleteBtn);
+
+      headerTop.appendChild(titleDiv);
+      headerTop.appendChild(actionsDiv);
+      header.appendChild(headerTop);
+
+      // Meta info
+      var meta = ClientUtils.el('div', { className: 'cm-header__meta' });
+      meta.innerHTML =
+        '<div class="cm-header__meta-item"><span class="cm-header__meta-label">Champion:</span> ' + ClientUtils.escapeHtml(init.championName) + '</div>' +
+        '<div class="cm-header__meta-item"><span class="cm-header__meta-label">Status:</span> ' + StatusBadge.html(init.status) + '</div>' +
+        (init.startDate ? '<div class="cm-header__meta-item"><span class="cm-header__meta-label">Start:</span> ' + ClientUtils.formatDate(init.startDate) + '</div>' : '') +
+        (init.targetDate ? '<div class="cm-header__meta-item"><span class="cm-header__meta-label">Target:</span> ' + ClientUtils.formatDate(init.targetDate) + '</div>' : '');
+      header.appendChild(meta);
+      viewContainer.appendChild(header);
+
+      // ── Knoster Assessment Section ──
+      buildKnosterSection(assessments, useConsensus, init.id);
+
+      // ── Readiness Trends Section (collapsible) ──
+      buildTrendsSection(init.id, assessments.length);
+
+      // ── Lippitt Tracker Section ──
+      buildLippittSection(phases, init.id);
+
+      // ── Progress Timeline Section ──
+      buildTimelineSection(init.id);
+
+      // ── Stakeholders Section ──
+      buildStakeholderSection(stakeholders, init.id);
+
+      // ── Communications Section ──
+      buildCommunicationsSection(init.id);
+    }
+
+    // ── Status Update ──
+
+    async function updateInitiativeStatus(initiativeId, newStatus) {
+      try {
+        await ServerAPI.updateInitiative(initiativeId, { status: newStatus });
+        Toast.success('Status updated to ' + newStatus.replace(/_/g, ' '));
+      } catch (err) {
+        Toast.error('Failed to update status: ' + err.message);
+        renderInitiativeDetail(initiativeId);
+      }
+    }
+
+    // ── Delete Initiative ──
+
+    function confirmDeleteInitiative(initiativeId, title) {
+      var body = ClientUtils.el('div');
+      body.innerHTML = '<p>Are you sure you want to delete <strong>' + ClientUtils.escapeHtml(title) + '</strong>?</p>' +
+        '<p style="color:var(--color-danger);font-size:var(--font-size-sm)">This will also delete all assessments, phases, stakeholders, and communications for this initiative.</p>';
+      Modal.open('Delete Initiative', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Delete', className: 'btn-danger', onClick: async function() {
+          try {
+            await ServerAPI.deleteInitiative(initiativeId);
+            Modal.close();
+            Toast.success('Initiative deleted.');
+            switchView('list');
+          } catch (err) {
+            Toast.error('Failed to delete: ' + err.message);
+          }
+        }}
+      ]);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Knoster Assessment Section
+    // ═══════════════════════════════════════════════
+
+    function buildKnosterSection(assessments, useConsensus, initiativeId) {
+      var section = ClientUtils.el('div', { className: 'cm-section' });
+
+      var sectionHeader = ClientUtils.el('div', { className: 'cm-section__header' });
+      sectionHeader.innerHTML = '<h3 class="cm-section__title">Knoster Readiness Assessment</h3>';
+      var assessBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showAssessmentModal(initiativeId, useConsensus); }
+      }, [assessments.length > 0 ? 'Re-assess' : 'Assess']);
+      sectionHeader.appendChild(assessBtn);
+      section.appendChild(sectionHeader);
+
+      if (assessments.length === 0) {
+        section.innerHTML += '<div class="cm-empty"><div class="cm-empty__icon">&#128203;</div>' +
+          '<div class="cm-empty__text">No assessments yet. Run a readiness assessment to see Knoster matrix scores.</div></div>';
+        viewContainer.appendChild(section);
+        return;
+      }
+
+      // Latest assessment → matrix grid
+      var latest = assessments[0];
+      var elements = buildElementsList(latest, useConsensus);
+
+      // Overall readiness
+      var readinessBar = ClientUtils.el('div', { className: 'cm-knoster__readiness' });
+      var readyCls = latest.overallReadiness <= 2 ? 'color:var(--color-danger)' :
+                     latest.overallReadiness <= 3 ? 'color:var(--color-warning)' : 'color:var(--color-success)';
+      readinessBar.innerHTML =
+        '<span class="cm-knoster__readiness-label">Overall Readiness</span>' +
+        '<span class="cm-knoster__readiness-value" style="' + readyCls + '">' + latest.overallReadiness + ' / 5</span>' +
+        '<span class="cm-knoster__readiness-label">Assessed ' + ClientUtils.timeAgo(latest.assessedAt) + ' by ' + ClientUtils.escapeHtml(latest.assessedBy) + '</span>';
+      section.appendChild(readinessBar);
+
+      // Grid
+      var gridCls = useConsensus ? 'cm-knoster__grid' : 'cm-knoster__grid cm-knoster__grid--five';
+      var grid = ClientUtils.el('div', { className: gridCls });
+
+      elements.forEach(function(el) {
+        var elem = ClientUtils.el('div', { className: 'cm-knoster__element' });
+        var scoreCls = el.score <= 2 ? 'cm-knoster__score--danger' :
+                       el.score === 3 ? 'cm-knoster__score--warning' : 'cm-knoster__score--success';
+        elem.innerHTML =
+          '<div class="cm-knoster__label">' + ClientUtils.escapeHtml(el.name) + '</div>' +
+          '<div class="cm-knoster__score ' + scoreCls + '">' + el.score + '</div>' +
+          (el.notes ? '<div class="cm-knoster__notes">' + ClientUtils.escapeHtml(el.notes) + '</div>' : '');
+        grid.appendChild(elem);
+      });
+      section.appendChild(grid);
+
+      // Risk predictions
+      if (latest.gaps.length > 0 || latest.warnings.length > 0) {
+        var risks = ClientUtils.el('div', { className: 'cm-risks' });
+        latest.gaps.forEach(function(g) {
+          risks.innerHTML += '<span class="cm-risk-pill cm-risk-pill--gap">' +
+            '<span class="cm-risk-pill__icon">&#9888;</span> ' +
+            'Missing ' + ClientUtils.escapeHtml(g.name) + ' \u2192 ' + ClientUtils.escapeHtml(g.risk) + '</span>';
+        });
+        latest.warnings.forEach(function(w) {
+          risks.innerHTML += '<span class="cm-risk-pill cm-risk-pill--warning">' +
+            '<span class="cm-risk-pill__icon">&#9888;</span> ' +
+            'Weak ' + ClientUtils.escapeHtml(w.name) + ' \u2192 Risk of ' + ClientUtils.escapeHtml(w.risk) + '</span>';
+        });
+        section.appendChild(risks);
+      }
+
+      // Assessment History (collapsible)
+      if (assessments.length > 1) {
+        var historyTitle = ClientUtils.el('h4', {
+          style: 'font-size:var(--font-size-sm);font-weight:600;color:var(--color-text-secondary);margin:var(--space-lg) 0 var(--space-sm);'
+        }, ['Assessment History (' + assessments.length + ')']);
+        section.appendChild(historyTitle);
+
+        assessments.forEach(function(a, idx) {
+          if (idx === 0) return; // Skip latest (already shown above)
+          var card = buildAssessmentHistoryCard(a, useConsensus);
+          section.appendChild(card);
+        });
+      }
+
+      viewContainer.appendChild(section);
+    }
+
+    function buildElementsList(assessment, useConsensus) {
+      var elements = [
+        { name: 'Vision', score: assessment.visionScore, notes: assessment.visionNotes },
+        { name: 'Skills', score: assessment.skillsScore, notes: assessment.skillsNotes },
+        { name: 'Incentives', score: assessment.incentivesScore, notes: assessment.incentivesNotes },
+        { name: 'Resources', score: assessment.resourcesScore, notes: assessment.resourcesNotes },
+        { name: 'Action Plan', score: assessment.actionPlanScore, notes: assessment.actionPlanNotes }
+      ];
+      if (useConsensus) {
+        elements.push({ name: 'Consensus', score: assessment.consensusScore, notes: assessment.consensusNotes });
+      }
+      return elements;
+    }
+
+    function buildAssessmentHistoryCard(assessment, useConsensus) {
+      var card = ClientUtils.el('div', { className: 'cm-assessment-card' });
+
+      var readyCls = assessment.overallReadiness <= 2 ? 'color:var(--color-danger)' :
+                     assessment.overallReadiness <= 3 ? 'color:var(--color-warning)' : 'color:var(--color-success)';
+
+      var header = ClientUtils.el('div', { className: 'cm-assessment-card__header' });
+      header.innerHTML =
+        '<div><span class="cm-assessment-card__date">' + ClientUtils.formatDate(assessment.assessedAt) + '</span>' +
+        ' <span class="cm-assessment-card__assessor">by ' + ClientUtils.escapeHtml(assessment.assessedBy) + '</span></div>' +
+        '<div style="display:flex;align-items:center;gap:var(--space-sm)">' +
+          '<span class="cm-assessment-card__readiness" style="' + readyCls + '">' + assessment.overallReadiness + '/5</span>' +
+          '<span class="cm-assessment-card__toggle">\u25BC</span>' +
+        '</div>';
+
+      var body = ClientUtils.el('div', { className: 'cm-assessment-card__body' });
+      var elements = buildElementsList(assessment, useConsensus);
+      var gridCls = useConsensus ? 'cm-knoster__grid' : 'cm-knoster__grid cm-knoster__grid--five';
+      var grid = ClientUtils.el('div', { className: gridCls, style: 'margin-top:var(--space-sm)' });
+
+      elements.forEach(function(el) {
+        var scoreCls = el.score <= 2 ? 'cm-knoster__score--danger' :
+                       el.score === 3 ? 'cm-knoster__score--warning' : 'cm-knoster__score--success';
+        var elem = ClientUtils.el('div', { className: 'cm-knoster__element' });
+        elem.innerHTML =
+          '<div class="cm-knoster__label">' + ClientUtils.escapeHtml(el.name) + '</div>' +
+          '<div class="cm-knoster__score ' + scoreCls + '" style="width:36px;height:36px;font-size:1rem">' + el.score + '</div>' +
+          (el.notes ? '<div class="cm-knoster__notes">' + ClientUtils.escapeHtml(el.notes) + '</div>' : '');
+        grid.appendChild(elem);
+      });
+      body.appendChild(grid);
+
+      // Toggle
+      header.addEventListener('click', function() {
+        var isOpen = body.classList.contains('cm-assessment-card__body--open');
+        body.classList.toggle('cm-assessment-card__body--open');
+        var toggle = header.querySelector('.cm-assessment-card__toggle');
+        toggle.classList.toggle('cm-assessment-card__toggle--open');
+      });
+
+      card.appendChild(header);
+      card.appendChild(body);
+      return card;
+    }
+
+    // ── Assessment Modal ──
+
+    function showAssessmentModal(initiativeId, useConsensus) {
+      var body = ClientUtils.el('div');
+
+      var elementNames = ['Vision', 'Skills', 'Incentives', 'Resources', 'Action Plan'];
+      if (useConsensus) elementNames.push('Consensus');
+
+      var elementKeys = ['vision', 'skills', 'incentives', 'resources', 'action_plan'];
+      if (useConsensus) elementKeys.push('consensus');
+
+      var ratingControls = {};
+
+      elementNames.forEach(function(name, idx) {
+        var key = elementKeys[idx];
+        var group = ClientUtils.el('div', {
+          className: 'form-group',
+          style: 'border-bottom:1px solid var(--color-border);padding-bottom:var(--space-sm);margin-bottom:var(--space-sm);'
+        });
+
+        var label = ClientUtils.el('label', { className: 'form-label' }, [name + ' (1-5)']);
+        group.appendChild(label);
+
+        var ratingContainer = ClientUtils.el('div', { style: 'margin-bottom:var(--space-xs)' });
+        group.appendChild(ratingContainer);
+
+        var notesInput = ClientUtils.el('textarea', {
+          className: 'form-input',
+          rows: '2',
+          placeholder: name + ' notes (optional)',
+          id: 'cm-assess-notes-' + key
+        });
+        group.appendChild(notesInput);
+
+        body.appendChild(group);
+
+        // Render after DOM append
+        setTimeout(function() {
+          ratingControls[key] = RatingScale.render(ratingContainer, {
+            name: key + '_score',
+            max: 5
+          });
+        }, 0);
+      });
+
+      Modal.open('Knoster Readiness Assessment', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Submit Assessment', className: 'btn-primary', onClick: async function() {
+          // Collect values
+          var assessmentData = {};
+          var allScored = true;
+          elementKeys.forEach(function(key) {
+            var score = ratingControls[key] ? ratingControls[key].getValue() : 0;
+            var notes = document.getElementById('cm-assess-notes-' + key).value.trim();
+            assessmentData[key + '_score'] = score;
+            assessmentData[key + '_notes'] = notes;
+            if (!score) allScored = false;
+          });
+
+          if (!allScored) {
+            Toast.error('Please rate all elements (1-5).');
+            return;
+          }
+
+          assessmentData.initiative_id = initiativeId;
+
+          try {
+            await ServerAPI.createKnosterAssessment(assessmentData);
+            Modal.close();
+            Toast.success('Assessment recorded.');
+            renderInitiativeDetail(initiativeId);
+          } catch (err) {
+            Toast.error('Failed to save assessment: ' + err.message);
+          }
+        }}
+      ]);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Lippitt Tracker Section
+    // ═══════════════════════════════════════════════
+
+    function buildLippittSection(phases, initiativeId) {
+      var section = ClientUtils.el('div', { className: 'cm-section' });
+
+      var sectionHeader = ClientUtils.el('div', { className: 'cm-section__header' });
+      sectionHeader.innerHTML = '<h3 class="cm-section__title">Lippitt Change Process</h3>';
+      section.appendChild(sectionHeader);
+
+      if (phases.length === 0) {
+        section.innerHTML += '<div class="cm-empty"><div class="cm-empty__text">No Lippitt phases found.</div></div>';
+        viewContainer.appendChild(section);
+        return;
+      }
+
+      // ── Stepper ──
+      var stepper = ClientUtils.el('div', { className: 'cm-stepper' });
+
+      phases.forEach(function(phase, idx) {
+        var step = ClientUtils.el('div', {
+          className: 'cm-stepper__step' + (state.selectedPhaseId === phase.id ? ' cm-stepper__step--selected' : '')
+        });
+
+        var circleMod = phase.status === 'completed' ? '--completed' :
+                        phase.status === 'in_progress' ? '--active' : '--pending';
+        var circleContent = phase.status === 'completed' ? '\u2713' : String(phase.phaseNumber);
+
+        var circle = ClientUtils.el('div', {
+          className: 'cm-stepper__circle cm-stepper__circle' + circleMod
+        }, [circleContent]);
+
+        var label = ClientUtils.el('div', { className: 'cm-stepper__label' }, [phase.phaseName]);
+
+        step.appendChild(circle);
+        step.appendChild(label);
+
+        // Connector (not on last)
+        if (idx < phases.length - 1) {
+          var nextPhase = phases[idx + 1];
+          var connMod = phase.status === 'completed' && nextPhase.status === 'completed' ? '--completed' :
+                        phase.status === 'completed' && nextPhase.status === 'in_progress' ? '--active' : '';
+          var conn = ClientUtils.el('div', {
+            className: 'cm-stepper__connector' + (connMod ? ' cm-stepper__connector' + connMod : '')
+          });
+          step.appendChild(conn);
+        }
+
+        // Click handler
+        step.addEventListener('click', function() {
+          state.selectedPhaseId = phase.id;
+          // Refresh the detail section to show the selected phase
+          renderPhaseDetail(section, phases, phase, initiativeId);
+          // Update selected state on stepper
+          var allSteps = stepper.querySelectorAll('.cm-stepper__step');
+          for (var i = 0; i < allSteps.length; i++) {
+            allSteps[i].classList.remove('cm-stepper__step--selected');
+          }
+          step.classList.add('cm-stepper__step--selected');
+        });
+
+        stepper.appendChild(step);
+      });
+
+      section.appendChild(stepper);
+
+      // Phase detail panel placeholder
+      var detailPanel = ClientUtils.el('div', { id: 'cm-phase-detail-panel' });
+      section.appendChild(detailPanel);
+
+      // Auto-select first in_progress or first phase
+      var autoSelect = phases.find(function(p) { return p.status === 'in_progress'; }) || phases[0];
+      if (autoSelect) {
+        state.selectedPhaseId = autoSelect.id;
+        renderPhaseDetail(section, phases, autoSelect, initiativeId);
+        // Mark step selected
+        var stepIdx = phases.indexOf(autoSelect);
+        var allSteps = stepper.querySelectorAll('.cm-stepper__step');
+        if (allSteps[stepIdx]) allSteps[stepIdx].classList.add('cm-stepper__step--selected');
+      }
+
+      viewContainer.appendChild(section);
+    }
+
+    function renderPhaseDetail(section, allPhases, phase, initiativeId) {
+      var panel = section.querySelector('#cm-phase-detail-panel');
+      if (!panel) return;
+      panel.innerHTML = '';
+
+      var detail = ClientUtils.el('div', { className: 'cm-phase-detail' });
+
+      // Header
+      var header = ClientUtils.el('div', { className: 'cm-phase-detail__header' });
+      header.innerHTML =
+        '<h4 class="cm-phase-detail__title">Phase ' + phase.phaseNumber + ': ' + ClientUtils.escapeHtml(phase.phaseName) + '</h4>' +
+        '<div class="cm-phase-detail__dates">' +
+          (phase.entryDate ? '<span>Started: ' + ClientUtils.formatDate(phase.entryDate) + '</span>' : '') +
+          (phase.completionDate ? '<span>Completed: ' + ClientUtils.formatDate(phase.completionDate) + '</span>' : '') +
+          ' ' + StatusBadge.html(phase.status) +
+        '</div>';
+      detail.appendChild(header);
+
+      // Fields
+      var fields = [
+        { label: 'Key Actions', value: phase.keyActions },
+        { label: 'Evidence', value: phase.evidence },
+        { label: 'Blockers', value: phase.blockers }
+      ];
+
+      fields.forEach(function(f) {
+        var field = ClientUtils.el('div', { className: 'cm-phase-detail__field' });
+        field.innerHTML =
+          '<div class="cm-phase-detail__field-label">' + f.label + '</div>' +
+          '<div class="cm-phase-detail__field-value' + (!f.value ? ' cm-phase-detail__field-value--empty' : '') + '">' +
+            (f.value ? ClientUtils.escapeHtml(f.value) : 'Not provided') +
+          '</div>';
+        detail.appendChild(field);
+      });
+
+      // Action buttons
+      var actions = ClientUtils.el('div', { className: 'cm-phase-detail__actions' });
+
+      // Edit button
+      var editBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { showEditPhaseModal(phase, initiativeId); }
+      }, ['Edit Details']);
+      actions.appendChild(editBtn);
+
+      // Start / Complete buttons
+      if (phase.status === 'not_started') {
+        var startBtn = ClientUtils.el('button', {
+          className: 'btn btn-sm btn-primary',
+          onClick: function() { advancePhase(phase.id, 'in_progress', initiativeId); }
+        }, ['Start Phase']);
+        actions.appendChild(startBtn);
+      } else if (phase.status === 'in_progress') {
+        var completeBtn = ClientUtils.el('button', {
+          className: 'btn btn-sm btn-success',
+          style: 'background:var(--color-success);color:white;',
+          onClick: function() { advancePhase(phase.id, 'completed', initiativeId); }
+        }, ['Mark Complete']);
+        actions.appendChild(completeBtn);
+      }
+
+      detail.appendChild(actions);
+      panel.appendChild(detail);
+    }
+
+    async function advancePhase(phaseId, newStatus, initiativeId) {
+      try {
+        await ServerAPI.updateLippittPhase(phaseId, { status: newStatus });
+        Toast.success('Phase ' + (newStatus === 'completed' ? 'completed' : 'started') + '.');
+        renderInitiativeDetail(initiativeId);
+      } catch (err) {
+        Toast.error(err.message);
+      }
+    }
+
+    function showEditPhaseModal(phase, initiativeId) {
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Key Actions</label>' +
+          '<textarea class="form-input" id="cm-phase-actions" rows="3" placeholder="What actions are being taken?">' +
+            ClientUtils.escapeHtml(phase.keyActions) + '</textarea>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Evidence</label>' +
+          '<textarea class="form-input" id="cm-phase-evidence" rows="3" placeholder="Evidence of progress">' +
+            ClientUtils.escapeHtml(phase.evidence) + '</textarea>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Blockers</label>' +
+          '<textarea class="form-input" id="cm-phase-blockers" rows="2" placeholder="Any obstacles or challenges?">' +
+            ClientUtils.escapeHtml(phase.blockers) + '</textarea>' +
+        '</div>';
+
+      Modal.open('Edit Phase ' + phase.phaseNumber + ': ' + phase.phaseName, body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Save', className: 'btn-primary', onClick: async function() {
+          try {
+            await ServerAPI.updateLippittPhase(phase.id, {
+              key_actions: document.getElementById('cm-phase-actions').value.trim(),
+              evidence: document.getElementById('cm-phase-evidence').value.trim(),
+              blockers: document.getElementById('cm-phase-blockers').value.trim()
+            });
+            Modal.close();
+            Toast.success('Phase details updated.');
+            renderInitiativeDetail(initiativeId);
+          } catch (err) {
+            Toast.error('Failed to update phase: ' + err.message);
+          }
+        }}
+      ]);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Stakeholders Section
+    // ═══════════════════════════════════════════════
+
+    function buildStakeholderSection(stakeholders, initiativeId) {
+      var section = ClientUtils.el('div', { className: 'cm-section' });
+
+      var sectionHeader = ClientUtils.el('div', { className: 'cm-section__header' });
+      sectionHeader.innerHTML = '<h3 class="cm-section__title">Stakeholders (' + stakeholders.length + ')</h3>';
+      var addBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showAddStakeholderModal(initiativeId); }
+      }, ['+ Add Stakeholder']);
+      sectionHeader.appendChild(addBtn);
+      section.appendChild(sectionHeader);
+
+      if (stakeholders.length === 0) {
+        section.innerHTML += '<div class="cm-empty"><div class="cm-empty__text">No stakeholders added yet.</div></div>';
+        viewContainer.appendChild(section);
+        return;
+      }
+
+      var list = ClientUtils.el('div', { className: 'cm-stakeholder-list' });
+
+      stakeholders.forEach(function(s) {
+        var row = ClientUtils.el('div', { className: 'cm-stakeholder' });
+
+        var nameSpan = ClientUtils.el('span', { className: 'cm-stakeholder__name' }, [ClientUtils.escapeHtml(s.staffName)]);
+
+        var roleBadge = ClientUtils.el('span', {
+          className: 'cm-stakeholder__role cm-stakeholder__role--' + s.role
+        }, [s.role]);
+
+        var engBadge = ClientUtils.el('span', {
+          className: 'cm-stakeholder__engagement cm-stakeholder__engagement--' + s.engagementLevel
+        }, [s.engagementLevel]);
+
+        var notesSpan = ClientUtils.el('span', { className: 'cm-stakeholder__notes' }, [s.notes || '']);
+
+        var actionsDiv = ClientUtils.el('div', { className: 'cm-stakeholder__actions' });
+
+        var editBtn = ClientUtils.el('button', {
+          className: 'btn btn-sm btn-secondary',
+          style: 'padding:2px 8px;font-size:var(--font-size-xs);',
+          onClick: function() { showEditStakeholderModal(s, initiativeId); }
+        }, ['Edit']);
+
+        var removeBtn = ClientUtils.el('button', {
+          className: 'btn btn-sm btn-danger',
+          style: 'padding:2px 8px;font-size:var(--font-size-xs);',
+          onClick: function() { removeStakeholder(s.id, initiativeId); }
+        }, ['Remove']);
+
+        actionsDiv.appendChild(editBtn);
+        actionsDiv.appendChild(removeBtn);
+
+        row.appendChild(nameSpan);
+        row.appendChild(roleBadge);
+        row.appendChild(engBadge);
+        row.appendChild(notesSpan);
+        row.appendChild(actionsDiv);
+        list.appendChild(row);
+      });
+
+      section.appendChild(list);
+      viewContainer.appendChild(section);
+    }
+
+    function showAddStakeholderModal(initiativeId) {
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Staff Member *</label>' +
+          '<div id="cm-sh-staff"></div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Role *</label>' +
+          '<select class="form-select" id="cm-sh-role">' +
+            '<option value="champion">Champion</option>' +
+            '<option value="contributor">Contributor</option>' +
+            '<option value="informed">Informed</option>' +
+            '<option value="affected">Affected</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Engagement Level</label>' +
+          '<select class="form-select" id="cm-sh-engagement">' +
+            '<option value="supportive">Supportive</option>' +
+            '<option value="neutral" selected>Neutral</option>' +
+            '<option value="resistant">Resistant</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Notes</label>' +
+          '<textarea class="form-input" id="cm-sh-notes" rows="2" placeholder="Optional notes"></textarea>' +
+        '</div>';
+
+      Modal.open('Add Stakeholder', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Add', className: 'btn-primary', onClick: async function() {
+          var staffEl = document.getElementById('cm-sh-staff');
+          var staffId = staffEl.querySelector('input[type=hidden]').value;
+          var role = document.getElementById('cm-sh-role').value;
+          var engagement = document.getElementById('cm-sh-engagement').value;
+          var notes = document.getElementById('cm-sh-notes').value.trim();
+
+          if (!staffId) {
+            Toast.error('Please select a staff member.');
+            return;
+          }
+
+          try {
+            await ServerAPI.addStakeholder({
+              initiative_id: initiativeId,
+              staff_id: staffId,
+              role: role,
+              engagement_level: engagement,
+              notes: notes
+            });
+            Modal.close();
+            Toast.success('Stakeholder added.');
+            renderInitiativeDetail(initiativeId);
+          } catch (err) {
+            Toast.error('Failed to add stakeholder: ' + err.message);
+          }
+        }}
+      ]);
+
+      var staffContainer = document.getElementById('cm-sh-staff');
+      StaffSelector.render(staffContainer, { placeholder: 'Search staff...' });
+    }
+
+    function showEditStakeholderModal(stakeholder, initiativeId) {
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Staff Member</label>' +
+          '<input type="text" class="form-input" value="' + ClientUtils.escapeHtml(stakeholder.staffName) + '" disabled>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Role</label>' +
+          '<select class="form-select" id="cm-sh-edit-role">' +
+            '<option value="champion"' + (stakeholder.role === 'champion' ? ' selected' : '') + '>Champion</option>' +
+            '<option value="contributor"' + (stakeholder.role === 'contributor' ? ' selected' : '') + '>Contributor</option>' +
+            '<option value="informed"' + (stakeholder.role === 'informed' ? ' selected' : '') + '>Informed</option>' +
+            '<option value="affected"' + (stakeholder.role === 'affected' ? ' selected' : '') + '>Affected</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Engagement Level</label>' +
+          '<select class="form-select" id="cm-sh-edit-engagement">' +
+            '<option value="supportive"' + (stakeholder.engagementLevel === 'supportive' ? ' selected' : '') + '>Supportive</option>' +
+            '<option value="neutral"' + (stakeholder.engagementLevel === 'neutral' ? ' selected' : '') + '>Neutral</option>' +
+            '<option value="resistant"' + (stakeholder.engagementLevel === 'resistant' ? ' selected' : '') + '>Resistant</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Notes</label>' +
+          '<textarea class="form-input" id="cm-sh-edit-notes" rows="2">' + ClientUtils.escapeHtml(stakeholder.notes) + '</textarea>' +
+        '</div>';
+
+      Modal.open('Edit Stakeholder', body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Save', className: 'btn-primary', onClick: async function() {
+          try {
+            await ServerAPI.updateStakeholder(stakeholder.id, {
+              role: document.getElementById('cm-sh-edit-role').value,
+              engagement_level: document.getElementById('cm-sh-edit-engagement').value,
+              notes: document.getElementById('cm-sh-edit-notes').value.trim()
+            });
+            Modal.close();
+            Toast.success('Stakeholder updated.');
+            renderInitiativeDetail(initiativeId);
+          } catch (err) {
+            Toast.error('Failed to update: ' + err.message);
+          }
+        }}
+      ]);
+    }
+
+    async function removeStakeholder(stakeholderId, initiativeId) {
+      if (!confirm('Remove this stakeholder?')) return;
+      try {
+        await ServerAPI.removeStakeholder(stakeholderId);
+        Toast.success('Stakeholder removed.');
+        renderInitiativeDetail(initiativeId);
+      } catch (err) {
+        Toast.error('Failed to remove: ' + err.message);
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Health Score
+    // ═══════════════════════════════════════════════
+
+    async function loadAndDisplayHealthScore(initiativeId, container) {
+      try {
+        var data = await ServerAPI.getInitiativeTimeline(initiativeId);
+        state.timelineData = data;
+        if (!data || !data.healthScore) return;
+        var hs = data.healthScore;
+
+        var scoreColor = hs.overall >= 70 ? 'var(--color-success)' :
+                         hs.overall >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
+
+        var html = '<div class="cm-health-score">';
+        html += buildHealthRingSVG(hs.overall, scoreColor);
+        html += '<div class="cm-health-score__breakdown">';
+
+        var items = [
+          { label: 'Readiness (40%)', value: hs.knosterScore || 0, color: '#3b82f6' },
+          { label: 'Progress (35%)', value: hs.lippittScore || 0, color: '#8b5cf6' },
+          { label: 'Engagement (25%)', value: hs.stakeholderScore || 0, color: '#f59e0b' }
+        ];
+
+        items.forEach(function(item) {
+          html += '<div class="cm-health-score__breakdown-item">' +
+            '<span class="cm-health-score__breakdown-label">' + item.label + '</span>' +
+            '<div class="cm-health-score__breakdown-bar">' +
+              '<div class="cm-health-score__breakdown-fill" style="width:' + Math.round(item.value) + '%;background:' + item.color + '"></div>' +
+            '</div>' +
+            '<span class="cm-health-score__breakdown-pct">' + Math.round(item.value) + '%</span>' +
+          '</div>';
+        });
+
+        html += '</div></div>';
+        container.innerHTML = html;
+      } catch (err) {
+        // Silently fail — health score is supplementary
+      }
+    }
+
+    function buildHealthRingSVG(score, color) {
+      var radius = 30;
+      var circumference = 2 * Math.PI * radius;
+      var offset = circumference - (score / 100) * circumference;
+
+      return '<div class="cm-health-score__ring">' +
+        '<svg width="80" height="80" viewBox="0 0 80 80">' +
+          '<circle cx="40" cy="40" r="' + radius + '" fill="none" stroke="var(--bg-secondary)" stroke-width="8"/>' +
+          '<circle cx="40" cy="40" r="' + radius + '" fill="none" stroke="' + color + '" stroke-width="8"' +
+            ' stroke-dasharray="' + circumference + '" stroke-dashoffset="' + offset + '"' +
+            ' stroke-linecap="round" transform="rotate(-90 40 40)"/>' +
+          '<text x="40" y="40" text-anchor="middle" dominant-baseline="central"' +
+            ' font-size="16" font-weight="700" fill="' + color + '">' + Math.round(score) + '</text>' +
+        '</svg>' +
+        '<div class="cm-health-score__label">Health Score</div>' +
+      '</div>';
+    }
+
+    // ═══════════════════════════════════════════════
+    // Readiness Trends Section
+    // ═══════════════════════════════════════════════
+
+    function buildTrendsSection(initiativeId, assessmentCount) {
+      var section = ClientUtils.el('div', { className: 'cm-section cm-trends' });
+
+      var toggle = ClientUtils.el('div', { className: 'cm-trends__toggle' });
+      var icon = ClientUtils.el('span', { className: 'cm-trends__toggle-icon' }, ['\u25B6']);
+      toggle.appendChild(icon);
+      toggle.appendChild(document.createTextNode(' Readiness Trends'));
+
+      if (assessmentCount < 2) {
+        toggle.appendChild(ClientUtils.el('span', {
+          style: 'font-weight:400;font-size:var(--font-size-xs);color:var(--text-secondary);margin-left:var(--space-sm);'
+        }, ['(requires 2+ assessments)']));
+      }
+
+      var chartArea = ClientUtils.el('div', { style: 'display:none;' });
+
+      toggle.addEventListener('click', function() {
+        var isOpen = chartArea.style.display !== 'none';
+        if (isOpen) {
+          chartArea.style.display = 'none';
+          icon.className = 'cm-trends__toggle-icon';
+        } else {
+          chartArea.style.display = 'block';
+          icon.className = 'cm-trends__toggle-icon cm-trends__toggle-icon--open';
+          if (!state.trendsData) {
+            renderTrendCharts(initiativeId, chartArea);
+          }
+        }
+      });
+
+      section.appendChild(toggle);
+      section.appendChild(chartArea);
+      viewContainer.appendChild(section);
+    }
+
+    async function renderTrendCharts(initiativeId, container) {
+      container.innerHTML = '<div style="text-align:center;padding:var(--space-md);color:var(--text-secondary)">Loading trends...</div>';
+      try {
+        var data = await ServerAPI.getReadinessTrends(initiativeId);
+        state.trendsData = data;
+        container.innerHTML = '';
+
+        if (!data.trendData || data.trendData.length < 2) {
+          container.innerHTML = '<div class="cm-empty"><div class="cm-empty__text">Not enough assessments to show trends. At least 2 assessments are needed.</div></div>';
+          return;
+        }
+
+        var row = ClientUtils.el('div', { className: 'cm-trends__chart-row' });
+
+        // ── Line Chart: Readiness Over Time ──
+        var lineCard = ClientUtils.el('div', { className: 'cm-trends__chart-card' });
+        lineCard.innerHTML = '<h4>Readiness Over Time</h4>';
+        var lineCanvas = ClientUtils.el('canvas', { id: 'cm-trend-line' });
+        lineCard.appendChild(lineCanvas);
+        row.appendChild(lineCard);
+
+        // ── Radar Chart: Latest vs Previous ──
+        var radarCard = ClientUtils.el('div', { className: 'cm-trends__chart-card' });
+        radarCard.innerHTML = '<h4>Latest vs Previous Assessment</h4>';
+        var radarCanvas = ClientUtils.el('canvas', { id: 'cm-trend-radar' });
+        radarCard.appendChild(radarCanvas);
+        row.appendChild(radarCard);
+
+        container.appendChild(row);
+
+        // Risk trend badges
+        if (data.riskHistory && data.riskHistory.length > 0) {
+          var riskSection = ClientUtils.el('div', { className: 'cm-risk-trend', style: 'margin-top:var(--space-md);' });
+          riskSection.innerHTML = '<strong style="font-size:var(--font-size-xs);color:var(--text-secondary);width:100%;margin-bottom:var(--space-xs);">Risk Trend:</strong>';
+          data.riskHistory.forEach(function(r) {
+            var badge = ClientUtils.el('div', { className: 'cm-risk-trend__item' });
+            badge.innerHTML = '<strong>' + ClientUtils.formatDate(r.date) + ':</strong> ' +
+              (r.gaps > 0 ? '<span style="color:var(--color-danger)">' + r.gaps + ' gap' + (r.gaps > 1 ? 's' : '') + '</span> ' : '') +
+              (r.warnings > 0 ? '<span style="color:var(--color-warning)">' + r.warnings + ' warning' + (r.warnings > 1 ? 's' : '') + '</span>' : '') +
+              (r.gaps === 0 && r.warnings === 0 ? '<span style="color:var(--color-success)">No risks</span>' : '');
+            riskSection.appendChild(badge);
+          });
+          container.appendChild(riskSection);
+        }
+
+        // Draw charts after DOM render
+        setTimeout(function() {
+          buildLineChart(data);
+          buildRadarChart(data);
+        }, 50);
+
+      } catch (err) {
+        container.innerHTML = '<div class="cm-empty"><div class="cm-empty__text">Failed to load trends: ' + ClientUtils.escapeHtml(err.message) + '</div></div>';
+      }
+    }
+
+    function buildLineChart(data) {
+      var canvas = document.getElementById('cm-trend-line');
+      if (!canvas) return;
+
+      var labels = data.trendData.map(function(d) { return ClientUtils.formatDate(d.date); });
+      var elements = data.useConsensus
+        ? ['vision', 'skills', 'incentives', 'resources', 'actionPlan', 'consensus']
+        : ['vision', 'skills', 'incentives', 'resources', 'actionPlan'];
+      var elementLabels = data.useConsensus
+        ? ['Vision', 'Skills', 'Incentives', 'Resources', 'Action Plan', 'Consensus']
+        : ['Vision', 'Skills', 'Incentives', 'Resources', 'Action Plan'];
+      var colors = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899'];
+
+      var datasets = elements.map(function(key, idx) {
+        return {
+          label: elementLabels[idx],
+          data: data.trendData.map(function(d) { return d[key]; }),
+          borderColor: colors[idx],
+          backgroundColor: colors[idx] + '20',
+          tension: 0.3,
+          pointRadius: 4,
+          fill: false
+        };
+      });
+
+      // Add overall readiness as bold line
+      datasets.push({
+        label: 'Overall',
+        data: data.trendData.map(function(d) { return d.overall; }),
+        borderColor: '#1e293b',
+        borderWidth: 3,
+        borderDash: [5, 5],
+        tension: 0.3,
+        pointRadius: 5,
+        fill: false
+      });
+
+      if (state.chartInstances.trendLine) state.chartInstances.trendLine.destroy();
+      state.chartInstances.trendLine = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            y: { min: 0, max: 5, ticks: { stepSize: 1 } }
+          },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+          }
+        }
+      });
+    }
+
+    function buildRadarChart(data) {
+      var canvas = document.getElementById('cm-trend-radar');
+      if (!canvas || !data.latestVsPrevious) return;
+
+      var latest = data.latestVsPrevious.latest;
+      var previous = data.latestVsPrevious.previous;
+      if (!latest || !previous) return;
+
+      var labels = data.useConsensus
+        ? ['Vision', 'Skills', 'Incentives', 'Resources', 'Action Plan', 'Consensus']
+        : ['Vision', 'Skills', 'Incentives', 'Resources', 'Action Plan'];
+      var keys = data.useConsensus
+        ? ['vision', 'skills', 'incentives', 'resources', 'actionPlan', 'consensus']
+        : ['vision', 'skills', 'incentives', 'resources', 'actionPlan'];
+
+      if (state.chartInstances.trendRadar) state.chartInstances.trendRadar.destroy();
+      state.chartInstances.trendRadar = new Chart(canvas.getContext('2d'), {
+        type: 'radar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Latest (' + ClientUtils.formatDate(latest.date) + ')',
+              data: keys.map(function(k) { return latest[k]; }),
+              borderColor: '#3b82f6',
+              backgroundColor: 'rgba(59, 130, 246, 0.15)',
+              pointBackgroundColor: '#3b82f6'
+            },
+            {
+              label: 'Previous (' + ClientUtils.formatDate(previous.date) + ')',
+              data: keys.map(function(k) { return previous[k]; }),
+              borderColor: '#94a3b8',
+              backgroundColor: 'rgba(148, 163, 184, 0.1)',
+              pointBackgroundColor: '#94a3b8',
+              borderDash: [4, 4]
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            r: { min: 0, max: 5, ticks: { stepSize: 1 }, pointLabels: { font: { size: 11 } } }
+          },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+          }
+        }
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // Progress Timeline Section
+    // ═══════════════════════════════════════════════
+
+    function buildTimelineSection(initiativeId) {
+      var section = ClientUtils.el('div', { className: 'cm-section' });
+      var sectionHeader = ClientUtils.el('div', { className: 'cm-section__header' });
+      sectionHeader.innerHTML = '<h3 class="cm-section__title">Progress Timeline</h3>';
+      section.appendChild(sectionHeader);
+
+      var timelineContainer = ClientUtils.el('div', { id: 'cm-timeline-container' });
+      section.appendChild(timelineContainer);
+      viewContainer.appendChild(section);
+
+      loadTimelineData(initiativeId, timelineContainer);
+    }
+
+    async function loadTimelineData(initiativeId, container) {
+      // timelineData may already be loaded from health score call
+      try {
+        var data = state.timelineData || await ServerAPI.getInitiativeTimeline(initiativeId);
+        state.timelineData = data;
+        renderTimelineUI(data, container);
+      } catch (err) {
+        container.innerHTML = '<div class="cm-empty"><div class="cm-empty__text">Failed to load timeline.</div></div>';
+      }
+    }
+
+    function renderTimelineUI(data, container) {
+      container.innerHTML = '';
+      var phases = data.phases || [];
+
+      if (phases.length === 0) {
+        container.innerHTML = '<div class="cm-empty"><div class="cm-empty__text">No phase data available.</div></div>';
+        return;
+      }
+
+      // ── Horizontal phase track ──
+      var track = ClientUtils.el('div', { className: 'cm-timeline__track' });
+
+      phases.forEach(function(phase) {
+        var phaseEl = ClientUtils.el('div', {
+          className: 'cm-timeline__phase cm-timeline__phase--' + phase.status
+        });
+
+        var dot = ClientUtils.el('div', { className: 'cm-timeline__phase-dot' });
+        dot.textContent = phase.status === 'completed' ? '\u2713' : phase.phaseNumber;
+        phaseEl.appendChild(dot);
+
+        var label = ClientUtils.el('div', { className: 'cm-timeline__phase-label' });
+        label.textContent = phase.phaseName;
+        phaseEl.appendChild(label);
+
+        if (phase.duration) {
+          var durLabel = ClientUtils.el('div', {
+            style: 'font-size:10px;color:var(--text-secondary);margin-top:2px;'
+          });
+          durLabel.textContent = phase.duration + 'd';
+          phaseEl.appendChild(durLabel);
+        }
+
+        track.appendChild(phaseEl);
+      });
+      container.appendChild(track);
+
+      // ── Milestones ──
+      var milestones = data.milestones || [];
+      if (milestones.length > 0) {
+        var msContainer = ClientUtils.el('div', { style: 'margin-top:var(--space-sm);' });
+        msContainer.innerHTML = '<div style="font-size:var(--font-size-xs);font-weight:600;color:var(--text-secondary);margin-bottom:var(--space-xs);">Key Milestones</div>';
+        milestones.slice(0, 6).forEach(function(ms) {
+          var msEl = ClientUtils.el('div', { className: 'cm-timeline__milestone' });
+          msEl.innerHTML = '<strong>' + ClientUtils.formatDate(ms.date) + ':</strong> ' + ClientUtils.escapeHtml(ms.label);
+          msContainer.appendChild(msEl);
+        });
+        container.appendChild(msContainer);
+      }
+
+      // ── Duration Analytics Table ──
+      var durations = data.phaseDurations || [];
+      var completedDurations = durations.filter(function(d) { return d.actual > 0; });
+
+      if (completedDurations.length > 0) {
+        var durTitle = ClientUtils.el('div', {
+          style: 'font-size:var(--font-size-xs);font-weight:600;color:var(--text-secondary);margin-top:var(--space-md);margin-bottom:var(--space-xs);'
+        }, ['Phase Duration Analysis']);
+        container.appendChild(durTitle);
+
+        var maxDuration = 0;
+        completedDurations.forEach(function(d) {
+          var m = Math.max(d.actual, d.average || 0);
+          if (m > maxDuration) maxDuration = m;
+        });
+        if (maxDuration === 0) maxDuration = 1;
+
+        var table = ClientUtils.el('table', { className: 'cm-duration-table' });
+        table.innerHTML = '<thead><tr><th>Phase</th><th>Actual</th><th>Avg</th><th>Comparison</th></tr></thead>';
+        var tbody = ClientUtils.el('tbody');
+
+        completedDurations.forEach(function(d) {
+          var tr = ClientUtils.el('tr');
+          var actualPct = Math.round((d.actual / maxDuration) * 100);
+          var avgPct = d.average ? Math.round((d.average / maxDuration) * 100) : 0;
+
+          tr.innerHTML =
+            '<td>' + ClientUtils.escapeHtml(d.phaseName) + '</td>' +
+            '<td>' + d.actual + 'd</td>' +
+            '<td>' + (d.average ? d.average + 'd' : 'N/A') + '</td>' +
+            '<td><div class="cm-duration-bar">' +
+              '<div class="cm-duration-bar__actual" style="width:' + actualPct + '%"></div>' +
+              (d.average ? '<div class="cm-duration-bar__avg" style="width:' + avgPct + '%"></div>' : '') +
+            '</div></td>';
+          tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        container.appendChild(table);
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Communications Section
+    // ═══════════════════════════════════════════════
+
+    function buildCommunicationsSection(initiativeId) {
+      var section = ClientUtils.el('div', { className: 'cm-section' });
+
+      var sectionHeader = ClientUtils.el('div', { className: 'cm-section__header' });
+      sectionHeader.innerHTML = '<h3 class="cm-section__title">Communications</h3>';
+
+      var actionsDiv = ClientUtils.el('div', { className: 'cm-comm-actions' });
+
+      var planBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showCommunicationModal(initiativeId, 'planned'); }
+      }, ['Plan Communication']);
+
+      var logBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { showCommunicationModal(initiativeId, 'sent'); }
+      }, ['Log Communication']);
+
+      actionsDiv.appendChild(planBtn);
+      actionsDiv.appendChild(logBtn);
+      sectionHeader.appendChild(actionsDiv);
+      section.appendChild(sectionHeader);
+
+      var commContainer = ClientUtils.el('div', { id: 'cm-comm-container' });
+      section.appendChild(commContainer);
+      viewContainer.appendChild(section);
+
+      loadCommunications(initiativeId, commContainer);
+    }
+
+    async function loadCommunications(initiativeId, container) {
+      try {
+        var data = await ServerAPI.getCommunications(initiativeId);
+        state.communicationsData = data;
+        renderCommunicationTimeline(data, container, initiativeId);
+      } catch (err) {
+        container.innerHTML = '<div class="cm-empty"><div class="cm-empty__text">Failed to load communications.</div></div>';
+      }
+    }
+
+    function renderCommunicationTimeline(data, container, initiativeId) {
+      container.innerHTML = '';
+      var comms = data.communications || [];
+      var counts = data.counts || {};
+
+      // Summary badges
+      if (counts.total > 0) {
+        var summary = ClientUtils.el('div', { style: 'display:flex;gap:var(--space-sm);margin-bottom:var(--space-md);flex-wrap:wrap;' });
+        summary.innerHTML =
+          '<span class="badge" style="background:var(--color-success);color:#fff">' + (counts.sent || 0) + ' Sent</span>' +
+          '<span class="badge" style="background:var(--color-info);color:#fff">' + (counts.planned || 0) + ' Planned</span>' +
+          (counts.cancelled > 0 ? '<span class="badge" style="background:var(--color-muted);color:#fff">' + counts.cancelled + ' Cancelled</span>' : '');
+        container.appendChild(summary);
+      }
+
+      if (comms.length === 0) {
+        container.innerHTML += '<div class="cm-empty"><div class="cm-empty__text">No communications recorded yet. Plan or log a communication to get started.</div></div>';
+        return;
+      }
+
+      // Vertical timeline
+      var timeline = ClientUtils.el('div', { className: 'cm-comm-timeline' });
+
+      comms.forEach(function(comm) {
+        var item = ClientUtils.el('div', { className: 'cm-comm-timeline__item' });
+
+        var marker = ClientUtils.el('div', {
+          className: 'cm-comm-timeline__marker cm-comm-timeline__marker--' + comm.status
+        });
+        item.appendChild(marker);
+
+        var dateStr = comm.status === 'sent' && comm.sentDate
+          ? ClientUtils.formatDate(comm.sentDate)
+          : (comm.scheduledDate ? 'Scheduled: ' + ClientUtils.formatDate(comm.scheduledDate) : 'No date');
+
+        item.innerHTML +=
+          '<div class="cm-comm-timeline__date">' + dateStr + '</div>' +
+          '<div class="cm-comm-timeline__subject">' + ClientUtils.escapeHtml(comm.subject || 'Untitled') + '</div>' +
+          '<div class="cm-comm-timeline__meta">' +
+            '<span class="cm-comm-badge cm-comm-badge--' + comm.messageType + '">' + comm.messageType.replace(/_/g, ' ') + '</span>' +
+            '<span>' + ClientUtils.escapeHtml(comm.channel || '') + '</span>' +
+            (comm.audienceDescription ? '<span>' + ClientUtils.escapeHtml(comm.audienceDescription) + '</span>' : '') +
+            (comm.sentByName ? '<span>by ' + ClientUtils.escapeHtml(comm.sentByName) + '</span>' : '') +
+          '</div>';
+
+        // Click to edit
+        item.addEventListener('click', function() {
+          showEditCommunicationModal(comm, initiativeId);
+        });
+
+        timeline.appendChild(item);
+      });
+
+      container.appendChild(timeline);
+    }
+
+    async function showCommunicationModal(initiativeId, defaultStatus) {
+      // Pre-fill from template if defaultStatus is planned
+      var templateData = {};
+
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md)">' +
+          '<div class="form-group">' +
+            '<label class="form-label">Type *</label>' +
+            '<select class="form-select" id="cm-comm-type">' +
+              '<option value="announcement">Announcement</option>' +
+              '<option value="update">Update</option>' +
+              '<option value="feedback_request">Feedback Request</option>' +
+              '<option value="milestone">Milestone</option>' +
+              '<option value="escalation">Escalation</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Channel *</label>' +
+            '<select class="form-select" id="cm-comm-channel">' +
+              '<option value="email">Email</option>' +
+              '<option value="meeting">Meeting</option>' +
+              '<option value="newsletter">Newsletter</option>' +
+              '<option value="presentation">Presentation</option>' +
+              '<option value="all_staff">All Staff</option>' +
+            '</select>' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Audience</label>' +
+          '<input type="text" class="form-input" id="cm-comm-audience" placeholder="e.g. All staff, Department heads, Parents">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Subject *</label>' +
+          '<input type="text" class="form-input" id="cm-comm-subject" placeholder="Communication subject">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Content</label>' +
+          '<textarea class="form-input" id="cm-comm-content" rows="4" placeholder="Message content or key talking points"></textarea>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md)">' +
+          '<div class="form-group">' +
+            '<label class="form-label">Status</label>' +
+            '<select class="form-select" id="cm-comm-status">' +
+              '<option value="planned">Planned</option>' +
+              '<option value="sent">Sent</option>' +
+              '<option value="cancelled">Cancelled</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Scheduled Date</label>' +
+            '<input type="date" class="form-input" id="cm-comm-sched">' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Notes</label>' +
+          '<textarea class="form-input" id="cm-comm-notes" rows="2" placeholder="Internal notes"></textarea>' +
+        '</div>';
+
+      var title = defaultStatus === 'sent' ? 'Log Communication' : 'Plan Communication';
+
+      Modal.open(title, body, [
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Auto-fill Template', className: 'btn-secondary', onClick: async function() {
+          var msgType = document.getElementById('cm-comm-type').value;
+          try {
+            var tmpl = await ServerAPI.getCommunicationTemplate(msgType, initiativeId);
+            if (tmpl.subject) document.getElementById('cm-comm-subject').value = tmpl.subject;
+            if (tmpl.content) document.getElementById('cm-comm-content').value = tmpl.content;
+            Toast.success('Template applied.');
+          } catch (err) {
+            Toast.error('Failed to load template.');
+          }
+        }},
+        { label: 'Save', className: 'btn-primary', onClick: async function() {
+          var commData = {
+            initiative_id: initiativeId,
+            message_type: document.getElementById('cm-comm-type').value,
+            channel: document.getElementById('cm-comm-channel').value,
+            audience_description: document.getElementById('cm-comm-audience').value.trim(),
+            subject: document.getElementById('cm-comm-subject').value.trim(),
+            content: document.getElementById('cm-comm-content').value.trim(),
+            status: document.getElementById('cm-comm-status').value,
+            scheduled_date: document.getElementById('cm-comm-sched').value,
+            notes: document.getElementById('cm-comm-notes').value.trim()
+          };
+
+          if (!commData.subject) {
+            Toast.error('Subject is required.');
+            return;
+          }
+
+          try {
+            await ServerAPI.createCommunication(commData);
+            Modal.close();
+            Toast.success('Communication saved.');
+            renderInitiativeDetail(initiativeId);
+          } catch (err) {
+            Toast.error('Failed to save: ' + err.message);
+          }
+        }}
+      ]);
+
+      // Set default status
+      setTimeout(function() {
+        var statusEl = document.getElementById('cm-comm-status');
+        if (statusEl) statusEl.value = defaultStatus || 'planned';
+      }, 0);
+    }
+
+    function showEditCommunicationModal(comm, initiativeId) {
+      var body = ClientUtils.el('div');
+      body.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md)">' +
+          '<div class="form-group">' +
+            '<label class="form-label">Type</label>' +
+            '<select class="form-select" id="cm-ecomm-type">' +
+              '<option value="announcement"' + (comm.messageType === 'announcement' ? ' selected' : '') + '>Announcement</option>' +
+              '<option value="update"' + (comm.messageType === 'update' ? ' selected' : '') + '>Update</option>' +
+              '<option value="feedback_request"' + (comm.messageType === 'feedback_request' ? ' selected' : '') + '>Feedback Request</option>' +
+              '<option value="milestone"' + (comm.messageType === 'milestone' ? ' selected' : '') + '>Milestone</option>' +
+              '<option value="escalation"' + (comm.messageType === 'escalation' ? ' selected' : '') + '>Escalation</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Channel</label>' +
+            '<select class="form-select" id="cm-ecomm-channel">' +
+              '<option value="email"' + (comm.channel === 'email' ? ' selected' : '') + '>Email</option>' +
+              '<option value="meeting"' + (comm.channel === 'meeting' ? ' selected' : '') + '>Meeting</option>' +
+              '<option value="newsletter"' + (comm.channel === 'newsletter' ? ' selected' : '') + '>Newsletter</option>' +
+              '<option value="presentation"' + (comm.channel === 'presentation' ? ' selected' : '') + '>Presentation</option>' +
+              '<option value="all_staff"' + (comm.channel === 'all_staff' ? ' selected' : '') + '>All Staff</option>' +
+            '</select>' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Audience</label>' +
+          '<input type="text" class="form-input" id="cm-ecomm-audience" value="' + ClientUtils.escapeHtml(comm.audienceDescription || '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Subject</label>' +
+          '<input type="text" class="form-input" id="cm-ecomm-subject" value="' + ClientUtils.escapeHtml(comm.subject || '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Content</label>' +
+          '<textarea class="form-input" id="cm-ecomm-content" rows="4">' + ClientUtils.escapeHtml(comm.content || '') + '</textarea>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md)">' +
+          '<div class="form-group">' +
+            '<label class="form-label">Status</label>' +
+            '<select class="form-select" id="cm-ecomm-status">' +
+              '<option value="planned"' + (comm.status === 'planned' ? ' selected' : '') + '>Planned</option>' +
+              '<option value="sent"' + (comm.status === 'sent' ? ' selected' : '') + '>Sent</option>' +
+              '<option value="cancelled"' + (comm.status === 'cancelled' ? ' selected' : '') + '>Cancelled</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Scheduled Date</label>' +
+            '<input type="date" class="form-input" id="cm-ecomm-sched" value="' + (comm.scheduledDate || '') + '">' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Notes</label>' +
+          '<textarea class="form-input" id="cm-ecomm-notes" rows="2">' + ClientUtils.escapeHtml(comm.notes || '') + '</textarea>' +
+        '</div>';
+
+      Modal.open('Edit Communication', body, [
+        { label: 'Delete', className: 'btn-danger', onClick: async function() {
+          if (!confirm('Delete this communication?')) return;
+          try {
+            await ServerAPI.deleteCommunication(comm.id);
+            Modal.close();
+            Toast.success('Communication deleted.');
+            renderInitiativeDetail(initiativeId);
+          } catch (err) {
+            Toast.error('Failed to delete: ' + err.message);
+          }
+        }},
+        { label: 'Cancel', className: 'btn-secondary', onClick: function() { Modal.close(); } },
+        { label: 'Save', className: 'btn-primary', onClick: async function() {
+          var updates = {
+            message_type: document.getElementById('cm-ecomm-type').value,
+            channel: document.getElementById('cm-ecomm-channel').value,
+            audience_description: document.getElementById('cm-ecomm-audience').value.trim(),
+            subject: document.getElementById('cm-ecomm-subject').value.trim(),
+            content: document.getElementById('cm-ecomm-content').value.trim(),
+            status: document.getElementById('cm-ecomm-status').value,
+            scheduled_date: document.getElementById('cm-ecomm-sched').value,
+            notes: document.getElementById('cm-ecomm-notes').value.trim()
+          };
+
+          try {
+            await ServerAPI.updateCommunication(comm.id, updates);
+            Modal.close();
+            Toast.success('Communication updated.');
+            renderInitiativeDetail(initiativeId);
+          } catch (err) {
+            Toast.error('Failed to update: ' + err.message);
+          }
+        }}
+      ]);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Comparison View
+    // ═══════════════════════════════════════════════
+
+    async function renderComparison() {
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getInitiativeComparison();
+        state.comparisonData = data;
+        LoadingSpinner.hide(viewContainer);
+        buildComparisonUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load comparison: ' + err.message);
+      }
+    }
+
+    function buildComparisonUI(initiatives) {
+      viewContainer.innerHTML = '';
+
+      if (!initiatives || initiatives.length === 0) {
+        viewContainer.innerHTML = '<div class="cm-empty"><div class="cm-empty__icon">&#128202;</div>' +
+          '<div class="cm-empty__text">No initiatives available for comparison. Create initiatives and run assessments first.</div></div>';
+        return;
+      }
+
+      var section = ClientUtils.el('div', { className: 'cm-section' });
+      section.innerHTML = '<h3 class="cm-section__title" style="margin-bottom:var(--space-md)">Initiative Comparison</h3>';
+
+      var wrap = ClientUtils.el('div', { className: 'cm-compare-wrap' });
+      var table = ClientUtils.el('table', { className: 'cm-compare-table' });
+
+      // Header
+      var useConsensus = state.config && state.config.useConsensus;
+      var headerCols = ['Initiative', 'Vision', 'Skills', 'Incentives', 'Resources', 'Action Plan'];
+      if (useConsensus) headerCols.push('Consensus');
+      headerCols.push('Readiness', 'Lippitt Phase', 'Status');
+
+      var thead = ClientUtils.el('thead');
+      var headerRow = ClientUtils.el('tr');
+      headerCols.forEach(function(col) {
+        headerRow.appendChild(ClientUtils.el('th', {}, [col]));
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      // Body
+      var tbody = ClientUtils.el('tbody');
+
+      initiatives.forEach(function(init) {
+        var tr = ClientUtils.el('tr');
+
+        // Title
+        var titleTd = ClientUtils.el('td');
+        titleTd.innerHTML = '<span style="font-weight:500">' + ClientUtils.escapeHtml(init.title) + '</span>';
+        tr.appendChild(titleTd);
+
+        // Knoster scores
+        var scoreKeys = ['visionScore', 'skillsScore', 'incentivesScore', 'resourcesScore', 'actionPlanScore'];
+        if (useConsensus) scoreKeys.push('consensusScore');
+
+        scoreKeys.forEach(function(key) {
+          var td = ClientUtils.el('td');
+          var score = init[key];
+          if (score !== null && score !== undefined && score > 0) {
+            var cls = score <= 2 ? 'cm-compare-cell--danger' : score === 3 ? 'cm-compare-cell--warning' : 'cm-compare-cell--success';
+            td.innerHTML = '<span class="cm-compare-cell ' + cls + '">' + score + '</span>';
+          } else {
+            td.innerHTML = '<span class="cm-compare-cell cm-compare-cell--na">N/A</span>';
+          }
+          tr.appendChild(td);
+        });
+
+        // Readiness
+        var readTd = ClientUtils.el('td');
+        if (init.overallReadiness) {
+          var rCls = init.overallReadiness <= 2 ? 'color:var(--color-danger)' :
+                     init.overallReadiness <= 3 ? 'color:var(--color-warning)' : 'color:var(--color-success)';
+          readTd.innerHTML = '<strong style="' + rCls + '">' + init.overallReadiness + '</strong>';
+        } else {
+          readTd.innerHTML = '<span style="color:var(--color-text-muted)">—</span>';
+        }
+        tr.appendChild(readTd);
+
+        // Lippitt Phase
+        var phaseTd = ClientUtils.el('td');
+        phaseTd.textContent = init.currentLippittPhase || 'Not started';
+        tr.appendChild(phaseTd);
+
+        // Status
+        var statusTd = ClientUtils.el('td');
+        statusTd.innerHTML = StatusBadge.html(init.status);
+        tr.appendChild(statusTd);
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      section.appendChild(wrap);
+      viewContainer.appendChild(section);
+
+      // ── Heat Map (loaded async) ──
+      var heatMapContainer = ClientUtils.el('div', { id: 'cm-heatmap-container' });
+      viewContainer.appendChild(heatMapContainer);
+      loadHeatMap(heatMapContainer);
+    }
+
+    async function loadHeatMap(container) {
+      try {
+        var data = await ServerAPI.getReadinessHeatMap();
+        state.heatMapData = data;
+        buildHeatMapUI(data, container);
+      } catch (err) {
+        // Silently fail — heat map is supplementary
+      }
+    }
+
+    function buildHeatMapUI(data, container) {
+      var initiatives = data.initiatives || [];
+      var elements = data.elements || [];
+
+      if (initiatives.length === 0 || elements.length === 0) return;
+
+      var section = ClientUtils.el('div', { className: 'cm-section cm-heatmap' });
+      section.innerHTML = '<h3 class="cm-section__title" style="margin-bottom:var(--space-md)">Readiness Heat Map</h3>';
+
+      var table = ClientUtils.el('table', { className: 'cm-heatmap__table' });
+
+      // Header
+      var thead = ClientUtils.el('thead');
+      var headerRow = ClientUtils.el('tr');
+      headerRow.appendChild(ClientUtils.el('th', {}, ['Initiative']));
+      elements.forEach(function(el) {
+        headerRow.appendChild(ClientUtils.el('th', {}, [el]));
+      });
+      headerRow.appendChild(ClientUtils.el('th', {}, ['Overall']));
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      // Body
+      var tbody = ClientUtils.el('tbody');
+      initiatives.forEach(function(init) {
+        var tr = ClientUtils.el('tr');
+
+        var titleTd = ClientUtils.el('td');
+        titleTd.textContent = init.title;
+        tr.appendChild(titleTd);
+
+        var scores = init.scores || {};
+        elements.forEach(function(el) {
+          var key = el.toLowerCase().replace(/ /g, '');
+          // Map element names to score keys
+          var scoreKey = key === 'actionplan' ? 'actionPlan' : key;
+          var score = scores[scoreKey];
+          var td = ClientUtils.el('td');
+          if (score && score > 0) {
+            td.className = 'cm-heatmap__cell cm-heatmap__cell--' + Math.round(score);
+            td.textContent = score;
+          } else {
+            td.className = 'cm-heatmap__cell cm-heatmap__cell--na';
+            td.textContent = 'N/A';
+          }
+          tr.appendChild(td);
+        });
+
+        // Overall
+        var overallTd = ClientUtils.el('td');
+        if (init.overallReadiness && init.overallReadiness > 0) {
+          overallTd.className = 'cm-heatmap__cell cm-heatmap__cell--' + Math.round(init.overallReadiness);
+          overallTd.textContent = init.overallReadiness;
+        } else {
+          overallTd.className = 'cm-heatmap__cell cm-heatmap__cell--na';
+          overallTd.textContent = 'N/A';
+        }
+        tr.appendChild(overallTd);
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      section.appendChild(table);
+      container.appendChild(section);
+    }
+
+    // ═══════════════════════════════════════════════
+    // Init & Return
+    // ═══════════════════════════════════════════════
+
+    buildLayout();
+
+    return {
+      onActivate: function() {
+        if (state.currentInitiativeId && viewContainer.querySelector('.cm-header')) {
+          renderInitiativeDetail(state.currentInitiativeId);
+        } else {
+          renderInitiativeList();
+        }
+      }
+    };
+  }
+};
+</script>

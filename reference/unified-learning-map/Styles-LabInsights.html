@@ -1,0 +1,434 @@
+<style>
+/* ================================================
+   LAB INSIGHTS DASHBOARD STYLES (lin- prefix)
+   ================================================ */
+
+/* Container */
+.lin-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 12px 0;
+}
+
+/* Section titles */
+.lin-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 22px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+/* Empty & loading states */
+.lin-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: #64748b;
+}
+.lin-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.lin-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+.lin-empty-text {
+  font-size: 13px;
+  color: #94a3b8;
+  max-width: 380px;
+  margin: 0 auto;
+}
+.lin-loading {
+  text-align: center;
+  padding: 40px 24px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* Assignment selector */
+.lin-assignment-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+.lin-assignment-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.lin-assignment-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+.lin-assignment-select {
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  background: white;
+  min-width: 200px;
+}
+.lin-assignment-select:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.15);
+}
+
+/* Overview cards */
+.lin-overview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.lin-overview-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+}
+.lin-overview-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1.1;
+}
+.lin-overview-value.success { color: #16a34a; }
+.lin-overview-value.warning { color: #d97706; }
+.lin-overview-value.danger { color: #dc2626; }
+.lin-overview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.lin-overview-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+/* Status bar */
+.lin-status-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 4px;
+  margin-top: 8px;
+}
+.lin-status-bar {
+  display: flex;
+  height: 18px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #f1f5f9;
+  margin-bottom: 6px;
+}
+.lin-status-segment {
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+.lin-status-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.lin-status-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #64748b;
+}
+.lin-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Criterion scorecard */
+.lin-criterion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lin-criterion-row {
+  display: grid;
+  grid-template-columns: 200px 1fr 60px 90px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f8fafc;
+}
+.lin-criterion-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lin-criterion-bar-container {
+  height: 10px;
+  background: #f1f5f9;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.lin-criterion-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0d9488, #14b8a6);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+.lin-criterion-avg {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  text-align: right;
+}
+.lin-criterion-mastery {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+.lin-criterion-mastery.high { background: #dcfce7; color: #16a34a; }
+.lin-criterion-mastery.mid { background: #fef3c7; color: #d97706; }
+.lin-criterion-mastery.low { background: #fef2f2; color: #dc2626; }
+
+/* Dimension bars */
+.lin-dim-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lin-dim-row {
+  display: grid;
+  grid-template-columns: 200px 1fr 50px;
+  gap: 10px;
+  align-items: center;
+}
+.lin-dim-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lin-dim-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lin-dim-bar-container {
+  height: 12px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.lin-dim-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+  opacity: 0.85;
+}
+.lin-dim-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  text-align: right;
+}
+
+/* Score distribution */
+.lin-distribution {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+  padding: 0 4px;
+}
+.lin-dist-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+.lin-dist-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 4px;
+}
+.lin-dist-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.lin-dist-bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height 0.3s ease;
+}
+.lin-dist-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Student breakdown */
+.lin-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lin-student-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.lin-student-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.lin-student-header:hover {
+  background: #f8fafc;
+}
+.lin-student-header:focus-visible {
+  outline: 2px solid #0d9488;
+  outline-offset: -2px;
+}
+.lin-student-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lin-student-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.lin-status-scored { background: #dcfce7; color: #16a34a; }
+.lin-status-submitted { background: #dbeafe; color: #2563eb; }
+.lin-status-returned { background: #fef3c7; color: #d97706; }
+.lin-status-draft { background: #f1f5f9; color: #64748b; }
+.lin-student-score {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+.lin-student-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0d9488;
+}
+.lin-revision-stat {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+.lin-student-chevron {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+/* Student detail (expanded) */
+.lin-student-detail {
+  padding: 4px 14px 12px;
+  background: #fafbfc;
+  border-top: 1px solid #f1f5f9;
+}
+.lin-detail-criterion-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.lin-detail-title {
+  font-size: 12px;
+  color: #475569;
+  width: 160px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lin-detail-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.lin-detail-bar {
+  display: inline-block;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.lin-detail-score {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  width: 50px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* CSV export button */
+.lin-csv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0d9488;
+  background: white;
+  border: 1px solid #0d9488;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.lin-csv-btn:hover {
+  background: #0d9488;
+  color: white;
+}
+</style>

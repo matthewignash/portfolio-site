@@ -1,0 +1,365 @@
+<script>
+// ============================================================================
+// ITERATION HISTORY — itr- prefix
+// Student iteration timeline, submission form, teacher review integration
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+var itrHistoryCache = {};    // hexId -> iteration records array
+var itrEvidenceCount = 0;    // Current evidence row count in submission form
+var itrCurrentReflection = '';
+var itrSubmitting = false;
+
+// Scaffolded reflection prompts — evolve by attempt number
+// Research: iteration-specific metacognition builds self-regulation
+var ITR_REFLECTION_SCAFFOLDS = {
+  1: {
+    prompt: 'This is your first attempt. What is your plan for this checkpoint?',
+    starters: ['My plan is to...', 'I will start by...', 'The most important thing is...']
+  },
+  2: {
+    prompt: 'How did you use the feedback from your first attempt?',
+    starters: ['The feedback helped me...', 'I changed my approach by...', 'I focused on improving...']
+  },
+  3: {
+    prompt: 'What pattern do you see across your attempts? What is working?',
+    starters: ['I notice that each time...', 'The strategy that works best is...', 'Compared to my first attempt...']
+  }
+};
+// Fallback for attempt 4+
+var ITR_SCAFFOLD_DEFAULT = {
+  prompt: 'What have you learned from this iterative process?',
+  starters: ['Through multiple attempts, I learned...', 'My strongest improvement is...', 'Next time, I would...']
+};
+
+// ================================================
+// RENDER ITERATION SECTION (inside student hex modal)
+// ================================================
+
+function renderIterationSection(mapId, hexId, hex, container) {
+  if (!hex || !hex.isCheckpoint) return '';
+
+  var html = '';
+  html += '<div class="itr-section-header">Iteration History <span class="itr-iteration-count" id="itrCount"></span></div>';
+  html += '<div id="itrTimelineContainer"><div class="loading" style="font-size:12px;">Loading iterations...</div></div>';
+  html += '<div id="itrSubmitContainer"></div>';
+
+  container.innerHTML = html;
+
+  // Load iteration history
+  itrLoadHistory(mapId, hexId);
+}
+
+function itrLoadHistory(mapId, hexId) {
+  google.script.run
+    .withSuccessHandler(function(history) {
+      itrHistoryCache[hexId] = history || [];
+      itrRenderTimeline(hexId);
+      itrRenderSubmitForm(mapId, hexId);
+    })
+    .withFailureHandler(function(err) {
+      var el = document.getElementById('itrTimelineContainer');
+      if (el) el.innerHTML = '<div style="color:#ef4444; font-size:12px;">Error loading history: ' + escapeHtml(err.message) + '</div>';
+    })
+    .getIterationHistory(mapId, hexId);
+}
+
+function itrRenderTimeline(hexId) {
+  var container = document.getElementById('itrTimelineContainer');
+  var countEl = document.getElementById('itrCount');
+  if (!container) return;
+
+  var history = itrHistoryCache[hexId] || [];
+  if (countEl) countEl.textContent = '(' + history.length + ' attempt' + (history.length !== 1 ? 's' : '') + ')';
+
+  if (history.length === 0) {
+    container.innerHTML = '<div style="color:#94a3b8; font-size:12px; padding:8px 0;">No submissions yet. Submit your work below to begin the iteration process.</div>';
+    return;
+  }
+
+  var html = '<div class="itr-timeline">';
+  for (var i = history.length - 1; i >= 0; i--) {
+    var item = history[i];
+    var statusClass = 'itr-' + (item.status || 'submitted');
+
+    html += '<div class="itr-card ' + statusClass + '">';
+    html += '<div class="itr-card-header">';
+    html += '<span class="itr-attempt-num">Attempt #' + item.iterationNumber + '</span>';
+    html += '<span class="itr-status-badge ' + statusClass + '">' + itrStatusLabel(item.status) + '</span>';
+    html += '</div>';
+
+    if (item.submittedAt) {
+      html += '<div class="itr-card-date">Submitted: ' + itrFormatDate(item.submittedAt) + '</div>';
+    }
+
+    if (item.score || item.maxScore) {
+      html += '<div class="itr-score">Score: <strong>' + item.score + '</strong> / ' + item.maxScore + '</div>';
+    }
+
+    // Evidence
+    var evidence = item.evidence || [];
+    if (evidence.length > 0) {
+      html += '<div class="itr-evidence-list">';
+      for (var e = 0; e < evidence.length; e++) {
+        var evUrl = evidence[e].url || '';
+        var safeEvUrl = (evUrl.indexOf('http://') === 0 || evUrl.indexOf('https://') === 0) ? evUrl : '#';
+        html += '<a class="itr-evidence-chip" href="' + escapeHtml(safeEvUrl) + '" target="_blank" rel="noopener">&#128206; ' + escapeHtml(evidence[e].label || 'Evidence') + '</a>';
+      }
+      html += '</div>';
+    }
+
+    // Reflection
+    if (item.reflectionNote) {
+      html += '<div class="itr-reflection">' + escapeHtml(item.reflectionNote) + '</div>';
+    }
+
+    // Teacher feedback
+    if (item.teacherFeedback) {
+      html += '<div class="itr-feedback">';
+      html += '<div class="itr-feedback-label">Teacher Feedback</div>';
+      html += escapeHtml(item.teacherFeedback);
+      html += '</div>';
+    }
+
+    html += '</div>'; // .itr-card
+  }
+  html += '</div>'; // .itr-timeline
+
+  container.innerHTML = html;
+}
+
+function itrStatusLabel(status) {
+  if (status === 'submitted') return 'Submitted';
+  if (status === 'approved') return 'Approved';
+  if (status === 'revision_requested') return 'Revision Requested';
+  return escapeHtml(status || 'Unknown');
+}
+
+function itrFormatDate(isoString) {
+  if (!isoString) return '';
+  try {
+    var d = new Date(isoString);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return isoString; }
+}
+
+// ================================================
+// SUBMISSION FORM
+// ================================================
+
+function itrRenderSubmitForm(mapId, hexId) {
+  var container = document.getElementById('itrSubmitContainer');
+  if (!container) return;
+
+  // Check if latest iteration is approved — don't show form
+  var history = itrHistoryCache[hexId] || [];
+  if (history.length > 0) {
+    var latest = history[history.length - 1];
+    if (latest.status === 'approved') {
+      container.innerHTML = '<div style="color:#059669; font-size:13px; padding:8px 0; text-align:center;">&#10003; This checkpoint has been approved.</div>';
+      return;
+    }
+    if (latest.status === 'submitted') {
+      container.innerHTML = '<div style="color:#3b82f6; font-size:13px; padding:8px 0; text-align:center;">&#9203; Awaiting teacher review...</div>';
+      return;
+    }
+  }
+
+  // Show submission form
+  itrEvidenceCount = 1;
+  var html = '';
+  html += '<div class="itr-submit-form">';
+  html += '<div class="itr-submit-title">&#128640; Submit for Review</div>';
+
+  // Evidence links
+  html += '<div class="itr-form-group">';
+  html += '<label class="itr-form-label">Evidence (links to your work)</label>';
+  html += '<div id="itrEvidenceRows">';
+  html += itrBuildEvidenceRow(0);
+  html += '</div>';
+  html += '<button class="itr-add-evidence-btn" onclick="itrAddEvidence()">+ Add Evidence Link</button>';
+  html += '</div>';
+
+  // Scaffolded Reflection (Phase 1 Research Alignment)
+  var attemptNum = (history.length || 0) + 1;
+  var scaffold = ITR_REFLECTION_SCAFFOLDS[attemptNum] || ITR_SCAFFOLD_DEFAULT;
+
+  html += '<div class="itr-form-group">';
+  html += '<label class="itr-form-label">' + escapeHtml(scaffold.prompt) + '</label>';
+
+  // Sentence starter chips
+  if (scaffold.starters && scaffold.starters.length > 0) {
+    html += '<div class="itr-scaffold-label">Sentence starters (click to use):</div>';
+    html += '<div class="itr-scaffold-chips">';
+    for (var sc = 0; sc < scaffold.starters.length; sc++) {
+      html += '<span class="itr-scaffold-chip" role="button" tabindex="0" onclick="itrInsertStarter(this)" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();itrInsertStarter(this);}">' + escapeHtml(scaffold.starters[sc]) + '</span>';
+    }
+    html += '</div>';
+  }
+
+  html += '<textarea class="itr-form-textarea" id="itrReflection" placeholder="Write about your process, changes, and learning..." maxlength="500" oninput="itrCurrentReflection = this.value; itrUpdateWordQuality()"></textarea>';
+  html += '<span class="itr-word-quality itr-wq-low" id="itrWordQuality"></span>';
+  html += '</div>';
+
+  // Submit button
+  html += '<button class="itr-submit-btn" id="itrSubmitBtn" onclick="itrSubmitAttempt(\'' + escapeHtml(mapId) + '\', \'' + escapeHtml(hexId) + '\')">&#128640; Submit for Review</button>';
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function itrBuildEvidenceRow(idx) {
+  return '<div class="itr-evidence-row" id="itrEvRow' + idx + '">' +
+    '<input type="text" class="itr-form-input" id="itrEvLabel' + idx + '" placeholder="Label (e.g., Draft 2)" style="max-width:120px;">' +
+    '<input type="url" class="itr-form-input" id="itrEvUrl' + idx + '" placeholder="https://...">' +
+    (idx > 0 ? '<button class="itr-evidence-remove" onclick="itrRemoveEvidence(' + idx + ')" aria-label="Remove evidence link">&times;</button>' : '') +
+    '</div>';
+}
+
+function itrAddEvidence() {
+  if (itrEvidenceCount >= 3) {
+    showToast('Maximum 3 evidence links', 'error');
+    return;
+  }
+  var container = document.getElementById('itrEvidenceRows');
+  if (!container) return;
+  var div = document.createElement('div');
+  div.innerHTML = itrBuildEvidenceRow(itrEvidenceCount);
+  container.appendChild(div.firstChild);
+  itrEvidenceCount++;
+}
+
+function itrRemoveEvidence(idx) {
+  var row = document.getElementById('itrEvRow' + idx);
+  if (row) row.remove();
+}
+
+function itrSubmitAttempt(mapId, hexId) {
+  if (itrSubmitting) return;
+
+  // Collect evidence
+  var evidence = [];
+  for (var i = 0; i < itrEvidenceCount; i++) {
+    var labelEl = document.getElementById('itrEvLabel' + i);
+    var urlEl = document.getElementById('itrEvUrl' + i);
+    if (labelEl && urlEl && urlEl.value.trim()) {
+      evidence.push({ label: labelEl.value.trim(), url: urlEl.value.trim() });
+    }
+  }
+
+  var reflectionEl = document.getElementById('itrReflection');
+  var reflection = reflectionEl ? reflectionEl.value.trim() : '';
+
+  // Validate
+  if (evidence.length === 0 && !reflection) {
+    showToast('Please add at least one evidence link or a reflection.', 'error');
+    return;
+  }
+
+  var btn = document.getElementById('itrSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+  itrSubmitting = true;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      itrSubmitting = false;
+      if (result && result.success) {
+        showToast('Submitted for review! (Attempt #' + result.iterationNumber + ')');
+        // Reload timeline
+        itrLoadHistory(mapId, hexId);
+      }
+    })
+    .withFailureHandler(function(err) {
+      itrSubmitting = false;
+      var btn2 = document.getElementById('itrSubmitBtn');
+      if (btn2) { btn2.disabled = false; btn2.textContent = '\uD83D\uDE80 Submit for Review'; }
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .submitIteration(mapId, hexId, {
+      evidence: evidence,
+      reflectionNote: reflection,
+      score: 0,
+      maxScore: 0
+    });
+}
+
+// ================================================
+// SCAFFOLDING HELPERS (Story 1.2)
+// ================================================
+
+function itrInsertStarter(chipEl) {
+  if (!chipEl) return;
+  var textarea = document.getElementById('itrReflection');
+  if (!textarea) return;
+
+  var starterText = chipEl.textContent || chipEl.innerText || '';
+  if (!starterText) return;
+
+  // Insert at cursor position or append
+  if (textarea.value.length === 0) {
+    textarea.value = starterText;
+  } else {
+    textarea.value = textarea.value + ' ' + starterText;
+  }
+  textarea.focus();
+  itrCurrentReflection = textarea.value;
+  itrUpdateWordQuality();
+}
+
+function itrUpdateWordQuality() {
+  var el = document.getElementById('itrWordQuality');
+  if (!el) return;
+
+  var text = itrCurrentReflection || '';
+  var words = text.trim().split(/\s+/);
+  var wordCount = text.trim().length === 0 ? 0 : words.length;
+
+  if (wordCount >= 30) {
+    el.className = 'itr-word-quality itr-wq-good';
+    el.textContent = wordCount + ' words — great detail!';
+  } else if (wordCount >= 10) {
+    el.className = 'itr-word-quality itr-wq-ok';
+    el.textContent = wordCount + ' words — keep going';
+  } else if (wordCount > 0) {
+    el.className = 'itr-word-quality itr-wq-low';
+    el.textContent = wordCount + ' word' + (wordCount !== 1 ? 's' : '');
+  } else {
+    el.className = 'itr-word-quality itr-wq-low';
+    el.textContent = '';
+  }
+}
+
+// ================================================
+// TEACHER REVIEW — Inline in pending approvals
+// ================================================
+
+function itrRenderTeacherReview(iterationId, currentFeedback) {
+  var html = '';
+  html += '<div style="margin-top:8px;">';
+  html += '<textarea class="itr-form-textarea" id="itrFeedback_' + iterationId + '" placeholder="Feedback for student..." maxlength="1000">' + escapeHtml(currentFeedback || '') + '</textarea>';
+  html += '<div style="display:flex; gap:8px; margin-top:6px;">';
+  html += '<button class="btn btn-sm btn-success" onclick="itrReview(\'' + iterationId + '\', \'approved\')">Approve</button>';
+  html += '<button class="btn btn-sm" style="background:#f59e0b;color:#fff;" onclick="itrReview(\'' + iterationId + '\', \'revision_requested\')">Request Revision</button>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function itrReview(iterationId, decision) {
+  var feedbackEl = document.getElementById('itrFeedback_' + iterationId);
+  var feedback = feedbackEl ? feedbackEl.value.trim() : '';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result && result.success) {
+        showToast(decision === 'approved' ? 'Iteration approved!' : 'Revision requested.');
+        // Refresh the pending approvals if available
+        if (typeof loadProgressDashboard === 'function') loadProgressDashboard();
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .reviewIteration(iterationId, decision, feedback);
+}
+</script>

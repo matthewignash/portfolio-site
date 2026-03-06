@@ -1,0 +1,2521 @@
+<script>
+    // ================================================
+    // COURSES - DATA & STATE (Story 2.1)
+    // ================================================
+
+    var gradingPresetsData = [];  // Grading system presets cache
+
+    function populateCourseDropdowns() {
+      // Departments
+      var deptSelect = document.getElementById('courseFormDepartment');
+      if (deptSelect.options.length <= 1) {
+        deptSelect.innerHTML = '<option value="">-- Select --</option>';
+        DEPARTMENTS.forEach(function(dept) {
+          var opt = document.createElement('option');
+          opt.value = dept;
+          opt.textContent = dept;
+          deptSelect.appendChild(opt);
+        });
+      }
+
+      // Grade Levels
+      var gradeSelect = document.getElementById('courseFormGradeLevel');
+      if (gradeSelect.options.length <= 1) {
+        gradeSelect.innerHTML = '<option value="">-- Select --</option>';
+        GRADE_LEVELS.forEach(function(grade) {
+          var opt = document.createElement('option');
+          opt.value = grade;
+          opt.textContent = 'Grade ' + grade;
+          gradeSelect.appendChild(opt);
+        });
+      }
+
+      // Years (reuse existing formOptions.years if available)
+      var yearSelect = document.getElementById('courseFormYear');
+      if (yearSelect.options.length === 0) {
+        var currentYear = new Date().getFullYear();
+        for (var i = -1; i <= 2; i++) {
+          var yr = (currentYear + i) + '-' + (currentYear + i + 1);
+          var opt = document.createElement('option');
+          opt.value = yr;
+          opt.textContent = yr;
+          if (i === 0) opt.selected = true;
+          yearSelect.appendChild(opt);
+        }
+      }
+
+      // Grading System Presets
+      if (gradingPresetsData.length === 0) {
+        google.script.run
+          .withSuccessHandler(function(presets) {
+            gradingPresetsData = presets || [];
+            populateGradingDropdowns();
+          })
+          .withFailureHandler(function(err) {
+            console.error('Error loading grading presets:', err);
+          })
+          .getGradingSystemPresets();
+      }
+    }
+
+    // ================================================
+    // GRADING SYSTEM EDITOR — DUAL SCALE + CUSTOMIZATION
+    // ================================================
+
+    var gradingEditorState = { primary: null, secondary: null };
+
+    function deepCopyObj(obj) {
+      return JSON.parse(JSON.stringify(obj));
+    }
+
+    function findPreset(type) {
+      for (var i = 0; i < gradingPresetsData.length; i++) {
+        if (gradingPresetsData[i].type === type) return gradingPresetsData[i];
+      }
+      return null;
+    }
+
+    function populateGradingDropdowns() {
+      var ids = ['grdPrimaryPreset', 'grdSecondaryPreset'];
+      for (var s = 0; s < ids.length; s++) {
+        var select = document.getElementById(ids[s]);
+        if (!select) continue;
+        select.innerHTML = '';
+        for (var i = 0; i < gradingPresetsData.length; i++) {
+          var preset = gradingPresetsData[i];
+          var opt = document.createElement('option');
+          opt.value = preset.type;
+          opt.textContent = preset.name;
+          select.appendChild(opt);
+        }
+      }
+    }
+
+    function onGradingPresetChange(which) {
+      var selectId = which === 'primary' ? 'grdPrimaryPreset' : 'grdSecondaryPreset';
+      var type = document.getElementById(selectId).value;
+      var preset = findPreset(type);
+      if (preset) {
+        gradingEditorState[which] = deepCopyObj(preset);
+        gradingEditorState[which].customized = false;
+      }
+      // Close customize panel and re-render
+      document.getElementById('grd' + capitalize(which) + 'Customize').style.display = 'none';
+      document.getElementById('grd' + capitalize(which) + 'CustomizeLink').textContent = 'Customize...';
+      document.getElementById('grd' + capitalize(which) + 'ResetLink').style.display = 'none';
+      updateGradingPreview();
+    }
+
+    function capitalize(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function toggleGradingCustomize(which) {
+      var panel = document.getElementById('grd' + capitalize(which) + 'Customize');
+      var link = document.getElementById('grd' + capitalize(which) + 'CustomizeLink');
+      if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        link.textContent = 'Hide customization';
+        renderGradingEditor(which);
+      } else {
+        panel.style.display = 'none';
+        link.textContent = 'Customize...';
+      }
+    }
+
+    function renderGradingEditor(which) {
+      var container = document.getElementById('grd' + capitalize(which) + 'Editor');
+      var state = gradingEditorState[which];
+      if (!state) { container.innerHTML = ''; return; }
+
+      var html = '';
+
+      // Passing Level
+      html += '<div class="grd-field-row">';
+      html += '<label>Passing Level</label>';
+      html += '<input type="number" min="1" max="' + state.scale + '" value="' + (state.passingLevel || 1) + '" onchange="onGradingFieldChange(\'' + which + '\', \'passingLevel\', this.value)">';
+      html += '</div>';
+
+      // Strands (only if they exist on this scale)
+      if (state.strands) {
+        html += '<div class="grd-field-row">';
+        html += '<label>Strands</label>';
+        html += '<input type="text" value="' + escapeHtml((state.strands || []).join(', ')) + '" placeholder="e.g., KU, TT, C" onchange="onGradingFieldChange(\'' + which + '\', \'strands\', this.value)">';
+        html += '</div>';
+      }
+
+      // Levels Table
+      if (state.levels && state.levels.length > 0) {
+        html += '<div class="grd-levels-table">';
+        html += '<div class="grd-levels-header"><span style="width:36px;">Val</span><span style="flex:1;">Label</span><span style="width:90px;">Range</span><span style="width:24px;"></span></div>';
+        for (var i = 0; i < state.levels.length; i++) {
+          var lv = state.levels[i];
+          html += '<div class="grd-level-row">';
+          html += '<span class="grd-lv">' + lv.value + '</span>';
+          html += '<input class="grd-ll" type="text" value="' + escapeHtml(lv.label || '') + '" onchange="onLevelFieldChange(\'' + which + '\',' + i + ',\'label\',this.value)">';
+          html += '<input class="grd-lr" type="text" value="' + escapeHtml(lv.range || '') + '" onchange="onLevelFieldChange(\'' + which + '\',' + i + ',\'range\',this.value)">';
+          html += '<button class="grd-ld" type="button" onclick="removeGradingLevel(\'' + which + '\',' + i + ')" title="Remove level">&times;</button>';
+          html += '</div>';
+        }
+        html += '</div>';
+        html += '<div class="grd-add-level"><button class="btn btn-ghost btn-small" type="button" onclick="addGradingLevel(\'' + which + '\')">+ Add Level</button></div>';
+      } else {
+        // Percentage preset has no levels — offer to add them
+        html += '<p style="font-size:12px; color:#64748b; margin-top:8px;">This scale has no defined levels. <a href="#" onclick="initLevelsForScale(\'' + which + '\'); return false;">Add levels</a></p>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    function onGradingFieldChange(which, field, value) {
+      var state = gradingEditorState[which];
+      if (!state) return;
+      if (field === 'passingLevel') {
+        state.passingLevel = parseInt(value) || 1;
+      } else if (field === 'strands') {
+        state.strands = value.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+      }
+      state.customized = true;
+      document.getElementById('grd' + capitalize(which) + 'ResetLink').style.display = 'inline';
+      updateGradingPreview();
+    }
+
+    function onLevelFieldChange(which, index, field, value) {
+      var state = gradingEditorState[which];
+      if (!state || !state.levels || !state.levels[index]) return;
+      state.levels[index][field] = value;
+      state.customized = true;
+      document.getElementById('grd' + capitalize(which) + 'ResetLink').style.display = 'inline';
+      updateGradingPreview();
+    }
+
+    function addGradingLevel(which) {
+      var state = gradingEditorState[which];
+      if (!state) return;
+      if (!state.levels) state.levels = [];
+      var newVal = state.levels.length > 0 ? state.levels[state.levels.length - 1].value - 1 : 1;
+      if (newVal < 1) newVal = 1;
+      state.levels.push({ value: newVal, label: '', range: '' });
+      state.customized = true;
+      document.getElementById('grd' + capitalize(which) + 'ResetLink').style.display = 'inline';
+      renderGradingEditor(which);
+      updateGradingPreview();
+    }
+
+    function removeGradingLevel(which, index) {
+      var state = gradingEditorState[which];
+      if (!state || !state.levels) return;
+      state.levels.splice(index, 1);
+      state.customized = true;
+      document.getElementById('grd' + capitalize(which) + 'ResetLink').style.display = 'inline';
+      renderGradingEditor(which);
+      updateGradingPreview();
+    }
+
+    function initLevelsForScale(which) {
+      var state = gradingEditorState[which];
+      if (!state) return;
+      state.levels = [];
+      for (var v = state.scale; v >= 1; v--) {
+        state.levels.push({ value: v, label: '', range: '' });
+      }
+      state.customized = true;
+      document.getElementById('grd' + capitalize(which) + 'ResetLink').style.display = 'inline';
+      renderGradingEditor(which);
+    }
+
+    function resetToPreset(which) {
+      var selectId = which === 'primary' ? 'grdPrimaryPreset' : 'grdSecondaryPreset';
+      var type = document.getElementById(selectId).value;
+      var preset = findPreset(type);
+      if (preset) {
+        gradingEditorState[which] = deepCopyObj(preset);
+        gradingEditorState[which].customized = false;
+      }
+      document.getElementById('grd' + capitalize(which) + 'ResetLink').style.display = 'none';
+      renderGradingEditor(which);
+      updateGradingPreview();
+    }
+
+    function addSecondaryScale() {
+      // Default to first preset that is NOT the primary type
+      var primaryType = gradingEditorState.primary ? gradingEditorState.primary.type : '';
+      var secondaryPreset = null;
+      for (var i = 0; i < gradingPresetsData.length; i++) {
+        if (gradingPresetsData[i].type !== primaryType) {
+          secondaryPreset = gradingPresetsData[i];
+          break;
+        }
+      }
+      if (!secondaryPreset && gradingPresetsData.length > 0) {
+        secondaryPreset = gradingPresetsData[0];
+      }
+      if (secondaryPreset) {
+        gradingEditorState.secondary = deepCopyObj(secondaryPreset);
+        gradingEditorState.secondary.customized = false;
+        document.getElementById('grdSecondaryPreset').value = secondaryPreset.type;
+      }
+      document.getElementById('grdSecondarySection').style.display = 'block';
+      document.getElementById('grdAddSecondaryRow').style.display = 'none';
+      document.getElementById('grdSecondaryCustomize').style.display = 'none';
+      document.getElementById('grdSecondaryCustomizeLink').textContent = 'Customize...';
+      document.getElementById('grdSecondaryResetLink').style.display = 'none';
+      updateGradingPreview();
+    }
+
+    function removeSecondaryScale() {
+      gradingEditorState.secondary = null;
+      document.getElementById('grdSecondarySection').style.display = 'none';
+      document.getElementById('grdAddSecondaryRow').style.display = 'block';
+      updateGradingPreview();
+    }
+
+    function updateGradingPreview() {
+      var container = document.getElementById('gradingPreview');
+      var primary = gradingEditorState.primary;
+      if (!primary) { container.style.display = 'none'; return; }
+
+      var html = renderScalePreview(primary, 'Primary');
+      var secondary = gradingEditorState.secondary;
+      if (secondary) {
+        html += renderScalePreview(secondary, 'Secondary');
+      }
+
+      container.innerHTML = html;
+      container.style.display = 'block';
+    }
+
+    function renderScalePreview(scale, label) {
+      var html = '<div class="grading-preview-header">';
+      if (label) html += '<span style="font-size:11px; color:#94a3b8; margin-right:4px;">' + label + ':</span>';
+      html += escapeHtml(scale.name);
+      html += '<span class="grading-preview-scale">Scale: 1\u2013' + scale.scale + '</span>';
+      if (scale.customized) html += '<span style="font-size:10px; color:#f59e0b; margin-left:4px;">(customized)</span>';
+      html += '</div>';
+
+      html += '<div class="grading-preview-meta">';
+      html += '<span>Passing: ' + scale.passingLevel + '+</span>';
+      if (scale.strands && scale.strands.length > 0) {
+        html += '<span>Strands: ' + escapeHtml(scale.strands.join(', ')) + '</span>';
+      }
+      html += '</div>';
+
+      if (scale.levels && scale.levels.length > 0) {
+        html += '<div class="grading-preview-levels">';
+        for (var j = 0; j < scale.levels.length; j++) {
+          var level = scale.levels[j];
+          var isPassing = level.value >= scale.passingLevel;
+          html += '<span class="grading-preview-level' + (isPassing ? ' passing' : '') + '">';
+          html += level.value + ' ' + escapeHtml(level.label);
+          html += '</span>';
+        }
+        html += '</div>';
+      }
+
+      return html;
+    }
+
+ function loadCourses() {
+  google.script.run
+    .withSuccessHandler(function(courses) {
+      coursesData = courses || [];
+      showCourses();
+      // Load unit counts for each course (async, updates badges when ready)
+      for (var i = 0; i < coursesData.length; i++) {
+        loadUnitCount(coursesData[i].courseId);
+      }
+    })
+    .withFailureHandler(function(err) {
+      console.error('[loadCourses] Error:', err);
+    })
+    .getCourses();
+}
+
+    function loadUnitCount(courseId) {
+      google.script.run
+        .withSuccessHandler(function(units) {
+          unitCountsCache[courseId] = units ? units.length : 0;
+          // Update the displayed count
+          var countEl = document.getElementById('unit-count-' + courseId);
+          if (countEl) {
+            countEl.textContent = '📖 ' + unitCountsCache[courseId] + ' Unit' + (unitCountsCache[courseId] !== 1 ? 's' : '');
+          }
+        })
+        .withFailureHandler(function(err) {
+          console.error('Error loading units for course:', courseId, err);
+          unitCountsCache[courseId] = 0;
+        })
+        .getUnits(courseId);
+    }
+
+    function showCourses() {
+      var container = document.getElementById('coursesContent');
+      var searchTerm = (document.getElementById('courseSearchInput').value || '').toLowerCase().trim();
+      var statusFilter = document.getElementById('courseStatusFilter').value;
+
+      // Filter courses
+      var filteredCourses = coursesData.filter(function(course) {
+        // Status filter
+        var isActive = course.active !== false;
+        if (statusFilter === 'active' && !isActive) return false;
+        if (statusFilter === 'archived' && isActive) return false;
+
+        // Search filter
+        if (searchTerm) {
+          var title = (course.title || '').toLowerCase();
+          var dept = (course.programTrack || '').toLowerCase();
+          if (title.indexOf(searchTerm) === -1 && dept.indexOf(searchTerm) === -1) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      if (filteredCourses.length === 0) {
+        if (coursesData.length === 0) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">📚</div><h3>No courses yet</h3><p>Create your first course to organize your curriculum.</p><button class="btn btn-success" onclick="openCourseModal()">+ Create Course</button></div>';
+        } else {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><h3>No matching courses</h3><p>Try adjusting your search or filter.</p></div>';
+        }
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < filteredCourses.length; i++) {
+        var course = filteredCourses[i];
+        var isActive = course.active !== false;
+        var safeCourseTitle = escapeHtml(course.title).replace(/'/g, "\\'");
+        var unitCount = unitCountsCache[course.courseId] || 0;
+
+        html += '<div class="course-card' + (isActive ? '' : ' archived') + '">';
+        html += '<div class="course-card-header"><div>';
+        html += '<div class="course-card-title"><span class="icon">📚</span>' + escapeHtml(course.title) + '</div>';
+
+        // Subtitle: Department • Grade • Year
+        var subtitleParts = [];
+        if (course.programTrack) subtitleParts.push(escapeHtml(course.programTrack));
+        if (course.gradeLevel) subtitleParts.push('Grade ' + escapeHtml(course.gradeLevel));
+        if (course.year) subtitleParts.push(escapeHtml(course.year));
+        if (subtitleParts.length > 0) {
+          html += '<div class="course-card-subtitle">' + subtitleParts.join(' • ') + '</div>';
+        }
+
+        html += '</div>';
+        html += '<span class="course-card-badge' + (isActive ? '' : ' archived') + '">' + (isActive ? 'Active' : 'Archived') + '</span></div>';
+
+        html += '<div class="course-card-meta">';
+        html += '<span class="unit-count-badge" id="unit-count-' + course.courseId + '">📖 ' + unitCount + ' Unit' + (unitCount !== 1 ? 's' : '') + '</span>';
+        var gs = course.gradingSystem || {};
+        var primaryName = (gs.primary && gs.primary.name) || (gs.name) || '8-Point SBAR';
+        html += '<span class="grading-badge">' + escapeHtml(primaryName) + '</span>';
+        if (gs.secondary && gs.secondary.name) {
+          html += '<span class="grading-badge" style="background:#fef3c7; color:#d97706; border-color:#fde68a;">' + escapeHtml(gs.secondary.name) + '</span>';
+        }
+        if (course.standardFramework) {
+          var stdLabel = course.standardSubject || course.standardFramework;
+          html += '<span class="grading-badge" style="background:#ede9fe; color:#7c3aed; border-color:#ddd6fe;">' + escapeHtml(stdLabel) + '</span>';
+        }
+        html += '</div>';
+
+        html += '<div class="course-card-actions">';
+        html += '<button class="btn btn-outline btn-small" onclick="viewCourseUnits(\'' + course.courseId + '\', \'' + safeCourseTitle + '\')">View Units</button>';
+        html += '<button class="btn btn-ghost btn-small" onclick="openCourseModal(\'' + course.courseId + '\')">Edit</button>';
+
+        if (isActive) {
+          html += '<button class="btn btn-ghost btn-small" onclick="toggleCourseArchive(\'' + course.courseId + '\', false)">Archive</button>';
+        } else {
+          html += '<button class="btn btn-ghost btn-small" onclick="toggleCourseArchive(\'' + course.courseId + '\', true)">Restore</button>';
+        }
+        html += '<button class="btn btn-ghost btn-small" style="color:#dc2626;" onclick="confirmDeleteCourse(\'' + course.courseId + '\', \'' + safeCourseTitle + '\')">Delete</button>';
+
+        html += '</div></div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    function filterCourses() {
+      showCourses();
+    }
+
+    function openCourseModal(courseId) {
+      // Reset form
+      document.getElementById('courseFormId').value = '';
+      document.getElementById('courseFormTitle').value = '';
+      document.getElementById('courseFormDepartment').value = '';
+      document.getElementById('courseFormGradeLevel').value = '';
+      document.getElementById('courseFormStdFramework').value = '';
+      document.getElementById('courseFormStdSubject').innerHTML = '<option value="">Select framework first</option>';
+      document.getElementById('courseFormStdSubject').disabled = true;
+
+      // Set year to current
+      var yearSelect = document.getElementById('courseFormYear');
+      var currentYear = new Date().getFullYear();
+      var currentYearStr = currentYear + '-' + (currentYear + 1);
+      for (var i = 0; i < yearSelect.options.length; i++) {
+        if (yearSelect.options[i].value === currentYearStr) {
+          yearSelect.selectedIndex = i;
+          break;
+        }
+      }
+
+      if (courseId) {
+        document.getElementById('courseModalTitle').textContent = 'Edit Course';
+        var course = coursesData.find(function(c) { return c.courseId === courseId; });
+        if (course) {
+          document.getElementById('courseFormId').value = course.courseId;
+          document.getElementById('courseFormTitle').value = course.title || '';
+          document.getElementById('courseFormDepartment').value = course.programTrack || '';
+          document.getElementById('courseFormGradeLevel').value = course.gradeLevel || '';
+          document.getElementById('courseFormYear').value = course.year || '';
+          // Standard set
+          document.getElementById('courseFormStdFramework').value = course.standardFramework || '';
+          if (course.standardFramework) {
+            if (stdSubjectsCache) {
+              populateCourseSubjectDropdown(course.standardFramework, course.standardSubject || '');
+            } else {
+              var capturedFw = course.standardFramework;
+              var capturedSubj = course.standardSubject || '';
+              google.script.run
+                .withSuccessHandler(function(data) {
+                  stdSubjectsCache = data || {};
+                  populateCourseSubjectDropdown(capturedFw, capturedSubj);
+                })
+                .withFailureHandler(function() {
+                  var subEl = document.getElementById('courseFormStdSubject');
+                  subEl.innerHTML = '<option value="">All ' + escapeHtml(capturedFw) + '</option>';
+                  subEl.disabled = false;
+                })
+                .getStandardSubjects();
+            }
+          }
+          // Grading system: load into editor state
+          var gs = course.gradingSystem || {};
+          var primary = gs.primary || null;
+          var secondary = gs.secondary || null;
+
+          if (primary) {
+            gradingEditorState.primary = deepCopyObj(primary);
+            document.getElementById('grdPrimaryPreset').value = primary.type || 'sbar_8point';
+          } else {
+            var defPreset = findPreset('sbar_8point');
+            gradingEditorState.primary = defPreset ? deepCopyObj(defPreset) : null;
+            document.getElementById('grdPrimaryPreset').value = 'sbar_8point';
+          }
+
+          if (secondary) {
+            gradingEditorState.secondary = deepCopyObj(secondary);
+            document.getElementById('grdSecondaryPreset').value = secondary.type || '';
+            document.getElementById('grdSecondarySection').style.display = 'block';
+            document.getElementById('grdAddSecondaryRow').style.display = 'none';
+          } else {
+            gradingEditorState.secondary = null;
+            document.getElementById('grdSecondarySection').style.display = 'none';
+            document.getElementById('grdAddSecondaryRow').style.display = 'block';
+          }
+
+          // Open customize panels if customized
+          if (primary && primary.customized) {
+            document.getElementById('grdPrimaryCustomize').style.display = 'block';
+            document.getElementById('grdPrimaryCustomizeLink').textContent = 'Hide customization';
+            document.getElementById('grdPrimaryResetLink').style.display = 'inline';
+            renderGradingEditor('primary');
+          } else {
+            document.getElementById('grdPrimaryCustomize').style.display = 'none';
+            document.getElementById('grdPrimaryCustomizeLink').textContent = 'Customize...';
+            document.getElementById('grdPrimaryResetLink').style.display = 'none';
+          }
+          if (secondary && secondary.customized) {
+            document.getElementById('grdSecondaryCustomize').style.display = 'block';
+            document.getElementById('grdSecondaryCustomizeLink').textContent = 'Hide customization';
+            document.getElementById('grdSecondaryResetLink').style.display = 'inline';
+            renderGradingEditor('secondary');
+          } else {
+            document.getElementById('grdSecondaryCustomize').style.display = 'none';
+            document.getElementById('grdSecondaryCustomizeLink').textContent = 'Customize...';
+            document.getElementById('grdSecondaryResetLink').style.display = 'none';
+          }
+        }
+      } else {
+        document.getElementById('courseModalTitle').textContent = 'Create New Course';
+        // Default: SBAR primary, no secondary
+        var defPreset = findPreset('sbar_8point');
+        gradingEditorState.primary = defPreset ? deepCopyObj(defPreset) : null;
+        if (gradingEditorState.primary) gradingEditorState.primary.customized = false;
+        gradingEditorState.secondary = null;
+        document.getElementById('grdPrimaryPreset').value = 'sbar_8point';
+        document.getElementById('grdSecondarySection').style.display = 'none';
+        document.getElementById('grdAddSecondaryRow').style.display = 'block';
+        // Reset customize panels for create mode
+        document.getElementById('grdPrimaryCustomize').style.display = 'none';
+        document.getElementById('grdPrimaryCustomizeLink').textContent = 'Customize...';
+        document.getElementById('grdPrimaryResetLink').style.display = 'none';
+        document.getElementById('grdSecondaryCustomize').style.display = 'none';
+        document.getElementById('grdSecondaryCustomizeLink').textContent = 'Customize...';
+        document.getElementById('grdSecondaryResetLink').style.display = 'none';
+      }
+
+      updateGradingPreview();
+      document.getElementById('courseModal').classList.add('active');
+      document.getElementById('courseFormTitle').focus();
+    }
+
+    function closeCourseModal() {
+      document.getElementById('courseModal').classList.remove('active');
+    }
+
+    function onCourseFrameworkChange() {
+      var fw = document.getElementById('courseFormStdFramework').value;
+      var subjectEl = document.getElementById('courseFormStdSubject');
+      if (!fw) {
+        subjectEl.innerHTML = '<option value="">Select framework first</option>';
+        subjectEl.disabled = true;
+        return;
+      }
+      // Load subjects from cache or RPC
+      if (stdSubjectsCache) {
+        populateCourseSubjectDropdown(fw, '');
+      } else {
+        subjectEl.innerHTML = '<option value="">Loading...</option>';
+        subjectEl.disabled = true;
+        google.script.run
+          .withSuccessHandler(function(data) {
+            stdSubjectsCache = data || {};
+            populateCourseSubjectDropdown(fw, '');
+          })
+          .withFailureHandler(function() {
+            subjectEl.innerHTML = '<option value="">All ' + escapeHtml(fw) + '</option>';
+            subjectEl.disabled = false;
+          })
+          .getStandardSubjects();
+      }
+    }
+
+    function populateCourseSubjectDropdown(framework, selectedSubject) {
+      var subjectEl = document.getElementById('courseFormStdSubject');
+      var subjects = (stdSubjectsCache && stdSubjectsCache[framework]) || [];
+      var html = '<option value="">All ' + escapeHtml(framework) + '</option>';
+      for (var i = 0; i < subjects.length; i++) {
+        var sel = (subjects[i] === selectedSubject) ? ' selected' : '';
+        html += '<option value="' + escapeHtml(subjects[i]) + '"' + sel + '>' + escapeHtml(subjects[i]) + '</option>';
+      }
+      subjectEl.innerHTML = html;
+      subjectEl.disabled = false;
+      if (selectedSubject) {
+        subjectEl.value = selectedSubject;
+      }
+    }
+
+    function saveCourse() {
+      var courseId = document.getElementById('courseFormId').value;
+      var title = document.getElementById('courseFormTitle').value.trim();
+      var department = document.getElementById('courseFormDepartment').value;
+      var gradeLevel = document.getElementById('courseFormGradeLevel').value;
+      var year = document.getElementById('courseFormYear').value;
+
+      // Validation
+      if (!title) { showToast('Please enter a course title', 'error'); return; }
+      if (!department) { showToast('Please select a department', 'error'); return; }
+      if (!gradeLevel) { showToast('Please select a grade level', 'error'); return; }
+
+      // Grading system: build from editor state
+      var gradingSystem = {
+        primary: gradingEditorState.primary ? deepCopyObj(gradingEditorState.primary) : null,
+        secondary: gradingEditorState.secondary ? deepCopyObj(gradingEditorState.secondary) : null
+      };
+
+      var stdFramework = document.getElementById('courseFormStdFramework').value;
+      var stdSubject = document.getElementById('courseFormStdSubject').value;
+
+      var courseData = {
+        title: title,
+        programTrack: department,
+        gradeLevel: gradeLevel,
+        year: year,
+        gradingSystem: gradingSystem,
+        standardFramework: stdFramework,
+        standardSubject: stdSubject,
+        active: true
+      };
+
+      if (courseId) {
+        courseData.courseId = courseId;
+        // Preserve active status when editing
+        var existingCourse = coursesData.find(function(c) { return c.courseId === courseId; });
+        if (existingCourse) {
+          courseData.active = existingCourse.active;
+        }
+      }
+
+      showToast('Saving course...', 'info');
+
+    google.script.run
+        .withSuccessHandler(function(savedCourse) {
+          showToast(courseId ? 'Course updated!' : 'Course created!', 'success');
+          closeCourseModal();
+
+          // BUGFIX: Use returned course directly
+          if (savedCourse && savedCourse.courseId) {
+            var existingIndex = -1;
+            for (var i = 0; i < coursesData.length; i++) {
+              if (coursesData[i].courseId === savedCourse.courseId) {
+                existingIndex = i;
+                break;
+              }
+            }
+
+            if (existingIndex >= 0) {
+              coursesData[existingIndex] = savedCourse;
+            } else {
+              coursesData.push(savedCourse);
+            }
+
+            showCourses();
+            loadUnitCount(savedCourse.courseId);
+          } else {
+            loadCourses();  // Fallback
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + err.message, 'error');
+        })
+        .saveCourse(courseData);
+    }
+
+    function toggleCourseArchive(courseId, restore) {
+      var course = coursesData.find(function(c) { return c.courseId === courseId; });
+      if (!course) return;
+
+      var action = restore ? 'restore' : 'archive';
+      if (!confirm('Are you sure you want to ' + action + ' "' + course.title + '"?')) return;
+
+      // Create a copy with updated active status
+      var updatedCourse = {
+        courseId: course.courseId,
+        title: course.title,
+        programTrack: course.programTrack,
+        gradeLevel: course.gradeLevel,
+        year: course.year,
+        active: restore
+      };
+
+      showToast((restore ? 'Restoring' : 'Archiving') + ' course...', 'info');
+
+    google.script.run
+        .withSuccessHandler(function(savedCourse) {
+          showToast('Course ' + (restore ? 'restored' : 'archived') + '!', 'success');
+
+          // BUGFIX: Update local data directly
+          if (savedCourse && savedCourse.courseId) {
+            for (var i = 0; i < coursesData.length; i++) {
+              if (coursesData[i].courseId === savedCourse.courseId) {
+                coursesData[i] = savedCourse;
+                break;
+              }
+            }
+            showCourses();
+          } else {
+            loadCourses();
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + err.message, 'error');
+        })
+        .saveCourse(updatedCourse);
+    }
+
+    function confirmDeleteCourse(courseId, courseTitle) {
+      if (!confirm('Delete course "' + courseTitle + '" and ALL its units, lessons, and linked maps?\n\nThis cannot be undone.')) return;
+      showToast('Deleting course...', 'info');
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Course deleted', 'success');
+          coursesData = coursesData.filter(function(c) { return c.courseId !== courseId; });
+          showCourses();
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error: ' + escapeHtml(err.message), 'error');
+        })
+        .deleteCourse(courseId);
+    }
+
+    // ================================================
+    // UNITS PANEL (Story 2.1b)
+    // ================================================
+
+    function viewCourseUnits(courseId, courseTitle) {
+      currentUnitsCourseId = courseId;
+      // Story 2.2: Reset to units mode when opening for a new course
+      unitsPanelMode = 'units';
+      currentLessonsUnitId = null;
+      currentLessonsData = [];
+      currentLessonMapHexes = [];
+
+      var panel = document.getElementById('unitsPanel');
+      var titleEl = document.getElementById('unitsPanelTitle');
+      titleEl.innerHTML = '';
+      titleEl.textContent = courseTitle ? courseTitle + ' — Units' : 'Units';
+      panel.classList.add('active');
+
+      // Show/hide footer (Add Unit button) based on view mode
+      var footer = document.getElementById('unitsPanelFooter');
+      if (currentViewMode === 'teacher') {
+        footer.style.display = 'block';
+        footer.innerHTML = '<button class="btn btn-success btn-small" onclick="openUnitModal()" style="width:100%;">+ Add Unit</button>';
+      } else {
+        footer.style.display = 'none';
+      }
+
+      loadUnitsForPanel(courseId);
+    }
+
+    function closeUnitsPanel() {
+      var panel = document.getElementById('unitsPanel');
+      panel.classList.remove('active');
+      currentUnitsCourseId = null;
+      currentUnitsData = [];
+      // Story 2.2: Reset lesson state
+      currentLessonsUnitId = null;
+      currentLessonsData = [];
+      currentLessonMapHexes = [];
+      unitsPanelMode = 'units';
+    }
+
+    function loadUnitsForPanel(courseId) {
+      var body = document.getElementById('unitsPanelBody');
+      body.innerHTML = '<div class="loading"><span class="loading-spinner"></span>Loading units...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(units) {
+          currentUnitsData = units || [];
+          // Sort by sequence
+          currentUnitsData.sort(function(a, b) {
+            return (a.sequence || 0) - (b.sequence || 0);
+          });
+          renderUnitsPanel();
+        })
+        .withFailureHandler(function(err) {
+          var body = document.getElementById('unitsPanelBody');
+          body.innerHTML = '<p style="color:#dc2626; padding:16px;">Error loading units: ' + escapeHtml(err.message) + '</p>';
+        })
+        .getUnitsForCourse(courseId);
+    }
+
+    function renderUnitsPanel() {
+      var body = document.getElementById('unitsPanelBody');
+      var isTeacher = (currentViewMode === 'teacher');
+
+      if (currentUnitsData.length === 0) {
+        body.innerHTML = '<div style="text-align:center; padding:40px 16px; color:#94a3b8;">' +
+          '<div style="font-size:48px; margin-bottom:12px;">📖</div>' +
+          '<p style="font-size:14px; margin:0;">No units yet.</p>' +
+          (isTeacher ? '<p style="font-size:13px; color:#64748b; margin-top:8px;">Click "+ Add Unit" below to create one.</p>' : '') +
+          '</div>';
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < currentUnitsData.length; i++) {
+        var unit = currentUnitsData[i];
+        var mapName = unit.mapId ? getMapNameById(unit.mapId) : '';
+        var statusClass = (unit.status === 'active') ? 'status-active' :
+                          (unit.status === 'draft') ? 'status-draft' : 'status-archived';
+        var statusLabel = unit.status ? unit.status.charAt(0).toUpperCase() + unit.status.slice(1) : 'Active';
+
+        html += '<div class="unit-card" data-unit-id="' + unit.unitId + '">';
+        html += '<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">';
+        html += '<span class="unit-card-seq">' + (unit.sequence || (i + 1)) + '</span>';
+        html += '<div style="flex:1; min-width:0;">';
+        html += '<div style="font-weight:600; font-size:14px; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(unit.title) + '</div>';
+        html += '<div class="unit-card-meta">';
+        if (unit.lessonCount !== undefined) {
+          html += '<span>📝 ' + unit.lessonCount + ' lesson' + (unit.lessonCount !== 1 ? 's' : '') + '</span>';
+        }
+        if (mapName) {
+          html += '<span>🗺️ ' + escapeHtml(mapName) + '</span>';
+        }
+        html += '</div>';
+        html += '</div>';
+        html += '<span class="unit-card-status ' + statusClass + '">' + statusLabel + '</span>';
+        html += '</div>';
+
+        // Action buttons
+        html += '<div class="unit-card-actions">';
+        if (isTeacher) {
+          // Reorder buttons
+          html += '<span>';
+          if (i > 0) {
+            html += '<button class="unit-reorder-btn" onclick="moveUnitUp(\'' + unit.unitId + '\')" title="Move up">&#9650;</button>';
+          }
+          if (i < currentUnitsData.length - 1) {
+            html += '<button class="unit-reorder-btn" onclick="moveUnitDown(\'' + unit.unitId + '\')" title="Move down">&#9660;</button>';
+          }
+          html += '</span>';
+          // Edit / Delete / Unlink
+          html += '<span>';
+          html += '<button class="btn btn-ghost btn-small" onclick="openUnitModal(\'' + unit.unitId + '\')">Edit</button>';
+          if (unit.mapId) {
+            html += '<button class="btn btn-ghost btn-small" onclick="confirmUnlinkMap(\'' + unit.unitId + '\')" style="color:#f59e0b;">Unlink Map</button>';
+          }
+          html += '<button class="btn btn-ghost btn-small" onclick="confirmDeleteUnit(\'' + unit.unitId + '\')" style="color:#dc2626;">Delete</button>';
+          html += '</span>';
+          // View Lessons button (teacher)
+          html += '<button class="btn btn-outline btn-small" onclick="viewUnitLessons(\'' + unit.unitId + '\')" style="margin-top:4px; width:100%;">Lessons (' + (unit.lessonCount || 0) + ')</button>';
+        } else {
+          // Student view: Open Map + View Lessons
+          if (unit.mapId) {
+            html += '<button class="btn btn-success btn-small" onclick="openMapFromUnit(\'' + unit.mapId + '\')">Open Map</button>';
+          }
+          html += '<button class="btn btn-outline btn-small" onclick="viewUnitLessons(\'' + unit.unitId + '\')">Lessons (' + (unit.lessonCount || 0) + ')</button>';
+          if (!unit.mapId) {
+            html += '<span style="font-size:12px; color:#94a3b8;">No map linked</span>';
+          }
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+
+      body.innerHTML = html;
+    }
+
+    function getMapNameById(mapId) {
+      if (!mapId || !mapsData) return '';
+      for (var i = 0; i < mapsData.length; i++) {
+        if (mapsData[i].mapId === mapId) {
+          return mapsData[i].title || mapsData[i].name || 'Untitled Map';
+        }
+      }
+      return 'Unknown Map';
+    }
+
+    // ---- Unit Modal Functions ----
+
+    function openUnitModal(unitId) {
+      var modal = document.getElementById('unitModal');
+      var titleEl = document.getElementById('unitModalTitle');
+      var formId = document.getElementById('unitFormId');
+      var formCourseId = document.getElementById('unitFormCourseId');
+      var formTitle = document.getElementById('unitFormTitle');
+      var formStatus = document.getElementById('unitFormStatus');
+
+      // Reset form
+      formId.value = '';
+      formCourseId.value = currentUnitsCourseId || '';
+      formTitle.value = '';
+      formStatus.value = 'active';
+
+      // Reset vocabulary section
+      if (typeof dctResetState === 'function') dctResetState();
+
+      // Reset PBL section
+      var dtkEnabled = document.getElementById('dtkPblEnabled');
+      if (dtkEnabled) dtkEnabled.checked = false;
+      var dtkConfig = document.getElementById('dtkFrameworkConfig');
+      if (dtkConfig) dtkConfig.classList.remove('dtk-visible');
+      dtkCurrentFramework = null;
+
+      if (unitId) {
+        // Edit mode: find unit in current data
+        var unit = null;
+        for (var i = 0; i < currentUnitsData.length; i++) {
+          if (currentUnitsData[i].unitId === unitId) {
+            unit = currentUnitsData[i];
+            break;
+          }
+        }
+        if (unit) {
+          titleEl.textContent = 'Edit Unit';
+          formId.value = unit.unitId;
+          formCourseId.value = unit.courseId;
+          formTitle.value = unit.title || '';
+          formStatus.value = unit.status || 'active';
+          populateUnitMapDropdown(unit.mapId || '');
+
+          // Populate PBL framework
+          var fw = null;
+          if (unit.designFrameworkJson) {
+            try {
+              fw = (typeof unit.designFrameworkJson === 'string') ? JSON.parse(unit.designFrameworkJson) : unit.designFrameworkJson;
+            } catch(e) { fw = null; }
+          }
+          if (fw && fw.isActive) {
+            dtkEnabled.checked = true;
+            dtkConfig.classList.add('dtk-visible');
+            dtkCurrentFramework = fw;
+            var fwSelect = document.getElementById('dtkFrameworkSelect');
+            if (fwSelect) fwSelect.value = fw.type || 'dschool';
+            dtkRenderPhaseList(fw.phases || []);
+            if (fw.type === 'custom') {
+              dtkRenderCustomEditor(fw.phases || []);
+            }
+          }
+
+          // Populate vocabulary
+          var vocabData = null;
+          if (unit.vocabularyJson) {
+            try {
+              vocabData = (typeof unit.vocabularyJson === 'string') ? JSON.parse(unit.vocabularyJson) : unit.vocabularyJson;
+            } catch(ev) { vocabData = null; }
+          }
+          dctUnitVocab = vocabData || [];
+        } else {
+          showToast('Unit not found', 'error');
+          return;
+        }
+      } else {
+        titleEl.textContent = 'Create New Unit';
+        populateUnitMapDropdown('');
+      }
+
+      // Render vocabulary section
+      if (typeof dctRenderUnitVocabSection === 'function') {
+        dctRenderUnitVocabSection();
+      }
+
+      modal.classList.add('active');
+      formTitle.focus();
+    }
+
+    function closeUnitModal() {
+      var modal = document.getElementById('unitModal');
+      modal.classList.remove('active');
+    }
+
+    function populateUnitMapDropdown(currentMapId) {
+      var select = document.getElementById('unitFormMapId');
+      // Start fresh
+      select.innerHTML = '<option value="">-- No Map Linked --</option>';
+
+      if (!mapsData || mapsData.length === 0) return;
+
+      // Build a set of mapIds already linked to OTHER units (not the one being edited)
+      var linkedMapIds = {};
+      var editingUnitId = document.getElementById('unitFormId').value;
+      for (var i = 0; i < currentUnitsData.length; i++) {
+        var u = currentUnitsData[i];
+        if (u.mapId && u.unitId !== editingUnitId) {
+          linkedMapIds[u.mapId] = true;
+        }
+      }
+
+      for (var j = 0; j < mapsData.length; j++) {
+        var map = mapsData[j];
+        var mapId = map.mapId;
+        // Show if: it's the current map, OR it's not linked to another unit
+        if (mapId === currentMapId || !linkedMapIds[mapId]) {
+          var opt = document.createElement('option');
+          opt.value = mapId;
+          opt.textContent = map.title || map.name || 'Untitled Map';
+          if (mapId === currentMapId) opt.selected = true;
+          select.appendChild(opt);
+        }
+      }
+    }
+
+    function saveUnitFromModal() {
+      var unitId = document.getElementById('unitFormId').value;
+      var courseId = document.getElementById('unitFormCourseId').value;
+      var title = document.getElementById('unitFormTitle').value.trim();
+      var status = document.getElementById('unitFormStatus').value;
+      var newMapId = document.getElementById('unitFormMapId').value;
+
+      if (!title) {
+        showToast('Unit title is required', 'error');
+        return;
+      }
+
+      // Find old mapId for comparison (edit mode)
+      var oldMapId = '';
+      if (unitId) {
+        for (var i = 0; i < currentUnitsData.length; i++) {
+          if (currentUnitsData[i].unitId === unitId) {
+            oldMapId = currentUnitsData[i].mapId || '';
+            break;
+          }
+        }
+      }
+
+      var unitData = {
+        courseId: courseId,
+        title: title,
+        status: status
+      };
+      if (unitId) {
+        unitData.unitId = unitId;
+      }
+      // Don't set mapId directly - we handle linking separately
+      if (!unitId) {
+        unitData.mapId = '';
+      }
+
+      // PBL / Design Framework
+      var dtkEnabledChk = document.getElementById('dtkPblEnabled');
+      if (dtkEnabledChk && dtkEnabledChk.checked && dtkCurrentFramework) {
+        unitData.designFrameworkJson = JSON.stringify(dtkCurrentFramework);
+      } else if (dtkEnabledChk && !dtkEnabledChk.checked) {
+        // Explicitly disable — preserve type/phases but set isActive=false
+        var existingFw = dtkCurrentFramework || { type: 'dschool', phases: [] };
+        existingFw.isActive = false;
+        unitData.designFrameworkJson = JSON.stringify(existingFw);
+      }
+
+      showToast('Saving unit...', 'info');
+
+      google.script.run
+        .withSuccessHandler(function(savedUnit) {
+          showToast(unitId ? 'Unit updated!' : 'Unit created!', 'success');
+
+          // Save vocabulary after unit save
+          var savedUnitId = savedUnit.unitId || unitId;
+          if (typeof dctSaveUnitVocab === 'function' && dctUnitVocab && dctUnitVocab.length > 0) {
+            dctSaveUnitVocab(savedUnitId);
+          }
+
+          closeUnitModal();
+
+          // Handle map link changes after unit save
+          handleMapLinkChange(savedUnitId, oldMapId, newMapId);
+
+          // Reload units panel
+          loadUnitsForPanel(currentUnitsCourseId);
+          // Refresh unit count badge on course card
+          refreshUnitCountForCourse(currentUnitsCourseId);
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error saving unit: ' + err.message, 'error');
+        })
+        .saveUnit(unitData);
+    }
+
+    function handleMapLinkChange(unitId, oldMapId, newMapId) {
+      if (oldMapId === newMapId) return; // No change
+
+      if (oldMapId && !newMapId) {
+        // Unlink old map
+        google.script.run
+          .withSuccessHandler(function() { /* silent success */ })
+          .withFailureHandler(function(err) {
+            showToast('Warning: Failed to unlink old map: ' + err.message, 'error');
+          })
+          .unlinkMapFromUnit(unitId);
+      } else if (newMapId && oldMapId !== newMapId) {
+        // If there was an old map, unlink first then link new
+        if (oldMapId) {
+          google.script.run
+            .withSuccessHandler(function() {
+              linkNewMap(unitId, newMapId);
+            })
+            .withFailureHandler(function(err) {
+              showToast('Warning: Failed to unlink old map: ' + err.message, 'error');
+              // Still try to link new map
+              linkNewMap(unitId, newMapId);
+            })
+            .unlinkMapFromUnit(unitId);
+        } else {
+          linkNewMap(unitId, newMapId);
+        }
+      }
+    }
+
+    function linkNewMap(unitId, mapId) {
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Map linked to unit!', 'success');
+          // Reload to show updated map name
+          if (currentUnitsCourseId) {
+            loadUnitsForPanel(currentUnitsCourseId);
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error linking map: ' + err.message, 'error');
+        })
+        .linkMapToUnit(unitId, mapId);
+    }
+
+    // ================================================
+    // PBL / DESIGN THINKING — Unit Modal Functions (dtk- prefix)
+    // ================================================
+
+    var dtkCurrentFramework = null;
+
+    // Client-side copy of framework presets (avoids RPC)
+    var DTK_PRESETS = {
+      dschool: {
+        type: 'dschool',
+        label: 'd.school 5-Phase',
+        phases: [
+          { id: 'empathize', label: 'Empathize', icon: '', color: '#7c3aed' },
+          { id: 'define', label: 'Define', icon: '', color: '#2563eb' },
+          { id: 'ideate', label: 'Ideate', icon: '', color: '#059669' },
+          { id: 'prototype', label: 'Prototype', icon: '', color: '#d97706' },
+          { id: 'test', label: 'Test', icon: '', color: '#dc2626' }
+        ]
+      },
+      doubleDiamond: {
+        type: 'doubleDiamond',
+        label: 'Double Diamond',
+        phases: [
+          { id: 'discover', label: 'Discover', icon: '', color: '#7c3aed' },
+          { id: 'define', label: 'Define', icon: '', color: '#2563eb' },
+          { id: 'develop', label: 'Develop', icon: '', color: '#059669' },
+          { id: 'deliver', label: 'Deliver', icon: '', color: '#d97706' }
+        ]
+      },
+      ibDesign: {
+        type: 'ibDesign',
+        label: 'IB Design Cycle',
+        phases: [
+          { id: 'inquiring', label: 'Inquiring & Analysing', icon: '', color: '#7c3aed' },
+          { id: 'developing', label: 'Developing Ideas', icon: '', color: '#2563eb' },
+          { id: 'creating', label: 'Creating the Solution', icon: '', color: '#059669' },
+          { id: 'evaluating', label: 'Evaluating', icon: '', color: '#d97706' }
+        ]
+      }
+    };
+
+    function dtkTogglePbl() {
+      var enabled = document.getElementById('dtkPblEnabled').checked;
+      var configDiv = document.getElementById('dtkFrameworkConfig');
+      if (enabled) {
+        configDiv.classList.add('dtk-visible');
+        // Initialize framework if none set
+        if (!dtkCurrentFramework) {
+          dtkOnFrameworkChange();
+        }
+      } else {
+        configDiv.classList.remove('dtk-visible');
+        if (dtkCurrentFramework) {
+          dtkCurrentFramework.isActive = false;
+        }
+      }
+    }
+
+    function dtkOnFrameworkChange() {
+      var type = document.getElementById('dtkFrameworkSelect').value;
+      var customEditor = document.getElementById('dtkCustomEditor');
+
+      if (type === 'custom') {
+        // Custom: start from current or empty
+        var phases = (dtkCurrentFramework && dtkCurrentFramework.phases) ? dtkCurrentFramework.phases : [
+          { id: 'phase_1', label: 'Phase 1', icon: '', color: '#3b82f6' }
+        ];
+        dtkCurrentFramework = { type: 'custom', isActive: true, phases: phases };
+        dtkRenderPhaseList(phases);
+        dtkRenderCustomEditor(phases);
+        customEditor.style.display = 'block';
+      } else {
+        // Preset
+        var preset = DTK_PRESETS[type];
+        if (preset) {
+          var presetPhases = [];
+          for (var i = 0; i < preset.phases.length; i++) {
+            presetPhases.push({
+              id: preset.phases[i].id,
+              label: preset.phases[i].label,
+              icon: preset.phases[i].icon || '',
+              color: preset.phases[i].color
+            });
+          }
+          dtkCurrentFramework = { type: type, isActive: true, phases: presetPhases };
+          dtkRenderPhaseList(presetPhases);
+        }
+        customEditor.style.display = 'none';
+      }
+    }
+
+    function dtkRenderPhaseList(phases) {
+      var container = document.getElementById('dtkPhaseList');
+      if (!container) return;
+      var html = '';
+      for (var i = 0; i < phases.length; i++) {
+        var p = phases[i];
+        html += '<div class="dtk-phase-item">';
+        html += '<span class="dtk-phase-dot" style="background:' + (p.color || '#64748b') + ';"></span>';
+        html += '<span class="dtk-phase-name">' + escapeHtml(p.label) + '</span>';
+        html += '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function dtkRenderCustomEditor(phases) {
+      var container = document.getElementById('dtkCustomEditor');
+      if (!container) return;
+      var html = '';
+      for (var i = 0; i < phases.length; i++) {
+        var p = phases[i];
+        html += '<div class="dtk-custom-row" data-dtk-idx="' + i + '">';
+        html += '<input type="color" class="dtk-custom-color" value="' + (p.color || '#3b82f6') + '" onchange="dtkUpdateCustomPhase(' + i + ', \'color\', this.value)">';
+        html += '<input type="text" class="dtk-custom-label-input" value="' + escapeHtml(p.label) + '" placeholder="Phase name" onchange="dtkUpdateCustomPhase(' + i + ', \'label\', this.value)">';
+        if (phases.length > 1) {
+          html += '<button class="dtk-custom-remove" onclick="dtkRemoveCustomPhase(' + i + ')" title="Remove">&times;</button>';
+        }
+        html += '</div>';
+      }
+      if (phases.length < 8) {
+        html += '<button class="dtk-custom-add-btn" onclick="dtkAddCustomPhase()">+ Add Phase</button>';
+      }
+      container.innerHTML = html;
+    }
+
+    function dtkUpdateCustomPhase(idx, field, value) {
+      if (!dtkCurrentFramework || !dtkCurrentFramework.phases[idx]) return;
+      dtkCurrentFramework.phases[idx][field] = value;
+      if (field === 'label') {
+        dtkCurrentFramework.phases[idx].id = value.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 30);
+      }
+      dtkRenderPhaseList(dtkCurrentFramework.phases);
+    }
+
+    function dtkRemoveCustomPhase(idx) {
+      if (!dtkCurrentFramework) return;
+      dtkCurrentFramework.phases.splice(idx, 1);
+      dtkRenderPhaseList(dtkCurrentFramework.phases);
+      dtkRenderCustomEditor(dtkCurrentFramework.phases);
+    }
+
+    function dtkAddCustomPhase() {
+      if (!dtkCurrentFramework) return;
+      if (dtkCurrentFramework.phases.length >= 8) return;
+      var n = dtkCurrentFramework.phases.length + 1;
+      dtkCurrentFramework.phases.push({ id: 'phase_' + n, label: 'Phase ' + n, icon: '', color: '#64748b' });
+      dtkRenderPhaseList(dtkCurrentFramework.phases);
+      dtkRenderCustomEditor(dtkCurrentFramework.phases);
+    }
+
+    // ---- Reorder Functions ----
+
+    function moveUnitUp(unitId) {
+      var idx = -1;
+      for (var i = 0; i < currentUnitsData.length; i++) {
+        if (currentUnitsData[i].unitId === unitId) { idx = i; break; }
+      }
+      if (idx <= 0) return;
+
+      // Swap locally
+      var temp = currentUnitsData[idx];
+      currentUnitsData[idx] = currentUnitsData[idx - 1];
+      currentUnitsData[idx - 1] = temp;
+
+      // Update sequence numbers
+      for (var j = 0; j < currentUnitsData.length; j++) {
+        currentUnitsData[j].sequence = j + 1;
+      }
+
+      // Optimistic re-render
+      renderUnitsPanel();
+
+      // Persist to backend
+      var unitIds = currentUnitsData.map(function(u) { return u.unitId; });
+      google.script.run
+        .withSuccessHandler(function() { /* silent */ })
+        .withFailureHandler(function(err) {
+          showToast('Error reordering: ' + err.message, 'error');
+          // Reload to get correct order
+          loadUnitsForPanel(currentUnitsCourseId);
+        })
+        .reorderUnits(currentUnitsCourseId, unitIds);
+    }
+
+    function moveUnitDown(unitId) {
+      var idx = -1;
+      for (var i = 0; i < currentUnitsData.length; i++) {
+        if (currentUnitsData[i].unitId === unitId) { idx = i; break; }
+      }
+      if (idx < 0 || idx >= currentUnitsData.length - 1) return;
+
+      // Swap locally
+      var temp = currentUnitsData[idx];
+      currentUnitsData[idx] = currentUnitsData[idx + 1];
+      currentUnitsData[idx + 1] = temp;
+
+      // Update sequence numbers
+      for (var j = 0; j < currentUnitsData.length; j++) {
+        currentUnitsData[j].sequence = j + 1;
+      }
+
+      // Optimistic re-render
+      renderUnitsPanel();
+
+      // Persist to backend
+      var unitIds = currentUnitsData.map(function(u) { return u.unitId; });
+      google.script.run
+        .withSuccessHandler(function() { /* silent */ })
+        .withFailureHandler(function(err) {
+          showToast('Error reordering: ' + err.message, 'error');
+          loadUnitsForPanel(currentUnitsCourseId);
+        })
+        .reorderUnits(currentUnitsCourseId, unitIds);
+    }
+
+    // ---- Delete / Unlink Functions ----
+
+    function confirmDeleteUnit(unitId) {
+      var unit = null;
+      for (var i = 0; i < currentUnitsData.length; i++) {
+        if (currentUnitsData[i].unitId === unitId) { unit = currentUnitsData[i]; break; }
+      }
+      if (!unit) return;
+
+      var msg = 'Delete unit "' + unit.title + '"';
+      if (unit.mapId) {
+        msg += ', its lessons, and linked map';
+      }
+      msg += '? This cannot be undone.';
+      if (!confirm(msg)) return;
+
+      showToast('Deleting unit...', 'info');
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Unit deleted!', 'success');
+          loadUnitsForPanel(currentUnitsCourseId);
+          refreshUnitCountForCourse(currentUnitsCourseId);
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error deleting unit: ' + err.message, 'error');
+        })
+        .deleteUnit(unitId);
+    }
+
+    function confirmUnlinkMap(unitId) {
+      var unit = null;
+      for (var i = 0; i < currentUnitsData.length; i++) {
+        if (currentUnitsData[i].unitId === unitId) { unit = currentUnitsData[i]; break; }
+      }
+      if (!unit || !unit.mapId) return;
+
+      var mapName = getMapNameById(unit.mapId);
+      if (!confirm('Unlink map "' + mapName + '" from unit "' + unit.title + '"?')) return;
+
+      showToast('Unlinking map...', 'info');
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Map unlinked!', 'success');
+          loadUnitsForPanel(currentUnitsCourseId);
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error unlinking map: ' + err.message, 'error');
+        })
+        .unlinkMapFromUnit(unitId);
+    }
+
+    // ---- Student Action ----
+
+    function openMapFromUnit(mapId) {
+      // Switch to builder tab and open the map
+      var builderTab = document.querySelector('.tab[data-view="builder"]');
+      if (builderTab) {
+        switchTab(builderTab);
+      }
+      openMapInBuilder(mapId);
+    }
+
+    // ---- Helper ----
+
+    function refreshUnitCountForCourse(courseId) {
+      if (!courseId) return;
+      loadUnitCount(courseId);
+    }
+
+    // ================================================
+    // LESSONS PANEL (Story 2.2)
+    // ================================================
+
+    // ---- Panel Navigation ----
+
+    function viewUnitLessons(unitId) {
+      // Find the unit in current data to get title and mapId
+      var unit = null;
+      for (var i = 0; i < currentUnitsData.length; i++) {
+        if (currentUnitsData[i].unitId === unitId) {
+          unit = currentUnitsData[i];
+          break;
+        }
+      }
+      if (!unit) { showToast('Unit not found', 'error'); return; }
+
+      currentLessonsUnitId = unitId;
+      currentLessonsUnitTitle = unit.title || 'Untitled Unit';
+      unitsPanelMode = 'lessons';
+
+      // Swap panel header to breadcrumb
+      var titleEl = document.getElementById('unitsPanelTitle');
+      titleEl.innerHTML = '';
+      var breadcrumb = document.createElement('div');
+      breadcrumb.className = 'lessons-breadcrumb';
+      breadcrumb.onclick = backToUnits;
+      breadcrumb.innerHTML = '&larr; Back to Units';
+      titleEl.appendChild(breadcrumb);
+      var subTitle = document.createElement('div');
+      subTitle.style.cssText = 'font-size:15px; font-weight:600; color:#1e293b;';
+      subTitle.textContent = currentLessonsUnitTitle + ' — Lessons';
+      titleEl.appendChild(subTitle);
+
+      // Show/hide footer based on view mode
+      var footer = document.getElementById('unitsPanelFooter');
+      if (currentViewMode === 'teacher') {
+        footer.style.display = 'block';
+        footer.innerHTML = '<button class="btn btn-success btn-small" onclick="openLessonModal()" style="width:100%;">+ Add Lesson</button>';
+      } else {
+        footer.style.display = 'none';
+      }
+
+      // Pre-load map hexes for the lesson modal (if unit has a linked map)
+      currentLessonMapHexes = [];
+      if (unit.mapId) {
+        google.script.run
+          .withSuccessHandler(function(map) {
+            if (map && map.hexes) {
+              currentLessonMapHexes = map.hexes;
+            }
+          })
+          .withFailureHandler(function() { /* silent */ })
+          .getMapById(unit.mapId);
+      }
+
+      loadLessonsForPanel(unitId);
+    }
+
+    function backToUnits() {
+      unitsPanelMode = 'units';
+      currentLessonsUnitId = null;
+      currentLessonsData = [];
+      currentLessonMapHexes = [];
+
+      // Restore units panel header
+      var titleEl = document.getElementById('unitsPanelTitle');
+      var course = null;
+      for (var i = 0; i < coursesData.length; i++) {
+        if (coursesData[i].courseId === currentUnitsCourseId) {
+          course = coursesData[i];
+          break;
+        }
+      }
+      titleEl.innerHTML = '';
+      titleEl.textContent = course ? course.title + ' — Units' : 'Units';
+
+      // Restore units footer
+      var footer = document.getElementById('unitsPanelFooter');
+      if (currentViewMode === 'teacher') {
+        footer.style.display = 'block';
+        footer.innerHTML = '<button class="btn btn-success btn-small" onclick="openUnitModal()" style="width:100%;">+ Add Unit</button>';
+      } else {
+        footer.style.display = 'none';
+      }
+
+      // Reload and re-render units
+      loadUnitsForPanel(currentUnitsCourseId);
+    }
+
+    function loadLessonsForPanel(unitId) {
+      var body = document.getElementById('unitsPanelBody');
+      body.innerHTML = '<div class="loading"><span class="loading-spinner"></span>Loading lessons...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(lessons) {
+          currentLessonsData = lessons || [];
+          currentLessonsData.sort(function(a, b) {
+            return (a.sequence || 0) - (b.sequence || 0);
+          });
+          renderLessonsPanel();
+        })
+        .withFailureHandler(function(err) {
+          var body = document.getElementById('unitsPanelBody');
+          body.innerHTML = '<p style="color:#dc2626; padding:16px;">Error loading lessons: ' + escapeHtml(err.message) + '</p>';
+        })
+        .getLessonsForUnit(unitId);
+    }
+
+    function renderLessonsPanel() {
+      var body = document.getElementById('unitsPanelBody');
+      var isTeacher = (currentViewMode === 'teacher');
+
+      if (currentLessonsData.length === 0) {
+        body.innerHTML = '<div style="text-align:center; padding:40px 16px; color:#94a3b8;">' +
+          '<div style="font-size:48px; margin-bottom:12px;">📝</div>' +
+          '<p style="font-size:14px; margin:0;">No lessons yet.</p>' +
+          (isTeacher ? '<p style="font-size:13px; color:#64748b; margin-top:8px;">Click "+ Add Lesson" below to create one.</p>' : '') +
+          '</div>';
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < currentLessonsData.length; i++) {
+        var lesson = currentLessonsData[i];
+        var objectives = lesson.objectives || [];
+        var materials = lesson.materials || [];
+        var hexIds = lesson.hexIds || [];
+
+        html += '<div class="lesson-card" data-lesson-id="' + lesson.lessonId + '">';
+
+        // Header row: sequence + title
+        html += '<div style="display:flex; align-items:center; gap:10px;">';
+        html += '<span class="lesson-card-seq">' + (lesson.sequence || (i + 1)) + '</span>';
+        html += '<div style="flex:1; min-width:0;">';
+        html += '<div style="font-weight:600; font-size:14px; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(lesson.title) + '</div>';
+
+        // Meta row
+        html += '<div class="lesson-card-meta">';
+        if (lesson.duration) {
+          html += '<span>⏱️ ' + escapeHtml(lesson.duration) + '</span>';
+        }
+        if (hexIds.length > 0) {
+          html += '<span>⬡ ' + hexIds.length + ' hex' + (hexIds.length !== 1 ? 'es' : '') + '</span>';
+        }
+        if (objectives.length > 0) {
+          html += '<span>🎯 ' + objectives.length + ' objective' + (objectives.length !== 1 ? 's' : '') + '</span>';
+        }
+        html += '</div>';
+        html += '</div>';
+        html += '</div>';
+
+        // Objectives (show for students, collapsible)
+        if (objectives.length > 0) {
+          html += '<div class="lesson-card-objectives">';
+          html += '<strong>Objectives:</strong>';
+          html += '<ul>';
+          for (var o = 0; o < objectives.length; o++) {
+            html += '<li>' + escapeHtml(objectives[o]) + '</li>';
+          }
+          html += '</ul>';
+          html += '</div>';
+        }
+
+        // Materials (show for students)
+        if (materials.length > 0) {
+          html += '<div class="lesson-card-materials">';
+          html += '<strong>Materials:</strong> ' + materials.map(function(m) { return escapeHtml(m); }).join(', ');
+          html += '</div>';
+        }
+
+        // Action buttons
+        if (isTeacher) {
+          html += '<div class="lesson-card-actions">';
+          // Reorder buttons
+          html += '<span>';
+          if (i > 0) {
+            html += '<button class="unit-reorder-btn" onclick="moveLessonUp(\'' + lesson.lessonId + '\')" title="Move up">&#9650;</button>';
+          }
+          if (i < currentLessonsData.length - 1) {
+            html += '<button class="unit-reorder-btn" onclick="moveLessonDown(\'' + lesson.lessonId + '\')" title="Move down">&#9660;</button>';
+          }
+          html += '</span>';
+          // Edit / Delete
+          html += '<span>';
+          html += '<button class="btn btn-ghost btn-small" onclick="openLessonModal(\'' + lesson.lessonId + '\')">Edit</button>';
+          html += '<button class="btn btn-ghost btn-small" onclick="confirmDeleteLesson(\'' + lesson.lessonId + '\')" style="color:#dc2626;">Delete</button>';
+          html += '</span>';
+          html += '</div>';
+        }
+
+        html += '</div>';
+      }
+
+      body.innerHTML = html;
+    }
+
+    // ---- Lesson Modal Functions ----
+
+    function openLessonModal(lessonId) {
+      var modal = document.getElementById('lessonModal');
+      var titleEl = document.getElementById('lessonModalTitle');
+      var formId = document.getElementById('lessonFormId');
+      var formUnitId = document.getElementById('lessonFormUnitId');
+      var formTitle = document.getElementById('lessonFormTitle');
+      var formDuration = document.getElementById('lessonFormDuration');
+      var formStatus = document.getElementById('lessonFormStatus');
+      var formObjectives = document.getElementById('lessonFormObjectives');
+      var formMaterials = document.getElementById('lessonFormMaterials');
+
+      // Reset basic fields
+      formId.value = '';
+      formUnitId.value = currentLessonsUnitId || '';
+      formTitle.value = '';
+      formDuration.value = '';
+      formStatus.value = 'active';
+      formObjectives.value = '';
+      formMaterials.value = '';
+
+      // Reset rich editor fields
+      document.getElementById('lsnOpeningName').value = '';
+      document.getElementById('lsnOpeningDesc').value = '';
+      document.getElementById('lsnOpeningDuration').value = '';
+      document.getElementById('lsnClosingName').value = '';
+      document.getElementById('lsnClosingDesc').value = '';
+      document.getElementById('lsnClosingDuration').value = '';
+      document.getElementById('lsnFormativeAssessment').value = '';
+      document.getElementById('lsnResources').value = '';
+      document.getElementById('lsnTeacherNotes').value = '';
+      document.getElementById('lsnModifications').value = '';
+      document.getElementById('lsnUdlCustom-representation').value = '';
+      document.getElementById('lsnUdlCustom-actionExpression').value = '';
+      document.getElementById('lsnUdlCustom-engagement').value = '';
+
+      // Reset dynamic lists
+      lessonEditorMainActivities = [];
+      lessonEditorSuccessCriteria = [];
+      lessonStandardsSelected = [];
+      renderMainActivities();
+      renderSuccessCriteria();
+      renderLessonStandardsTags();
+      updateLessonStandardsBadge();
+
+      // Reset section states: basic, objectives, sequence open; others collapsed
+      var openSections = ['basic', 'objectives', 'sequence'];
+      var allSections = ['basic', 'objectives', 'standards', 'sequence', 'udl', 'assessment', 'materials', 'notes', 'accommodations'];
+      for (var s = 0; s < allSections.length; s++) {
+        var secEl = document.getElementById('lsnSec-' + allSections[s]);
+        if (!secEl) continue;
+        var shouldOpen = false;
+        for (var o = 0; o < openSections.length; o++) {
+          if (allSections[s] === openSections[o]) { shouldOpen = true; break; }
+        }
+        if (shouldOpen) {
+          secEl.className = 'lsn-section';
+        } else {
+          secEl.className = 'lsn-section lsn-collapsed';
+        }
+      }
+
+      var selectedHexIds = [];
+      var ld = {}; // lessonData (rich content)
+
+      if (lessonId) {
+        // Edit mode — find the lesson
+        var lesson = null;
+        for (var i = 0; i < currentLessonsData.length; i++) {
+          if (currentLessonsData[i].lessonId === lessonId) {
+            lesson = currentLessonsData[i];
+            break;
+          }
+        }
+        if (!lesson) {
+          showToast('Lesson not found', 'error');
+          return;
+        }
+        titleEl.textContent = 'Edit Lesson';
+        formId.value = lesson.lessonId;
+        formUnitId.value = lesson.unitId;
+        formTitle.value = lesson.title || '';
+        formDuration.value = lesson.duration || '';
+        formStatus.value = lesson.status || 'active';
+        formObjectives.value = (lesson.objectives || []).join('\n');
+        formMaterials.value = (lesson.materials || []).join('\n');
+        selectedHexIds = lesson.hexIds || [];
+        ld = lesson.lessonData || {};
+
+        // Populate rich fields from lessonData
+        if (ld.openingActivity) {
+          document.getElementById('lsnOpeningName').value = ld.openingActivity.name || '';
+          document.getElementById('lsnOpeningDesc').value = ld.openingActivity.description || '';
+          document.getElementById('lsnOpeningDuration').value = ld.openingActivity.duration || '';
+        }
+        if (ld.closingActivity) {
+          document.getElementById('lsnClosingName').value = ld.closingActivity.name || '';
+          document.getElementById('lsnClosingDesc').value = ld.closingActivity.description || '';
+          document.getElementById('lsnClosingDuration').value = ld.closingActivity.duration || '';
+        }
+        lessonEditorMainActivities = (ld.mainActivities && ld.mainActivities.length) ? ld.mainActivities.slice() : [];
+        renderMainActivities();
+
+        document.getElementById('lsnFormativeAssessment').value = ld.formativeAssessment || '';
+        lessonEditorSuccessCriteria = (ld.successCriteria && ld.successCriteria.length) ? ld.successCriteria.slice() : [];
+        renderSuccessCriteria();
+
+        document.getElementById('lsnResources').value = (ld.resources || []).join('\n');
+        document.getElementById('lsnTeacherNotes').value = ld.teacherNotes || '';
+        document.getElementById('lsnModifications').value = ld.modifications || '';
+
+        // Auto-expand sections that have content
+        if (ld.udl && (hasUdlContent(ld.udl))) {
+          var udlSec = document.getElementById('lsnSec-udl');
+          if (udlSec) udlSec.className = 'lsn-section';
+        }
+        if (ld.formativeAssessment || (ld.successCriteria && ld.successCriteria.length > 0)) {
+          var assessSec = document.getElementById('lsnSec-assessment');
+          if (assessSec) assessSec.className = 'lsn-section';
+        }
+        if (ld.resources && ld.resources.length > 0) {
+          var matSec = document.getElementById('lsnSec-materials');
+          if (matSec) matSec.className = 'lsn-section';
+        }
+        if (ld.teacherNotes || ld.modifications) {
+          var notesSec = document.getElementById('lsnSec-notes');
+          if (notesSec) notesSec.className = 'lsn-section';
+        }
+
+        // Load lesson standards
+        loadLessonStandards(lesson.standardIds || []);
+        if (lesson.standardIds && lesson.standardIds.length > 0) {
+          var stdSec = document.getElementById('lsnSec-standards');
+          if (stdSec) stdSec.className = 'lsn-section';
+        }
+      } else {
+        titleEl.textContent = 'Create New Lesson';
+      }
+
+      // Render hex checkboxes
+      renderHexCheckboxes(currentLessonMapHexes, selectedHexIds);
+
+      // Load reference data (templates, UDL strategies, assessment strategies) then render chips
+      loadLessonReferenceData(function() {
+        populateLessonTemplateDropdowns();
+        renderUdlChips('representation', (ld.udl && ld.udl.representation) ? ld.udl.representation : []);
+        renderUdlChips('actionExpression', (ld.udl && ld.udl.actionExpression) ? ld.udl.actionExpression : []);
+        renderUdlChips('engagement', (ld.udl && ld.udl.engagement) ? ld.udl.engagement : []);
+        if (ld.udl) {
+          document.getElementById('lsnUdlCustom-representation').value = ld.udl.customRepresentation || '';
+          document.getElementById('lsnUdlCustom-actionExpression').value = ld.udl.customActionExpression || '';
+          document.getElementById('lsnUdlCustom-engagement').value = ld.udl.customEngagement || '';
+        }
+        updateUdlBadge();
+        updateAssessBadge();
+      });
+
+      modal.classList.add('active');
+      formTitle.focus();
+
+      // Load accommodation reminders for this lesson's map (Story 2: EAL/LS Support)
+      loadLessonAccommodationReminders();
+    }
+
+    function closeLessonModal() {
+      var modal = document.getElementById('lessonModal');
+      modal.classList.remove('active');
+    }
+
+    // ---- Accommodation Reminders (Story 2: EAL/LS Support) ----
+
+    function loadLessonAccommodationReminders() {
+      var contentEl = document.getElementById('lsnAccommodationsContent');
+      var badgeEl = document.getElementById('lsnAccommodationCount');
+      if (!contentEl) return;
+
+      // Find the map for the current unit
+      var unitId = currentLessonsUnitId;
+      if (!unitId) {
+        contentEl.innerHTML = '<div style="color:#a0aec0;font-size:13px;">No unit context — cannot check accommodations.</div>';
+        if (badgeEl) badgeEl.style.display = 'none';
+        return;
+      }
+
+      // Trace unit -> map
+      var mapId = null;
+      for (var i = 0; i < currentUnitsData.length; i++) {
+        if (currentUnitsData[i].unitId === unitId && currentUnitsData[i].mapId) {
+          mapId = currentUnitsData[i].mapId;
+          break;
+        }
+      }
+
+      if (!mapId) {
+        contentEl.innerHTML = '<div style="color:#a0aec0;font-size:13px;">Unit has no linked map — cannot check class accommodations.</div>';
+        if (badgeEl) badgeEl.style.display = 'none';
+        return;
+      }
+
+      contentEl.innerHTML = '<div class="loading">Checking for student accommodations...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          renderAccommodationReminders(data);
+        })
+        .withFailureHandler(function(err) {
+          contentEl.innerHTML = '<div style="color:#a0aec0;font-size:13px;">Could not load accommodations.</div>';
+          if (badgeEl) badgeEl.style.display = 'none';
+        })
+        .getAccommodationReminders(mapId);
+    }
+
+    function renderAccommodationReminders(data) {
+      var contentEl = document.getElementById('lsnAccommodationsContent');
+      var badgeEl = document.getElementById('lsnAccommodationCount');
+      if (!contentEl) return;
+
+      if (!data || data.totalStudentsWithProfiles === 0) {
+        contentEl.innerHTML = '<div style="color:#a0aec0;font-size:13px;">No students with support profiles in assigned classes.</div>';
+        if (badgeEl) badgeEl.style.display = 'none';
+        return;
+      }
+
+      // Show badge count
+      if (badgeEl) {
+        badgeEl.textContent = data.totalStudentsWithProfiles;
+        badgeEl.style.display = 'inline-block';
+      }
+
+      var html = '';
+
+      // Summary bar
+      html += '<div class="ssp-reminder-summary">';
+      html += '&#128203; <strong>' + data.totalStudentsWithProfiles + ' student(s)</strong> with support profiles';
+      if (data.classNames && data.classNames.length > 0) {
+        html += ' across ' + data.classNames.join(', ');
+      }
+      html += '</div>';
+
+      // Grouped accommodation reminders
+      if (data.reminders && data.reminders.length > 0) {
+        for (var r = 0; r < data.reminders.length; r++) {
+          var rem = data.reminders[r];
+          html += '<div class="ssp-reminder-group">';
+          html += '<div class="ssp-reminder-group-title">' + escapeHtml(rem.label) + ' (' + rem.count + ')</div>';
+          html += '<div class="ssp-reminder-students">';
+          for (var s = 0; s < rem.students.length; s++) {
+            html += '<span class="ssp-student-chip">' + escapeHtml(rem.students[s]) + '</span>';
+          }
+          html += '</div>';
+          html += '</div>';
+        }
+      }
+
+      // WIDA students with strategies
+      if (data.widaStudents && data.widaStudents.length > 0) {
+        html += '<div class="ssp-section-title" style="margin-top:16px;">EAL Students (WIDA)</div>';
+        for (var w = 0; w < data.widaStudents.length; w++) {
+          var ws = data.widaStudents[w];
+          html += '<div class="ssp-wida-card">';
+          html += '<div class="ssp-wida-card-header">';
+          html += '<span class="ssp-wida-card-name">' + escapeHtml(ws.name) + '</span>';
+          html += '<span class="ssp-wida-badge ssp-wida-' + ws.level + '">WIDA ' + ws.level + '</span>';
+          html += '</div>';
+          if (ws.strategies && ws.strategies.length > 0) {
+            for (var st = 0; st < ws.strategies.length; st++) {
+              html += '<span class="ssp-strategy-tag">' + escapeHtml(ws.strategies[st]) + '</span>';
+            }
+          }
+          html += '</div>';
+        }
+      }
+
+      contentEl.innerHTML = html;
+    }
+
+    function renderHexCheckboxes(hexes, selectedHexIds) {
+      var container = document.getElementById('lessonHexCheckboxes');
+
+      if (!hexes || hexes.length === 0) {
+        // Check if the unit even has a linked map
+        var unit = null;
+        for (var i = 0; i < currentUnitsData.length; i++) {
+          if (currentUnitsData[i].unitId === currentLessonsUnitId) {
+            unit = currentUnitsData[i];
+            break;
+          }
+        }
+        if (!unit || !unit.mapId) {
+          container.innerHTML = '<div class="hex-checkbox-empty">Link a map to this unit first to select hexes</div>';
+        } else {
+          container.innerHTML = '<div class="hex-checkbox-empty">Map has no hexes yet</div>';
+        }
+        return;
+      }
+
+      var selectedSet = {};
+      for (var s = 0; s < selectedHexIds.length; s++) {
+        selectedSet[selectedHexIds[s]] = true;
+      }
+
+      var html = '<div class="hex-checkbox-list">';
+      for (var h = 0; h < hexes.length; h++) {
+        var hex = hexes[h];
+        var checked = selectedSet[hex.id] ? ' checked' : '';
+        html += '<label class="hex-checkbox-item">';
+        html += '<input type="checkbox" name="lessonHex" value="' + hex.id + '"' + checked + '>';
+        html += '<span class="hex-cb-icon">' + (hex.icon || '⬡') + '</span>';
+        html += '<span class="hex-cb-label">' + escapeHtml(hex.label || 'Hex ' + hex.id) + '</span>';
+        html += '</label>';
+      }
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function getCheckedHexIds() {
+      var checkboxes = document.querySelectorAll('input[name="lessonHex"]:checked');
+      var ids = [];
+      for (var i = 0; i < checkboxes.length; i++) {
+        ids.push(checkboxes[i].value);
+      }
+      return ids;
+    }
+
+    function saveLessonFromModal() {
+      var lessonId = document.getElementById('lessonFormId').value;
+      var unitId = document.getElementById('lessonFormUnitId').value;
+      var title = document.getElementById('lessonFormTitle').value.trim();
+      var duration = document.getElementById('lessonFormDuration').value.trim();
+      var status = document.getElementById('lessonFormStatus').value;
+      var objectivesText = document.getElementById('lessonFormObjectives').value;
+      var materialsText = document.getElementById('lessonFormMaterials').value;
+      var hexIds = getCheckedHexIds();
+
+      if (!title) {
+        showToast('Lesson title is required', 'error');
+        return;
+      }
+
+      // Parse textarea lines into arrays
+      var objectives = objectivesText.split('\n').map(function(line) { return line.trim(); }).filter(function(line) { return line.length > 0; });
+      var materials = materialsText.split('\n').map(function(line) { return line.trim(); }).filter(function(line) { return line.length > 0; });
+
+      // Collect rich lessonData
+      syncMainActivitiesFromDom();
+      syncSuccessCriteriaFromDom();
+
+      var resourcesText = document.getElementById('lsnResources').value;
+      var resources = resourcesText.split('\n').map(function(line) { return line.trim(); }).filter(function(line) { return line.length > 0; });
+
+      var richData = {
+        openingActivity: {
+          name: document.getElementById('lsnOpeningName').value.trim(),
+          description: document.getElementById('lsnOpeningDesc').value.trim(),
+          duration: document.getElementById('lsnOpeningDuration').value.trim()
+        },
+        mainActivities: lessonEditorMainActivities,
+        closingActivity: {
+          name: document.getElementById('lsnClosingName').value.trim(),
+          description: document.getElementById('lsnClosingDesc').value.trim(),
+          duration: document.getElementById('lsnClosingDuration').value.trim()
+        },
+        udl: {
+          representation: getSelectedUdlStrategies('representation'),
+          actionExpression: getSelectedUdlStrategies('actionExpression'),
+          engagement: getSelectedUdlStrategies('engagement'),
+          customRepresentation: document.getElementById('lsnUdlCustom-representation').value.trim(),
+          customActionExpression: document.getElementById('lsnUdlCustom-actionExpression').value.trim(),
+          customEngagement: document.getElementById('lsnUdlCustom-engagement').value.trim()
+        },
+        formativeAssessment: document.getElementById('lsnFormativeAssessment').value.trim(),
+        successCriteria: lessonEditorSuccessCriteria,
+        resources: resources,
+        teacherNotes: document.getElementById('lsnTeacherNotes').value.trim(),
+        modifications: document.getElementById('lsnModifications').value.trim()
+      };
+
+      // Collect standard IDs from lesson standards picker
+      var standardIds = [];
+      for (var si = 0; si < lessonStandardsSelected.length; si++) {
+        standardIds.push(lessonStandardsSelected[si].standardId);
+      }
+
+      var lessonObj = {
+        unitId: unitId,
+        title: title,
+        duration: duration,
+        status: status,
+        objectives: objectives,
+        materials: materials,
+        hexIds: hexIds,
+        standardIds: standardIds,
+        lessonData: richData
+      };
+
+      // E2-S1: Sync UDL selections from lesson editor to linked hex(es) in current map
+      if (currentMap && richData.udl && hexIds && hexIds.length > 0) {
+        for (var hi = 0; hi < hexIds.length; hi++) {
+          var linkedHex = (typeof findHexById === 'function') ? findHexById(hexIds[hi]) : null;
+          if (linkedHex) {
+            if (!linkedHex.lessonPlan) linkedHex.lessonPlan = {};
+            linkedHex.lessonPlan.udl = {
+              representation: (richData.udl.representation || []).slice(0),
+              actionExpression: (richData.udl.actionExpression || []).slice(0),
+              engagement: (richData.udl.engagement || []).slice(0),
+              customRepresentation: richData.udl.customRepresentation || '',
+              customActionExpression: richData.udl.customActionExpression || '',
+              customEngagement: richData.udl.customEngagement || ''
+            };
+          }
+        }
+      }
+
+      if (lessonId) {
+        lessonObj.lessonId = lessonId;
+        // Preserve existing sequence
+        for (var i = 0; i < currentLessonsData.length; i++) {
+          if (currentLessonsData[i].lessonId === lessonId) {
+            lessonObj.sequence = currentLessonsData[i].sequence;
+            break;
+          }
+        }
+      } else {
+        // New lesson: assign next sequence number
+        lessonObj.sequence = currentLessonsData.length + 1;
+      }
+
+      showToast('Saving lesson...', 'info');
+
+      google.script.run
+        .withSuccessHandler(function(savedLesson) {
+          showToast(lessonId ? 'Lesson updated!' : 'Lesson created!', 'success');
+          closeLessonModal();
+          // Reload lessons panel
+          if (unitsPanelMode === 'lessons' && currentLessonsUnitId) {
+            loadLessonsForPanel(currentLessonsUnitId);
+          }
+          // Refresh unit card lesson count
+          if (currentUnitsCourseId) {
+            refreshUnitCountForCourse(currentUnitsCourseId);
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error saving lesson: ' + err.message, 'error');
+        })
+        .saveLesson(lessonObj);
+    }
+
+    function confirmDeleteLesson(lessonId) {
+      var lesson = null;
+      for (var i = 0; i < currentLessonsData.length; i++) {
+        if (currentLessonsData[i].lessonId === lessonId) { lesson = currentLessonsData[i]; break; }
+      }
+      if (!lesson) return;
+
+      if (!confirm('Delete lesson "' + lesson.title + '"? This cannot be undone.')) return;
+
+      showToast('Deleting lesson...', 'info');
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Lesson deleted!', 'success');
+          if (unitsPanelMode === 'lessons' && currentLessonsUnitId) {
+            loadLessonsForPanel(currentLessonsUnitId);
+          }
+          if (currentUnitsCourseId) {
+            refreshUnitCountForCourse(currentUnitsCourseId);
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error deleting lesson: ' + err.message, 'error');
+        })
+        .deleteLesson(lessonId);
+    }
+
+    // ---- Lesson Reorder Functions ----
+
+    function moveLessonUp(lessonId) {
+      var idx = -1;
+      for (var i = 0; i < currentLessonsData.length; i++) {
+        if (currentLessonsData[i].lessonId === lessonId) { idx = i; break; }
+      }
+      if (idx <= 0) return;
+
+      // Swap locally
+      var temp = currentLessonsData[idx];
+      currentLessonsData[idx] = currentLessonsData[idx - 1];
+      currentLessonsData[idx - 1] = temp;
+
+      // Update sequences
+      for (var j = 0; j < currentLessonsData.length; j++) {
+        currentLessonsData[j].sequence = j + 1;
+      }
+
+      // Optimistic re-render
+      renderLessonsPanel();
+
+      // Persist
+      var lessonIds = currentLessonsData.map(function(l) { return l.lessonId; });
+      google.script.run
+        .withSuccessHandler(function() { /* silent */ })
+        .withFailureHandler(function(err) {
+          showToast('Error reordering: ' + err.message, 'error');
+          loadLessonsForPanel(currentLessonsUnitId);
+        })
+        .reorderLessons(currentLessonsUnitId, lessonIds);
+    }
+
+    function moveLessonDown(lessonId) {
+      var idx = -1;
+      for (var i = 0; i < currentLessonsData.length; i++) {
+        if (currentLessonsData[i].lessonId === lessonId) { idx = i; break; }
+      }
+      if (idx < 0 || idx >= currentLessonsData.length - 1) return;
+
+      // Swap locally
+      var temp = currentLessonsData[idx];
+      currentLessonsData[idx] = currentLessonsData[idx + 1];
+      currentLessonsData[idx + 1] = temp;
+
+      // Update sequences
+      for (var j = 0; j < currentLessonsData.length; j++) {
+        currentLessonsData[j].sequence = j + 1;
+      }
+
+      // Optimistic re-render
+      renderLessonsPanel();
+
+      // Persist
+      var lessonIds = currentLessonsData.map(function(l) { return l.lessonId; });
+      google.script.run
+        .withSuccessHandler(function() { /* silent */ })
+        .withFailureHandler(function(err) {
+          showToast('Error reordering: ' + err.message, 'error');
+          loadLessonsForPanel(currentLessonsUnitId);
+        })
+        .reorderLessons(currentLessonsUnitId, lessonIds);
+    }
+
+    // ---- Rich Lesson Editor Helpers ----
+
+    function toggleLessonSection(sectionId) {
+      var el = document.getElementById('lsnSec-' + sectionId);
+      if (!el) return;
+      var cls = el.className;
+      if (cls.indexOf('lsn-collapsed') >= 0) {
+        el.className = cls.replace('lsn-collapsed', '').replace(/\s+/g, ' ').trim();
+      } else {
+        el.className = cls + ' lsn-collapsed';
+      }
+    }
+
+    function hasUdlContent(udl) {
+      if (!udl) return false;
+      if (udl.representation && udl.representation.length > 0) return true;
+      if (udl.actionExpression && udl.actionExpression.length > 0) return true;
+      if (udl.engagement && udl.engagement.length > 0) return true;
+      if (udl.customRepresentation) return true;
+      if (udl.customActionExpression) return true;
+      if (udl.customEngagement) return true;
+      return false;
+    }
+
+    function loadLessonReferenceData(callback) {
+      // If already cached, callback immediately
+      if (lessonActivityTemplatesCache && lessonUdlStrategiesCache && lessonAssessmentStrategiesCache) {
+        if (callback) callback();
+        return;
+      }
+
+      var loaded = 0;
+      var total = 3; // templates, udl, assessment
+
+      function checkDone() {
+        loaded++;
+        if (loaded >= total && callback) callback();
+      }
+
+      // Load activity templates (3 types combined)
+      if (!lessonActivityTemplatesCache) {
+        lessonActivityTemplatesCache = { opening: [], main: [], closing: [] };
+        var tmplLoaded = 0;
+        var types = ['opening', 'main', 'closing'];
+        for (var t = 0; t < types.length; t++) {
+          (function(type) {
+            google.script.run
+              .withSuccessHandler(function(data) {
+                lessonActivityTemplatesCache[type] = data || [];
+                tmplLoaded++;
+                if (tmplLoaded >= 3) checkDone();
+              })
+              .withFailureHandler(function() {
+                tmplLoaded++;
+                if (tmplLoaded >= 3) checkDone();
+              })
+              .getActivityTemplates(type);
+          })(types[t]);
+        }
+      } else {
+        checkDone();
+      }
+
+      // Load UDL strategies (3 principles combined)
+      if (!lessonUdlStrategiesCache) {
+        lessonUdlStrategiesCache = { representation: [], actionExpression: [], engagement: [] };
+        var udlLoaded = 0;
+        var principles = ['representation', 'actionExpression', 'engagement'];
+        for (var p = 0; p < principles.length; p++) {
+          (function(principle) {
+            google.script.run
+              .withSuccessHandler(function(data) {
+                lessonUdlStrategiesCache[principle] = data || [];
+                udlLoaded++;
+                if (udlLoaded >= 3) checkDone();
+              })
+              .withFailureHandler(function() {
+                udlLoaded++;
+                if (udlLoaded >= 3) checkDone();
+              })
+              .getUdlStrategies(principle);
+          })(principles[p]);
+        }
+      } else {
+        checkDone();
+      }
+
+      // Load assessment strategies
+      if (!lessonAssessmentStrategiesCache) {
+        google.script.run
+          .withSuccessHandler(function(data) {
+            lessonAssessmentStrategiesCache = data || [];
+            checkDone();
+          })
+          .withFailureHandler(function() {
+            lessonAssessmentStrategiesCache = [];
+            checkDone();
+          })
+          .getFormativeAssessmentStrategies();
+      } else {
+        checkDone();
+      }
+    }
+
+    function populateLessonTemplateDropdowns() {
+      if (lessonActivityTemplatesCache) {
+        populateTemplateSelect('lsnTmplOpening', lessonActivityTemplatesCache.opening || []);
+        populateTemplateSelect('lsnTmplClosing', lessonActivityTemplatesCache.closing || []);
+      }
+      if (lessonAssessmentStrategiesCache) {
+        var sel = document.getElementById('lsnAssessSelect');
+        if (sel) {
+          var html = '<option value="">-- Strategy --</option>';
+          for (var i = 0; i < lessonAssessmentStrategiesCache.length; i++) {
+            var st = lessonAssessmentStrategiesCache[i];
+            html += '<option value="' + i + '">' + escapeHtml(st.name) + '</option>';
+          }
+          sel.innerHTML = html;
+        }
+      }
+    }
+
+    function populateTemplateSelect(selectId, templates) {
+      var sel = document.getElementById(selectId);
+      if (!sel) return;
+      var html = '<option value="">-- Template --</option>';
+      for (var i = 0; i < templates.length; i++) {
+        html += '<option value="' + i + '">' + escapeHtml(templates[i].name) + '</option>';
+      }
+      sel.innerHTML = html;
+    }
+
+    function applyActivityTemplate(type) {
+      var selectId = (type === 'opening') ? 'lsnTmplOpening' : 'lsnTmplClosing';
+      var sel = document.getElementById(selectId);
+      if (!sel || sel.value === '') return;
+      var idx = parseInt(sel.value);
+      var templates = (lessonActivityTemplatesCache && lessonActivityTemplatesCache[type]) ? lessonActivityTemplatesCache[type] : [];
+      if (idx < 0 || idx >= templates.length) return;
+      var tmpl = templates[idx];
+      var prefix = (type === 'opening') ? 'lsnOpening' : 'lsnClosing';
+      document.getElementById(prefix + 'Name').value = tmpl.name || '';
+      document.getElementById(prefix + 'Desc').value = tmpl.description || '';
+      document.getElementById(prefix + 'Duration').value = tmpl.duration || '';
+    }
+
+    // ---- Main Activities (dynamic list) ----
+
+    function addMainActivity() {
+      syncMainActivitiesFromDom();
+      lessonEditorMainActivities.push({ name: '', description: '', duration: '' });
+      renderMainActivities();
+    }
+
+    function removeMainActivity(idx) {
+      syncMainActivitiesFromDom();
+      lessonEditorMainActivities.splice(idx, 1);
+      renderMainActivities();
+    }
+
+    function renderMainActivities() {
+      var container = document.getElementById('lsnMainActivitiesList');
+      if (!container) return;
+      if (lessonEditorMainActivities.length === 0) {
+        container.innerHTML = '<div style="font-size:12px; color:#94a3b8; padding:4px 0;">No main activities yet</div>';
+        return;
+      }
+      var html = '';
+      var mainTemplates = (lessonActivityTemplatesCache && lessonActivityTemplatesCache.main) ? lessonActivityTemplatesCache.main : [];
+      for (var i = 0; i < lessonEditorMainActivities.length; i++) {
+        var act = lessonEditorMainActivities[i];
+        html += '<div class="lsn-activity-card" data-main-idx="' + i + '">';
+        html += '<div class="lsn-activity-card-header">';
+        html += '<span class="lsn-activity-card-label">Activity ' + (i + 1) + '</span>';
+        html += '<button class="lsn-activity-remove" onclick="removeMainActivity(' + i + ')" title="Remove">&times;</button>';
+        html += '</div>';
+        // Template row
+        html += '<div class="lsn-template-row">';
+        html += '<select class="lsn-template-select" id="lsnMainTmpl-' + i + '">';
+        html += '<option value="">-- Template --</option>';
+        for (var t = 0; t < mainTemplates.length; t++) {
+          html += '<option value="' + t + '">' + escapeHtml(mainTemplates[t].name) + '</option>';
+        }
+        html += '</select>';
+        html += '<button class="lsn-template-apply" onclick="applyMainActivityTemplate(' + i + ')">Apply</button>';
+        html += '</div>';
+        html += '<input type="text" class="lsn-form-input lsn-main-name" data-idx="' + i + '" value="' + escapeHtml(act.name || '') + '" placeholder="Activity name" style="margin-bottom:4px;">';
+        html += '<textarea class="lsn-form-textarea lsn-main-desc" data-idx="' + i + '" rows="2" placeholder="Description...">' + escapeHtml(act.description || '') + '</textarea>';
+        html += '<input type="text" class="lsn-form-input lsn-main-dur" data-idx="' + i + '" value="' + escapeHtml(act.duration || '') + '" placeholder="Duration" style="margin-top:4px;">';
+        html += '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function syncMainActivitiesFromDom() {
+      var names = document.querySelectorAll('.lsn-main-name');
+      var descs = document.querySelectorAll('.lsn-main-desc');
+      var durs = document.querySelectorAll('.lsn-main-dur');
+      for (var i = 0; i < names.length; i++) {
+        var idx = parseInt(names[i].getAttribute('data-idx'));
+        if (idx >= 0 && idx < lessonEditorMainActivities.length) {
+          lessonEditorMainActivities[idx].name = names[i].value.trim();
+        }
+      }
+      for (var j = 0; j < descs.length; j++) {
+        var idx2 = parseInt(descs[j].getAttribute('data-idx'));
+        if (idx2 >= 0 && idx2 < lessonEditorMainActivities.length) {
+          lessonEditorMainActivities[idx2].description = descs[j].value.trim();
+        }
+      }
+      for (var k = 0; k < durs.length; k++) {
+        var idx3 = parseInt(durs[k].getAttribute('data-idx'));
+        if (idx3 >= 0 && idx3 < lessonEditorMainActivities.length) {
+          lessonEditorMainActivities[idx3].duration = durs[k].value.trim();
+        }
+      }
+    }
+
+    function applyMainActivityTemplate(actIdx) {
+      var sel = document.getElementById('lsnMainTmpl-' + actIdx);
+      if (!sel || sel.value === '') return;
+      var tmplIdx = parseInt(sel.value);
+      var mainTemplates = (lessonActivityTemplatesCache && lessonActivityTemplatesCache.main) ? lessonActivityTemplatesCache.main : [];
+      if (tmplIdx < 0 || tmplIdx >= mainTemplates.length) return;
+      var tmpl = mainTemplates[tmplIdx];
+
+      // Sync first so we don't lose other fields
+      syncMainActivitiesFromDom();
+      if (actIdx >= 0 && actIdx < lessonEditorMainActivities.length) {
+        lessonEditorMainActivities[actIdx].name = tmpl.name || '';
+        lessonEditorMainActivities[actIdx].description = tmpl.description || '';
+        lessonEditorMainActivities[actIdx].duration = tmpl.duration || '';
+      }
+      renderMainActivities();
+    }
+
+    // ---- UDL Chips ----
+
+    function renderUdlChips(principle, selected) {
+      var container = document.getElementById('lsnChips-' + principle);
+      if (!container) return;
+      var strategies = (lessonUdlStrategiesCache && lessonUdlStrategiesCache[principle]) ? lessonUdlStrategiesCache[principle] : [];
+      if (strategies.length === 0) {
+        container.innerHTML = '<span style="font-size:11px; color:#94a3b8;">Loading...</span>';
+        return;
+      }
+      var selectedSet = {};
+      for (var s = 0; s < selected.length; s++) {
+        selectedSet[selected[s]] = true;
+      }
+      var html = '';
+      for (var i = 0; i < strategies.length; i++) {
+        var isSelected = selectedSet[strategies[i]] ? ' selected' : '';
+        html += '<span class="lsn-strategy-chip' + isSelected + '" data-principle="' + principle + '" onclick="toggleUdlChip(this)">' + escapeHtml(strategies[i]) + '</span>';
+      }
+      container.innerHTML = html;
+    }
+
+    function toggleUdlChip(el) {
+      var cls = el.className;
+      if (cls.indexOf('selected') >= 0) {
+        el.className = cls.replace(' selected', '');
+      } else {
+        el.className = cls + ' selected';
+      }
+      updateUdlBadge();
+    }
+
+    function updateUdlBadge() {
+      var total = 0;
+      var principles = ['representation', 'actionExpression', 'engagement'];
+      for (var p = 0; p < principles.length; p++) {
+        var chips = document.querySelectorAll('#lsnChips-' + principles[p] + ' .lsn-strategy-chip.selected');
+        total += chips.length;
+        var customEl = document.getElementById('lsnUdlCustom-' + principles[p]);
+        if (customEl && customEl.value.trim()) total++;
+      }
+      var badge = document.getElementById('lsnUdlBadge');
+      if (badge) {
+        badge.textContent = String(total);
+        badge.className = total > 0 ? 'lsn-section-badge' : 'lsn-section-badge empty';
+      }
+    }
+
+    function getSelectedUdlStrategies(principle) {
+      var chips = document.querySelectorAll('#lsnChips-' + principle + ' .lsn-strategy-chip.selected');
+      var result = [];
+      for (var i = 0; i < chips.length; i++) {
+        result.push(chips[i].textContent);
+      }
+      return result;
+    }
+
+    // ---- Success Criteria (dynamic list) ----
+
+    function addSuccessCriteria() {
+      syncSuccessCriteriaFromDom();
+      lessonEditorSuccessCriteria.push('');
+      renderSuccessCriteria();
+      updateAssessBadge();
+    }
+
+    function removeSuccessCriteria(idx) {
+      syncSuccessCriteriaFromDom();
+      lessonEditorSuccessCriteria.splice(idx, 1);
+      renderSuccessCriteria();
+      updateAssessBadge();
+    }
+
+    function renderSuccessCriteria() {
+      var container = document.getElementById('lsnSuccessCriteriaList');
+      if (!container) return;
+      if (lessonEditorSuccessCriteria.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < lessonEditorSuccessCriteria.length; i++) {
+        html += '<div class="lsn-list-item">';
+        html += '<input type="text" class="form-input lsn-sc-input" data-sc-idx="' + i + '" value="' + escapeHtml(lessonEditorSuccessCriteria[i] || '') + '" placeholder="I can...">';
+        html += '<button class="lsn-list-remove" onclick="removeSuccessCriteria(' + i + ')" title="Remove">&times;</button>';
+        html += '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function syncSuccessCriteriaFromDom() {
+      var inputs = document.querySelectorAll('.lsn-sc-input');
+      for (var i = 0; i < inputs.length; i++) {
+        var idx = parseInt(inputs[i].getAttribute('data-sc-idx'));
+        if (idx >= 0 && idx < lessonEditorSuccessCriteria.length) {
+          lessonEditorSuccessCriteria[idx] = inputs[i].value.trim();
+        }
+      }
+    }
+
+    function updateAssessBadge() {
+      var total = 0;
+      var fa = document.getElementById('lsnFormativeAssessment');
+      if (fa && fa.value.trim()) total++;
+      total += lessonEditorSuccessCriteria.length;
+      var badge = document.getElementById('lsnAssessBadge');
+      if (badge) {
+        badge.textContent = String(total);
+        badge.className = total > 0 ? 'lsn-section-badge' : 'lsn-section-badge empty';
+      }
+    }
+
+    // ---- Assessment Template ----
+
+    function applyAssessmentTemplate() {
+      var sel = document.getElementById('lsnAssessSelect');
+      if (!sel || sel.value === '') return;
+      var idx = parseInt(sel.value);
+      if (!lessonAssessmentStrategiesCache || idx < 0 || idx >= lessonAssessmentStrategiesCache.length) return;
+      var strat = lessonAssessmentStrategiesCache[idx];
+      var fa = document.getElementById('lsnFormativeAssessment');
+      if (fa) {
+        var current = fa.value.trim();
+        var line = strat.name + ': ' + strat.description + ' (' + strat.timing + ')';
+        fa.value = current ? (current + '\n' + line) : line;
+      }
+      updateAssessBadge();
+    }
+
+</script>

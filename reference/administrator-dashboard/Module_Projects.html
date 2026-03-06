@@ -1,0 +1,1592 @@
+<script>
+/**
+ * Projects Module — Waterfall project management for school initiatives
+ *
+ * Registers as App.ModuleRegistry.projects.
+ * Admin-only: project list, project detail with phases/tasks, timeline view.
+ */
+
+App.ModuleRegistry.projects = {
+
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      overviewData: null,
+      currentProjectId: null,
+      projectDetail: null,
+      timelineData: null,
+      risksData: null,
+      heatMapData: null,
+      activityData: null,
+      workloadData: null,
+      filters: { status: '', owner_id: '' },
+      expandedPhases: {},    // phaseId → boolean
+      expandedTasks: {},     // taskId → boolean (comment expansion)
+      chartInstances: {},    // key → Chart.js instance
+      detailTab: 'details'   // details | activity | timeline
+    };
+
+    // ── DOM Refs ──
+    var viewContainer;
+
+    // ── Build Layout ──
+    function buildLayout() {
+      container.innerHTML = '';
+      viewContainer = ClientUtils.el('div', { className: 'relative' });
+      container.appendChild(viewContainer);
+      switchView('list');
+    }
+
+    function destroyCharts() {
+      Object.keys(state.chartInstances).forEach(function(key) {
+        if (state.chartInstances[key] && typeof state.chartInstances[key].destroy === 'function') {
+          state.chartInstances[key].destroy();
+        }
+      });
+      state.chartInstances = {};
+    }
+
+    function switchView(viewKey, opts) {
+      destroyCharts();
+      viewContainer.innerHTML = '';
+      if (viewKey === 'list') renderProjectList();
+      else if (viewKey === 'detail') renderProjectDetail(opts && opts.projectId);
+      else if (viewKey === 'timeline') renderTimeline(opts && opts.projectId);
+      else if (viewKey === 'resource') renderResourceView();
+    }
+
+    // ═══════════════════════════════════════════════
+    // Project List (Overview)
+    // ═══════════════════════════════════════════════
+
+    async function renderProjectList() {
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getProjectOverview(state.filters);
+        state.overviewData = data;
+        LoadingSpinner.hide(viewContainer);
+        buildProjectListUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load projects: ' + err.message);
+      }
+    }
+
+    function buildProjectListUI(data) {
+      viewContainer.innerHTML = '';
+      var projects = data.projects || [];
+      var stats = data.stats || {};
+
+      // ── Filter Bar ──
+      var filterBar = ClientUtils.el('div', { className: 'filter-bar' });
+
+      var statusSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() { state.filters.status = this.value; renderProjectList(); }
+      });
+      statusSelect.innerHTML = '<option value="">All Statuses</option>' +
+        '<option value="planning">Planning</option>' +
+        '<option value="active">Active</option>' +
+        '<option value="on_hold">On Hold</option>' +
+        '<option value="completed">Completed</option>' +
+        '<option value="cancelled">Cancelled</option>';
+      statusSelect.value = state.filters.status;
+
+      // Build owner dropdown from loaded projects
+      var ownerMap = {};
+      projects.forEach(function(p) { ownerMap[p.ownerId] = p.ownerName; });
+      var ownerSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: function() { state.filters.owner_id = this.value; renderProjectList(); }
+      });
+      ownerSelect.innerHTML = '<option value="">All Owners</option>';
+      Object.keys(ownerMap).forEach(function(id) {
+        var opt = ClientUtils.el('option', { value: id }, [ownerMap[id]]);
+        ownerSelect.appendChild(opt);
+      });
+      ownerSelect.value = state.filters.owner_id;
+
+      var clearBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { state.filters = { status: '', owner_id: '' }; renderProjectList(); }
+      }, ['Clear']);
+
+      var spacer = ClientUtils.el('div', { style: 'flex:1' });
+
+      var resourceBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { switchView('resource'); }
+      }, ['👥 Resource View']);
+
+      var newBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showCreateProjectModal(); }
+      }, ['+ New Project']);
+
+      filterBar.appendChild(statusSelect);
+      filterBar.appendChild(ownerSelect);
+      filterBar.appendChild(clearBtn);
+      filterBar.appendChild(spacer);
+      filterBar.appendChild(resourceBtn);
+      filterBar.appendChild(newBtn);
+      viewContainer.appendChild(filterBar);
+
+      // ── Stats Grid ──
+      var statsGrid = ClientUtils.el('div', { className: 'stats-grid' });
+      var statItems = [
+        { label: 'Total Projects', value: stats.total || 0, cls: '' },
+        { label: 'Active', value: stats.active || 0, cls: '' },
+        { label: 'Overdue', value: stats.overdue || 0, cls: stats.overdue > 0 ? 'stat-card--danger' : '' },
+        { label: 'Completed', value: stats.completed || 0, cls: '' }
+      ];
+      statItems.forEach(function(s) {
+        var card = ClientUtils.el('div', { className: 'stat-card ' + s.cls });
+        card.innerHTML = '<div class="stat-card__value">' + s.value + '</div>' +
+          '<div class="stat-card__label">' + s.label + '</div>';
+        statsGrid.appendChild(card);
+      });
+      viewContainer.appendChild(statsGrid);
+
+      // ── Data Table ──
+      var tableCard = ClientUtils.el('div', { className: 'card' });
+      viewContainer.appendChild(tableCard);
+
+      DataTable.render(tableCard, {
+        columns: [
+          { key: 'title', label: 'Project', sortable: true, render: function(val) {
+            return '<span style="color:var(--color-primary);font-weight:500;cursor:pointer">' + ClientUtils.escapeHtml(val) + '</span>';
+          }},
+          { key: 'ownerName', label: 'Owner', sortable: true },
+          { key: 'status', label: 'Status', sortable: true, render: function(val) {
+            return StatusBadge.html(val);
+          }},
+          { key: 'phaseCount', label: 'Phases', sortable: true, width: '70px' },
+          { key: 'taskCount', label: 'Tasks', sortable: true, width: '70px' },
+          { key: 'riskCount', label: 'Risks', sortable: true, width: '80px', render: function(val, row) {
+            var html = String(val || 0);
+            if (row.highRiskCount > 0) {
+              html += ' <span class="proj-risk__badge--high">⚠ ' + row.highRiskCount + '</span>';
+            }
+            return html;
+          }},
+          { key: 'startDate', label: 'Start', sortable: true, render: function(val) {
+            return val ? ClientUtils.formatDate(val) : '—';
+          }},
+          { key: 'targetEndDate', label: 'Target End', sortable: true, render: function(val) {
+            return val ? ClientUtils.formatDate(val) : '—';
+          }},
+          { key: 'progress', label: 'Progress', sortable: true, width: '130px', render: function(val, row) {
+            var barClass = val === 100 ? ' proj-progress__bar--success' : '';
+            return '<div style="display:flex;align-items:center;gap:8px">' +
+              '<div class="proj-progress"><div class="proj-progress__bar' + barClass + '" style="width:' + val + '%"></div></div>' +
+              '<span class="proj-progress__label">' + val + '%</span></div>';
+          }}
+        ],
+        data: projects,
+        onRowClick: function(row) {
+          state.currentProjectId = row.id;
+          switchView('detail', { projectId: row.id });
+        },
+        pageSize: 20
+      });
+    }
+
+    // ── Create Project Modal ──
+    function showCreateProjectModal() {
+      var form = ClientUtils.el('div');
+      form.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Title *</label>' +
+          '<input type="text" class="form-input" id="proj-title" placeholder="Project title">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Description</label>' +
+          '<textarea class="form-input" id="proj-desc" rows="3" placeholder="Project description"></textarea>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Owner *</label>' +
+          '<div id="proj-owner-picker"></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:var(--space-md)">' +
+          '<div class="form-group" style="flex:1">' +
+            '<label class="form-label">Start Date</label>' +
+            '<input type="date" class="form-input" id="proj-start">' +
+          '</div>' +
+          '<div class="form-group" style="flex:1">' +
+            '<label class="form-label">Target End Date</label>' +
+            '<input type="date" class="form-input" id="proj-end">' +
+          '</div>' +
+        '</div>';
+
+      var modal = Modal.open({
+        title: 'New Project',
+        body: form,
+        confirmLabel: 'Create Project',
+        onConfirm: async function() {
+          var title = document.getElementById('proj-title').value.trim();
+          var desc = document.getElementById('proj-desc').value.trim();
+          var start = document.getElementById('proj-start').value;
+          var end = document.getElementById('proj-end').value;
+
+          if (!title) { Toast.error('Title is required'); return; }
+          if (!selectedOwnerId) { Toast.error('Owner is required'); return; }
+
+          try {
+            await ServerAPI.createProject({
+              title: title,
+              description: desc,
+              owner_id: selectedOwnerId,
+              start_date: start,
+              target_end_date: end
+            });
+            Modal.close(modal);
+            Toast.success('Project created');
+            renderProjectList();
+          } catch (err) {
+            Toast.error('Failed to create project: ' + err.message);
+          }
+        }
+      });
+
+      var selectedOwnerId = null;
+      StaffSelector.render(document.getElementById('proj-owner-picker'), {
+        placeholder: 'Select project owner',
+        onSelect: function(staff) { selectedOwnerId = staff.id; }
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // Project Detail
+    // ═══════════════════════════════════════════════
+
+    async function renderProjectDetail(projectId) {
+      projectId = projectId || state.currentProjectId;
+      if (!projectId) { switchView('list'); return; }
+      state.currentProjectId = projectId;
+      state.expandedPhases = {};
+
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getProjectDetail(projectId);
+        state.projectDetail = data;
+        LoadingSpinner.hide(viewContainer);
+        buildProjectDetailUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load project: ' + err.message);
+      }
+    }
+
+    function buildProjectDetailUI(data) {
+      viewContainer.innerHTML = '';
+      var proj = data.project;
+      var phases = data.phases || [];
+      var tasksByPhase = data.tasksByPhase || {};
+      var stats = data.stats || {};
+
+      // ── Back Link ──
+      var back = ClientUtils.el('a', {
+        className: 'proj-header__back',
+        onClick: function() { switchView('list'); }
+      }, ['← Back to Projects']);
+      viewContainer.appendChild(back);
+
+      // ── Sub-Nav Tabs ──
+      var subNav = ClientUtils.el('div', { className: 'proj-subnav' });
+      ['details', 'activity', 'timeline'].forEach(function(tab) {
+        var label = tab.charAt(0).toUpperCase() + tab.slice(1);
+        var btn = ClientUtils.el('button', {
+          className: 'proj-subnav__tab' + (state.detailTab === tab ? ' proj-subnav__tab--active' : ''),
+          onClick: function() {
+            state.detailTab = tab;
+            if (tab === 'timeline') {
+              switchView('timeline', { projectId: proj.id });
+            } else if (tab === 'activity') {
+              renderActivityView(proj.id);
+            } else {
+              renderProjectDetail(proj.id);
+            }
+          }
+        }, [label]);
+        subNav.appendChild(btn);
+      });
+      viewContainer.appendChild(subNav);
+
+      // If not on details tab, don't render the rest
+      if (state.detailTab !== 'details') return;
+
+      // ── Header Card ──
+      var headerCard = ClientUtils.el('div', { className: 'card mb-lg' });
+      var header = ClientUtils.el('div', { className: 'proj-header' });
+
+      var info = ClientUtils.el('div', { className: 'proj-header__info' });
+      info.innerHTML =
+        '<div class="proj-header__name">' + ClientUtils.escapeHtml(proj.title) + '</div>' +
+        (proj.description ? '<div class="proj-header__desc">' + ClientUtils.escapeHtml(proj.description) + '</div>' : '') +
+        '<div class="proj-header__meta">' +
+          '<span>👤 ' + ClientUtils.escapeHtml(proj.ownerName) + '</span>' +
+          (proj.startDate ? '<span>📅 ' + ClientUtils.formatDate(proj.startDate) + ' — ' + (proj.targetEndDate ? ClientUtils.formatDate(proj.targetEndDate) : 'TBD') + '</span>' : '') +
+        '</div>' +
+        '<div style="margin-top:var(--space-md);display:flex;align-items:center;gap:var(--space-sm)">' +
+          '<div class="proj-progress proj-progress--lg"><div class="proj-progress__bar' + (proj.progress === 100 ? ' proj-progress__bar--success' : '') + '" style="width:' + proj.progress + '%"></div></div>' +
+          '<span class="proj-progress__label">' + proj.progress + '% complete</span>' +
+          (proj.isOverdue ? ' <span class="badge badge--danger">Overdue</span>' : '') +
+        '</div>';
+
+      var actions = ClientUtils.el('div', { className: 'proj-header__actions' });
+
+      // Status dropdown
+      var statusSelect = ClientUtils.el('select', {
+        className: 'form-select',
+        onChange: async function() {
+          try {
+            await ServerAPI.updateProject(proj.id, { status: this.value });
+            Toast.success('Status updated');
+            renderProjectDetail(proj.id);
+          } catch (err) {
+            Toast.error('Failed to update status: ' + err.message);
+          }
+        }
+      });
+      ['planning', 'active', 'on_hold', 'completed', 'cancelled'].forEach(function(s) {
+        var opt = ClientUtils.el('option', { value: s }, [s.replace(/_/g, ' ')]);
+        if (s === proj.status) opt.selected = true;
+        statusSelect.appendChild(opt);
+      });
+      actions.appendChild(statusSelect);
+
+      // Timeline button
+      var timelineBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-secondary',
+        onClick: function() { switchView('timeline', { projectId: proj.id }); }
+      }, ['📊 Timeline']);
+      actions.appendChild(timelineBtn);
+
+      // Delete button
+      var deleteBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-danger',
+        onClick: async function() {
+          if (!confirm('Delete "' + proj.title + '" and all its phases, tasks, risks, activity, and comments? This cannot be undone.')) return;
+          try {
+            await ServerAPI.deleteProject(proj.id);
+            Toast.success('Project deleted');
+            switchView('list');
+          } catch (err) {
+            Toast.error('Failed to delete project: ' + err.message);
+          }
+        }
+      }, ['Delete']);
+      actions.appendChild(deleteBtn);
+
+      header.appendChild(info);
+      header.appendChild(actions);
+      headerCard.appendChild(header);
+      viewContainer.appendChild(headerCard);
+
+      // ── Phases Section ──
+      var phasesCard = ClientUtils.el('div', { className: 'card mb-lg' });
+      var phasesHeader = ClientUtils.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md)' });
+      phasesHeader.innerHTML = '<h3 style="margin:0;font-size:var(--font-size-lg)">Project Phases</h3>';
+
+      var addPhaseBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showPhaseModal(proj.id, phases); }
+      }, ['+ Add Phase']);
+      phasesHeader.appendChild(addPhaseBtn);
+      phasesCard.appendChild(phasesHeader);
+
+      if (phases.length === 0) {
+        phasesCard.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm', style: 'padding:var(--space-lg);text-align:center' }, ['No phases yet. Add a phase to get started.']));
+      } else {
+        phases.forEach(function(phase) {
+          var phaseTasks = tasksByPhase[phase.id] || [];
+          phasesCard.appendChild(buildPhaseCard(proj, phase, phaseTasks, phases));
+        });
+      }
+
+      viewContainer.appendChild(phasesCard);
+
+      // ── Risk Register Section ──
+      var riskSection = ClientUtils.el('div', { className: 'proj-risk__section' });
+      viewContainer.appendChild(riskSection);
+      loadRisksSection(riskSection, proj.id);
+    }
+
+    // ── Phase Card ──
+    function buildPhaseCard(proj, phase, tasks, allPhases) {
+      var isExpanded = state.expandedPhases[phase.id] || false;
+
+      var card = ClientUtils.el('div', { className: 'proj-phase proj-phase--' + phase.status });
+
+      // Header row
+      var header = ClientUtils.el('div', { className: 'proj-phase__header' });
+
+      var orderBadge = ClientUtils.el('div', { className: 'proj-phase__order' }, [String(phase.phaseOrder)]);
+      var title = ClientUtils.el('div', { className: 'proj-phase__title' }, [phase.title]);
+      var statusBadge = ClientUtils.el('span');
+      statusBadge.innerHTML = StatusBadge.html(phase.status);
+
+      var toggle = ClientUtils.el('button', {
+        className: 'proj-phase__toggle' + (isExpanded ? ' expanded' : ''),
+        onClick: function(e) {
+          e.stopPropagation();
+          state.expandedPhases[phase.id] = !state.expandedPhases[phase.id];
+          var taskContainer = card.querySelector('.proj-phase__tasks');
+          if (taskContainer) taskContainer.classList.toggle('hidden');
+          toggle.classList.toggle('expanded');
+        }
+      }, ['▶']);
+
+      header.appendChild(orderBadge);
+      header.appendChild(title);
+      header.appendChild(statusBadge);
+      header.appendChild(toggle);
+
+      header.addEventListener('click', function() {
+        state.expandedPhases[phase.id] = !state.expandedPhases[phase.id];
+        var taskContainer = card.querySelector('.proj-phase__tasks');
+        if (taskContainer) taskContainer.classList.toggle('hidden');
+        toggle.classList.toggle('expanded');
+      });
+
+      card.appendChild(header);
+
+      // Body: description, dates, dependency
+      if (phase.description) {
+        card.appendChild(ClientUtils.el('div', { className: 'proj-phase__body' }, [phase.description]));
+      }
+
+      if (phase.startDate || phase.endDate) {
+        var dateStr = (phase.startDate ? ClientUtils.formatDate(phase.startDate) : '?') + ' — ' + (phase.endDate ? ClientUtils.formatDate(phase.endDate) : '?');
+        card.appendChild(ClientUtils.el('div', { className: 'proj-phase__dates' }, ['📅 ' + dateStr]));
+      }
+
+      if (phase.dependsOnPhaseTitle) {
+        card.appendChild(ClientUtils.el('div', { className: 'proj-phase__dependency' }, ['Depends on: ' + phase.dependsOnPhaseTitle]));
+      }
+
+      // Footer: task count, progress, actions
+      var footer = ClientUtils.el('div', { className: 'proj-phase__footer' });
+
+      var taskInfo = ClientUtils.el('span');
+      taskInfo.innerHTML = tasks.length + ' ' + ClientUtils.pluralize(tasks.length, 'task', 'tasks') +
+        (tasks.length > 0 ? ' · ' + phase.progress + '% complete' : '');
+      footer.appendChild(taskInfo);
+
+      var phaseActions = ClientUtils.el('div', { className: 'proj-phase__actions' });
+
+      var editPhaseBtn = ClientUtils.el('button', {
+        className: 'btn btn-xs btn-secondary',
+        onClick: function(e) {
+          e.stopPropagation();
+          showPhaseModal(proj.id, allPhases, phase);
+        }
+      }, ['Edit']);
+
+      var deletePhaseBtn = ClientUtils.el('button', {
+        className: 'btn btn-xs btn-danger',
+        onClick: async function(e) {
+          e.stopPropagation();
+          if (!confirm('Delete phase "' + phase.title + '" and all its tasks?')) return;
+          try {
+            await ServerAPI.deleteProjectPhase(phase.id);
+            Toast.success('Phase deleted');
+            renderProjectDetail(proj.id);
+          } catch (err) {
+            Toast.error('Failed to delete phase: ' + err.message);
+          }
+        }
+      }, ['Delete']);
+
+      // Phase status dropdown
+      var phaseStatusSelect = ClientUtils.el('select', {
+        className: 'form-select form-select--sm',
+        onClick: function(e) { e.stopPropagation(); },
+        onChange: async function(e) {
+          e.stopPropagation();
+          try {
+            await ServerAPI.updateProjectPhase(phase.id, { status: this.value });
+            Toast.success('Phase status updated');
+            renderProjectDetail(proj.id);
+          } catch (err) {
+            Toast.error('Failed to update phase: ' + err.message);
+          }
+        }
+      });
+      ['not_started', 'in_progress', 'completed', 'blocked'].forEach(function(s) {
+        var opt = ClientUtils.el('option', { value: s }, [s.replace(/_/g, ' ')]);
+        if (s === phase.status) opt.selected = true;
+        phaseStatusSelect.appendChild(opt);
+      });
+
+      phaseActions.appendChild(phaseStatusSelect);
+      phaseActions.appendChild(editPhaseBtn);
+      phaseActions.appendChild(deletePhaseBtn);
+      footer.appendChild(phaseActions);
+      card.appendChild(footer);
+
+      // ── Tasks Container ──
+      var tasksContainer = ClientUtils.el('div', { className: 'proj-phase__tasks' + (isExpanded ? '' : ' hidden') });
+
+      if (tasks.length === 0) {
+        tasksContainer.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm', style: 'padding:var(--space-sm) 0' }, ['No tasks in this phase.']));
+      } else {
+        tasks.forEach(function(task) {
+          tasksContainer.appendChild(buildTaskRow(proj, phase, task));
+        });
+      }
+
+      // Add task button
+      var addTaskBtn = ClientUtils.el('button', {
+        className: 'btn btn-xs btn-secondary',
+        style: 'margin-top:var(--space-sm)',
+        onClick: function(e) {
+          e.stopPropagation();
+          showTaskModal(proj.id, phase.id);
+        }
+      }, ['+ Add Task']);
+      tasksContainer.appendChild(addTaskBtn);
+
+      card.appendChild(tasksContainer);
+      return card;
+    }
+
+    // ── Task Row ──
+    function buildTaskRow(proj, phase, task) {
+      var wrapper = ClientUtils.el('div');
+
+      var row = ClientUtils.el('div', { className: 'proj-task' });
+
+      var title = ClientUtils.el('div', { className: 'proj-task__title' }, [task.title]);
+
+      var assignee = ClientUtils.el('div', { className: 'proj-task__assignee' });
+      if (task.assigneeName) {
+        assignee.innerHTML = '<span class="avatar avatar--xs">' + ClientUtils.initials(task.assigneeName) + '</span> ' + ClientUtils.escapeHtml(task.assigneeName);
+      } else {
+        assignee.innerHTML = '<span class="text-muted">Unassigned</span>';
+      }
+
+      var due = ClientUtils.el('div', { className: 'proj-task__due' + (task.isOverdue ? ' overdue' : '') });
+      due.textContent = task.dueDate ? ClientUtils.formatDate(task.dueDate) : '—';
+
+      // Comment toggle button
+      var commentBtn = ClientUtils.el('button', {
+        className: 'proj-comment__toggle',
+        title: 'Comments',
+        onClick: function(e) {
+          e.stopPropagation();
+          var commentsEl = wrapper.querySelector('.proj-comment__list');
+          if (commentsEl) {
+            commentsEl.classList.toggle('hidden');
+            state.expandedTasks[task.id] = !commentsEl.classList.contains('hidden');
+          } else {
+            state.expandedTasks[task.id] = true;
+            var container = ClientUtils.el('div', { className: 'proj-comment__list' });
+            wrapper.appendChild(container);
+            loadTaskComments(container, task);
+          }
+        }
+      }, ['💬']);
+
+      // Quick status dropdown
+      var statusSelect = ClientUtils.el('select', {
+        className: 'form-select form-select--sm',
+        onClick: function(e) { e.stopPropagation(); },
+        onChange: async function(e) {
+          e.stopPropagation();
+          try {
+            await ServerAPI.updateProjectTask(task.id, { status: this.value });
+            Toast.success('Task updated');
+            renderProjectDetail(proj.id);
+          } catch (err) {
+            Toast.error('Failed to update task: ' + err.message);
+          }
+        }
+      });
+      ['pending', 'in_progress', 'completed', 'deferred'].forEach(function(s) {
+        var opt = ClientUtils.el('option', { value: s }, [s.replace(/_/g, ' ')]);
+        if (s === task.status) opt.selected = true;
+        statusSelect.appendChild(opt);
+      });
+
+      var actions = ClientUtils.el('div', { className: 'proj-task__actions' });
+
+      var editBtn = ClientUtils.el('button', {
+        className: 'btn btn-xs btn-secondary',
+        onClick: function(e) {
+          e.stopPropagation();
+          showTaskModal(proj.id, phase.id, task);
+        }
+      }, ['Edit']);
+
+      var deleteBtn = ClientUtils.el('button', {
+        className: 'btn btn-xs btn-danger',
+        onClick: async function(e) {
+          e.stopPropagation();
+          if (!confirm('Delete task "' + task.title + '"?')) return;
+          try {
+            await ServerAPI.deleteProjectTask(task.id);
+            Toast.success('Task deleted');
+            renderProjectDetail(proj.id);
+          } catch (err) {
+            Toast.error('Failed to delete task: ' + err.message);
+          }
+        }
+      }, ['Delete']);
+
+      actions.appendChild(commentBtn);
+      actions.appendChild(statusSelect);
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+
+      row.appendChild(title);
+      row.appendChild(assignee);
+      row.appendChild(due);
+      row.appendChild(actions);
+
+      wrapper.appendChild(row);
+
+      // Auto-expand comments if previously expanded
+      if (state.expandedTasks[task.id]) {
+        var commentsContainer = ClientUtils.el('div', { className: 'proj-comment__list' });
+        wrapper.appendChild(commentsContainer);
+        loadTaskComments(commentsContainer, task);
+      }
+
+      return wrapper;
+    }
+
+    // ── Phase Modal (create/edit) ──
+    function showPhaseModal(projectId, allPhases, existing) {
+      var isEdit = !!existing;
+      var form = ClientUtils.el('div');
+      form.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Title *</label>' +
+          '<input type="text" class="form-input" id="phase-title" value="' + (isEdit ? ClientUtils.escapeHtml(existing.title) : '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Description</label>' +
+          '<textarea class="form-input" id="phase-desc" rows="2">' + (isEdit ? ClientUtils.escapeHtml(existing.description) : '') + '</textarea>' +
+        '</div>' +
+        '<div style="display:flex;gap:var(--space-md)">' +
+          '<div class="form-group" style="flex:1">' +
+            '<label class="form-label">Start Date</label>' +
+            '<input type="date" class="form-input" id="phase-start" value="' + (isEdit ? (existing.startDate || '') : '') + '">' +
+          '</div>' +
+          '<div class="form-group" style="flex:1">' +
+            '<label class="form-label">End Date</label>' +
+            '<input type="date" class="form-input" id="phase-end" value="' + (isEdit ? (existing.endDate || '') : '') + '">' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Depends On</label>' +
+          '<select class="form-select" id="phase-depends"></select>' +
+        '</div>';
+
+      var modal = Modal.open({
+        title: isEdit ? 'Edit Phase' : 'Add Phase',
+        body: form,
+        confirmLabel: isEdit ? 'Save Changes' : 'Add Phase',
+        onConfirm: async function() {
+          var title = document.getElementById('phase-title').value.trim();
+          if (!title) { Toast.error('Title is required'); return; }
+
+          var payload = {
+            title: title,
+            description: document.getElementById('phase-desc').value.trim(),
+            start_date: document.getElementById('phase-start').value,
+            end_date: document.getElementById('phase-end').value,
+            depends_on_phase_id: document.getElementById('phase-depends').value
+          };
+
+          try {
+            if (isEdit) {
+              await ServerAPI.updateProjectPhase(existing.id, payload);
+              Toast.success('Phase updated');
+            } else {
+              payload.project_id = projectId;
+              await ServerAPI.createProjectPhase(payload);
+              Toast.success('Phase added');
+            }
+            Modal.close(modal);
+            renderProjectDetail(projectId);
+          } catch (err) {
+            Toast.error('Failed to save phase: ' + err.message);
+          }
+        }
+      });
+
+      // Populate depends-on dropdown
+      var depSelect = document.getElementById('phase-depends');
+      depSelect.innerHTML = '<option value="">None</option>';
+      allPhases.forEach(function(p) {
+        if (isEdit && p.id === existing.id) return; // Can't depend on self
+        var opt = ClientUtils.el('option', { value: p.id }, [p.phaseOrder + '. ' + p.title]);
+        if (isEdit && existing.dependsOnPhaseId === p.id) opt.selected = true;
+        depSelect.appendChild(opt);
+      });
+    }
+
+    // ── Task Modal (create/edit) ──
+    function showTaskModal(projectId, phaseId, existing) {
+      var isEdit = !!existing;
+      var form = ClientUtils.el('div');
+      form.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Title *</label>' +
+          '<input type="text" class="form-input" id="task-title" value="' + (isEdit ? ClientUtils.escapeHtml(existing.title) : '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Assigned To</label>' +
+          '<div id="task-assignee-picker"></div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Due Date</label>' +
+          '<input type="date" class="form-input" id="task-due" value="' + (isEdit ? (existing.dueDate || '') : '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Notes</label>' +
+          '<textarea class="form-input" id="task-notes" rows="3">' + (isEdit ? ClientUtils.escapeHtml(existing.notes) : '') + '</textarea>' +
+        '</div>';
+
+      var selectedAssigneeId = isEdit ? (existing.assignedTo || null) : null;
+
+      var modal = Modal.open({
+        title: isEdit ? 'Edit Task' : 'Add Task',
+        body: form,
+        confirmLabel: isEdit ? 'Save Changes' : 'Add Task',
+        onConfirm: async function() {
+          var title = document.getElementById('task-title').value.trim();
+          if (!title) { Toast.error('Title is required'); return; }
+
+          var payload = {
+            title: title,
+            assigned_to: selectedAssigneeId || '',
+            due_date: document.getElementById('task-due').value,
+            notes: document.getElementById('task-notes').value.trim()
+          };
+
+          try {
+            if (isEdit) {
+              await ServerAPI.updateProjectTask(existing.id, payload);
+              Toast.success('Task updated');
+            } else {
+              payload.phase_id = phaseId;
+              payload.project_id = projectId;
+              await ServerAPI.createProjectTask(payload);
+              Toast.success('Task added');
+            }
+            Modal.close(modal);
+            renderProjectDetail(projectId);
+          } catch (err) {
+            Toast.error('Failed to save task: ' + err.message);
+          }
+        }
+      });
+
+      StaffSelector.render(document.getElementById('task-assignee-picker'), {
+        placeholder: 'Select assignee (optional)',
+        selectedId: selectedAssigneeId,
+        onSelect: function(staff) { selectedAssigneeId = staff.id; }
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // Timeline (Gantt-style)
+    // ═══════════════════════════════════════════════
+
+    async function renderTimeline(projectId) {
+      projectId = projectId || state.currentProjectId;
+      if (!projectId) { switchView('list'); return; }
+
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getProjectTimeline(projectId);
+        state.timelineData = data;
+        LoadingSpinner.hide(viewContainer);
+        buildTimelineUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load timeline: ' + err.message);
+      }
+    }
+
+    function buildTimelineUI(data) {
+      viewContainer.innerHTML = '';
+      var proj = data.project;
+      var phases = data.phases || [];
+      var range = data.dateRange;
+
+      // Back link
+      var back = ClientUtils.el('a', {
+        className: 'proj-header__back',
+        onClick: function() { state.detailTab = 'details'; switchView('detail', { projectId: proj.id }); }
+      }, ['← Back to ' + proj.title]);
+      viewContainer.appendChild(back);
+
+      // Timeline card
+      var card = ClientUtils.el('div', { className: 'card proj-timeline' });
+
+      var header = ClientUtils.el('div', { className: 'proj-timeline__header' });
+      header.innerHTML = '<h3 style="margin:0">Project Timeline</h3>' +
+        '<span class="text-sm text-muted">' +
+        (proj.startDate ? ClientUtils.formatDate(proj.startDate) : '?') +
+        ' — ' +
+        (proj.targetEndDate ? ClientUtils.formatDate(proj.targetEndDate) : '?') +
+        '</span>';
+      card.appendChild(header);
+
+      if (phases.length === 0) {
+        card.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm', style: 'text-align:center;padding:var(--space-xl)' }, ['No phases to display. Add phases to see the timeline.']));
+        viewContainer.appendChild(card);
+        return;
+      }
+
+      var minDate = new Date(range.min);
+      var maxDate = new Date(range.max);
+      var totalDays = Math.max(1, daysBetween_(minDate, maxDate));
+
+      // Chart container
+      var chart = ClientUtils.el('div', { className: 'proj-timeline__chart' });
+
+      // Month labels
+      var monthsRow = ClientUtils.el('div', { className: 'proj-timeline__months' });
+      var labelPlaceholder = ClientUtils.el('div', { style: 'width:160px;flex-shrink:0' });
+      monthsRow.appendChild(labelPlaceholder);
+
+      var monthTrack = ClientUtils.el('div', { style: 'flex:1;display:flex;position:relative' });
+      var months = getMonthLabels_(minDate, maxDate, totalDays);
+      months.forEach(function(m) {
+        var monthEl = ClientUtils.el('div', {
+          className: 'proj-timeline__month',
+          style: 'width:' + m.width + '%'
+        }, [m.label]);
+        monthTrack.appendChild(monthEl);
+      });
+      monthsRow.appendChild(monthTrack);
+      chart.appendChild(monthsRow);
+
+      // Phase rows
+      phases.forEach(function(phase) {
+        var row = ClientUtils.el('div', { className: 'proj-timeline__row' });
+
+        var label = ClientUtils.el('div', { className: 'proj-timeline__label' }, [phase.title]);
+        row.appendChild(label);
+
+        var track = ClientUtils.el('div', { className: 'proj-timeline__track' });
+
+        if (phase.startDate && phase.endDate) {
+          var phaseStart = new Date(phase.startDate);
+          var phaseEnd = new Date(phase.endDate);
+          var leftDays = daysBetween_(minDate, phaseStart);
+          var widthDays = Math.max(1, daysBetween_(phaseStart, phaseEnd));
+          var leftPct = Math.max(0, (leftDays / totalDays) * 100);
+          var widthPct = Math.min(100 - leftPct, (widthDays / totalDays) * 100);
+
+          var bar = ClientUtils.el('div', {
+            className: 'proj-timeline__bar proj-timeline__bar--' + phase.status,
+            style: 'left:' + leftPct + '%;width:' + Math.max(1, widthPct) + '%',
+            title: phase.title + ': ' + ClientUtils.formatDate(phase.startDate) + ' — ' + ClientUtils.formatDate(phase.endDate)
+          });
+          track.appendChild(bar);
+        }
+
+        row.appendChild(track);
+        chart.appendChild(row);
+      });
+
+      // Today marker
+      var today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (today >= minDate && today <= maxDate) {
+        var todayDays = daysBetween_(minDate, today);
+        var todayPct = (todayDays / totalDays) * 100;
+
+        // Add today marker to each track
+        var tracks = chart.querySelectorAll('.proj-timeline__track');
+        for (var i = 0; i < tracks.length; i++) {
+          var marker = ClientUtils.el('div', {
+            className: 'proj-timeline__today',
+            style: 'left:' + todayPct + '%'
+          });
+          if (i === 0) {
+            var todayLabel = ClientUtils.el('div', { className: 'proj-timeline__today-label' }, ['Today']);
+            marker.appendChild(todayLabel);
+          }
+          tracks[i].appendChild(marker);
+        }
+      }
+
+      card.appendChild(chart);
+      viewContainer.appendChild(card);
+    }
+
+    // ── Timeline Helpers ──
+    function daysBetween_(a, b) {
+      var ms = Math.abs(b.getTime() - a.getTime());
+      return Math.floor(ms / (1000 * 60 * 60 * 24));
+    }
+
+    function getMonthLabels_(minDate, maxDate, totalDays) {
+      var labels = [];
+      var d = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+      var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      while (d <= maxDate) {
+        var nextMonth = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+        var monthStart = d < minDate ? minDate : d;
+        var monthEnd = nextMonth > maxDate ? maxDate : new Date(nextMonth - 1);
+        var days = daysBetween_(monthStart, monthEnd) + 1;
+        var widthPct = (days / totalDays) * 100;
+
+        labels.push({
+          label: monthNames[d.getMonth()] + ' ' + d.getFullYear(),
+          width: widthPct
+        });
+
+        d = nextMonth;
+      }
+      return labels;
+    }
+
+    // ═══════════════════════════════════════════════
+    // Risk Register
+    // ═══════════════════════════════════════════════
+
+    async function loadRisksSection(container, projectId) {
+      container.innerHTML = '';
+      var card = ClientUtils.el('div', { className: 'card' });
+
+      var header = ClientUtils.el('div', { className: 'proj-risk__header' });
+      header.innerHTML = '<h3>Risk Register</h3>';
+      var addRiskBtn = ClientUtils.el('button', {
+        className: 'btn btn-sm btn-primary',
+        onClick: function() { showRiskModal(projectId); }
+      }, ['+ Add Risk']);
+      header.appendChild(addRiskBtn);
+      card.appendChild(header);
+
+      try {
+        var risks = await ServerAPI.getProjectRisks(projectId);
+        state.risksData = risks;
+
+        if (!risks || risks.length === 0) {
+          card.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm', style: 'text-align:center;padding:var(--space-lg)' }, ['No risks identified. Add a risk to begin tracking.']));
+        } else {
+          var table = ClientUtils.el('table', { className: 'proj-risk__table' });
+          table.innerHTML =
+            '<thead><tr>' +
+              '<th>Risk</th><th>Category</th><th>Score</th>' +
+              '<th>Status</th><th>Owner</th><th>Actions</th>' +
+            '</tr></thead>';
+          var tbody = ClientUtils.el('tbody');
+
+          risks.forEach(function(risk) {
+            var scoreClass = risk.riskScore >= 15 ? '--high' : (risk.riskScore >= 8 ? '--medium' : '--low');
+            var tr = ClientUtils.el('tr');
+            tr.innerHTML =
+              '<td><strong>' + ClientUtils.escapeHtml(risk.title) + '</strong>' +
+                (risk.description ? '<br><small class="text-muted">' + ClientUtils.escapeHtml(risk.description).substring(0, 80) + '</small>' : '') +
+              '</td>' +
+              '<td><span class="proj-risk__category">' + ClientUtils.escapeHtml(risk.category) + '</span></td>' +
+              '<td><span class="proj-risk__score proj-risk__score' + scoreClass + '">' + risk.riskScore + '</span>' +
+                '<br><small class="text-muted">' + risk.likelihood + '×' + risk.impact + '</small></td>' +
+              '<td>' + StatusBadge.html(risk.status) + '</td>' +
+              '<td>' + ClientUtils.escapeHtml(risk.ownerName) + '</td>' +
+              '<td class="proj-risk__actions"></td>';
+
+            var actionsCell = tr.querySelector('.proj-risk__actions');
+            var editBtn = ClientUtils.el('button', {
+              title: 'Edit',
+              onClick: function() { showRiskModal(projectId, risk); }
+            }, ['✏️']);
+            var delBtn = ClientUtils.el('button', {
+              title: 'Delete',
+              onClick: async function() {
+                if (!confirm('Delete risk "' + risk.title + '"?')) return;
+                try {
+                  await ServerAPI.deleteProjectRisk(risk.id);
+                  Toast.success('Risk deleted');
+                  loadRisksSection(container, projectId);
+                } catch (err) {
+                  Toast.error('Failed to delete risk: ' + err.message);
+                }
+              }
+            }, ['🗑️']);
+            actionsCell.appendChild(editBtn);
+            actionsCell.appendChild(delBtn);
+
+            tbody.appendChild(tr);
+          });
+
+          table.appendChild(tbody);
+          card.appendChild(table);
+        }
+
+        container.appendChild(card);
+
+        // Heat map
+        var heatMapContainer = ClientUtils.el('div');
+        container.appendChild(heatMapContainer);
+        loadRiskHeatMap(heatMapContainer, projectId);
+
+      } catch (err) {
+        card.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm', style: 'padding:var(--space-md)' }, ['Failed to load risks.']));
+        container.appendChild(card);
+      }
+    }
+
+    async function loadRiskHeatMap(container, projectId) {
+      try {
+        var data = await ServerAPI.getRiskHeatMap(projectId);
+        state.heatMapData = data;
+        if (!data || data.totals.active === 0) return;
+
+        var card = ClientUtils.el('div', { className: 'proj-risk__heatmap' });
+        card.innerHTML = '<h4>Risk Heat Map</h4>';
+
+        // Grid: 6 cols (label + 5 impact), 6 rows (5 likelihood + axis)
+        var grid = ClientUtils.el('div', { className: 'proj-risk__heatmap-grid' });
+
+        var impactLabels = ['1', '2', '3', '4', '5'];
+        var likelihoodLabels = ['5', '4', '3', '2', '1'];
+
+        // Impact axis header row
+        grid.appendChild(ClientUtils.el('div', { className: 'proj-risk__heatmap-label' }, ['L\\I']));
+        impactLabels.forEach(function(l) {
+          grid.appendChild(ClientUtils.el('div', { className: 'proj-risk__heatmap-axis' }, [l]));
+        });
+
+        // Rows (likelihood 5→1, top to bottom)
+        for (var li = 4; li >= 0; li--) {
+          grid.appendChild(ClientUtils.el('div', { className: 'proj-risk__heatmap-label' }, [String(li + 1)]));
+          for (var ii = 0; ii < 5; ii++) {
+            var score = (li + 1) * (ii + 1);
+            var count = data.matrix[li][ii];
+            var colorClass = score >= 15 ? '--red' : (score >= 8 ? '--yellow' : '--green');
+            var hasRisks = count > 0 ? ' proj-risk__heatmap-cell--has-risks' : '';
+            var cell = ClientUtils.el('div', {
+              className: 'proj-risk__heatmap-cell proj-risk__heatmap-cell' + colorClass + hasRisks,
+              title: 'L' + (li + 1) + ' × I' + (ii + 1) + ' = ' + score + (count > 0 ? ' (' + count + ' risks)' : '')
+            }, [count > 0 ? String(count) : '']);
+            grid.appendChild(cell);
+          }
+        }
+
+        card.appendChild(grid);
+
+        // Summary
+        var summary = ClientUtils.el('div', { className: 'proj-risk__heatmap-summary' });
+        summary.innerHTML =
+          '<span>Total: <strong>' + data.totals.total + '</strong></span>' +
+          '<span>Active: <strong>' + data.totals.active + '</strong></span>' +
+          '<span style="color:var(--color-error)">High: <strong>' + data.totals.high + '</strong></span>' +
+          '<span style="color:#856404">Medium: <strong>' + data.totals.medium + '</strong></span>' +
+          '<span style="color:var(--color-success)">Low: <strong>' + data.totals.low + '</strong></span>';
+        card.appendChild(summary);
+
+        container.appendChild(card);
+      } catch (err) {
+        // Silent fail for heat map
+      }
+    }
+
+    function showRiskModal(projectId, existing) {
+      var isEdit = !!existing;
+      var form = ClientUtils.el('div');
+      form.innerHTML =
+        '<div class="form-group">' +
+          '<label class="form-label">Title *</label>' +
+          '<input type="text" class="form-input" id="risk-title" value="' + (isEdit ? ClientUtils.escapeHtml(existing.title) : '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Description</label>' +
+          '<textarea class="form-input" id="risk-desc" rows="2">' + (isEdit ? ClientUtils.escapeHtml(existing.description) : '') + '</textarea>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Category *</label>' +
+          '<select class="form-select" id="risk-category">' +
+            '<option value="technical">Technical</option>' +
+            '<option value="schedule">Schedule</option>' +
+            '<option value="resource">Resource</option>' +
+            '<option value="external">External</option>' +
+            '<option value="stakeholder">Stakeholder</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="proj-risk__slider-group">' +
+          '<label>Likelihood (1–5)</label>' +
+          '<div class="proj-risk__slider-row">' +
+            '<input type="range" id="risk-likelihood" min="1" max="5" value="' + (isEdit ? existing.likelihood : 3) + '">' +
+            '<span class="proj-risk__slider-value" id="risk-lk-val">' + (isEdit ? existing.likelihood : 3) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="proj-risk__slider-group">' +
+          '<label>Impact (1–5)</label>' +
+          '<div class="proj-risk__slider-row">' +
+            '<input type="range" id="risk-impact" min="1" max="5" value="' + (isEdit ? existing.impact : 3) + '">' +
+            '<span class="proj-risk__slider-value" id="risk-im-val">' + (isEdit ? existing.impact : 3) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="proj-risk__score-preview" id="risk-score-preview"></div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Mitigation Strategy</label>' +
+          '<textarea class="form-input" id="risk-mitigation" rows="2">' + (isEdit ? ClientUtils.escapeHtml(existing.mitigationStrategy) : '') + '</textarea>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="form-label">Owner</label>' +
+          '<div id="risk-owner-picker"></div>' +
+        '</div>' +
+        (isEdit ?
+          '<div class="form-group">' +
+            '<label class="form-label">Status</label>' +
+            '<select class="form-select" id="risk-status">' +
+              '<option value="identified">Identified</option>' +
+              '<option value="mitigating">Mitigating</option>' +
+              '<option value="accepted">Accepted</option>' +
+              '<option value="resolved">Resolved</option>' +
+              '<option value="closed">Closed</option>' +
+            '</select>' +
+          '</div>' : '');
+
+      var selectedOwnerId = isEdit ? (existing.ownerId || null) : null;
+
+      var modal = Modal.open({
+        title: isEdit ? 'Edit Risk' : 'Add Risk',
+        body: form,
+        confirmLabel: isEdit ? 'Save Changes' : 'Add Risk',
+        onConfirm: async function() {
+          var title = document.getElementById('risk-title').value.trim();
+          if (!title) { Toast.error('Title is required'); return; }
+
+          var payload = {
+            title: title,
+            description: document.getElementById('risk-desc').value.trim(),
+            category: document.getElementById('risk-category').value,
+            likelihood: parseInt(document.getElementById('risk-likelihood').value),
+            impact: parseInt(document.getElementById('risk-impact').value),
+            mitigation_strategy: document.getElementById('risk-mitigation').value.trim(),
+            owner_id: selectedOwnerId || ''
+          };
+
+          if (isEdit) {
+            var statusEl = document.getElementById('risk-status');
+            if (statusEl) payload.status = statusEl.value;
+          }
+
+          try {
+            if (isEdit) {
+              await ServerAPI.updateProjectRisk(existing.id, payload);
+              Toast.success('Risk updated');
+            } else {
+              payload.project_id = projectId;
+              await ServerAPI.createProjectRisk(payload);
+              Toast.success('Risk added');
+            }
+            Modal.close(modal);
+            // Reload risks section
+            var riskSection = viewContainer.querySelector('.proj-risk__section');
+            if (riskSection) loadRisksSection(riskSection, projectId);
+          } catch (err) {
+            Toast.error('Failed to save risk: ' + err.message);
+          }
+        }
+      });
+
+      // Set initial values for edit mode
+      if (isEdit) {
+        document.getElementById('risk-category').value = existing.category;
+        var statusEl = document.getElementById('risk-status');
+        if (statusEl) statusEl.value = existing.status;
+      }
+
+      // Slider interactivity
+      function updateScorePreview() {
+        var lk = parseInt(document.getElementById('risk-likelihood').value);
+        var im = parseInt(document.getElementById('risk-impact').value);
+        document.getElementById('risk-lk-val').textContent = lk;
+        document.getElementById('risk-im-val').textContent = im;
+        var score = lk * im;
+        var preview = document.getElementById('risk-score-preview');
+        var color = score >= 15 ? 'var(--color-error)' : (score >= 8 ? 'var(--color-warning)' : 'var(--color-success)');
+        preview.style.background = color;
+        preview.style.color = '#fff';
+        preview.textContent = 'Risk Score: ' + score;
+      }
+      document.getElementById('risk-likelihood').addEventListener('input', updateScorePreview);
+      document.getElementById('risk-impact').addEventListener('input', updateScorePreview);
+      updateScorePreview();
+
+      StaffSelector.render(document.getElementById('risk-owner-picker'), {
+        placeholder: 'Select risk owner (optional)',
+        selectedId: selectedOwnerId,
+        onSelect: function(staff) { selectedOwnerId = staff.id; }
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // Activity View
+    // ═══════════════════════════════════════════════
+
+    async function renderActivityView(projectId) {
+      projectId = projectId || state.currentProjectId;
+      if (!projectId) { switchView('list'); return; }
+
+      destroyCharts();
+      viewContainer.innerHTML = '';
+
+      // Back link
+      var back = ClientUtils.el('a', {
+        className: 'proj-header__back',
+        onClick: function() { switchView('list'); }
+      }, ['← Back to Projects']);
+      viewContainer.appendChild(back);
+
+      // Sub-nav (rebuild)
+      var subNav = ClientUtils.el('div', { className: 'proj-subnav' });
+      ['details', 'activity', 'timeline'].forEach(function(tab) {
+        var label = tab.charAt(0).toUpperCase() + tab.slice(1);
+        var btn = ClientUtils.el('button', {
+          className: 'proj-subnav__tab' + (tab === 'activity' ? ' proj-subnav__tab--active' : ''),
+          onClick: function() {
+            state.detailTab = tab;
+            if (tab === 'timeline') {
+              switchView('timeline', { projectId: projectId });
+            } else if (tab === 'details') {
+              renderProjectDetail(projectId);
+            } else {
+              renderActivityView(projectId);
+            }
+          }
+        }, [label]);
+        subNav.appendChild(btn);
+      });
+      viewContainer.appendChild(subNav);
+
+      // Activity card
+      var card = ClientUtils.el('div', { className: 'card' });
+      card.innerHTML = '<h3 style="margin:0 0 var(--space-md) 0">Project Activity</h3>';
+      viewContainer.appendChild(card);
+
+      LoadingSpinner.show(card);
+      try {
+        var entries = await ServerAPI.getProjectActivity(projectId, 100);
+        state.activityData = entries;
+        LoadingSpinner.hide(card);
+
+        if (!entries || entries.length === 0) {
+          card.appendChild(ClientUtils.el('div', { className: 'text-muted text-sm', style: 'text-align:center;padding:var(--space-lg)' }, ['No activity recorded yet.']));
+          return;
+        }
+
+        var list = ClientUtils.el('div', { className: 'proj-activity__list' });
+        entries.forEach(function(entry) {
+          list.appendChild(buildActivityEntry(entry, true));
+        });
+        card.appendChild(list);
+      } catch (err) {
+        LoadingSpinner.hide(card);
+        Toast.error('Failed to load activity: ' + err.message);
+      }
+    }
+
+    function buildActivityEntry(entry, showTaskTitle) {
+      var el = ClientUtils.el('div', { className: 'proj-activity__entry' });
+
+      var iconMap = {
+        task_created: '➕', task_updated: '✏️', task_deleted: '🗑️', task_status_changed: '🔄',
+        phase_created: '📁', phase_updated: '✏️', phase_deleted: '🗑️', phase_status_changed: '🔄',
+        project_status_changed: '🏷️', comment_added: '💬',
+        risk_created: '⚠️', risk_updated: '🛡️', risk_resolved: '✅'
+      };
+
+      var icon = ClientUtils.el('div', { className: 'proj-activity__icon' }, [iconMap[entry.actionType] || '•']);
+
+      var body = ClientUtils.el('div', { className: 'proj-activity__body' });
+      var desc = ClientUtils.el('div', { className: 'proj-activity__desc' });
+      desc.innerHTML = '<strong>' + ClientUtils.escapeHtml(entry.userName) + '</strong> ' + formatProjectActivityDesc(entry);
+
+      if (showTaskTitle && entry.taskTitle) {
+        desc.innerHTML += ' on <span class="proj-activity__task-title">' + ClientUtils.escapeHtml(entry.taskTitle) + '</span>';
+      }
+
+      var time = ClientUtils.el('div', { className: 'proj-activity__time' }, [ClientUtils.timeAgo(entry.createdAt)]);
+
+      body.appendChild(desc);
+      body.appendChild(time);
+      el.appendChild(icon);
+      el.appendChild(body);
+
+      return el;
+    }
+
+    function formatProjectActivityDesc(entry) {
+      switch (entry.actionType) {
+        case 'task_created':
+          return 'created task' + (entry.newValue ? ' "' + ClientUtils.escapeHtml(entry.newValue) + '"' : '');
+        case 'task_updated':
+          return 'updated <em>' + ClientUtils.escapeHtml(entry.fieldName) + '</em>';
+        case 'task_deleted':
+          return 'deleted task' + (entry.oldValue ? ' "' + ClientUtils.escapeHtml(entry.oldValue) + '"' : '');
+        case 'task_status_changed':
+          return 'changed status from <em>' + (entry.oldValue || '—') + '</em> to <em>' + (entry.newValue || '—') + '</em>';
+        case 'phase_created':
+          return 'created phase' + (entry.newValue ? ' "' + ClientUtils.escapeHtml(entry.newValue) + '"' : '');
+        case 'phase_deleted':
+          return 'deleted phase' + (entry.oldValue ? ' "' + ClientUtils.escapeHtml(entry.oldValue) + '"' : '');
+        case 'phase_status_changed':
+          return 'changed phase status from <em>' + (entry.oldValue || '—') + '</em> to <em>' + (entry.newValue || '—') + '</em>';
+        case 'project_status_changed':
+          return 'changed project status from <em>' + (entry.oldValue || '—') + '</em> to <em>' + (entry.newValue || '—') + '</em>';
+        case 'comment_added':
+          return 'added a comment';
+        case 'risk_created':
+          return 'identified risk' + (entry.newValue ? ' "' + ClientUtils.escapeHtml(entry.newValue) + '"' : '');
+        case 'risk_updated':
+          return 'updated risk ' + (entry.fieldName || '');
+        case 'risk_resolved':
+          return 'resolved risk' + (entry.newValue ? ' "' + ClientUtils.escapeHtml(entry.newValue) + '"' : '');
+        default:
+          return entry.actionType.replace(/_/g, ' ');
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Task Comments
+    // ═══════════════════════════════════════════════
+
+    async function loadTaskComments(container, task) {
+      container.innerHTML = '<div class="text-muted text-sm">Loading comments...</div>';
+      try {
+        var comments = await ServerAPI.getTaskComments(task.id);
+        container.innerHTML = '';
+
+        if (comments && comments.length > 0) {
+          comments.forEach(function(c) {
+            appendProjectComment(container, c);
+          });
+        }
+
+        // Add comment form
+        var form = ClientUtils.el('div', { className: 'proj-comment__form' });
+        var input = ClientUtils.el('input', {
+          type: 'text',
+          placeholder: 'Add a comment...'
+        });
+        var submitBtn = ClientUtils.el('button', {
+          onClick: async function() {
+            var content = input.value.trim();
+            if (!content) return;
+            try {
+              var comment = await ServerAPI.createProjectComment(task.id, task.projectId, content);
+              appendProjectComment(container, comment, form);
+              input.value = '';
+              Toast.success('Comment added');
+            } catch (err) {
+              Toast.error('Failed to add comment: ' + err.message);
+            }
+          }
+        }, ['Post']);
+        form.appendChild(input);
+        form.appendChild(submitBtn);
+        container.appendChild(form);
+
+        // Enter key support
+        input.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submitBtn.click();
+          }
+        });
+      } catch (err) {
+        container.innerHTML = '<div class="text-muted text-sm">Failed to load comments.</div>';
+      }
+    }
+
+    function appendProjectComment(listEl, comment, beforeEl) {
+      var el = ClientUtils.el('div', { className: 'proj-comment' });
+
+      var avatar = ClientUtils.el('div', { className: 'proj-comment__avatar' }, [comment.authorInitials]);
+
+      var body = ClientUtils.el('div', { className: 'proj-comment__body' });
+      var header = ClientUtils.el('div', { className: 'proj-comment__header' });
+      header.innerHTML =
+        '<span class="proj-comment__author">' + ClientUtils.escapeHtml(comment.authorName) + '</span>' +
+        '<span class="proj-comment__time">' + ClientUtils.timeAgo(comment.createdAt) + '</span>';
+
+      var content = ClientUtils.el('div', { className: 'proj-comment__content' }, [comment.content]);
+
+      body.appendChild(header);
+      body.appendChild(content);
+      el.appendChild(avatar);
+      el.appendChild(body);
+
+      if (beforeEl) {
+        listEl.insertBefore(el, beforeEl);
+      } else {
+        listEl.appendChild(el);
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // Resource & Workload View
+    // ═══════════════════════════════════════════════
+
+    async function renderResourceView() {
+      viewContainer.innerHTML = '';
+
+      // Back link
+      var back = ClientUtils.el('a', {
+        className: 'proj-header__back',
+        onClick: function() { switchView('list'); }
+      }, ['← Back to Projects']);
+      viewContainer.appendChild(back);
+
+      var heading = ClientUtils.el('h2', { style: 'margin:0 0 var(--space-lg) 0' }, ['Resource Workload']);
+      viewContainer.appendChild(heading);
+
+      LoadingSpinner.show(viewContainer);
+      try {
+        var data = await ServerAPI.getResourceWorkload();
+        state.workloadData = data;
+        LoadingSpinner.hide(viewContainer);
+        buildResourceViewUI(data);
+      } catch (err) {
+        LoadingSpinner.hide(viewContainer);
+        Toast.error('Failed to load workload data: ' + err.message);
+      }
+    }
+
+    function buildResourceViewUI(data) {
+      var summary = data.summary || {};
+      var staffList = data.staff || [];
+
+      // ── Summary Stats ──
+      var statsGrid = ClientUtils.el('div', { className: 'stats-grid' });
+      var statItems = [
+        { label: 'Total Tasks', value: summary.totalTasks || 0 },
+        { label: 'Staff Assigned', value: summary.staffWithTasks || 0 },
+        { label: 'Unassigned Tasks', value: summary.unassigned || 0 },
+        { label: 'Avg per Person', value: summary.avgPerPerson || 0 }
+      ];
+      statItems.forEach(function(s) {
+        var card = ClientUtils.el('div', { className: 'stat-card' });
+        card.innerHTML = '<div class="stat-card__value">' + s.value + '</div>' +
+          '<div class="stat-card__label">' + s.label + '</div>';
+        statsGrid.appendChild(card);
+      });
+      viewContainer.appendChild(statsGrid);
+
+      if (staffList.length === 0) {
+        viewContainer.appendChild(ClientUtils.el('div', {
+          className: 'card text-muted text-sm',
+          style: 'text-align:center;padding:var(--space-xl)'
+        }, ['No tasks assigned to any staff yet.']));
+        return;
+      }
+
+      // ── Chart.js Horizontal Stacked Bar ──
+      var chartCard = ClientUtils.el('div', { className: 'proj-workload__chart-container' });
+      chartCard.innerHTML = '<h3>Tasks per Person by Status</h3>';
+      var canvas = ClientUtils.el('canvas');
+      chartCard.appendChild(canvas);
+      viewContainer.appendChild(chartCard);
+
+      var labels = staffList.map(function(s) { return s.staffName; });
+      var datasets = [
+        { label: 'Completed', data: staffList.map(function(s) { return s.completed; }), backgroundColor: 'rgba(40,167,69,0.7)' },
+        { label: 'In Progress', data: staffList.map(function(s) { return s.inProgress; }), backgroundColor: 'rgba(33,150,243,0.7)' },
+        { label: 'Pending', data: staffList.map(function(s) { return s.pending; }), backgroundColor: 'rgba(255,193,7,0.7)' },
+        { label: 'Deferred', data: staffList.map(function(s) { return s.deferred; }), backgroundColor: 'rgba(108,117,125,0.5)' }
+      ];
+
+      try {
+        state.chartInstances.workload = new Chart(canvas.getContext('2d'), {
+          type: 'bar',
+          data: { labels: labels, datasets: datasets },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { stacked: true, title: { display: true, text: 'Tasks' } },
+              y: { stacked: true }
+            },
+            plugins: {
+              legend: { position: 'top' }
+            }
+          }
+        });
+        // Set explicit height based on staff count
+        canvas.parentElement.style.height = Math.max(200, staffList.length * 40 + 60) + 'px';
+      } catch (e) {
+        chartCard.innerHTML += '<div class="text-muted text-sm">Chart unavailable.</div>';
+      }
+
+      // ── Staff Workload Cards ──
+      var cardsGrid = ClientUtils.el('div', { className: 'proj-workload__summary' });
+
+      staffList.forEach(function(s) {
+        var card = ClientUtils.el('div', { className: 'proj-workload__card' });
+
+        var header = ClientUtils.el('div', { className: 'proj-workload__card-header' });
+        header.innerHTML =
+          '<div>' +
+            '<div class="proj-workload__card-name">' + ClientUtils.escapeHtml(s.staffName) + '</div>' +
+            (s.department ? '<div class="proj-workload__card-dept">' + ClientUtils.escapeHtml(s.department) + '</div>' : '') +
+          '</div>' +
+          '<span class="proj-workload__capacity proj-workload__capacity--' + s.capacity + '">' + s.capacity + '</span>';
+        card.appendChild(header);
+
+        // Stacked progress bar
+        var bar = ClientUtils.el('div', { className: 'proj-workload__bar' });
+        var total = s.total || 1;
+        var completedPct = Math.round((s.completed / total) * 100);
+        var inProgressPct = Math.round((s.inProgress / total) * 100);
+        bar.innerHTML =
+          '<div class="proj-workload__bar-fill proj-workload__bar-fill--completed" style="width:' + completedPct + '%;position:absolute;left:0"></div>' +
+          '<div class="proj-workload__bar-fill proj-workload__bar-fill--in-progress" style="width:' + inProgressPct + '%;position:absolute;left:' + completedPct + '%"></div>';
+        bar.style.position = 'relative';
+        card.appendChild(bar);
+
+        // Stats row
+        var statsRow = ClientUtils.el('div', { className: 'proj-workload__stats-row' });
+        statsRow.innerHTML =
+          '<span>' + s.total + ' tasks</span>' +
+          '<span>' + s.completed + ' done</span>' +
+          '<span>' + s.inProgress + ' active</span>' +
+          (s.overdue > 0 ? '<span style="color:var(--color-error)">' + s.overdue + ' overdue</span>' : '');
+        card.appendChild(statsRow);
+
+        // Projects list
+        if (s.projects && s.projects.length > 0) {
+          var projectsList = ClientUtils.el('div', { className: 'proj-workload__projects-list' });
+          s.projects.forEach(function(p) {
+            projectsList.innerHTML += '<span class="badge">' + ClientUtils.escapeHtml(p.projectTitle) + ' (' + p.taskCount + ')</span>';
+          });
+          card.appendChild(projectsList);
+        }
+
+        cardsGrid.appendChild(card);
+      });
+
+      viewContainer.appendChild(cardsGrid);
+    }
+
+    // ── Init & Return ──
+    buildLayout();
+
+    return {
+      onActivate: function() {
+        state.detailTab = 'details';
+        if (state.currentProjectId && viewContainer.querySelector('.proj-header__back')) {
+          renderProjectDetail(state.currentProjectId);
+        } else {
+          renderProjectList();
+        }
+      }
+    };
+  }
+};
+</script>

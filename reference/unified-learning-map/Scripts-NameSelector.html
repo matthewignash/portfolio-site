@@ -1,0 +1,1149 @@
+<script>
+/* ================================================
+   NAME SELECTOR & GROUPING TOOL (nsg- prefix)
+   Phase 1: Random name picker + basic grouping
+   Phase 2: Backend persistence, equity insights, saved groups
+   ================================================ */
+
+var NSG_GROUP_COLORS = ['#0d9488', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444', '#10b981', '#6366f1'];
+var NSG_DEFAULT_GROUP_NUMBER = 4;
+var NSG_MAX_HISTORY = 50;
+
+// Local shuffle to avoid cross-file dependency on efaShuffleArray
+function nsgShuffleArray(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = a[i];
+    a[i] = a[j];
+    a[j] = tmp;
+  }
+  return a;
+}
+
+// ─── Story 1: Overlay Shell + Class Selector + Absent Toggles ───
+
+function nsgOpenPicker() {
+  nsgPickerOpen = true;
+  var overlay = document.getElementById('nsgOverlay');
+  if (overlay) overlay.classList.add('active');
+
+  // Populate class dropdown if not already populated
+  nsgRenderContent();
+}
+
+function nsgClosePicker() {
+  nsgPickerOpen = false;
+  nsgProjectorMode = false;
+  var overlay = document.getElementById('nsgOverlay');
+  if (overlay) overlay.classList.remove('active');
+  var modal = document.getElementById('nsgModal');
+  if (modal) modal.classList.remove('nsg-projector');
+  // Clear any running animation timer
+  if (nsgAnimTimer) {
+    clearInterval(nsgAnimTimer);
+    nsgAnimTimer = null;
+  }
+  // Show projector button for next open
+  var projBtn = document.getElementById('nsgProjectorBtn');
+  if (projBtn) projBtn.style.display = 'none';
+  // Note: absent, history, selectedEmails state persists for session
+}
+
+function nsgSelectClass(classId) {
+  if (!classId) {
+    nsgClassId = null;
+    nsgRosterData = [];
+    nsgRenderContent();
+    return;
+  }
+  nsgClassId = classId;
+
+  // Clear saved groups from previous class (replaced by batch load)
+  nsgSavedGroupSets = [];
+
+  // Initialize per-class state if first visit
+  if (!nsgAbsentEmails[classId]) nsgAbsentEmails[classId] = {};
+  if (!nsgSelectedEmails[classId]) nsgSelectedEmails[classId] = {};
+  if (!nsgSelectionHistory[classId]) nsgSelectionHistory[classId] = [];
+
+  getCachedRoster(classId, function(roster) {
+    nsgRosterData = Array.isArray(roster) ? roster : [];
+    nsgRenderContent();
+
+    // Batch-load persisted data (stale-response guard)
+    var expectedClassId = nsgClassId;
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (String(nsgClassId) !== String(expectedClassId)) return;
+        nsgLoadPersistedData(expectedClassId, data);
+      })
+      .withFailureHandler(function() {
+        // Non-fatal: persisted data just won't load
+      })
+      .getNameSelectorData(classId);
+  }, function(err) {
+    showToast('Failed to load roster: ' + escapeHtml(err.message), 'error');
+    nsgRosterData = [];
+    nsgRenderContent();
+  });
+}
+
+function nsgSetMode(mode) {
+  nsgMode = mode;
+  // Update tab button active state
+  var btns = document.querySelectorAll('.nsg-mode-btn');
+  for (var i = 0; i < btns.length; i++) {
+    var btn = btns[i];
+    if (btn.getAttribute('data-mode') === mode) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  }
+  nsgRenderContent();
+}
+
+function nsgRenderContent() {
+  var container = document.getElementById('nsgContent');
+  if (!container) return;
+
+  if (nsgMode === 'picker') {
+    container.innerHTML = nsgRenderPickerMode();
+  } else {
+    container.innerHTML = nsgRenderGroupsMode();
+  }
+
+  // Show/hide projector button
+  var projBtn = document.getElementById('nsgProjectorBtn');
+  if (projBtn) {
+    var showProj = (nsgClassId && nsgRosterData.length > 0);
+    projBtn.style.display = showProj ? '' : 'none';
+  }
+}
+
+function nsgRenderClassBar() {
+  var html = '<div class="nsg-class-bar">';
+  html += '<label class="nsg-class-label" for="nsgClassSelect">Class:</label>';
+  html += '<select id="nsgClassSelect" class="nsg-class-select" onchange="nsgSelectClass(this.value)">';
+  html += '<option value="">-- Select Class --</option>';
+  var classes = classesData || [];
+  for (var c = 0; c < classes.length; c++) {
+    var cls = classes[c];
+    if (cls.status === 'removed' || cls.status === 'archived') continue;
+    var sel = (nsgClassId && String(cls.classId) === String(nsgClassId)) ? ' selected' : '';
+    html += '<option value="' + escapeHtml(String(cls.classId)) + '"' + sel + '>' +
+            escapeHtml(cls.className || 'Untitled') + '</option>';
+  }
+  html += '</select>';
+
+  // Present count badge
+  if (nsgClassId && nsgRosterData.length > 0) {
+    var active = nsgGetActiveStudents();
+    html += '<span class="nsg-present-badge">Present: ' + active.length + ' / ' + nsgRosterData.length + '</span>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function nsgGetActiveStudents() {
+  var result = [];
+  var absentDict = nsgAbsentEmails[nsgClassId] || {};
+  for (var i = 0; i < nsgRosterData.length; i++) {
+    var s = nsgRosterData[i];
+    if (s.status === 'removed') continue;
+    if (absentDict[s.email]) continue;
+    result.push(s);
+  }
+  return result;
+}
+
+function nsgRenderAbsentSection() {
+  var isOpen = nsgAbsentOpen;
+  var html = '<div class="nsg-absent-section">';
+  html += '<div class="nsg-absent-header" onclick="nsgToggleAbsentSection()" role="button" tabindex="0" aria-expanded="' + (isOpen ? 'true' : 'false') + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){nsgToggleAbsentSection();event.preventDefault();}">';
+  html += '<span>Mark Absent Students</span>';
+  html += '<span class="nsg-absent-chevron' + (isOpen ? ' open' : '') + '">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="nsg-absent-list' + (isOpen ? ' open' : '') + '">';
+
+  var absentDict = nsgAbsentEmails[nsgClassId] || {};
+  for (var i = 0; i < nsgRosterData.length; i++) {
+    var s = nsgRosterData[i];
+    if (s.status === 'removed') continue;
+    var isAbsent = !!absentDict[s.email];
+    html += '<div class="nsg-absent-item' + (isAbsent ? ' is-absent' : '') + '">';
+    html += '<input type="checkbox" class="nsg-absent-checkbox" ' +
+            (isAbsent ? 'checked' : '') +
+            ' onchange="nsgToggleAbsent(\'' + escapeHtml(s.email) + '\')" aria-label="Mark ' + escapeHtml(s.name || s.email) + ' absent">';
+    html += '<span class="nsg-absent-name">' + escapeHtml(s.name || s.email) + '</span>';
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function nsgToggleAbsent(email) {
+  if (!nsgClassId) return;
+  if (!nsgAbsentEmails[nsgClassId]) nsgAbsentEmails[nsgClassId] = {};
+  if (nsgAbsentEmails[nsgClassId][email]) {
+    delete nsgAbsentEmails[nsgClassId][email];
+  } else {
+    nsgAbsentEmails[nsgClassId][email] = true;
+  }
+  nsgRenderContent();
+
+  // Fire-and-forget save absent marks
+  var absentList = nsgCollectAbsentEmails(nsgClassId);
+  google.script.run
+    .withSuccessHandler(function() {})
+    .withFailureHandler(function() {})
+    .saveAbsentMarks(nsgClassId, absentList);
+}
+
+function nsgToggleAbsentSection() {
+  nsgAbsentOpen = !nsgAbsentOpen;
+  var headers = document.querySelectorAll('.nsg-absent-header');
+  var chevrons = document.querySelectorAll('.nsg-absent-section .nsg-absent-chevron');
+  var lists = document.querySelectorAll('.nsg-absent-list');
+  for (var h = 0; h < headers.length; h++) {
+    headers[h].setAttribute('aria-expanded', nsgAbsentOpen ? 'true' : 'false');
+  }
+  for (var i = 0; i < chevrons.length; i++) {
+    if (nsgAbsentOpen) {
+      chevrons[i].classList.add('open');
+    } else {
+      chevrons[i].classList.remove('open');
+    }
+  }
+  for (var j = 0; j < lists.length; j++) {
+    if (nsgAbsentOpen) {
+      lists[j].classList.add('open');
+    } else {
+      lists[j].classList.remove('open');
+    }
+  }
+}
+
+function nsgFormatNameForDisplay(student) {
+  var name = (student && student.name) ? String(student.name).trim() : '';
+  if (!name) {
+    // Fallback to email prefix
+    var email = (student && student.email) ? String(student.email) : '';
+    var atIdx = email.indexOf('@');
+    return escapeHtml(atIdx > 0 ? email.substring(0, atIdx) : email);
+  }
+  var parts = name.split(/\s+/);
+  if (parts.length === 1) return escapeHtml(parts[0]);
+  var first = parts[0];
+  var lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
+  return escapeHtml(first + ' ' + lastInitial + '.');
+}
+
+
+// ─── Story 2: Name Picker Mode + Animation ───
+
+function nsgRenderPickerMode() {
+  var html = '';
+
+  // Class bar
+  html += nsgRenderClassBar();
+
+  if (!nsgClassId) {
+    html += '<div class="nsg-empty"><div class="nsg-empty-icon">🎯</div>';
+    html += '<div class="nsg-empty-title">Select a Class</div>';
+    html += '<div>Choose a class above to start picking names</div></div>';
+    return html;
+  }
+
+  if (nsgRosterData.length === 0) {
+    html += '<div class="nsg-empty"><div class="nsg-empty-icon">👥</div>';
+    html += '<div class="nsg-empty-title">No Students</div>';
+    html += '<div>This class has no students in its roster</div></div>';
+    return html;
+  }
+
+  // Absent section
+  html += nsgRenderAbsentSection();
+
+  // Pick area
+  var active = nsgGetActiveStudents();
+  var selectedDict = nsgSelectedEmails[nsgClassId] || {};
+  var selectedCount = 0;
+  for (var k in selectedDict) {
+    if (selectedDict.hasOwnProperty(k)) selectedCount++;
+  }
+
+  html += '<div class="nsg-pick-area">';
+  html += '<div class="nsg-spin-display" id="nsgSpinDisplay"><span class="nsg-spin-placeholder">🎯</span></div>';
+
+  // Stats
+  var remaining = active.length;
+  if (nsgNoRepeatMode) {
+    remaining = 0;
+    for (var a = 0; a < active.length; a++) {
+      if (!selectedDict[active[a].email]) remaining++;
+    }
+  }
+  html += '<div class="nsg-stats">';
+  if (nsgNoRepeatMode) {
+    html += '<span class="nsg-stats-count">' + remaining + '</span> remaining &middot; ';
+    html += '<span class="nsg-stats-count">' + selectedCount + '</span> selected';
+  } else {
+    html += '<span class="nsg-stats-count">' + active.length + '</span> students available';
+  }
+  html += '</div>';
+
+  // Equity insight bar (Phase 2)
+  html += nsgRenderEquityInsight();
+
+  // Pick button
+  var allPicked = nsgNoRepeatMode && remaining === 0 && selectedCount > 0;
+  if (allPicked) {
+    html += '<div style="margin-top:16px;color:#64748b;font-size:14px;">All students have been picked!</div>';
+    html += '<button class="nsg-reset-btn" style="margin-top:8px;padding:8px 20px;font-size:14px;" onclick="nsgResetNoRepeat()">Reset &amp; Start Over</button>';
+  } else if (active.length === 0) {
+    html += '<div style="margin-top:16px;color:#64748b;font-size:14px;">All students are marked absent</div>';
+  } else {
+    var btnLabel = selectedCount > 0 ? '🎲 Pick Another' : '🎲 Pick a Name';
+    html += '<button class="nsg-pick-btn" onclick="nsgPickName()">' + btnLabel + '</button>';
+  }
+
+  // Options
+  html += '<div class="nsg-options">';
+  html += '<label class="nsg-option-label"><input type="checkbox" ' + (nsgNoRepeatMode ? 'checked' : '') +
+          ' onchange="nsgToggleNoRepeat()"> No repeats</label>';
+  if (selectedCount > 0) {
+    html += '<button class="nsg-reset-btn" onclick="nsgResetNoRepeat()">Reset History</button>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+
+  // History section
+  html += nsgRenderHistory();
+
+  return html;
+}
+
+function nsgPickName() {
+  var active = nsgGetActiveStudents();
+  var pool = active;
+
+  // Filter by no-repeat
+  if (nsgNoRepeatMode) {
+    var selectedDict = nsgSelectedEmails[nsgClassId] || {};
+    pool = [];
+    for (var i = 0; i < active.length; i++) {
+      if (!selectedDict[active[i].email]) pool.push(active[i]);
+    }
+  }
+
+  if (pool.length === 0) {
+    showToast('All students have been picked! Reset to start over.', 'info');
+    return;
+  }
+
+  // Pre-select winner
+  var winnerIdx = Math.floor(Math.random() * pool.length);
+  var winner = pool[winnerIdx];
+
+  // Mark as selected
+  if (!nsgSelectedEmails[nsgClassId]) nsgSelectedEmails[nsgClassId] = {};
+  nsgSelectedEmails[nsgClassId][winner.email] = true;
+
+  // Add to history (capped at NSG_MAX_HISTORY entries)
+  if (!nsgSelectionHistory[nsgClassId]) nsgSelectionHistory[nsgClassId] = [];
+  nsgSelectionHistory[nsgClassId].unshift({
+    email: winner.email,
+    name: winner.name || winner.email,
+    timestamp: new Date().toLocaleTimeString()
+  });
+  if (nsgSelectionHistory[nsgClassId].length > NSG_MAX_HISTORY) {
+    nsgSelectionHistory[nsgClassId] = nsgSelectionHistory[nsgClassId].slice(0, NSG_MAX_HISTORY);
+  }
+
+  // Fire-and-forget record pick to backend
+  google.script.run
+    .withSuccessHandler(function() {})
+    .withFailureHandler(function() {})
+    .recordNamePick(nsgClassId, winner.email, winner.name || winner.email);
+
+  // Trigger animation
+  nsgAnimatePick(winner, active);
+}
+
+function nsgAnimatePick(winner, allStudents) {
+  // Build a reel of names for the animation
+  var reel = nsgShuffleArray(allStudents.slice());
+  // Ensure reel has at least 12 items (repeat if small roster)
+  while (reel.length < 12) {
+    reel = reel.concat(nsgShuffleArray(allStudents.slice()));
+  }
+  // Remove winner from reel and place at end so animation lands on it
+  var filtered = [];
+  for (var f = 0; f < reel.length; f++) {
+    if (reel[f].email !== winner.email) filtered.push(reel[f]);
+  }
+  // Take 12-14 items plus winner at end
+  var finalReel = filtered.slice(0, 14);
+  finalReel.push(winner);
+
+  var display = document.getElementById('nsgSpinDisplay');
+  if (!display) return;
+
+  // Disable pick button during animation
+  var pickBtns = document.querySelectorAll('.nsg-pick-btn');
+  for (var b = 0; b < pickBtns.length; b++) pickBtns[b].disabled = true;
+
+  display.className = 'nsg-spin-display nsg-spinning';
+  display.innerHTML = '';
+
+  var reelIdx = 0;
+  var useProjectorNames = nsgProjectorMode;
+
+  // Phase 1: Fast (60ms)
+  nsgAnimTimer = setInterval(function() {
+    var s = finalReel[reelIdx % finalReel.length];
+    display.textContent = useProjectorNames ? nsgFormatNameForDisplay(s) : (s.name || s.email);
+    reelIdx++;
+  }, 60);
+
+  // Phase 2: Medium (120ms) at 600ms
+  setTimeout(function() {
+    if (!nsgAnimTimer) return;
+    clearInterval(nsgAnimTimer);
+    nsgAnimTimer = setInterval(function() {
+      var s = finalReel[reelIdx % finalReel.length];
+      display.textContent = useProjectorNames ? nsgFormatNameForDisplay(s) : (s.name || s.email);
+      reelIdx++;
+    }, 120);
+  }, 600);
+
+  // Phase 3: Slow (200ms) at 1100ms
+  setTimeout(function() {
+    if (!nsgAnimTimer) return;
+    clearInterval(nsgAnimTimer);
+    nsgAnimTimer = setInterval(function() {
+      var s = finalReel[reelIdx % finalReel.length];
+      display.textContent = useProjectorNames ? nsgFormatNameForDisplay(s) : (s.name || s.email);
+      reelIdx++;
+    }, 200);
+  }, 1100);
+
+  // Phase 4: Very slow (350ms) at 1500ms
+  setTimeout(function() {
+    if (!nsgAnimTimer) return;
+    clearInterval(nsgAnimTimer);
+    nsgAnimTimer = setInterval(function() {
+      var s = finalReel[reelIdx % finalReel.length];
+      display.textContent = useProjectorNames ? nsgFormatNameForDisplay(s) : (s.name || s.email);
+      reelIdx++;
+    }, 350);
+  }, 1500);
+
+  // Final: Land on winner at 2000ms
+  setTimeout(function() {
+    if (nsgAnimTimer) {
+      clearInterval(nsgAnimTimer);
+      nsgAnimTimer = null;
+    }
+    // Guard: overlay may have been closed during animation
+    if (!nsgPickerOpen) return;
+    display.textContent = useProjectorNames ? nsgFormatNameForDisplay(winner) : (winner.name || winner.email);
+    display.className = 'nsg-spin-display nsg-reveal';
+
+    // Re-enable pick button and re-render stats after short delay
+    setTimeout(function() {
+      if (!nsgPickerOpen) return;
+      nsgRenderContent();
+    }, 500);
+  }, 2000);
+}
+
+function nsgToggleNoRepeat() {
+  nsgNoRepeatMode = !nsgNoRepeatMode;
+  nsgRenderContent();
+}
+
+function nsgResetNoRepeat() {
+  if (nsgClassId) {
+    nsgSelectedEmails[nsgClassId] = {};
+    nsgSelectionHistory[nsgClassId] = [];
+
+    // Fire-and-forget clear server-side history
+    google.script.run
+      .withSuccessHandler(function() {})
+      .withFailureHandler(function() {})
+      .clearPickHistory(nsgClassId);
+  }
+  nsgRenderContent();
+}
+
+function nsgRenderHistory() {
+  var history = nsgSelectionHistory[nsgClassId] || [];
+  if (history.length === 0) return '';
+
+  var html = '<div class="nsg-history-section">';
+  html += '<div class="nsg-history-header" onclick="nsgToggleHistorySection()" role="button" tabindex="0" aria-expanded="' + (nsgHistoryOpen ? 'true' : 'false') + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){nsgToggleHistorySection();event.preventDefault();}">';
+  html += '<span>Selection History (' + history.length + ')</span>';
+  html += '<span class="nsg-absent-chevron' + (nsgHistoryOpen ? ' open' : '') + '">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="nsg-history-list' + (nsgHistoryOpen ? ' open' : '') + '">';
+
+  for (var i = 0; i < history.length; i++) {
+    var item = history[i];
+    var num = history.length - i;
+    html += '<div class="nsg-history-item">';
+    html += '<span class="nsg-history-num">' + num + '.</span>';
+    html += '<span class="nsg-history-name">' + escapeHtml(item.name) + '</span>';
+    html += '<span class="nsg-history-time">' + escapeHtml(item.timestamp) + '</span>';
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function nsgToggleHistorySection() {
+  nsgHistoryOpen = !nsgHistoryOpen;
+  var histHeaders = document.querySelectorAll('.nsg-history-header');
+  var chevrons = document.querySelectorAll('.nsg-history-header .nsg-absent-chevron');
+  var lists = document.querySelectorAll('.nsg-history-list');
+  for (var h = 0; h < histHeaders.length; h++) {
+    histHeaders[h].setAttribute('aria-expanded', nsgHistoryOpen ? 'true' : 'false');
+  }
+  for (var i = 0; i < chevrons.length; i++) {
+    if (nsgHistoryOpen) chevrons[i].classList.add('open');
+    else chevrons[i].classList.remove('open');
+  }
+  for (var j = 0; j < lists.length; j++) {
+    if (nsgHistoryOpen) lists[j].classList.add('open');
+    else lists[j].classList.remove('open');
+  }
+}
+
+
+// ─── Story 3: Group Generator + Projector + CSV + Export ───
+
+function nsgRenderGroupsMode() {
+  var html = '';
+
+  // Class bar
+  html += nsgRenderClassBar();
+
+  if (!nsgClassId) {
+    html += '<div class="nsg-empty"><div class="nsg-empty-icon">👥</div>';
+    html += '<div class="nsg-empty-title">Select a Class</div>';
+    html += '<div>Choose a class above to start creating groups</div></div>';
+    return html;
+  }
+
+  if (nsgRosterData.length === 0) {
+    html += '<div class="nsg-empty"><div class="nsg-empty-icon">👥</div>';
+    html += '<div class="nsg-empty-title">No Students</div>';
+    html += '<div>This class has no students in its roster</div></div>';
+    return html;
+  }
+
+  // Absent section
+  html += nsgRenderAbsentSection();
+
+  var active = nsgGetActiveStudents();
+  if (active.length === 0) {
+    html += '<div class="nsg-empty"><div class="nsg-empty-icon">🚫</div>';
+    html += '<div class="nsg-empty-title">All Students Absent</div>';
+    html += '<div>Unmark some students to create groups</div></div>';
+    return html;
+  }
+
+  // Config bar
+  html += '<div class="nsg-group-config">';
+  html += '<label><input type="radio" name="nsgGroupMode" value="count" ' +
+          (nsgGroupMode === 'count' ? 'checked' : '') +
+          ' onchange="nsgGroupMode=\'count\'"> Divide into</label>';
+  html += '<input type="number" class="nsg-group-input" id="nsgGroupNumber" value="' + nsgGroupNumber +
+          '" min="2" max="' + active.length + '" onchange="nsgGroupNumber=parseInt(this.value)||4">';
+  html += '<label><input type="radio" name="nsgGroupMode" value="size" ' +
+          (nsgGroupMode === 'size' ? 'checked' : '') +
+          ' onchange="nsgGroupMode=\'size\'"> groups of</label>';
+  html += '<button class="nsg-generate-btn" onclick="nsgGenerateGroups()">Generate Groups</button>';
+  html += '</div>';
+
+  // Actions bar (shown when groups exist)
+  if (nsgCurrentGroups.length > 0) {
+    html += '<div class="nsg-actions">';
+    html += '<button class="nsg-action-btn" onclick="nsgShuffleGroups()">🔀 Shuffle</button>';
+    html += '<button class="nsg-action-btn" onclick="nsgExportGroups()">📥 Export CSV</button>';
+    html += '<button class="nsg-action-btn nsg-save-btn" onclick="nsgSaveCurrentGroups()">💾 Save</button>';
+    html += '</div>';
+  }
+
+  // Groups grid
+  if (nsgCurrentGroups.length > 0) {
+    html += nsgRenderGroups(nsgCurrentGroups);
+  }
+
+  // Saved groups section (Phase 2)
+  html += nsgRenderSavedGroups();
+
+  return html;
+}
+
+function nsgGenerateGroups() {
+  var active = nsgGetActiveStudents();
+  if (active.length === 0) {
+    showToast('No active students to group', 'info');
+    return;
+  }
+
+  // Read current config from DOM
+  var numInput = document.getElementById('nsgGroupNumber');
+  var num = numInput ? (parseInt(numInput.value) || NSG_DEFAULT_GROUP_NUMBER) : nsgGroupNumber;
+  nsgGroupNumber = num;
+
+  // Determine number of groups
+  var numGroups;
+  if (nsgGroupMode === 'count') {
+    numGroups = Math.max(2, Math.min(num, active.length));
+  } else {
+    // 'size' mode: groups of N students
+    var groupSize = Math.max(2, num);
+    numGroups = Math.ceil(active.length / groupSize);
+    if (numGroups < 1) numGroups = 1;
+  }
+
+  // Shuffle students
+  var shuffled = nsgShuffleArray(active);
+
+  // Build groups with round-robin distribution
+  var groups = [];
+  for (var g = 0; g < numGroups; g++) {
+    groups.push({
+      name: 'Group ' + (g + 1),
+      members: [],
+      color: NSG_GROUP_COLORS[g % NSG_GROUP_COLORS.length],
+      customName: false
+    });
+  }
+  for (var s = 0; s < shuffled.length; s++) {
+    groups[s % numGroups].members.push(shuffled[s]);
+  }
+
+  nsgCurrentGroups = groups;
+  nsgRenderContent();
+}
+
+function nsgRenderGroups(groups) {
+  var html = '<div class="nsg-groups-grid">';
+  for (var g = 0; g < groups.length; g++) {
+    var group = groups[g];
+    var safeColor = /^#[0-9a-fA-F]{3,6}$/.test(group.color) ? group.color : '#0d9488';
+    html += '<div class="nsg-group-card" style="border-top: 3px solid ' + safeColor + ';">';
+    html += '<div class="nsg-group-card-header">';
+    html += '<span class="nsg-group-name" contenteditable="true" onblur="nsgUpdateGroupName(' + g + ', this.textContent)" aria-label="Group ' + (g + 1) + ' name">' +
+            escapeHtml(group.name) + '</span>';
+    html += '<span class="nsg-group-count">' + group.members.length + '</span>';
+    html += '</div>';
+    html += '<div class="nsg-group-members">';
+    for (var m = 0; m < group.members.length; m++) {
+      var unknownClass = group.members[m]._unknown ? ' nsg-group-member-unknown' : '';
+      var displayName = nsgProjectorMode
+        ? nsgFormatNameForDisplay(group.members[m])
+        : escapeHtml(group.members[m].name || group.members[m].email);
+      html += '<div class="nsg-group-member' + unknownClass + '">' + displayName + '</div>';
+    }
+    html += '</div></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function nsgUpdateGroupName(index, text) {
+  if (index < 0 || index >= nsgCurrentGroups.length) return;
+  // Sanitize: strip HTML, limit length
+  var clean = String(text || '').replace(/<[^>]*>/g, '').trim();
+  if (clean.length > 50) clean = clean.substring(0, 50);
+  if (!clean) clean = 'Group ' + (index + 1);
+  nsgCurrentGroups[index].name = clean;
+  nsgCurrentGroups[index].customName = true;
+}
+
+function nsgShuffleGroups() {
+  var active = nsgGetActiveStudents();
+  if (active.length === 0 || nsgCurrentGroups.length === 0) return;
+
+  var numGroups = nsgCurrentGroups.length;
+  var shuffled = nsgShuffleArray(active);
+
+  // Preserve custom group names
+  for (var g = 0; g < numGroups; g++) {
+    nsgCurrentGroups[g].members = [];
+  }
+  for (var s = 0; s < shuffled.length; s++) {
+    nsgCurrentGroups[s % numGroups].members.push(shuffled[s]);
+  }
+
+  nsgRenderContent();
+}
+
+function nsgToggleProjector() {
+  nsgProjectorMode = !nsgProjectorMode;
+  var modal = document.getElementById('nsgModal');
+  if (!modal) return;
+
+  if (nsgProjectorMode) {
+    modal.classList.add('nsg-projector');
+  } else {
+    modal.classList.remove('nsg-projector');
+  }
+  nsgRenderContent();
+}
+
+function nsgExportGroups() {
+  if (nsgCurrentGroups.length === 0) {
+    showToast('Generate groups first', 'info');
+    return;
+  }
+  var headers = ['Group', 'Student Name', 'Student Email'];
+  var rows = [];
+  for (var g = 0; g < nsgCurrentGroups.length; g++) {
+    var group = nsgCurrentGroups[g];
+    for (var m = 0; m < group.members.length; m++) {
+      rows.push([group.name, group.members[m].name || '', group.members[m].email || '']);
+    }
+  }
+  var safeClassId = String(nsgClassId || 'export').replace(/[^a-zA-Z0-9_-]/g, '_');
+  csvExportData(headers, rows, 'groups-' + safeClassId + '.csv');
+}
+
+
+// ─── Phase 2: Backend Persistence, Equity Insights, Saved Groups ───
+
+/**
+ * Collect absent emails from the dict for a class as a flat array.
+ */
+function nsgCollectAbsentEmails(classId) {
+  var dict = nsgAbsentEmails[classId] || {};
+  var list = [];
+  for (var k in dict) {
+    if (dict.hasOwnProperty(k) && dict[k]) list.push(k);
+  }
+  return list;
+}
+
+/**
+ * Dispatch batch response from getNameSelectorData into local state.
+ */
+function nsgLoadPersistedData(classId, data) {
+  if (!data) return;
+
+  // 1. Absent marks
+  if (Array.isArray(data.absentEmails) && data.absentEmails.length > 0) {
+    if (!nsgAbsentEmails[classId]) nsgAbsentEmails[classId] = {};
+    for (var a = 0; a < data.absentEmails.length; a++) {
+      nsgAbsentEmails[classId][data.absentEmails[a]] = true;
+    }
+  }
+
+  // 2. Pick history → local format
+  if (Array.isArray(data.pickHistory) && data.pickHistory.length > 0) {
+    if (!nsgSelectionHistory[classId]) nsgSelectionHistory[classId] = [];
+    if (!nsgSelectedEmails[classId]) nsgSelectedEmails[classId] = {};
+
+    // Only merge if local is empty (avoid duplicating after page reload)
+    if (nsgSelectionHistory[classId].length === 0) {
+      for (var p = 0; p < data.pickHistory.length; p++) {
+        var pick = data.pickHistory[p];
+        nsgSelectionHistory[classId].push({
+          email: pick.studentEmail,
+          name: pick.studentName || pick.studentEmail,
+          timestamp: nsgFormatServerDate(pick.pickedAt)
+        });
+        // Mark as selected for no-repeat mode
+        nsgSelectedEmails[classId][pick.studentEmail] = true;
+      }
+    }
+  }
+
+  // 3. Saved group summaries
+  if (Array.isArray(data.savedGroups)) {
+    nsgSavedGroupSets = data.savedGroups;
+  }
+
+  nsgRenderContent();
+}
+
+/**
+ * Format a server ISO date string to a short local time string.
+ */
+function nsgFormatServerDate(isoStr) {
+  if (!isoStr) return '';
+  try {
+    var d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString();
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Render the equity insight bar showing which students haven't been called.
+ */
+function nsgRenderEquityInsight() {
+  if (!nsgClassId) return '';
+  var history = nsgSelectionHistory[nsgClassId] || [];
+  if (history.length === 0) return '';
+
+  var active = nsgGetActiveStudents();
+  if (active.length === 0) return '';
+
+  // Build set of picked emails
+  var pickedSet = {};
+  for (var h = 0; h < history.length; h++) {
+    pickedSet[history[h].email] = true;
+  }
+
+  // Find un-called students
+  var uncalled = [];
+  for (var s = 0; s < active.length; s++) {
+    if (!pickedSet[active[s].email]) {
+      uncalled.push(active[s]);
+    }
+  }
+
+  var html = '';
+  if (uncalled.length === 0) {
+    html += '<div class="nsg-equity-bar all-called">';
+    html += '&#10003; All students called at least once';
+    html += '</div>';
+  } else {
+    html += '<div class="nsg-equity-bar">';
+    html += 'Not yet called: ';
+    html += '<span class="nsg-equity-names">';
+    var maxShow = 5;
+    for (var u = 0; u < Math.min(uncalled.length, maxShow); u++) {
+      if (u > 0) html += ', ';
+      html += nsgFormatNameForDisplay(uncalled[u]);
+    }
+    if (uncalled.length > maxShow) {
+      html += ' +' + (uncalled.length - maxShow) + ' more';
+    }
+    html += '</span>';
+    html += '</div>';
+  }
+  return html;
+}
+
+/**
+ * Save the current groups configuration to the backend.
+ */
+function nsgSaveCurrentGroups() {
+  if (nsgCurrentGroups.length === 0) {
+    showToast('Generate groups first', 'info');
+    return;
+  }
+  if (!nsgClassId) return;
+  if (document.getElementById('nsgInlineSaveNameRow')) return;
+
+  var savedSection = document.querySelector('.nsg-saved-section') || document.getElementById('nsgGroupsContent');
+  if (!savedSection) return;
+  var row = document.createElement('div');
+  row.id = 'nsgInlineSaveNameRow';
+  row.style.cssText = 'display:flex;gap:6px;padding:8px;align-items:center;';
+  row.innerHTML = '<input id="nsgSaveNameInput" type="text" placeholder="Group set name..." '
+    + 'maxlength="50" style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+    + 'onkeydown="if(event.key===\'Enter\'){nsgConfirmSaveGroups();}if(event.key===\'Escape\'){nsgCancelSaveGroups();}">'
+    + '<button onclick="nsgConfirmSaveGroups()" style="padding:6px 12px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Save</button>'
+    + '<button onclick="nsgCancelSaveGroups()" style="padding:6px 12px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+  savedSection.insertBefore(row, savedSection.firstChild);
+  document.getElementById('nsgSaveNameInput').focus();
+  return;
+}
+
+function nsgConfirmSaveGroups() {
+  var input = document.getElementById('nsgSaveNameInput');
+  var name = (input ? input.value : '').trim();
+  if (!name) { showToast('Name cannot be empty', 'error'); return; }
+  name = name.substring(0, 50);
+  var row = document.getElementById('nsgInlineSaveNameRow');
+  if (row) row.parentNode.removeChild(row);
+
+  // Extract email-only member arrays
+  var groups = [];
+  for (var g = 0; g < nsgCurrentGroups.length; g++) {
+    var grp = nsgCurrentGroups[g];
+    var members = [];
+    for (var m = 0; m < grp.members.length; m++) {
+      var email = grp.members[m].email || grp.members[m];
+      if (email) members.push(String(email));
+    }
+    groups.push({
+      name: grp.name || 'Group ' + (g + 1),
+      members: members,
+      color: grp.color || '#0d9488'
+    });
+  }
+
+  var groupSetData = {
+    name: name,
+    groupMode: nsgGroupMode,
+    groupNumber: nsgGroupNumber,
+    groups: groups
+  };
+
+  var expectedClassId = nsgClassId;
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (String(nsgClassId) !== String(expectedClassId)) return;
+      // Add to local saved sets
+      nsgSavedGroupSets.unshift({
+        groupSetId: result.groupSetId,
+        groupSetName: result.groupSetName,
+        groupMode: nsgGroupMode,
+        groupNumber: nsgGroupNumber,
+        groupCount: groups.length,
+        studentCount: nsgCurrentGroups.reduce(function(sum, g) { return sum + g.members.length; }, 0),
+        createdAt: new Date().toISOString()
+      });
+      nsgSavedGroupsOpen = true;
+      nsgRenderContent();
+      showToast('Group set "' + escapeHtml(name) + '" saved', 'success');
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to save groups: ' + escapeHtml(err.message), 'error');
+    })
+    .saveGroupSet(nsgClassId, groupSetData);
+}
+
+function nsgCancelSaveGroups() {
+  var row = document.getElementById('nsgInlineSaveNameRow');
+  if (row) row.parentNode.removeChild(row);
+}
+
+/**
+ * Load a saved group set by ID from the backend.
+ */
+function nsgLoadSavedGroupSet(groupSetId) {
+  if (!groupSetId) return;
+
+  var expectedClassId = nsgClassId;
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (String(nsgClassId) !== String(expectedClassId)) return;
+      if (!result || !Array.isArray(result.groups)) {
+        showToast('Failed to load group set', 'error');
+        return;
+      }
+
+      // Resolve member emails against current roster
+      var rosterByEmail = {};
+      for (var r = 0; r < nsgRosterData.length; r++) {
+        rosterByEmail[String(nsgRosterData[r].email).toLowerCase()] = nsgRosterData[r];
+      }
+
+      var groups = [];
+      for (var g = 0; g < result.groups.length; g++) {
+        var serverGroup = result.groups[g];
+        var members = [];
+        var memberEmails = serverGroup.members || [];
+        for (var m = 0; m < memberEmails.length; m++) {
+          var email = String(memberEmails[m]).toLowerCase();
+          var student = rosterByEmail[email];
+          if (student) {
+            members.push(student);
+          } else {
+            // Student no longer in roster — show as unknown
+            members.push({ email: email, name: 'Unknown (' + email + ')', _unknown: true });
+          }
+        }
+        groups.push({
+          name: serverGroup.name || 'Group ' + (g + 1),
+          members: members,
+          color: serverGroup.color || NSG_GROUP_COLORS[g % NSG_GROUP_COLORS.length],
+          customName: true
+        });
+      }
+
+      nsgCurrentGroups = groups;
+      nsgGroupMode = result.groupMode || 'count';
+      nsgGroupNumber = result.groupNumber || 4;
+      nsgRenderContent();
+      showToast('Loaded "' + escapeHtml(result.groupSetName || '') + '"', 'success');
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to load groups: ' + escapeHtml(err.message), 'error');
+    })
+    .loadGroupSet(groupSetId);
+}
+
+/**
+ * Delete a saved group set.
+ */
+function nsgDeleteSavedGroupSet(groupSetId) {
+  if (!groupSetId) return;
+  if (!confirm('Delete this saved group set?')) return;
+
+  // Capture for stale-response guard and potential revert
+  var expectedClassId = nsgClassId;
+  var removedItem = null;
+  var removedIdx = -1;
+
+  // Optimistic local removal
+  for (var i = 0; i < nsgSavedGroupSets.length; i++) {
+    if (String(nsgSavedGroupSets[i].groupSetId) === String(groupSetId)) {
+      removedItem = nsgSavedGroupSets[i];
+      removedIdx = i;
+      nsgSavedGroupSets.splice(i, 1);
+      break;
+    }
+  }
+  nsgRenderContent();
+
+  google.script.run
+    .withSuccessHandler(function() {})
+    .withFailureHandler(function(err) {
+      // Revert if still on the same class
+      if (String(nsgClassId) === String(expectedClassId) && removedItem) {
+        nsgSavedGroupSets.splice(removedIdx, 0, removedItem);
+        nsgRenderContent();
+      }
+      showToast('Failed to delete group set: ' + escapeHtml(err.message), 'error');
+    })
+    .deleteGroupSet(groupSetId);
+}
+
+/**
+ * Rename a saved group set via prompt + optimistic update.
+ */
+function nsgEditSavedGroupSet(groupSetId) {
+  var group = null;
+  for (var i = 0; i < nsgSavedGroupSets.length; i++) {
+    if (String(nsgSavedGroupSets[i].groupSetId) === String(groupSetId)) {
+      group = nsgSavedGroupSets[i];
+      break;
+    }
+  }
+  if (!group) return;
+
+  var rowId = 'nsgRenameRow-' + groupSetId;
+  if (document.getElementById(rowId)) return;
+
+  // Find the saved item element to insert inline input
+  var itemEl = document.querySelector('[data-groupset-id="' + groupSetId + '"]')
+    || document.querySelector('.nsg-saved-section');
+  if (!itemEl) return;
+
+  var row = document.createElement('div');
+  row.id = rowId;
+  row.style.cssText = 'display:flex;gap:6px;padding:6px;align-items:center;';
+  row.innerHTML = '<input id="nsgRenameInput-' + escapeHtml(groupSetId) + '" type="text" '
+    + 'value="' + escapeHtml(group.groupSetName || '') + '" maxlength="50" '
+    + 'style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+    + 'onkeydown="if(event.key===\'Enter\'){nsgConfirmRename(\'' + escapeHtml(groupSetId) + '\');}if(event.key===\'Escape\'){nsgCancelRename(\'' + escapeHtml(groupSetId) + '\');}">'
+    + '<button onclick="nsgConfirmRename(\'' + escapeHtml(groupSetId) + '\')" style="padding:6px 10px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Rename</button>'
+    + '<button onclick="nsgCancelRename(\'' + escapeHtml(groupSetId) + '\')" style="padding:6px 10px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+  itemEl.parentNode.insertBefore(row, itemEl.nextSibling);
+  var input = document.getElementById('nsgRenameInput-' + groupSetId);
+  if (input) { input.focus(); input.select(); }
+}
+
+function nsgConfirmRename(groupSetId) {
+  var input = document.getElementById('nsgRenameInput-' + groupSetId);
+  var newName = (input ? input.value : '').trim();
+  if (!newName) { showToast('Name cannot be empty', 'error'); return; }
+  if (newName.length > 50) newName = newName.substring(0, 50);
+  var row = document.getElementById('nsgRenameRow-' + groupSetId);
+  if (row) row.parentNode.removeChild(row);
+
+  var group = null;
+  for (var i = 0; i < nsgSavedGroupSets.length; i++) {
+    if (String(nsgSavedGroupSets[i].groupSetId) === String(groupSetId)) {
+      group = nsgSavedGroupSets[i];
+      break;
+    }
+  }
+  if (!group || newName === group.groupSetName) return;
+
+  var oldName = group.groupSetName;
+  var expectedClassId = String(nsgClassId);
+  group.groupSetName = newName;
+  nsgRenderContent();
+
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Group renamed.', 'success');
+    })
+    .withFailureHandler(function(err) {
+      if (String(nsgClassId) !== expectedClassId) return;
+      for (var j = 0; j < nsgSavedGroupSets.length; j++) {
+        if (String(nsgSavedGroupSets[j].groupSetId) === String(groupSetId)) {
+          nsgSavedGroupSets[j].groupSetName = oldName;
+          break;
+        }
+      }
+      nsgRenderContent();
+      showToast('Failed to rename group: ' + escapeHtml(friendlyError(err)), 'error');
+    })
+    .updateGroupSet(groupSetId, { groupSetName: newName });
+}
+
+function nsgCancelRename(groupSetId) {
+  var row = document.getElementById('nsgRenameRow-' + groupSetId);
+  if (row) row.parentNode.removeChild(row);
+}
+
+/**
+ * Render the saved groups collapsible section.
+ */
+function nsgRenderSavedGroups() {
+  var html = '<div class="nsg-saved-section">';
+  html += '<div class="nsg-saved-header" onclick="nsgToggleSavedGroups()" role="button" tabindex="0" aria-expanded="' + (nsgSavedGroupsOpen ? 'true' : 'false') + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){nsgToggleSavedGroups();event.preventDefault();}">';
+  html += '<span>Saved Groups (' + nsgSavedGroupSets.length + ')</span>';
+  html += '<span class="nsg-absent-chevron' + (nsgSavedGroupsOpen ? ' open' : '') + '">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="nsg-saved-list' + (nsgSavedGroupsOpen ? ' open' : '') + '">';
+
+  if (nsgSavedGroupSets.length === 0) {
+    html += '<div class="nsg-saved-empty">No saved groups yet. Generate groups and click 💾 Save.</div>';
+  } else {
+    for (var i = 0; i < nsgSavedGroupSets.length; i++) {
+      var set = nsgSavedGroupSets[i];
+      html += '<div class="nsg-saved-item">';
+      html += '<div class="nsg-saved-item-info">';
+      html += '<span class="nsg-saved-item-name">' + escapeHtml(set.groupSetName || 'Untitled') + '</span>';
+      html += '<span class="nsg-saved-item-meta">';
+      html += '<span class="nsg-saved-item-badge">' + (set.groupCount || 0) + ' groups</span>';
+      html += '<span class="nsg-saved-item-badge">' + (set.studentCount || 0) + ' students</span>';
+      html += '</span>';
+      html += '</div>';
+      html += '<div class="nsg-saved-item-actions">';
+      html += '<button class="nsg-saved-load-btn" onclick="nsgLoadSavedGroupSet(\'' + escapeHtml(String(set.groupSetId)) + '\')">Load</button>';
+      html += '<button type="button" class="nsg-saved-edit-btn" onclick="nsgEditSavedGroupSet(\'' + escapeHtml(String(set.groupSetId)) + '\')" aria-label="Rename ' + escapeHtml(set.groupSetName || 'Untitled') + '">Rename</button>';
+      html += '<button class="nsg-saved-delete-btn" onclick="nsgDeleteSavedGroupSet(\'' + escapeHtml(String(set.groupSetId)) + '\')">Delete</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function nsgToggleSavedGroups() {
+  nsgSavedGroupsOpen = !nsgSavedGroupsOpen;
+  var chevrons = document.querySelectorAll('.nsg-saved-header .nsg-absent-chevron');
+  var lists = document.querySelectorAll('.nsg-saved-list');
+  for (var i = 0; i < chevrons.length; i++) {
+    if (nsgSavedGroupsOpen) chevrons[i].classList.add('open');
+    else chevrons[i].classList.remove('open');
+  }
+  for (var j = 0; j < lists.length; j++) {
+    if (nsgSavedGroupsOpen) lists[j].classList.add('open');
+    else lists[j].classList.remove('open');
+  }
+}
+
+</script>

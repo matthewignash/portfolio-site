@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Department Announcements</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f5f6f8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .app-container {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 12px 16px;
+    }
+
+    /* Header */
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .app-header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0;
+      color: #1a1a2e;
+    }
+
+    /* Error banner */
+    .error-banner {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    /* Success banner */
+    .success-banner {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    /* Loading spinner */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 0;
+      color: #6c757d;
+    }
+
+    .loading-container .spinner-border {
+      width: 2.5rem;
+      height: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    /* New post form */
+    .new-post-form {
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .new-post-form textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .char-counter {
+      font-size: 0.8rem;
+      color: #6c757d;
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    .char-counter.warning {
+      color: #e67e22;
+    }
+
+    .char-counter.danger {
+      color: #dc3545;
+      font-weight: 600;
+    }
+
+    /* Pinned section label */
+    .section-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6c757d;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .section-label i {
+      font-size: 0.85rem;
+    }
+
+    /* Post card */
+    .post-card {
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      transition: box-shadow 0.15s ease;
+      position: relative;
+    }
+
+    .post-card:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .post-card.pinned {
+      border-left: 3px solid #0d6efd;
+      background: #f8f9ff;
+    }
+
+    .post-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .avatar-circle {
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .post-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .post-author {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #1a1a2e;
+    }
+
+    .post-timestamp {
+      font-size: 0.78rem;
+      color: #6c757d;
+      cursor: default;
+    }
+
+    .edited-indicator {
+      font-style: italic;
+      font-size: 0.75rem;
+      color: #999;
+    }
+
+    .post-actions-btn {
+      background: none;
+      border: none;
+      color: #6c757d;
+      padding: 4px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    .post-actions-btn:hover {
+      background: #e9ecef;
+      color: #333;
+    }
+
+    .post-message {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      color: #333;
+      margin-top: 2px;
+    }
+
+    .post-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .pin-badge {
+      font-size: 0.75rem;
+      color: #0d6efd;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    /* Category badges */
+    .badge-category {
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    /* Edit form inline */
+    .edit-form textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .edit-form .char-counter {
+      margin-bottom: 8px;
+    }
+
+    /* Pagination */
+    .pagination-container {
+      display: flex;
+      justify-content: center;
+      margin-top: 16px;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #6c757d;
+    }
+
+    .empty-state i {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    /* Event date badge on post cards */
+    .event-date-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+      color: #0d6efd;
+      background: #e8f0fe;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 4px;
+    }
+    .event-date-badge i { font-size: 0.7rem; }
+
+    /* Date/time picker row in new post form */
+    .date-time-row {
+      display: none;
+      gap: 8px;
+      align-items: end;
+      margin-top: 8px;
+    }
+    .date-time-row.visible {
+      display: flex;
+    }
+    .date-time-row label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .date-time-row .optional-hint {
+      color: #999;
+      font-weight: 400;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Error / Success Banners -->
+  <div class="app-container">
+    <div id="error-banner" class="alert alert-danger error-banner alert-dismissible" role="alert">
+      <span id="error-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideError()"></button>
+    </div>
+    <div id="success-banner" class="alert alert-success success-banner alert-dismissible" role="alert">
+      <span id="success-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideSuccess()"></button>
+    </div>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div id="loading-spinner" class="loading-container">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <div>Loading announcements...</div>
+  </div>
+
+  <!-- Main App (hidden until loaded) -->
+  <div id="app-content" class="app-container" style="display: none;">
+
+    <!-- Header -->
+    <div class="app-header">
+      <h1><i class="bi bi-megaphone"></i> Announcements</h1>
+      <button class="btn btn-primary btn-sm" onclick="toggleNewPostForm()">
+        <i class="bi bi-plus-lg"></i> New Post
+      </button>
+    </div>
+
+    <!-- New Post Form (collapsible) -->
+    <div id="new-post-form" class="new-post-form" style="display: none;">
+      <div class="mb-2">
+        <textarea id="new-post-text" class="form-control form-control-sm" placeholder="Share an announcement with the department..." maxlength="500" oninput="updateCharCounter('new-post-text', 'new-post-counter')"></textarea>
+        <div id="new-post-counter" class="char-counter">0 / 500</div>
+      </div>
+      <div id="date-time-row" class="date-time-row">
+        <div style="flex: 1;">
+          <label class="form-label">Event Date</label>
+          <input type="date" id="new-post-date" class="form-control form-control-sm">
+        </div>
+        <div style="flex: 1;">
+          <label class="form-label">Time <span class="optional-hint">(optional)</span></label>
+          <input type="time" id="new-post-time" class="form-control form-control-sm">
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <select id="new-post-category" class="form-select form-select-sm" style="width: auto;" onchange="onCategoryChange()">
+          <option value="General">General</option>
+          <option value="Deadline">Deadline</option>
+          <option value="Event">Event</option>
+          <option value="FYI">FYI</option>
+          <option value="Urgent">Urgent</option>
+        </select>
+        <button id="new-post-submit" class="btn btn-primary btn-sm" onclick="handleNewPost()" disabled>
+          Post
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="toggleNewPostForm()">
+          Cancel
+        </button>
+      </div>
+    </div>
+
+    <!-- Posts Feed -->
+    <div id="posts-feed"></div>
+
+    <!-- Pagination -->
+    <div id="pagination-container" class="pagination-container"></div>
+
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title">Delete Announcement</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <p class="mb-0 small">Are you sure you want to delete this announcement? This cannot be undone.</p>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="confirm-delete-btn" class="btn btn-sm btn-danger" onclick="confirmDelete()">
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+  /* ============================================================
+     SECTION 2: APPLICATION STATE & CONFIGURATION
+     ============================================================ */
+
+  var AppState = {
+    currentUser: null,
+    posts: [],
+    isLoading: true,
+    editingPostId: null,
+    editDraft: '',
+    currentPage: 1,
+    postsPerPage: 50,
+    pendingDeleteId: null,
+    submitting: false
+  };
+
+  var MAX_POST_LENGTH = 500;
+
+  /* ============================================================
+     SECTION 3: RENDERING FUNCTIONS
+     ============================================================ */
+
+  function renderApp() {
+    var spinner = document.getElementById('loading-spinner');
+    var content = document.getElementById('app-content');
+
+    if (AppState.isLoading) {
+      spinner.style.display = 'flex';
+      content.style.display = 'none';
+      return;
+    }
+
+    spinner.style.display = 'none';
+    content.style.display = 'block';
+    renderPosts(AppState.posts);
+  }
+
+  function renderPosts(posts) {
+    var feed = document.getElementById('posts-feed');
+    var pinnedPosts = [];
+    var unpinnedPosts = [];
+
+    for (var i = 0; i < posts.length; i++) {
+      if (posts[i].Pinned === true || posts[i].Pinned === 'TRUE') {
+        pinnedPosts.push(posts[i]);
+      } else {
+        unpinnedPosts.push(posts[i]);
+      }
+    }
+
+    var html = '';
+
+    // Pinned section
+    if (pinnedPosts.length > 0) {
+      html += '<div class="section-label"><i class="bi bi-pin-fill"></i> Pinned</div>';
+      for (var p = 0; p < pinnedPosts.length; p++) {
+        html += renderPostCard(pinnedPosts[p], true);
+      }
+      if (unpinnedPosts.length > 0) {
+        html += '<hr class="my-3" style="border-color: #dee2e6;">';
+      }
+    }
+
+    // Unpinned section with pagination
+    var totalPages = Math.ceil(unpinnedPosts.length / AppState.postsPerPage);
+    if (AppState.currentPage > totalPages && totalPages > 0) {
+      AppState.currentPage = totalPages;
+    }
+    var start = (AppState.currentPage - 1) * AppState.postsPerPage;
+    var end = start + AppState.postsPerPage;
+    var pagePosts = unpinnedPosts.slice(start, end);
+
+    if (pagePosts.length === 0 && pinnedPosts.length === 0) {
+      html += '<div class="empty-state">';
+      html += '<i class="bi bi-chat-square-text"></i>';
+      html += '<p>No announcements yet.</p>';
+      html += '<p class="small">Click "New Post" to share something with the department.</p>';
+      html += '</div>';
+    }
+
+    for (var u = 0; u < pagePosts.length; u++) {
+      html += renderPostCard(pagePosts[u], false);
+    }
+
+    feed.innerHTML = html;
+
+    // Pagination
+    renderPagination(unpinnedPosts.length, totalPages);
+
+    // Restore edit draft if editing
+    if (AppState.editingPostId) {
+      var editTextarea = document.getElementById('edit-textarea-' + AppState.editingPostId);
+      if (editTextarea && AppState.editDraft) {
+        editTextarea.value = AppState.editDraft;
+        updateCharCounter('edit-textarea-' + AppState.editingPostId, 'edit-counter-' + AppState.editingPostId);
+      }
+    }
+  }
+
+  function renderPostCard(post, isPinned) {
+    var isOwn = AppState.currentUser && post.Author === AppState.currentUser.email;
+    var isAdmin = AppState.currentUser && AppState.currentUser.isAdmin;
+    var isEditing = AppState.editingPostId === post.PostId;
+
+    var cardClass = 'post-card' + (isPinned ? ' pinned' : '');
+    var html = '<div class="' + cardClass + '" data-post-id="' + post.PostId + '">';
+
+    // Header row: avatar, meta, actions
+    html += '<div class="post-card-header">';
+
+    // Avatar
+    var initials = getInitials(post.AuthorName);
+    var avatarColor = getAvatarColor(post.Author || '');
+    html += '<div class="avatar-circle" style="background-color: ' + avatarColor + ';">' + initials + '</div>';
+
+    // Meta
+    html += '<div class="post-meta">';
+    html += '<div class="post-author">' + escapeHtml(post.AuthorName) + '</div>';
+    html += '<div>';
+    var timeInfo = formatRelativeTime(post.Timestamp);
+    html += '<span class="post-timestamp" title="' + escapeHtml(timeInfo.full) + '">' + escapeHtml(timeInfo.relative) + '</span>';
+    if (post.Edited === true || post.Edited === 'TRUE') {
+      var editedTimeInfo = formatRelativeTime(post.EditedTimestamp);
+      html += ' <span class="edited-indicator" title="Edited ' + escapeHtml(editedTimeInfo.full) + '">(edited)</span>';
+    }
+    html += ' ';
+    html += '<span class="badge badge-category ' + getCategoryBadgeClass(post.Category) + '">' + escapeHtml(post.Category) + '</span>';
+    if (post.EventDate) {
+      var eventDisplay = formatEventDate(post.EventDate);
+      if (post.EventTime) eventDisplay += ' at ' + formatEventTime(post.EventTime);
+      html += ' <span class="event-date-badge"><i class="bi bi-calendar-event"></i> ' + escapeHtml(eventDisplay) + '</span>';
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // Action dropdown
+    if (isOwn || isAdmin) {
+      html += '<div class="dropdown">';
+      html += '<button class="post-actions-btn" data-bs-toggle="dropdown" aria-expanded="false">';
+      html += '<i class="bi bi-three-dots"></i>';
+      html += '</button>';
+      html += '<ul class="dropdown-menu dropdown-menu-end">';
+      if (isOwn) {
+        html += '<li><a class="dropdown-item small" href="#" onclick="handleEditPost(\'' + post.PostId + '\'); return false;"><i class="bi bi-pencil me-2"></i>Edit</a></li>';
+      }
+      if (isAdmin) {
+        var pinLabel = (post.Pinned === true || post.Pinned === 'TRUE') ? 'Unpin' : 'Pin';
+        var pinIcon = (post.Pinned === true || post.Pinned === 'TRUE') ? 'bi-pin-angle' : 'bi-pin-fill';
+        html += '<li><a class="dropdown-item small" href="#" onclick="handleTogglePin(\'' + post.PostId + '\'); return false;"><i class="bi ' + pinIcon + ' me-2"></i>' + pinLabel + '</a></li>';
+      }
+      if (isOwn || isAdmin) {
+        html += '<li><hr class="dropdown-divider"></li>';
+        html += '<li><a class="dropdown-item small text-danger" href="#" onclick="handleDeletePost(\'' + post.PostId + '\'); return false;"><i class="bi bi-trash me-2"></i>Delete</a></li>';
+      }
+      html += '</ul>';
+      html += '</div>';
+    }
+
+    html += '</div>'; // end header
+
+    // Message body or edit form
+    if (isEditing) {
+      html += '<div class="edit-form">';
+      html += '<textarea id="edit-textarea-' + post.PostId + '" class="form-control form-control-sm mb-1" maxlength="500" oninput="updateCharCounter(\'edit-textarea-' + post.PostId + '\', \'edit-counter-' + post.PostId + '\')">' + escapeHtml(post.Message) + '</textarea>';
+      html += '<div id="edit-counter-' + post.PostId + '" class="char-counter">' + post.Message.length + ' / 500</div>';
+      html += '<div class="d-flex gap-2">';
+      html += '<button class="btn btn-primary btn-sm" onclick="handleSaveEdit(\'' + post.PostId + '\')">Save</button>';
+      html += '<button class="btn btn-outline-secondary btn-sm" onclick="handleCancelEdit()">Cancel</button>';
+      html += '</div>';
+      html += '</div>';
+    } else {
+      html += '<div class="post-message">' + escapeHtml(post.Message) + '</div>';
+    }
+
+    // Pin badge in footer
+    if (isPinned) {
+      html += '<div class="post-footer">';
+      html += '<span class="pin-badge"><i class="bi bi-pin-fill"></i> Pinned</span>';
+      html += '</div>';
+    }
+
+    html += '</div>'; // end card
+    return html;
+  }
+
+  function renderPagination(totalUnpinned, totalPages) {
+    var container = document.getElementById('pagination-container');
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+
+    var html = '<nav><ul class="pagination pagination-sm">';
+    html += '<li class="page-item' + (AppState.currentPage === 1 ? ' disabled' : '') + '">';
+    html += '<a class="page-link" href="#" onclick="goToPage(' + (AppState.currentPage - 1) + '); return false;">Previous</a>';
+    html += '</li>';
+
+    for (var i = 1; i <= totalPages; i++) {
+      html += '<li class="page-item' + (i === AppState.currentPage ? ' active' : '') + '">';
+      html += '<a class="page-link" href="#" onclick="goToPage(' + i + '); return false;">' + i + '</a>';
+      html += '</li>';
+    }
+
+    html += '<li class="page-item' + (AppState.currentPage === totalPages ? ' disabled' : '') + '">';
+    html += '<a class="page-link" href="#" onclick="goToPage(' + (AppState.currentPage + 1) + '); return false;">Next</a>';
+    html += '</li>';
+    html += '</ul></nav>';
+
+    container.innerHTML = html;
+  }
+
+  function formatRelativeTime(timestamp) {
+    var now = new Date();
+    var date = new Date(timestamp);
+    var diffSeconds = Math.floor((now - date) / 1000);
+
+    var relative;
+    if (diffSeconds < 60) {
+      relative = 'just now';
+    } else if (diffSeconds < 3600) {
+      var mins = Math.floor(diffSeconds / 60);
+      relative = mins === 1 ? '1 minute ago' : mins + ' minutes ago';
+    } else if (diffSeconds < 86400) {
+      var hrs = Math.floor(diffSeconds / 3600);
+      relative = hrs === 1 ? '1 hour ago' : hrs + ' hours ago';
+    } else if (diffSeconds < 604800) {
+      var days = Math.floor(diffSeconds / 86400);
+      relative = days === 1 ? '1 day ago' : days + ' days ago';
+    } else {
+      relative = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    var full = date.toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    }) + ' at ' + date.toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true
+    });
+
+    return { relative: relative, full: full };
+  }
+
+  function getInitials(name) {
+    if (!name) return '?';
+    var parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  function getAvatarColor(email) {
+    var hash = 0;
+    for (var i = 0; i < email.length; i++) {
+      hash = email.charCodeAt(i) + ((hash << 5) - hash);
+      hash = hash & hash;
+    }
+    var hue = Math.abs(hash) % 360;
+    return 'hsl(' + hue + ', 55%, 45%)';
+  }
+
+  function getCategoryBadgeClass(category) {
+    var map = {
+      'General': 'bg-secondary',
+      'Deadline': 'bg-danger',
+      'Event': 'bg-info text-dark',
+      'FYI': 'bg-success',
+      'Urgent': 'bg-warning text-dark'
+    };
+    return map[category] || 'bg-secondary';
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function formatEventDate(dateStr) {
+    if (!dateStr) return '';
+    var parts = dateStr.split('-');
+    var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function formatEventTime(timeStr) {
+    if (!timeStr) return '';
+    var parts = timeStr.split(':');
+    var h = parseInt(parts[0]);
+    var m = parts[1];
+    if (h === 0) return '12:' + m + ' AM';
+    if (h < 12) return h + ':' + m + ' AM';
+    if (h === 12) return '12:' + m + ' PM';
+    return (h - 12) + ':' + m + ' PM';
+  }
+
+  /* ============================================================
+     SECTION 4: EVENT HANDLERS
+     ============================================================ */
+
+  function toggleNewPostForm() {
+    var form = document.getElementById('new-post-form');
+    var isVisible = form.style.display !== 'none';
+    form.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible) {
+      document.getElementById('new-post-text').value = '';
+      document.getElementById('new-post-category').value = 'General';
+      document.getElementById('new-post-date').value = '';
+      document.getElementById('new-post-time').value = '';
+      document.getElementById('date-time-row').className = 'date-time-row';
+      updateCharCounter('new-post-text', 'new-post-counter');
+      document.getElementById('new-post-text').focus();
+    }
+  }
+
+  function onCategoryChange() {
+    var category = document.getElementById('new-post-category').value;
+    var dateRow = document.getElementById('date-time-row');
+    if (category === 'Event' || category === 'Deadline') {
+      dateRow.className = 'date-time-row visible';
+    } else {
+      dateRow.className = 'date-time-row';
+      document.getElementById('new-post-date').value = '';
+      document.getElementById('new-post-time').value = '';
+    }
+  }
+
+  function updateCharCounter(textareaId, counterId) {
+    var textarea = document.getElementById(textareaId);
+    var counter = document.getElementById(counterId);
+    if (!textarea || !counter) return;
+
+    var len = textarea.value.length;
+    counter.textContent = len + ' / ' + MAX_POST_LENGTH;
+    counter.className = 'char-counter';
+    if (len > MAX_POST_LENGTH * 0.9) {
+      counter.className = 'char-counter danger';
+    } else if (len > MAX_POST_LENGTH * 0.8) {
+      counter.className = 'char-counter warning';
+    }
+
+    // Enable/disable submit for new post form
+    if (textareaId === 'new-post-text') {
+      var submitBtn = document.getElementById('new-post-submit');
+      submitBtn.disabled = len === 0 || len > MAX_POST_LENGTH || AppState.submitting;
+    }
+  }
+
+  function handleNewPost() {
+    var textarea = document.getElementById('new-post-text');
+    var categorySelect = document.getElementById('new-post-category');
+    var submitBtn = document.getElementById('new-post-submit');
+    var message = textarea.value.trim();
+    var category = categorySelect.value;
+    var eventDate = document.getElementById('new-post-date').value || '';
+    var eventTime = document.getElementById('new-post-time').value || '';
+
+    if (!message) return;
+    if (message.length > MAX_POST_LENGTH) {
+      showError('Message exceeds ' + MAX_POST_LENGTH + ' characters.');
+      return;
+    }
+
+    AppState.submitting = true;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+
+    google.script.run
+      .withSuccessHandler(function() {
+        AppState.submitting = false;
+        submitBtn.innerHTML = 'Post';
+        toggleNewPostForm();
+        showSuccess('Announcement posted.');
+        loadPosts();
+      })
+      .withFailureHandler(function(error) {
+        AppState.submitting = false;
+        submitBtn.innerHTML = 'Post';
+        submitBtn.disabled = false;
+        showError(error.message || 'Failed to create post.');
+      })
+      .createPost(message, category, eventDate, eventTime);
+  }
+
+  function handleEditPost(postId) {
+    AppState.editingPostId = postId;
+    AppState.editDraft = '';
+    renderPosts(AppState.posts);
+  }
+
+  function handleSaveEdit(postId) {
+    var textarea = document.getElementById('edit-textarea-' + postId);
+    if (!textarea) return;
+
+    var message = textarea.value.trim();
+    if (!message) {
+      showError('Post cannot be empty.');
+      return;
+    }
+    if (message.length > MAX_POST_LENGTH) {
+      showError('Message exceeds ' + MAX_POST_LENGTH + ' characters.');
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function() {
+        AppState.editingPostId = null;
+        AppState.editDraft = '';
+        showSuccess('Announcement updated.');
+        loadPosts();
+      })
+      .withFailureHandler(function(error) {
+        showError(error.message || 'Failed to save edit.');
+      })
+      .editPost(postId, message);
+  }
+
+  function handleCancelEdit() {
+    AppState.editingPostId = null;
+    AppState.editDraft = '';
+    renderPosts(AppState.posts);
+  }
+
+  function handleDeletePost(postId) {
+    AppState.pendingDeleteId = postId;
+    var modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+  }
+
+  function confirmDelete() {
+    var postId = AppState.pendingDeleteId;
+    if (!postId) return;
+
+    var btn = document.getElementById('confirm-delete-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+
+    google.script.run
+      .withSuccessHandler(function() {
+        btn.disabled = false;
+        btn.innerHTML = 'Delete';
+        AppState.pendingDeleteId = null;
+        var modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+        if (modal) modal.hide();
+        showSuccess('Announcement deleted.');
+        loadPosts();
+      })
+      .withFailureHandler(function(error) {
+        btn.disabled = false;
+        btn.innerHTML = 'Delete';
+        showError(error.message || 'Failed to delete post.');
+      })
+      .deletePost(postId);
+  }
+
+  function handleTogglePin(postId) {
+    google.script.run
+      .withSuccessHandler(function(post) {
+        showSuccess((post.Pinned === true || post.Pinned === 'TRUE') ? 'Announcement pinned.' : 'Announcement unpinned.');
+        loadPosts();
+      })
+      .withFailureHandler(function(error) {
+        showError(error.message || 'Failed to update pin status.');
+      })
+      .togglePin(postId);
+  }
+
+  function goToPage(page) {
+    if (page < 1) return;
+    AppState.currentPage = page;
+    renderPosts(AppState.posts);
+    window.scrollTo(0, 0);
+  }
+
+
+  /* ============================================================
+     SECTION 5: ERROR HANDLING & UTILITIES
+     ============================================================ */
+
+  function showError(message) {
+    var banner = document.getElementById('error-banner');
+    var msgEl = document.getElementById('error-message');
+    msgEl.textContent = message;
+    banner.style.display = 'block';
+    setTimeout(function() {
+      banner.style.display = 'none';
+    }, 5000);
+  }
+
+  function hideError() {
+    document.getElementById('error-banner').style.display = 'none';
+  }
+
+  function showSuccess(message) {
+    var banner = document.getElementById('success-banner');
+    document.getElementById('success-message').textContent = message;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 3000);
+  }
+
+  function hideSuccess() {
+    document.getElementById('success-banner').style.display = 'none';
+  }
+
+  /* ============================================================
+     SECTION 6: INITIALIZATION
+     ============================================================ */
+
+  var loadCount = 0;
+
+  function checkLoaded() {
+    loadCount++;
+    if (loadCount >= 2) {
+      AppState.isLoading = false;
+      renderApp();
+    }
+  }
+
+  function loadPosts() {
+    google.script.run
+      .withSuccessHandler(function(posts) {
+        AppState.posts = posts;
+        if (AppState.isLoading) {
+          checkLoaded();
+        } else {
+          renderPosts(AppState.posts);
+        }
+      })
+      .withFailureHandler(function(error) {
+        showError('Failed to load posts.');
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getPosts();
+  }
+
+  function loadCurrentUser() {
+    google.script.run
+      .withSuccessHandler(function(user) {
+        AppState.currentUser = user;
+        if (AppState.isLoading) {
+          checkLoaded();
+        } else {
+          renderApp();
+        }
+      })
+      .withFailureHandler(function(error) {
+        showError('Failed to identify user.');
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getCurrentUser();
+  }
+
+  // Boot
+  document.addEventListener('DOMContentLoaded', function() {
+    loadCurrentUser();
+    loadPosts();
+  });
+
+  </script>
+</body>
+</html>

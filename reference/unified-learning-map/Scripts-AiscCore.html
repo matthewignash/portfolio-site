@@ -1,0 +1,463 @@
+<script>
+// ============================================================================
+// AISC CORE — Frontend (ES5)
+// Mission, Vision, Values, Competencies — toggles, planner panel, hex context,
+// analytics renderers
+// Prefix: asc
+// ============================================================================
+
+// ---- Fallback competency/value defs (used before RPC returns) ----
+var ASC_COMPETENCIES = [
+  { key: 'criticalThinkers', label: 'Critical Thinkers', short: 'CT', color: '#6366f1', description: 'Define, analyze, evaluate, and solve complex problems.' },
+  { key: 'resilientLearners', label: 'Resilient Learners', short: 'RL', color: '#f59e0b', description: 'Embrace challenges, persist through difficulties, learn from feedback, and adapt to new situations.' },
+  { key: 'skillfulCommunicators', label: 'Skillful Communicators', short: 'SC', color: '#06b6d4', description: 'Communicate clearly and purposefully across diverse contexts and media.' },
+  { key: 'effectiveCollaborators', label: 'Effective Collaborators', short: 'EC', color: '#10b981', description: 'Collaborate with empathy while learning from and with each other.' },
+  { key: 'digitalNavigators', label: 'Digital Navigators', short: 'DN', color: '#8b5cf6', description: 'Leverage technology creatively, responsibly, and ethically.' },
+  { key: 'changeMakers', label: 'Change Makers', short: 'CM', color: '#ef4444', description: 'Transfer and apply skills, knowledge, and understanding to make a difference locally and globally.' }
+];
+
+var ASC_VALUES = [
+  { key: 'discovery', label: 'Discovery', icon: '\uD83D\uDD0D', color: '#3b82f6',
+    statements: { self: 'Embracing the unknown with wonder', act: 'Finding our own way forward', connect: 'Mapping new possibilities' } },
+  { key: 'belonging', label: 'Belonging', icon: '\uD83E\uDD1D', color: '#8b5cf6',
+    statements: { self: "Celebrating everyone's authentic self", act: 'Creating spaces where everyone feels safe, included, and has a sense of belonging', connect: 'Building bridges that connect different paths, ideas, and people' } },
+  { key: 'wellbeing', label: 'Wellbeing', icon: '\uD83D\uDC9A', color: '#10b981',
+    statements: { self: 'Nurturing mind, body, and self', act: 'Seeking balance while embracing challenges', connect: "Supporting each other's wellbeing" } },
+  { key: 'responsibility', label: 'Responsibility', icon: '\u2696\uFE0F', color: '#f59e0b',
+    statements: { self: 'Committing to personal and organizational excellence', act: 'Acting ethically and with integrity', connect: 'Considering our impact and being stewards of our shared environment' } },
+  { key: 'purpose', label: 'Purpose', icon: '\uD83C\uDFAF', color: '#ef4444',
+    statements: { self: 'Optimistically pursuing ambitious goals', act: 'Leading and learning with intention and direction', connect: 'Seeking global perspective to drive meaningful impact' } }
+];
+
+// ---- Helper: get competencies array (prefer server data, fall back to client) ----
+function ascGetCompetencies() {
+  return (ascCoreData && ascCoreData.competencies) ? ascCoreData.competencies : ASC_COMPETENCIES;
+}
+
+function ascGetValues() {
+  return (ascCoreData && ascCoreData.values) ? ascCoreData.values : ASC_VALUES;
+}
+
+function ascFindCompetency(key) {
+  var comps = ascGetCompetencies();
+  for (var i = 0; i < comps.length; i++) {
+    if (comps[i].key === key) return comps[i];
+  }
+  return null;
+}
+
+function ascFindValue(key) {
+  var vals = ascGetValues();
+  for (var i = 0; i < vals.length; i++) {
+    if (vals[i].key === key) return vals[i];
+  }
+  return null;
+}
+
+
+// ============================================================================
+// TEACHER HEX EDITOR — Toggle Handlers
+// ============================================================================
+
+/**
+ * Initialize competency toggle states from hex data.
+ */
+function ascInitCompetencyToggles(competencies) {
+  var group = document.getElementById('ascCompetencyToggles');
+  if (!group) return;
+  var toggles = group.querySelectorAll('.asc-toggle');
+  for (var i = 0; i < toggles.length; i++) {
+    var key = toggles[i].getAttribute('data-key');
+    var isActive = competencies.indexOf(key) !== -1;
+    if (isActive) {
+      toggles[i].classList.add('active');
+    } else {
+      toggles[i].classList.remove('active');
+    }
+    toggles[i].querySelector('input').checked = isActive;
+  }
+}
+
+/**
+ * Initialize value toggle states from hex data.
+ */
+function ascInitValueToggles(valuesAlignment) {
+  var group = document.getElementById('ascValueToggles');
+  if (!group) return;
+  var toggles = group.querySelectorAll('.asc-toggle');
+  for (var i = 0; i < toggles.length; i++) {
+    var key = toggles[i].getAttribute('data-key');
+    var isActive = valuesAlignment.indexOf(key) !== -1;
+    if (isActive) {
+      toggles[i].classList.add('active');
+    } else {
+      toggles[i].classList.remove('active');
+    }
+    toggles[i].querySelector('input').checked = isActive;
+  }
+}
+
+/**
+ * Toggle a competency on/off for the selected hex.
+ * Mirrors toggleSbarDomain() pattern.
+ */
+function toggleAscCompetency(key) {
+  var toggle = document.querySelector('#ascCompetencyToggles .asc-toggle[data-key="' + key + '"]');
+  if (!toggle) return;
+
+  var isActive = !toggle.classList.contains('active');
+  if (isActive) {
+    toggle.classList.add('active');
+  } else {
+    toggle.classList.remove('active');
+  }
+  toggle.querySelector('input').checked = isActive;
+
+  // Update hex curriculum
+  if (!selectedHexId) return;
+  var hex = findHexById(selectedHexId);
+  if (!hex) return;
+
+  if (!hex.curriculum) hex.curriculum = {};
+  if (!hex.curriculum.competencies) hex.curriculum.competencies = [];
+
+  if (isActive && hex.curriculum.competencies.indexOf(key) === -1) {
+    hex.curriculum.competencies.push(key);
+  } else if (!isActive) {
+    hex.curriculum.competencies = hex.curriculum.competencies.filter(function(k) { return k !== key; });
+  }
+
+  renderHexGrid();
+}
+
+/**
+ * Toggle a value on/off for the selected hex.
+ */
+function toggleAscValue(key) {
+  var toggle = document.querySelector('#ascValueToggles .asc-toggle[data-key="' + key + '"]');
+  if (!toggle) return;
+
+  var isActive = !toggle.classList.contains('active');
+  if (isActive) {
+    toggle.classList.add('active');
+  } else {
+    toggle.classList.remove('active');
+  }
+  toggle.querySelector('input').checked = isActive;
+
+  // Update hex curriculum
+  if (!selectedHexId) return;
+  var hex = findHexById(selectedHexId);
+  if (!hex) return;
+
+  if (!hex.curriculum) hex.curriculum = {};
+  if (!hex.curriculum.valuesAlignment) hex.curriculum.valuesAlignment = [];
+
+  if (isActive && hex.curriculum.valuesAlignment.indexOf(key) === -1) {
+    hex.curriculum.valuesAlignment.push(key);
+  } else if (!isActive) {
+    hex.curriculum.valuesAlignment = hex.curriculum.valuesAlignment.filter(function(k) { return k !== key; });
+  }
+
+  renderHexGrid();
+}
+
+
+// ============================================================================
+// STUDENT HEX CONTEXT — Competency/Value badges in modal
+// ============================================================================
+
+/**
+ * Render competency and value context badges in student hex modal.
+ */
+function ascRenderHexContext(hex) {
+  var container = document.getElementById('ascHexContext');
+  if (!container) return;
+
+  var curriculum = hex.curriculum || {};
+  var comps = curriculum.competencies || [];
+  var vals = curriculum.valuesAlignment || [];
+
+  if (comps.length === 0 && vals.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  var html = '';
+
+  // Competency badges
+  for (var i = 0; i < comps.length; i++) {
+    var comp = ascFindCompetency(comps[i]);
+    if (comp) {
+      html += '<span class="asc-context-badge ' + escapeHtml(comp.key) + '">' + escapeHtml(comp.short) + ' ' + escapeHtml(comp.label) + '</span>';
+    }
+  }
+
+  // Value badges
+  for (var v = 0; v < vals.length; v++) {
+    var val = ascFindValue(vals[v]);
+    if (val) {
+      html += '<span class="asc-context-badge value-badge ' + escapeHtml(val.key) + '">' + val.icon + ' ' + escapeHtml(val.label) + '</span>';
+    }
+  }
+
+  container.innerHTML = html;
+}
+
+
+// ============================================================================
+// STUDENT PLANNER — "Our School" Reference Panel
+// ============================================================================
+
+/**
+ * Render the collapsible "Our School" panel in the student planner.
+ */
+function ascRenderPlannerPanel() {
+  var container = document.getElementById('ascPlannerPanel');
+  if (!container) return;
+
+  var core = ascCoreData;
+  // If core data hasn't loaded yet, show nothing (will render on next planner refresh)
+  if (!core) {
+    container.innerHTML = '';
+    return;
+  }
+
+  var bodyClass = ascPlannerExpanded ? 'asc-panel-body open' : 'asc-panel-body';
+  var chevronClass = ascPlannerExpanded ? 'asc-panel-chevron open' : 'asc-panel-chevron';
+
+  var html = '<div class="asc-planner-panel">';
+
+  // Header
+  html += '<div class="asc-panel-header" role="button" tabindex="0" aria-expanded="' + (ascPlannerExpanded ? 'true' : 'false') + '" onclick="ascTogglePlannerPanel()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ascTogglePlannerPanel();}">';
+  html += '<span class="asc-panel-title">&#127979; Our School</span>';
+  html += '<span class="' + chevronClass + '">&#9660;</span>';
+  html += '</div>';
+
+  // Body
+  html += '<div class="' + bodyClass + '">';
+
+  // Mission
+  html += '<div class="asc-statement">';
+  html += '<div class="asc-statement-label">Mission</div>';
+  html += '<div class="asc-statement-text">' + escapeHtml(core.mission) + '</div>';
+  html += '</div>';
+
+  // Vision
+  html += '<div class="asc-statement">';
+  html += '<div class="asc-statement-label">Vision</div>';
+  html += '<div class="asc-statement-text">' + escapeHtml(core.vision) + '</div>';
+  html += '</div>';
+
+  // Definition of Learning
+  html += '<div class="asc-statement">';
+  html += '<div class="asc-statement-label">Definition of Learning</div>';
+  html += '<div class="asc-statement-text">' + escapeHtml(core.definitionOfLearning) + '</div>';
+  html += '</div>';
+
+  // Competencies
+  html += '<div class="asc-panel-section-title">Our Competencies</div>';
+  html += '<div class="asc-competency-grid">';
+  var comps = core.competencies || [];
+  for (var c = 0; c < comps.length; c++) {
+    html += ascRenderCompetencyCard(comps[c]);
+  }
+  html += '</div>';
+
+  // Values
+  html += '<div class="asc-panel-section-title">Our Values</div>';
+  html += '<div class="asc-values-grid">';
+  var vals = core.values || [];
+  for (var v = 0; v < vals.length; v++) {
+    html += ascRenderValueCard(vals[v]);
+  }
+  html += '</div>';
+
+  html += '</div>'; // end panel-body
+  html += '</div>'; // end planner-panel
+
+  container.innerHTML = html;
+}
+
+/**
+ * Toggle the planner panel open/closed.
+ */
+function ascTogglePlannerPanel() {
+  ascPlannerExpanded = !ascPlannerExpanded;
+  ascRenderPlannerPanel();
+}
+
+/**
+ * Render a single competency card for the planner panel.
+ */
+function ascRenderCompetencyCard(comp) {
+  var html = '<div class="asc-comp-card ' + escapeHtml(comp.key) + '">';
+  html += '<div class="asc-comp-card-label">' + escapeHtml(comp.short) + ' ' + escapeHtml(comp.label) + '</div>';
+  html += '<div class="asc-comp-card-desc">' + escapeHtml(comp.description) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Render a single value card for the planner panel.
+ */
+function ascRenderValueCard(val) {
+  var html = '<div class="asc-value-card">';
+  html += '<div class="asc-value-card-header">';
+  html += '<span class="asc-value-card-icon">' + val.icon + '</span>';
+  html += '<span class="asc-value-card-label">' + escapeHtml(val.label) + '</span>';
+  html += '</div>';
+  html += '<div class="asc-value-card-statements">';
+  html += '<div class="asc-value-statement"><span class="asc-value-lens self">Self</span> ' + escapeHtml(val.statements.self) + '</div>';
+  html += '<div class="asc-value-statement"><span class="asc-value-lens act">Act</span> ' + escapeHtml(val.statements.act) + '</div>';
+  html += '<div class="asc-value-statement"><span class="asc-value-lens connect">Connect</span> ' + escapeHtml(val.statements.connect) + '</div>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+
+// ============================================================================
+// ANALYTICS — Competency Coverage (for Knowledge Gaps + Student Analytics)
+// ============================================================================
+
+/**
+ * Compute competency coverage from hex data (client-side).
+ * Used by Knowledge Gaps dashboard.
+ *
+ * @param {Array} hexes - Array of hex objects from mapsData
+ * @param {Array} students - Student progress data (optional, for score computation)
+ * @returns {Object} { items: [{ key, label, short, color, hexCount, totalHexes, coveragePct, avgScorePct }], hasGaps: bool }
+ */
+function ascComputeMapCompetencyCoverage(hexes, students) {
+  var comps = ascGetCompetencies();
+  var totalHexes = hexes ? hexes.length : 0;
+  var items = [];
+  var hasGaps = false;
+
+  for (var c = 0; c < comps.length; c++) {
+    var comp = comps[c];
+    var hexCount = 0;
+    var totalScore = 0;
+    var totalMaxScore = 0;
+
+    for (var h = 0; h < (hexes || []).length; h++) {
+      var curriculum = hexes[h].curriculum || {};
+      var hexComps = curriculum.competencies || [];
+      if (hexComps.indexOf(comp.key) !== -1) {
+        hexCount++;
+
+        // If students data provided, compute class avg score for this hex
+        if (students && students.length > 0) {
+          for (var s = 0; s < students.length; s++) {
+            var hp = (students[s].hexProgress || {})[hexes[h].id];
+            if (hp && hp.score !== null && hp.score !== undefined && hp.maxScore > 0) {
+              totalScore += parseFloat(hp.score) || 0;
+              totalMaxScore += parseFloat(hp.maxScore) || 0;
+            }
+          }
+        }
+      }
+    }
+
+    var coveragePct = totalHexes > 0 ? Math.round((hexCount / totalHexes) * 100) : 0;
+    var avgScorePct = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+
+    if (hexCount === 0) hasGaps = true;
+
+    items.push({
+      key: comp.key,
+      label: comp.label,
+      short: comp.short,
+      color: comp.color,
+      hexCount: hexCount,
+      totalHexes: totalHexes,
+      coveragePct: coveragePct,
+      avgScorePct: avgScorePct
+    });
+  }
+
+  return { items: items, hasGaps: hasGaps };
+}
+
+/**
+ * Render competency coverage section for Knowledge Gaps.
+ * Returns HTML string.
+ */
+function ascRenderCoverageSection(coverageData) {
+  if (!coverageData || !coverageData.items) return '';
+
+  var html = '';
+  for (var i = 0; i < coverageData.items.length; i++) {
+    var item = coverageData.items[i];
+    var gapClass = item.hexCount === 0 ? ' gap' : '';
+
+    html += '<div class="asc-coverage-row' + gapClass + '">';
+
+    // Label with color dot
+    html += '<div class="asc-coverage-label">';
+    html += '<span class="asc-coverage-dot" style="background:' + item.color + ';"></span>';
+    html += escapeHtml(item.short) + ' ' + escapeHtml(item.label);
+    html += '</div>';
+
+    // Bar
+    html += '<div class="asc-coverage-bar-container">';
+    html += '<div class="asc-coverage-bar-fill" style="width:' + item.coveragePct + '%;background:' + item.color + ';"></div>';
+    html += '</div>';
+
+    // Value
+    html += '<div class="asc-coverage-value">' + item.hexCount + '/' + item.totalHexes;
+    if (item.hexCount === 0) {
+      html += ' &#9888;';
+    }
+    html += '</div>';
+
+    html += '</div>';
+  }
+
+  return html;
+}
+
+/**
+ * Render student competency profile bars for Student Analytics.
+ * Returns HTML string.
+ *
+ * @param {Object} profileData - { competencies: { key: { completionPct, avgScorePct, totalHexes, completedHexes } } }
+ */
+function ascRenderStudentProfile(profileData) {
+  if (!profileData || !profileData.competencies) return '';
+
+  var comps = ascGetCompetencies();
+  var html = '';
+
+  for (var c = 0; c < comps.length; c++) {
+    var comp = comps[c];
+    var data = profileData.competencies[comp.key];
+    if (!data || data.totalHexes === 0) continue;
+
+    html += '<div class="asc-coverage-row">';
+
+    // Label with color dot
+    html += '<div class="asc-coverage-label">';
+    html += '<span class="asc-coverage-dot" style="background:' + comp.color + ';"></span>';
+    html += escapeHtml(comp.short) + ' ' + escapeHtml(comp.label);
+    html += '</div>';
+
+    // Bar (completion %)
+    html += '<div class="asc-coverage-bar-container">';
+    html += '<div class="asc-coverage-bar-fill" style="width:' + data.completionPct + '%;background:' + comp.color + ';"></div>';
+    html += '</div>';
+
+    // Value
+    html += '<div class="asc-coverage-value">' + data.completionPct + '%</div>';
+
+    html += '</div>';
+  }
+
+  if (html === '') {
+    html = '<div style="font-size:12px;color:#94a3b8;font-style:italic;padding:4px 0;">No competency-tagged hexes in this map.</div>';
+  }
+
+  return html;
+}
+</script>

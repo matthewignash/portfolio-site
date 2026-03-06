@@ -1,0 +1,366 @@
+<style>
+/* ============================================================================
+   GUIDED TOUR / ONBOARDING — tur- prefix
+   Spotlight overlay, tooltip, pulse ring, progress bar, animations.
+   z-index: 1300 (backdrop), 1310 (spotlight target), 1350 (tooltip)
+   ============================================================================ */
+
+/* ---- Backdrop Overlay ---- */
+.tur-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1300;
+  pointer-events: auto;
+  background: transparent;
+}
+
+/* ---- Spotlight on Target Element ---- */
+.tur-spotlight {
+  position: relative;
+  z-index: 1310 !important;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  border-radius: 6px;
+  pointer-events: auto;
+  transition: box-shadow 0.3s ease;
+}
+
+/* ---- Pulse Ring (around spotlight target) ---- */
+.tur-pulse-ring {
+  position: absolute;
+  border: 2px solid #3b82f6;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1310;
+  animation: tur-pulse 1.5s ease-in-out infinite;
+}
+
+/* ---- Tooltip ---- */
+.tur-tooltip {
+  position: fixed;
+  z-index: 1350;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+  max-width: 380px;
+  width: 380px;
+  padding: 0;
+  animation: tur-scaleIn 0.3s ease-out;
+  overflow: hidden;
+}
+.tur-tooltip.tur-dismissing {
+  animation: tur-fadeOut 0.2s ease-in forwards;
+}
+
+/* ---- Tooltip Header ---- */
+.tur-tooltip-header {
+  padding: 16px 20px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.tur-tooltip-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.tur-tooltip-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.3;
+  flex: 1;
+  padding-top: 4px;
+}
+
+/* ---- EAL/LS Badge ---- */
+.tur-eal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 10px;
+  margin-left: 20px;
+}
+.tur-eal-badge-icon {
+  font-size: 12px;
+}
+
+/* ---- Tooltip Body ---- */
+.tur-tooltip-body {
+  padding: 12px 20px 16px;
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.6;
+}
+
+/* ---- Progress Bar ---- */
+.tur-progress-bar {
+  height: 3px;
+  background: #e2e8f0;
+  margin: 0;
+}
+.tur-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+/* ---- Tooltip Footer ---- */
+.tur-tooltip-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #f1f5f9;
+}
+.tur-step-counter {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+.tur-tooltip-nav {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---- Navigation Buttons ---- */
+.tur-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+.tur-btn:hover {
+  transform: translateY(-1px);
+}
+.tur-btn:active {
+  transform: translateY(0);
+}
+.tur-btn-next {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35);
+}
+.tur-btn-next:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4);
+}
+.tur-btn-prev {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+.tur-btn-prev:hover {
+  background: #e2e8f0;
+}
+.tur-btn-skip {
+  background: none;
+  color: #94a3b8;
+  padding: 8px 12px;
+  font-weight: 500;
+}
+.tur-btn-skip:hover {
+  color: #64748b;
+}
+.tur-btn-finish {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+}
+.tur-btn-finish:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);
+}
+
+/* ---- Arrow (CSS triangle) ---- */
+.tur-arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  transform: rotate(45deg);
+  box-shadow: -2px -2px 4px rgba(0, 0, 0, 0.04);
+}
+.tur-arrow-top {
+  top: -6px;
+  left: 50%;
+  margin-left: -6px;
+  box-shadow: -2px -2px 4px rgba(0, 0, 0, 0.04);
+}
+.tur-arrow-bottom {
+  bottom: -6px;
+  left: 50%;
+  margin-left: -6px;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.04);
+}
+.tur-arrow-left {
+  left: -6px;
+  top: 50%;
+  margin-top: -6px;
+  box-shadow: -2px 2px 4px rgba(0, 0, 0, 0.04);
+}
+.tur-arrow-right {
+  right: -6px;
+  top: 50%;
+  margin-top: -6px;
+  box-shadow: 2px -2px 4px rgba(0, 0, 0, 0.04);
+}
+
+/* ---- Completion Card ---- */
+.tur-complete-card {
+  position: fixed;
+  z-index: 1350;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px 40px;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  animation: tur-slideUp 0.4s ease-out;
+  max-width: 360px;
+}
+.tur-complete-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.tur-complete-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+.tur-complete-msg {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.tur-complete-btn {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.tur-complete-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+/* ---- Welcome Overlay (Step 0 special) ---- */
+.tur-welcome-overlay {
+  position: fixed;
+  z-index: 1350;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px 40px;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  animation: tur-slideUp 0.4s ease-out;
+  max-width: 420px;
+  width: 90%;
+}
+
+/* ---- Replay Tour Button (for guide tabs) ---- */
+.tur-replay-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: 12px;
+}
+.tur-replay-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.35);
+}
+.tur-replay-icon {
+  font-size: 14px;
+}
+
+/* ============================================================================
+   ANIMATIONS
+   ============================================================================ */
+
+/* Tooltip entrance */
+@keyframes tur-scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Tooltip exit */
+@keyframes tur-fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Pulse ring */
+@keyframes tur-pulse {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.05);
+  }
+}
+
+/* Completion card / welcome slide-up */
+@keyframes tur-slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateY(0);
+  }
+}
+</style>

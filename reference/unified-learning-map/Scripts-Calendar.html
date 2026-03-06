@@ -1,0 +1,444 @@
+<script>
+    // ================================================
+    //  TEACHER CALENDAR / TIMELINE (tcl- prefix)
+    //  Map-level time gate + due date visualization
+    // ================================================
+
+    var TCL_DAY_WIDTH = 32;
+    var TCL_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var TCL_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    // ---- Entry Points ----
+
+    function tclOpenCalendar() {
+      if (!currentMap || !currentMap.hexes || currentMap.hexes.length === 0) {
+        showToast('Open a map first to view its calendar.', 'info');
+        return;
+      }
+      tclCalendarOpen = true;
+      tclMonthOffset = 0;
+      var overlay = document.getElementById('tclOverlay');
+      if (overlay) overlay.classList.add('active');
+      tclRender();
+    }
+
+    function tclCloseCalendar() {
+      tclCalendarOpen = false;
+      var overlay = document.getElementById('tclOverlay');
+      if (overlay) overlay.classList.remove('active');
+    }
+
+    // ---- Data Collection ----
+
+    function tclCollectTimeData() {
+      var events = [];
+      if (!currentMap || !currentMap.hexes) return events;
+
+      for (var h = 0; h < currentMap.hexes.length; h++) {
+        var hex = currentMap.hexes[h];
+
+        // Collect time-gated branches
+        if (hex.branches && hex.branches.length > 0) {
+          for (var b = 0; b < hex.branches.length; b++) {
+            var branch = hex.branches[b];
+            if (!branch.condition) continue;
+
+            var timeConditions = tclExtractTimeConditions(branch.condition);
+            for (var tc = 0; tc < timeConditions.length; tc++) {
+              var cond = timeConditions[tc];
+              if (cond.availableAfter || cond.availableBefore) {
+                var targets = branch.nextHexIds || [];
+                var targetLabel = '';
+                if (targets.length > 0) {
+                  var tHex = tclFindHex(targets[0]);
+                  targetLabel = tHex ? (tHex.label || 'Hex') : '';
+                }
+                events.push({
+                  hexId: hex.id,
+                  hexLabel: hex.label || 'Hex',
+                  hexIcon: hex.icon || '📚',
+                  type: 'time_gate',
+                  availableAfter: cond.availableAfter || '',
+                  availableBefore: cond.availableBefore || '',
+                  dueDate: '',
+                  targetLabel: targetLabel,
+                  branchIndex: b,
+                  condLabel: branch.condition.label || 'Time Gate'
+                });
+              }
+            }
+          }
+        }
+
+        // Collect hex due dates
+        if (hex.dueDate) {
+          events.push({
+            hexId: hex.id,
+            hexLabel: hex.label || 'Hex',
+            hexIcon: hex.icon || '📚',
+            type: 'due_date',
+            availableAfter: '',
+            availableBefore: '',
+            dueDate: hex.dueDate,
+            targetLabel: '',
+            branchIndex: -1,
+            condLabel: 'Due Date'
+          });
+        }
+      }
+
+      // Sort by earliest date
+      events.sort(function(a, b) {
+        var dateA = a.availableAfter || a.dueDate || a.availableBefore || '9999';
+        var dateB = b.availableAfter || b.dueDate || b.availableBefore || '9999';
+        return dateA < dateB ? -1 : (dateA > dateB ? 1 : 0);
+      });
+
+      return events;
+    }
+
+    function tclExtractTimeConditions(condition) {
+      if (condition.type === 'time') return [condition];
+      if (condition.type === 'compound' && condition.conditions) {
+        var result = [];
+        for (var i = 0; i < condition.conditions.length; i++) {
+          if (condition.conditions[i].type === 'time') {
+            result.push(condition.conditions[i]);
+          }
+        }
+        return result;
+      }
+      return [];
+    }
+
+    function tclFindHex(hexId) {
+      if (!currentMap || !currentMap.hexes) return null;
+      for (var i = 0; i < currentMap.hexes.length; i++) {
+        if (currentMap.hexes[i].id === hexId) return currentMap.hexes[i];
+      }
+      return null;
+    }
+
+    // ---- Rendering ----
+
+    function tclRender() {
+      var events = tclCollectTimeData();
+      var modalEl = document.getElementById('tclModalBody');
+      if (!modalEl) return;
+
+      if (events.length === 0) {
+        modalEl.innerHTML = '<div class="tcl-empty-state">' +
+          '<div class="tcl-empty-icon">📅</div>' +
+          '<div class="tcl-empty-title">No Time Events</div>' +
+          '<div class="tcl-empty-text">Add time-based branches or due dates to hexes to see them here.</div>' +
+          '</div>';
+        tclRenderToolbar(events);
+        return;
+      }
+
+      if (tclViewMode === 'timeline') {
+        tclRenderTimeline(events, modalEl);
+      } else {
+        tclRenderList(events, modalEl);
+      }
+      tclRenderToolbar(events);
+    }
+
+    function tclRenderToolbar(events) {
+      var toolbarEl = document.getElementById('tclToolbar');
+      if (!toolbarEl) return;
+
+      var timeGateCount = 0;
+      var dueDateCount = 0;
+      for (var i = 0; i < events.length; i++) {
+        if (events[i].type === 'time_gate') timeGateCount++;
+        else dueDateCount++;
+      }
+
+      var html = '<div class="tcl-view-toggle">';
+      html += '<button class="tcl-view-btn' + (tclViewMode === 'timeline' ? ' active' : '') + '" onclick="tclSetView(\'timeline\')">Timeline</button>';
+      html += '<button class="tcl-view-btn' + (tclViewMode === 'list' ? ' active' : '') + '" onclick="tclSetView(\'list\')">List</button>';
+      html += '</div>';
+
+      if (tclViewMode === 'timeline') {
+        html += '<div class="tcl-month-nav">';
+        html += '<button class="tcl-nav-btn" onclick="tclNavigateMonth(-1)">&lt;</button>';
+        var refDate = tclGetReferenceDate();
+        html += '<span class="tcl-month-label">' + TCL_MONTH_NAMES[refDate.getMonth()] + ' ' + refDate.getFullYear() + '</span>';
+        html += '<button class="tcl-nav-btn" onclick="tclNavigateMonth(1)">&gt;</button>';
+        html += '<button class="tcl-nav-btn" onclick="tclNavigateMonth(0)">Today</button>';
+        html += '</div>';
+      }
+
+      html += '<span class="tcl-summary-badge">' + timeGateCount + ' gate' + (timeGateCount !== 1 ? 's' : '') + ', ' + dueDateCount + ' due date' + (dueDateCount !== 1 ? 's' : '') + '</span>';
+      toolbarEl.innerHTML = html;
+    }
+
+    function tclSetView(mode) {
+      tclViewMode = mode;
+      tclRender();
+    }
+
+    function tclNavigateMonth(direction) {
+      if (direction === 0) {
+        tclMonthOffset = 0;
+      } else {
+        tclMonthOffset += direction;
+      }
+      tclRender();
+    }
+
+    function tclGetReferenceDate() {
+      var now = new Date();
+      now.setMonth(now.getMonth() + tclMonthOffset);
+      return now;
+    }
+
+    // ---- Timeline View ----
+
+    function tclRenderTimeline(events, container) {
+      // Compute date range
+      var allDates = [];
+      for (var i = 0; i < events.length; i++) {
+        var e = events[i];
+        if (e.availableAfter) allDates.push(e.availableAfter);
+        if (e.availableBefore) allDates.push(e.availableBefore);
+        if (e.dueDate) allDates.push(e.dueDate);
+      }
+
+      var today = tclFormatDate(new Date());
+      allDates.push(today);
+
+      allDates.sort();
+      var startDate = tclParseDate(allDates[0]);
+      var endDate = tclParseDate(allDates[allDates.length - 1]);
+
+      // Pad by 7 days each side
+      startDate.setDate(startDate.getDate() - 7);
+      endDate.setDate(endDate.getDate() + 7);
+
+      // Minimum 30-day span
+      var daySpan = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24));
+      if (daySpan < 30) {
+        endDate.setDate(endDate.getDate() + (30 - daySpan));
+      }
+
+      // Apply month offset
+      if (tclMonthOffset !== 0) {
+        var refDate = tclGetReferenceDate();
+        startDate = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+        endDate = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 7);
+      }
+
+      var totalDays = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+      var totalWidth = totalDays * TCL_DAY_WIDTH;
+
+      // Build header
+      var html = '<div class="tcl-timeline" style="width:' + (totalWidth + 140) + 'px;">';
+
+      // Day header
+      html += '<div class="tcl-timeline-header">';
+      html += '<div class="tcl-hex-label" style="font-weight:600;color:#64748b;font-size:11px;">Hex</div>';
+      var currentDate = new Date(startDate);
+      for (var d = 0; d < totalDays; d++) {
+        var dateStr = tclFormatDate(currentDate);
+        var dayOfWeek = currentDate.getDay();
+        var isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+        var isToday = (dateStr === today);
+        var classes = 'tcl-timeline-day' + (isWeekend ? ' weekend' : '') + (isToday ? ' today' : '');
+
+        html += '<div class="' + classes + '" style="width:' + TCL_DAY_WIDTH + 'px;" title="' + dateStr + '">';
+        if (currentDate.getDate() === 1 || d === 0) {
+          html += '<div style="font-size:9px;">' + TCL_MONTH_NAMES[currentDate.getMonth()] + '</div>';
+        } else {
+          html += '<div style="font-size:9px;">' + TCL_DAY_NAMES[dayOfWeek] + '</div>';
+        }
+        html += '<div class="tcl-timeline-day-num">' + currentDate.getDate() + '</div>';
+        html += '</div>';
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      html += '</div>';
+
+      // Rows
+      html += '<div class="tcl-timeline-rows">';
+
+      // Today line
+      var todayPos = tclDateToPixel(today, startDate);
+      if (todayPos >= 0 && todayPos <= totalWidth) {
+        html += '<div class="tcl-today-line" style="left:' + (140 + todayPos) + 'px;"></div>';
+      }
+
+      // Group events by hex to combine on same row
+      var hexRows = {};
+      var hexOrder = [];
+      for (var ei = 0; ei < events.length; ei++) {
+        var evt = events[ei];
+        if (!hexRows[evt.hexId]) {
+          hexRows[evt.hexId] = { label: evt.hexLabel, icon: evt.hexIcon, events: [] };
+          hexOrder.push(evt.hexId);
+        }
+        hexRows[evt.hexId].events.push(evt);
+      }
+
+      for (var ri = 0; ri < hexOrder.length; ri++) {
+        var rowHexId = hexOrder[ri];
+        var row = hexRows[rowHexId];
+
+        html += '<div class="tcl-timeline-row">';
+        html += '<div class="tcl-hex-label"><span class="tcl-hex-icon">' + row.icon + '</span><span>' + escapeHtml(row.label) + '</span></div>';
+        html += '<div class="tcl-bar-area">';
+
+        for (var be = 0; be < row.events.length; be++) {
+          var barEvt = row.events[be];
+
+          if (barEvt.type === 'time_gate') {
+            var barStart = barEvt.availableAfter ? tclDateToPixel(barEvt.availableAfter, startDate) : 0;
+            var barEnd = barEvt.availableBefore ? tclDateToPixel(barEvt.availableBefore, startDate) + TCL_DAY_WIDTH : totalWidth;
+            var barWidth = Math.max(barEnd - barStart, TCL_DAY_WIDTH);
+            var status = tclGetBarStatus(barEvt.availableAfter, barEvt.availableBefore, today);
+
+            html += '<div class="tcl-bar time-gate ' + status + '" style="left:' + barStart + 'px;width:' + barWidth + 'px;" onclick="tclOnBarClick(\'' + escapeHtml(barEvt.hexId) + '\', \'time_gate\', ' + barEvt.branchIndex + ')" title="' + escapeHtml(barEvt.condLabel) + '">';
+            html += escapeHtml(barEvt.condLabel);
+            html += '</div>';
+          } else {
+            var duePos = tclDateToPixel(barEvt.dueDate, startDate);
+            var dueStatus = (barEvt.dueDate < today) ? 'expired' : (barEvt.dueDate === today ? 'active' : 'future');
+
+            html += '<div class="tcl-bar due-date ' + dueStatus + '" style="left:' + duePos + 'px;width:' + TCL_DAY_WIDTH + 'px;" onclick="tclOnBarClick(\'' + escapeHtml(barEvt.hexId) + '\', \'due_date\', -1)" title="Due: ' + barEvt.dueDate + '">';
+            html += '📌';
+            html += '</div>';
+          }
+        }
+
+        html += '</div>'; // bar-area
+        html += '</div>'; // row
+      }
+
+      html += '</div>'; // rows
+      html += '</div>'; // timeline
+
+      container.innerHTML = html;
+
+      // Scroll to today
+      var timelineEl = container.querySelector('.tcl-timeline');
+      if (timelineEl && todayPos > 200) {
+        timelineEl.scrollLeft = todayPos - 200;
+      }
+    }
+
+    // ---- List View ----
+
+    function tclRenderList(events, container) {
+      var today = tclFormatDate(new Date());
+      var html = '<div class="tcl-list">';
+
+      for (var i = 0; i < events.length; i++) {
+        var evt = events[i];
+        var status = '';
+        var statusText = '';
+        var dateText = '';
+
+        if (evt.type === 'time_gate') {
+          status = tclGetBarStatus(evt.availableAfter, evt.availableBefore, today);
+          if (status === 'active') {
+            statusText = 'Active now';
+          } else if (status === 'future') {
+            var daysUntil = tclDaysBetween(today, evt.availableAfter);
+            statusText = 'Starts in ' + daysUntil + ' day' + (daysUntil !== 1 ? 's' : '');
+          } else {
+            var daysAgo = tclDaysBetween(evt.availableBefore, today);
+            statusText = 'Expired ' + daysAgo + ' day' + (daysAgo !== 1 ? 's' : '') + ' ago';
+          }
+          dateText = '';
+          if (evt.availableAfter) dateText += 'After: ' + tclFormatDateShort(evt.availableAfter);
+          if (evt.availableAfter && evt.availableBefore) dateText += '  ·  ';
+          if (evt.availableBefore) dateText += 'Before: ' + tclFormatDateShort(evt.availableBefore);
+        } else {
+          if (evt.dueDate < today) { status = 'expired'; statusText = 'Overdue'; }
+          else if (evt.dueDate === today) { status = 'active'; statusText = 'Due today'; }
+          else {
+            status = 'future';
+            var dUntil = tclDaysBetween(today, evt.dueDate);
+            statusText = 'Due in ' + dUntil + ' day' + (dUntil !== 1 ? 's' : '');
+          }
+          dateText = tclFormatDateShort(evt.dueDate);
+        }
+
+        html += '<div class="tcl-list-item' + (status === 'expired' ? ' expired' : '') + '" onclick="tclOnBarClick(\'' + escapeHtml(evt.hexId) + '\', \'' + evt.type + '\', ' + evt.branchIndex + ')">';
+        html += '<span class="tcl-list-icon">' + evt.hexIcon + '</span>';
+        html += '<div class="tcl-list-body">';
+        html += '<div class="tcl-list-label">' + escapeHtml(evt.hexLabel) + (evt.targetLabel ? ' → ' + escapeHtml(evt.targetLabel) : '') + '</div>';
+        html += '<div class="tcl-list-dates">' + dateText + '</div>';
+        html += '</div>';
+        html += '<span class="tcl-list-badge ' + evt.type.replace('_', '-') + '">' + (evt.type === 'time_gate' ? 'Time Gate' : 'Due Date') + '</span>';
+        html += '<span class="tcl-list-status ' + status + '">' + statusText + '</span>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    // ---- Interactions ----
+
+    function tclOnBarClick(hexId, eventType, branchIndex) {
+      tclCloseCalendar();
+      // Select the hex in the grid
+      var hex = tclFindHex(hexId);
+      if (!hex) return;
+
+      selectHex(hexId);
+      openHexEditorPanel(hexId);
+
+      // Scroll to relevant section after a brief delay for panel to render
+      setTimeout(function() {
+        if (eventType === 'time_gate' && branchIndex >= 0) {
+          // Scroll to branch editor / connections summary
+          var connSummary = document.getElementById('hexConnectionsSummary');
+          if (connSummary) connSummary.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          // Scroll to due date field
+          var dueDateEl = document.getElementById('hexDueDate');
+          if (dueDateEl) dueDateEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+    }
+
+    // ---- Helpers ----
+
+    function tclFormatDate(d) {
+      var y = d.getFullYear();
+      var m = ('0' + (d.getMonth() + 1)).slice(-2);
+      var day = ('0' + d.getDate()).slice(-2);
+      return y + '-' + m + '-' + day;
+    }
+
+    function tclParseDate(dateStr) {
+      var parts = dateStr.split('-');
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+
+    function tclDateToPixel(dateStr, startDate) {
+      var target = tclParseDate(dateStr);
+      var diff = Math.round((target - startDate) / (1000 * 60 * 60 * 24));
+      return diff * TCL_DAY_WIDTH;
+    }
+
+    function tclGetBarStatus(availableAfter, availableBefore, today) {
+      if (availableAfter && today < availableAfter) return 'future';
+      if (availableBefore && today > availableBefore) return 'expired';
+      return 'active';
+    }
+
+    function tclFormatDateShort(dateStr) {
+      if (!dateStr) return '';
+      var d = tclParseDate(dateStr);
+      return TCL_MONTH_NAMES[d.getMonth()] + ' ' + d.getDate();
+    }
+
+    function tclDaysBetween(dateA, dateB) {
+      var a = tclParseDate(dateA);
+      var b = tclParseDate(dateB);
+      return Math.max(0, Math.round((b - a) / (1000 * 60 * 60 * 24)));
+    }
+</script>

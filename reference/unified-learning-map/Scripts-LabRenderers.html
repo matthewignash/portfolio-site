@@ -1,0 +1,833 @@
+<script>
+// ============================================================================
+// Scripts-LabRenderers.html — Specialized Input Renderers for Lab Editor
+//
+// 7 type-specific renderers for non-richtext section types:
+//   structured (title_page), structured_table (variables), list (materials),
+//   ordered_list (procedure), richtext_checklist (safety), data_table (raw_data),
+//   structured_list (bibliography)
+//
+// Each renderer returns HTML, serializes to structuredDataJson, and supports
+// read-only mode. All code is ES5.
+// ============================================================================
+
+
+// ============================================================================
+// RENDERERS
+// ============================================================================
+
+
+/**
+ * Title Page — structured fields: title, author, date.
+ *
+ * @param {string} secKey
+ * @param {Object|null} data - { title, author, date }
+ * @param {boolean} readOnly
+ * @returns {string} HTML
+ */
+function labRenderTitlePage(secKey, data, readOnly) {
+  var d = data || {};
+  var dis = readOnly ? ' disabled' : '';
+  var html = '<div class="lab-struct-fields" id="labEditorInputArea-' + escapeHtml(secKey) + '">';
+  html += '<div class="lab-struct-field">';
+  html += '<label class="lab-struct-label">Title</label>';
+  html += '<input type="text" class="lab-struct-input" id="labSI-' + escapeHtml(secKey) + '-title"' +
+    ' value="' + escapeHtml(d.title || '') + '" oninput="labStructuredInput(\'' + escapeHtml(secKey) + '\')"' +
+    ' placeholder="Enter your lab report title"' + dis + '>';
+  html += '</div>';
+  html += '<div class="lab-struct-field-row">';
+  html += '<div class="lab-struct-field" style="flex:1;">';
+  html += '<label class="lab-struct-label">Author</label>';
+  html += '<input type="text" class="lab-struct-input" id="labSI-' + escapeHtml(secKey) + '-author"' +
+    ' value="' + escapeHtml(d.author || '') + '" oninput="labStructuredInput(\'' + escapeHtml(secKey) + '\')"' +
+    ' placeholder="Your name"' + dis + '>';
+  html += '</div>';
+  html += '<div class="lab-struct-field" style="flex:1;">';
+  html += '<label class="lab-struct-label">Date</label>';
+  html += '<input type="date" class="lab-struct-input" id="labSI-' + escapeHtml(secKey) + '-date"' +
+    ' value="' + escapeHtml(d.date || '') + '" oninput="labStructuredInput(\'' + escapeHtml(secKey) + '\')"' + dis + '>';
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Variables Table — IV, DV, and controlled variables.
+ *
+ * @param {string} secKey
+ * @param {Object|null} data - { independent:{name,how}, dependent:{name,how}, controlled:[{name,how}] }
+ * @param {boolean} readOnly
+ * @returns {string} HTML
+ */
+function labRenderVariablesTable(secKey, data, readOnly) {
+  var d = data || {};
+  var iv = d.independent || { name: '', how: '' };
+  var dv = d.dependent || { name: '', how: '' };
+  var cv = d.controlled || [{ name: '', how: '' }];
+  if (cv.length === 0) cv = [{ name: '', how: '' }];
+  var dis = readOnly ? ' disabled' : '';
+  var esc = escapeHtml(secKey);
+
+  var html = '<div class="lab-var-table" id="labEditorInputArea-' + esc + '">';
+
+  // Independent variable
+  html += '<div class="lab-var-section">';
+  html += '<div class="lab-var-header">Independent Variable</div>';
+  html += '<div class="lab-var-row">';
+  html += '<input type="text" class="lab-struct-input" id="labSI-' + esc + '-iv-name"' +
+    ' value="' + escapeHtml(iv.name || '') + '" placeholder="Variable name"' +
+    ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+  html += '<input type="text" class="lab-struct-input" id="labSI-' + esc + '-iv-how"' +
+    ' value="' + escapeHtml(iv.how || '') + '" placeholder="How measured/changed"' +
+    ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+  html += '</div>';
+  html += '</div>';
+
+  // Dependent variable
+  html += '<div class="lab-var-section">';
+  html += '<div class="lab-var-header">Dependent Variable</div>';
+  html += '<div class="lab-var-row">';
+  html += '<input type="text" class="lab-struct-input" id="labSI-' + esc + '-dv-name"' +
+    ' value="' + escapeHtml(dv.name || '') + '" placeholder="Variable name"' +
+    ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+  html += '<input type="text" class="lab-struct-input" id="labSI-' + esc + '-dv-how"' +
+    ' value="' + escapeHtml(dv.how || '') + '" placeholder="How measured"' +
+    ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+  html += '</div>';
+  html += '</div>';
+
+  // Controlled variables
+  html += '<div class="lab-var-section">';
+  html += '<div class="lab-var-header">Controlled Variables</div>';
+  for (var i = 0; i < cv.length; i++) {
+    html += '<div class="lab-var-row">';
+    html += '<input type="text" class="lab-struct-input lab-var-cv-name" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(cv[i].name || '') + '" placeholder="Variable name"' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    html += '<input type="text" class="lab-struct-input lab-var-cv-how" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(cv[i].how || '') + '" placeholder="How controlled"' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    if (!readOnly && cv.length > 1) {
+      html += '<button type="button" class="lab-list-remove" onclick="labVarRemoveControlled(\'' + esc + '\',' + i + ')" title="Remove">&times;</button>';
+    }
+    html += '</div>';
+  }
+  if (!readOnly && cv.length < 10) {
+    html += '<button type="button" class="lab-list-add-btn" onclick="labVarAddControlled(\'' + esc + '\')">+ Add controlled variable</button>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Unordered List — materials list.
+ *
+ * @param {string} secKey
+ * @param {Object|null} data - { items: ["item1", "item2"] }
+ * @param {boolean} readOnly
+ * @returns {string} HTML
+ */
+function labRenderList(secKey, data, readOnly) {
+  var d = data || {};
+  var items = d.items || [''];
+  if (items.length === 0) items = [''];
+  var dis = readOnly ? ' disabled' : '';
+  var esc = escapeHtml(secKey);
+
+  var html = '<div class="lab-list-items" id="labEditorInputArea-' + esc + '">';
+  for (var i = 0; i < items.length; i++) {
+    html += '<div class="lab-list-item">';
+    html += '<span class="lab-list-bullet">&bull;</span>';
+    html += '<input type="text" class="lab-list-input" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(items[i] || '') + '" placeholder="Enter item..."' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    if (!readOnly && items.length > 1) {
+      html += '<button type="button" class="lab-list-remove" onclick="labListRemoveItem(\'' + esc + '\',' + i + ')" title="Remove">&times;</button>';
+    }
+    html += '</div>';
+  }
+  if (!readOnly && items.length < 50) {
+    html += '<button type="button" class="lab-list-add-btn" onclick="labListAddItem(\'' + esc + '\')">+ Add item</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Ordered List — procedure steps with reorder.
+ *
+ * @param {string} secKey
+ * @param {Object|null} data - { steps: ["step1", "step2"] }
+ * @param {boolean} readOnly
+ * @returns {string} HTML
+ */
+function labRenderOrderedList(secKey, data, readOnly) {
+  var d = data || {};
+  var steps = d.steps || [''];
+  if (steps.length === 0) steps = [''];
+  var dis = readOnly ? ' disabled' : '';
+  var esc = escapeHtml(secKey);
+
+  var html = '<div class="lab-list-items" id="labEditorInputArea-' + esc + '">';
+  for (var i = 0; i < steps.length; i++) {
+    html += '<div class="lab-list-item">';
+    html += '<span class="lab-list-num">' + (i + 1) + '</span>';
+    html += '<input type="text" class="lab-list-input" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(steps[i] || '') + '" placeholder="Describe step ' + (i + 1) + '..."' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    if (!readOnly) {
+      html += '<div class="lab-list-actions">';
+      if (i > 0) {
+        html += '<button type="button" class="lab-list-move" onclick="labListMoveItem(\'' + esc + '\',' + i + ',-1)" title="Move up">&uarr;</button>';
+      }
+      if (i < steps.length - 1) {
+        html += '<button type="button" class="lab-list-move" onclick="labListMoveItem(\'' + esc + '\',' + i + ',1)" title="Move down">&darr;</button>';
+      }
+      if (steps.length > 1) {
+        html += '<button type="button" class="lab-list-remove" onclick="labListRemoveItem(\'' + esc + '\',' + i + ')" title="Remove">&times;</button>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  if (!readOnly && steps.length < 30) {
+    html += '<button type="button" class="lab-list-add-btn" onclick="labListAddItem(\'' + esc + '\')">+ Add step</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Checklist — safety items with checkboxes.
+ *
+ * @param {string} secKey
+ * @param {Object|null} data - { items: [{text:"", checked:false}] }
+ * @param {boolean} readOnly
+ * @returns {string} HTML
+ */
+function labRenderChecklist(secKey, data, readOnly) {
+  var d = data || {};
+  var items = d.items || [{ text: '', checked: false }];
+  if (items.length === 0) items = [{ text: '', checked: false }];
+  var dis = readOnly ? ' disabled' : '';
+  var esc = escapeHtml(secKey);
+
+  var html = '<div class="lab-list-items" id="labEditorInputArea-' + esc + '">';
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i] || { text: '', checked: false };
+    html += '<div class="lab-check-item">';
+    html += '<input type="checkbox" class="lab-check-box" data-idx="' + i + '"' +
+      (item.checked ? ' checked' : '') +
+      ' onchange="labCheckToggle(\'' + esc + '\',' + i + ')"' + dis + '>';
+    html += '<input type="text" class="lab-list-input" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(item.text || '') + '" placeholder="Safety consideration..."' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    if (!readOnly && items.length > 1) {
+      html += '<button type="button" class="lab-list-remove" onclick="labCheckRemoveItem(\'' + esc + '\',' + i + ')" title="Remove">&times;</button>';
+    }
+    html += '</div>';
+  }
+  if (!readOnly && items.length < 20) {
+    html += '<button type="button" class="lab-list-add-btn" onclick="labCheckAddItem(\'' + esc + '\')">+ Add safety item</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Data Table — dynamic rows x columns grid.
+ *
+ * @param {string} secKey
+ * @param {Object|null} data - { headers: ["Col1"], rows: [["val"]] }
+ * @param {boolean} readOnly
+ * @returns {string} HTML
+ */
+function labRenderDataTable(secKey, data, readOnly) {
+  var d = data || {};
+  var headers = d.headers || ['Column 1', 'Column 2', 'Column 3'];
+  var rows = d.rows || [['', '', ''], ['', '', ''], ['', '', '']];
+  if (headers.length === 0) headers = ['Column 1'];
+  if (rows.length === 0) rows = [['']];
+  var dis = readOnly ? ' disabled' : '';
+  var esc = escapeHtml(secKey);
+
+  // Normalize rows to match header length
+  for (var r = 0; r < rows.length; r++) {
+    while (rows[r].length < headers.length) rows[r].push('');
+    while (rows[r].length > headers.length) rows[r].pop();
+  }
+
+  var html = '<div id="labEditorInputArea-' + esc + '">';
+
+  // Size warning
+  var jsonSize = JSON.stringify(d).length;
+  if (jsonSize > 4000) {
+    html += '<div class="lab-size-warning">Data is approaching the storage limit (' + jsonSize + '/5000 characters)</div>';
+  }
+
+  html += '<div class="lab-data-wrap">';
+  html += '<table class="lab-data-grid">';
+
+  // Header row
+  html += '<tr>';
+  html += '<th class="lab-data-corner">#</th>';
+  for (var c = 0; c < headers.length; c++) {
+    html += '<th class="lab-data-header">';
+    html += '<input type="text" class="lab-data-header-input" data-col="' + c + '"' +
+      ' value="' + escapeHtml(headers[c] || '') + '" placeholder="Column ' + (c + 1) + '"' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    if (!readOnly && headers.length > 1) {
+      html += '<button type="button" class="lab-data-remove-col" onclick="labDataRemoveCol(\'' + esc + '\',' + c + ')" title="Remove column">&times;</button>';
+    }
+    html += '</th>';
+  }
+  html += '</tr>';
+
+  // Data rows
+  for (var ri = 0; ri < rows.length; ri++) {
+    html += '<tr>';
+    html += '<td class="lab-data-row-num">' + (ri + 1);
+    if (!readOnly && rows.length > 1) {
+      html += '<button type="button" class="lab-data-remove-row" onclick="labDataRemoveRow(\'' + esc + '\',' + ri + ')" title="Remove row">&times;</button>';
+    }
+    html += '</td>';
+    for (var ci = 0; ci < headers.length; ci++) {
+      html += '<td class="lab-data-cell">';
+      html += '<input type="text" class="lab-data-cell-input" data-row="' + ri + '" data-col="' + ci + '"' +
+        ' value="' + escapeHtml((rows[ri] && rows[ri][ci]) || '') + '"' +
+        ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+      html += '</td>';
+    }
+    html += '</tr>';
+  }
+
+  html += '</table>';
+  html += '</div>'; // .lab-data-wrap
+
+  if (!readOnly) {
+    html += '<div class="lab-data-actions">';
+    if (rows.length < 50) {
+      html += '<button type="button" class="lab-list-add-btn" onclick="labDataAddRow(\'' + esc + '\')">+ Add row</button>';
+    }
+    if (headers.length < 20) {
+      html += '<button type="button" class="lab-list-add-btn" onclick="labDataAddCol(\'' + esc + '\')">+ Add column</button>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+
+/**
+ * Bibliography — structured list of citation entries.
+ *
+ * @param {string} secKey
+ * @param {Object|null} data - { entries: [{author,title,year,url}] }
+ * @param {boolean} readOnly
+ * @returns {string} HTML
+ */
+function labRenderBibliography(secKey, data, readOnly) {
+  var d = data || {};
+  var entries = d.entries || [{ author: '', title: '', year: '', url: '' }];
+  if (entries.length === 0) entries = [{ author: '', title: '', year: '', url: '' }];
+  var dis = readOnly ? ' disabled' : '';
+  var esc = escapeHtml(secKey);
+
+  var html = '<div class="lab-bib-entries" id="labEditorInputArea-' + esc + '">';
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i] || {};
+    html += '<div class="lab-bib-entry">';
+    html += '<div class="lab-bib-entry-header">';
+    html += '<span class="lab-bib-num">Source ' + (i + 1) + '</span>';
+    if (!readOnly && entries.length > 1) {
+      html += '<button type="button" class="lab-list-remove" onclick="labBibRemoveEntry(\'' + esc + '\',' + i + ')" title="Remove">&times;</button>';
+    }
+    html += '</div>';
+    html += '<div class="lab-bib-fields">';
+    html += '<div class="lab-bib-field">';
+    html += '<label class="lab-struct-label">Author(s)</label>';
+    html += '<input type="text" class="lab-struct-input lab-bib-author" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(e.author || '') + '" placeholder="Last, First"' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    html += '</div>';
+    html += '<div class="lab-bib-field">';
+    html += '<label class="lab-struct-label">Title</label>';
+    html += '<input type="text" class="lab-struct-input lab-bib-title" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(e.title || '') + '" placeholder="Title of source"' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    html += '</div>';
+    html += '<div class="lab-struct-field-row">';
+    html += '<div class="lab-bib-field" style="flex:1;">';
+    html += '<label class="lab-struct-label">Year</label>';
+    html += '<input type="text" class="lab-struct-input lab-bib-year" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(e.year || '') + '" placeholder="2026"' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    html += '</div>';
+    html += '<div class="lab-bib-field" style="flex:2;">';
+    html += '<label class="lab-struct-label">URL</label>';
+    html += '<input type="text" class="lab-struct-input lab-bib-url" data-idx="' + i + '"' +
+      ' value="' + escapeHtml(e.url || '') + '" placeholder="https://..."' +
+      ' oninput="labStructuredInput(\'' + esc + '\')"' + dis + '>';
+    html += '</div>';
+    html += '</div>';
+    html += '</div>'; // .lab-bib-fields
+    html += '</div>'; // .lab-bib-entry
+  }
+  if (!readOnly && entries.length < 20) {
+    html += '<button type="button" class="lab-list-add-btn" onclick="labBibAddEntry(\'' + esc + '\')">+ Add source</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+
+/**
+ * Main handler for all structured input changes.
+ * Collects data from DOM, updates cache, triggers debounce save.
+ *
+ * @param {string} sectionKey
+ */
+function labStructuredInput(sectionKey) {
+  var result = labCollectStructuredData(sectionKey);
+  if (!result) return;
+
+  // Update cache
+  if (labEditorSectionContent[sectionKey]) {
+    labEditorSectionContent[sectionKey].structuredData = result.json;
+    labEditorSectionContent[sectionKey].content = result.text;
+  }
+
+  // Trigger existing debounce + word count
+  labEditorOnInput(sectionKey);
+}
+
+
+/**
+ * Collect structured data from DOM for a section.
+ * Returns { json: "...", text: "..." } or null.
+ *
+ * @param {string} sectionKey
+ * @returns {Object|null}
+ */
+function labCollectStructuredData(sectionKey) {
+  var secEl = document.getElementById('labEditorSec-' + sectionKey);
+  if (!secEl) return null;
+
+  var inputType = secEl.getAttribute('data-inputtype') || 'richtext';
+  var data = null;
+  var text = '';
+
+  if (inputType === 'structured') {
+    data = {
+      title: (document.getElementById('labSI-' + sectionKey + '-title') || {}).value || '',
+      author: (document.getElementById('labSI-' + sectionKey + '-author') || {}).value || '',
+      date: (document.getElementById('labSI-' + sectionKey + '-date') || {}).value || ''
+    };
+    text = (data.title + ' ' + data.author + ' ' + data.date).trim();
+
+  } else if (inputType === 'structured_table') {
+    var ivName = (document.getElementById('labSI-' + sectionKey + '-iv-name') || {}).value || '';
+    var ivHow = (document.getElementById('labSI-' + sectionKey + '-iv-how') || {}).value || '';
+    var dvName = (document.getElementById('labSI-' + sectionKey + '-dv-name') || {}).value || '';
+    var dvHow = (document.getElementById('labSI-' + sectionKey + '-dv-how') || {}).value || '';
+    var controlled = [];
+    var cvNames = secEl.getElementsByClassName('lab-var-cv-name');
+    var cvHows = secEl.getElementsByClassName('lab-var-cv-how');
+    for (var vi = 0; vi < cvNames.length; vi++) {
+      controlled.push({ name: cvNames[vi].value || '', how: (cvHows[vi] || {}).value || '' });
+    }
+    data = { independent: { name: ivName, how: ivHow }, dependent: { name: dvName, how: dvHow }, controlled: controlled };
+    var parts = [ivName, ivHow, dvName, dvHow];
+    for (var vj = 0; vj < controlled.length; vj++) {
+      parts.push(controlled[vj].name);
+      parts.push(controlled[vj].how);
+    }
+    text = parts.join(' ').trim();
+
+  } else if (inputType === 'list') {
+    var listInputs = secEl.getElementsByClassName('lab-list-input');
+    var items = [];
+    for (var li = 0; li < listInputs.length; li++) items.push(listInputs[li].value || '');
+    data = { items: items };
+    text = items.join(' ').trim();
+
+  } else if (inputType === 'ordered_list') {
+    var stepInputs = secEl.getElementsByClassName('lab-list-input');
+    var steps = [];
+    for (var si = 0; si < stepInputs.length; si++) steps.push(stepInputs[si].value || '');
+    data = { steps: steps };
+    text = steps.join(' ').trim();
+
+  } else if (inputType === 'richtext_checklist') {
+    var checkTexts = secEl.getElementsByClassName('lab-list-input');
+    var checkBoxes = secEl.getElementsByClassName('lab-check-box');
+    var checkItems = [];
+    var checkParts = [];
+    for (var ci = 0; ci < checkTexts.length; ci++) {
+      checkItems.push({ text: checkTexts[ci].value || '', checked: checkBoxes[ci] ? checkBoxes[ci].checked : false });
+      checkParts.push(checkTexts[ci].value || '');
+    }
+    data = { items: checkItems };
+    text = checkParts.join(' ').trim();
+
+  } else if (inputType === 'data_table') {
+    var headerInputs = secEl.getElementsByClassName('lab-data-header-input');
+    var headers = [];
+    for (var hi = 0; hi < headerInputs.length; hi++) headers.push(headerInputs[hi].value || '');
+    var cellInputs = secEl.getElementsByClassName('lab-data-cell-input');
+    var rowMap = {};
+    var maxRow = -1;
+    for (var di = 0; di < cellInputs.length; di++) {
+      var rIdx = parseInt(cellInputs[di].getAttribute('data-row'), 10);
+      if (!rowMap[rIdx]) rowMap[rIdx] = [];
+      rowMap[rIdx].push(cellInputs[di].value || '');
+      if (rIdx > maxRow) maxRow = rIdx;
+    }
+    var rowsArr = [];
+    for (var ri = 0; ri <= maxRow; ri++) {
+      rowsArr.push(rowMap[ri] || []);
+    }
+    data = { headers: headers, rows: rowsArr };
+    var dataParts = headers.slice();
+    for (var rr = 0; rr < rowsArr.length; rr++) {
+      for (var rc = 0; rc < rowsArr[rr].length; rc++) dataParts.push(rowsArr[rr][rc]);
+    }
+    text = dataParts.join(' ').trim();
+
+  } else if (inputType === 'structured_list') {
+    var bibAuthors = secEl.getElementsByClassName('lab-bib-author');
+    var bibTitles = secEl.getElementsByClassName('lab-bib-title');
+    var bibYears = secEl.getElementsByClassName('lab-bib-year');
+    var bibUrls = secEl.getElementsByClassName('lab-bib-url');
+    var bibEntries = [];
+    var bibParts = [];
+    for (var bi = 0; bi < bibAuthors.length; bi++) {
+      var entry = {
+        author: bibAuthors[bi].value || '',
+        title: (bibTitles[bi] || {}).value || '',
+        year: (bibYears[bi] || {}).value || '',
+        url: (bibUrls[bi] || {}).value || ''
+      };
+      bibEntries.push(entry);
+      bibParts.push(entry.author);
+      bibParts.push(entry.title);
+      bibParts.push(entry.year);
+    }
+    data = { entries: bibEntries };
+    text = bibParts.join(' ').trim();
+
+  } else {
+    return null;
+  }
+
+  return { json: JSON.stringify(data), text: text };
+}
+
+
+/**
+ * Extract plain text from parsed structured data for word counting.
+ *
+ * @param {string} inputType
+ * @param {Object} data - Parsed structured data
+ * @returns {string} Plain text
+ */
+function labExtractTextFromStructured(inputType, data) {
+  if (!data) return '';
+
+  if (inputType === 'structured') {
+    return ((data.title || '') + ' ' + (data.author || '') + ' ' + (data.date || '')).trim();
+
+  } else if (inputType === 'structured_table') {
+    var parts = [];
+    if (data.independent) { parts.push(data.independent.name || ''); parts.push(data.independent.how || ''); }
+    if (data.dependent) { parts.push(data.dependent.name || ''); parts.push(data.dependent.how || ''); }
+    var cv = data.controlled || [];
+    for (var i = 0; i < cv.length; i++) { parts.push(cv[i].name || ''); parts.push(cv[i].how || ''); }
+    return parts.join(' ').trim();
+
+  } else if (inputType === 'list') {
+    return (data.items || []).join(' ').trim();
+
+  } else if (inputType === 'ordered_list') {
+    return (data.steps || []).join(' ').trim();
+
+  } else if (inputType === 'richtext_checklist') {
+    var texts = [];
+    var items = data.items || [];
+    for (var ci = 0; ci < items.length; ci++) texts.push(items[ci].text || '');
+    return texts.join(' ').trim();
+
+  } else if (inputType === 'data_table') {
+    var dp = (data.headers || []).slice();
+    var rows = data.rows || [];
+    for (var ri = 0; ri < rows.length; ri++) {
+      for (var rc = 0; rc < rows[ri].length; rc++) dp.push(rows[ri][rc] || '');
+    }
+    return dp.join(' ').trim();
+
+  } else if (inputType === 'structured_list') {
+    var bp = [];
+    var entries = data.entries || [];
+    for (var bi = 0; bi < entries.length; bi++) {
+      bp.push(entries[bi].author || '');
+      bp.push(entries[bi].title || '');
+      bp.push(entries[bi].year || '');
+    }
+    return bp.join(' ').trim();
+  }
+
+  return '';
+}
+
+
+// ============================================================================
+// ACTION FUNCTIONS — Add / Remove / Reorder
+// ============================================================================
+
+
+/**
+ * Re-render a structured section after data modification.
+ * Collects current data, applies mutation, re-renders, triggers save.
+ *
+ * @param {string} secKey
+ * @param {string} inputType
+ * @param {Object} newData - The modified data to render
+ * @param {number|null} focusIdx - Index to focus after re-render (for add operations)
+ */
+function labReRenderStructured_(secKey, inputType, newData, focusIdx) {
+  var readOnly = labEditorReadOnly || false;
+  var areaEl = document.getElementById('labEditorInputArea-' + secKey);
+  if (!areaEl) return;
+
+  var renderHtml = '';
+  if (inputType === 'structured_table') renderHtml = labRenderVariablesTable(secKey, newData, readOnly);
+  else if (inputType === 'list') renderHtml = labRenderList(secKey, newData, readOnly);
+  else if (inputType === 'ordered_list') renderHtml = labRenderOrderedList(secKey, newData, readOnly);
+  else if (inputType === 'richtext_checklist') renderHtml = labRenderChecklist(secKey, newData, readOnly);
+  else if (inputType === 'data_table') renderHtml = labRenderDataTable(secKey, newData, readOnly);
+  else if (inputType === 'structured_list') renderHtml = labRenderBibliography(secKey, newData, readOnly);
+  else return;
+
+  // Replace the input area's parent (since renderers include the wrapper div)
+  var parent = areaEl.parentNode;
+  if (!parent) return;
+
+  // Create temp container to extract the new input area
+  var temp = document.createElement('div');
+  temp.innerHTML = renderHtml;
+  var newArea = temp.firstChild;
+  if (newArea) {
+    parent.replaceChild(newArea, areaEl);
+  }
+
+  // Trigger save
+  labStructuredInput(secKey);
+
+  // Focus the relevant input after re-render
+  if (focusIdx !== null && focusIdx !== undefined) {
+    setTimeout(function() {
+      var inputs = document.getElementById('labEditorInputArea-' + secKey);
+      if (!inputs) return;
+      var allInputs = inputs.getElementsByClassName('lab-list-input');
+      if (!allInputs.length) allInputs = inputs.getElementsByClassName('lab-struct-input');
+      if (allInputs[focusIdx]) allInputs[focusIdx].focus();
+    }, 0);
+  }
+}
+
+
+// ---- Variables Table Actions ----
+
+function labVarAddControlled(secKey) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.controlled) data.controlled = [];
+  if (data.controlled.length >= 10) return;
+  data.controlled.push({ name: '', how: '' });
+  labReRenderStructured_(secKey, 'structured_table', data, null);
+}
+
+function labVarRemoveControlled(secKey, idx) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.controlled || data.controlled.length <= 1) return;
+  data.controlled.splice(idx, 1);
+  labReRenderStructured_(secKey, 'structured_table', data, null);
+}
+
+
+// ---- List Actions (materials) ----
+
+function labListAddItem(secKey) {
+  var secEl = document.getElementById('labEditorSec-' + secKey);
+  if (!secEl) return;
+  var inputType = secEl.getAttribute('data-inputtype') || 'list';
+
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+
+  if (inputType === 'ordered_list') {
+    if (!data.steps) data.steps = [];
+    if (data.steps.length >= 30) return;
+    data.steps.push('');
+    labReRenderStructured_(secKey, 'ordered_list', data, data.steps.length - 1);
+  } else {
+    if (!data.items) data.items = [];
+    if (data.items.length >= 50) return;
+    data.items.push('');
+    labReRenderStructured_(secKey, 'list', data, data.items.length - 1);
+  }
+}
+
+function labListRemoveItem(secKey, idx) {
+  var secEl = document.getElementById('labEditorSec-' + secKey);
+  if (!secEl) return;
+  var inputType = secEl.getAttribute('data-inputtype') || 'list';
+
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+
+  if (inputType === 'ordered_list') {
+    if (!data.steps || data.steps.length <= 1) return;
+    data.steps.splice(idx, 1);
+    labReRenderStructured_(secKey, 'ordered_list', data, null);
+  } else {
+    if (!data.items || data.items.length <= 1) return;
+    data.items.splice(idx, 1);
+    labReRenderStructured_(secKey, 'list', data, null);
+  }
+}
+
+function labListMoveItem(secKey, idx, dir) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.steps) return;
+
+  var newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= data.steps.length) return;
+
+  var tmp = data.steps[idx];
+  data.steps[idx] = data.steps[newIdx];
+  data.steps[newIdx] = tmp;
+
+  labReRenderStructured_(secKey, 'ordered_list', data, newIdx);
+}
+
+
+// ---- Checklist Actions (safety) ----
+
+function labCheckAddItem(secKey) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.items) data.items = [];
+  if (data.items.length >= 20) return;
+  data.items.push({ text: '', checked: false });
+  labReRenderStructured_(secKey, 'richtext_checklist', data, data.items.length - 1);
+}
+
+function labCheckRemoveItem(secKey, idx) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.items || data.items.length <= 1) return;
+  data.items.splice(idx, 1);
+  labReRenderStructured_(secKey, 'richtext_checklist', data, null);
+}
+
+function labCheckToggle(secKey, idx) {
+  // Checkbox state is already toggled by the browser, just trigger save
+  labStructuredInput(secKey);
+}
+
+
+// ---- Data Table Actions ----
+
+function labDataAddRow(secKey) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.rows) data.rows = [];
+  if (data.rows.length >= 50) return;
+  var newRow = [];
+  for (var c = 0; c < (data.headers || []).length; c++) newRow.push('');
+  data.rows.push(newRow);
+  labReRenderStructured_(secKey, 'data_table', data, null);
+}
+
+function labDataAddCol(secKey) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.headers) data.headers = [];
+  if (data.headers.length >= 20) return;
+  data.headers.push('Column ' + (data.headers.length + 1));
+  for (var r = 0; r < (data.rows || []).length; r++) {
+    data.rows[r].push('');
+  }
+  labReRenderStructured_(secKey, 'data_table', data, null);
+}
+
+function labDataRemoveRow(secKey, idx) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.rows || data.rows.length <= 1) return;
+  data.rows.splice(idx, 1);
+  labReRenderStructured_(secKey, 'data_table', data, null);
+}
+
+function labDataRemoveCol(secKey, idx) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.headers || data.headers.length <= 1) return;
+  data.headers.splice(idx, 1);
+  for (var r = 0; r < (data.rows || []).length; r++) {
+    if (data.rows[r].length > idx) data.rows[r].splice(idx, 1);
+  }
+  labReRenderStructured_(secKey, 'data_table', data, null);
+}
+
+
+// ---- Bibliography Actions ----
+
+function labBibAddEntry(secKey) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.entries) data.entries = [];
+  if (data.entries.length >= 20) return;
+  data.entries.push({ author: '', title: '', year: '', url: '' });
+  labReRenderStructured_(secKey, 'structured_list', data, null);
+}
+
+function labBibRemoveEntry(secKey, idx) {
+  var result = labCollectStructuredData(secKey);
+  if (!result) return;
+  var data = JSON.parse(result.json);
+  if (!data.entries || data.entries.length <= 1) return;
+  data.entries.splice(idx, 1);
+  labReRenderStructured_(secKey, 'structured_list', data, null);
+}
+</script>

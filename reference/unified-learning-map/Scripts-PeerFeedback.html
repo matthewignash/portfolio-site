@@ -1,0 +1,306 @@
+<script>
+// ============================================================================
+// PEER FEEDBACK — pfb- prefix
+// Review form, received feedback, given feedback, helpful toggle
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+var pfbReceivedCache = {};    // hexId -> received feedback array
+var pfbGivenCache = {};       // hexId -> given feedback array
+var pfbReviewPeer = null;     // { email, name } of peer being reviewed
+var pfbCurrentRatings = {};   // criterionIdx -> rating value
+var pfbSubmitting = false;
+
+// ================================================
+// RENDER PEER FEEDBACK SECTION (inside student hex modal)
+// ================================================
+
+function renderPeerFeedbackSection(mapId, hexId, hex, container) {
+  if (!hex || !hex.peerFeedbackConfig || !hex.peerFeedbackConfig.enabled) return '';
+
+  var html = '';
+  html += '<div class="pfb-section-header">Peer Feedback</div>';
+  html += '<div id="pfbReceivedContainer"><div class="loading" style="font-size:12px;">Loading feedback...</div></div>';
+  html += '<div id="pfbGivenContainer"></div>';
+  html += '<div id="pfbReviewContainer"></div>';
+
+  container.innerHTML = html;
+
+  // Load received + given feedback
+  pfbLoadReceived(mapId, hexId);
+  pfbLoadGiven(mapId, hexId);
+}
+
+function pfbLoadReceived(mapId, hexId) {
+  google.script.run
+    .withSuccessHandler(function(feedback) {
+      pfbReceivedCache[hexId] = feedback || [];
+      pfbRenderReceived(hexId);
+    })
+    .withFailureHandler(function(err) {
+      var el = document.getElementById('pfbReceivedContainer');
+      if (el) el.innerHTML = '<div class="pfb-empty">Error loading feedback: ' + escapeHtml(err.message) + '</div>';
+    })
+    .getPeerFeedbackForHex(mapId, hexId);
+}
+
+function pfbLoadGiven(mapId, hexId) {
+  google.script.run
+    .withSuccessHandler(function(feedback) {
+      pfbGivenCache[hexId] = feedback || [];
+      pfbRenderGiven(hexId);
+      // Show review button if student hasn't reviewed enough peers
+      pfbCheckReviewAvailability(mapId, hexId);
+    })
+    .withFailureHandler(function() { /* silent */ })
+    .getPeerFeedbackGiven(mapId, hexId);
+}
+
+function pfbRenderReceived(hexId) {
+  var container = document.getElementById('pfbReceivedContainer');
+  if (!container) return;
+
+  var feedback = pfbReceivedCache[hexId] || [];
+  if (feedback.length === 0) {
+    container.innerHTML = '<div class="pfb-empty">No peer feedback received yet.</div>';
+    return;
+  }
+
+  var html = '<div style="font-size:12px;font-weight:500;color:#475569;margin-bottom:8px;">Received (' + feedback.length + ')</div>';
+  for (var i = 0; i < feedback.length; i++) {
+    var fb = feedback[i];
+    html += '<div class="pfb-feedback-card">';
+    html += '<div class="pfb-feedback-header">';
+    if (fb.isAnonymous) {
+      html += '<span class="pfb-anonymous-badge">Anonymous Peer</span>';
+    } else {
+      html += '<span class="pfb-reviewer-name">' + escapeHtml(fb.reviewerEmail) + '</span>';
+    }
+    html += '<span class="pfb-feedback-date">' + pfbFormatDate(fb.createdAt) + '</span>';
+    html += '</div>';
+
+    // Ratings
+    var ratings = fb.ratings || [];
+    if (ratings.length > 0) {
+      html += '<div class="pfb-rating-display">';
+      for (var r = 0; r < ratings.length; r++) {
+        var ratingClass = ratings[r].rating >= 3 ? 'pfb-high' : (ratings[r].rating >= 2 ? 'pfb-mid' : 'pfb-low');
+        html += '<span class="pfb-rating-chip ' + ratingClass + '">' + escapeHtml(ratings[r].criterion) + ': ' + ratings[r].rating + '/4</span>';
+      }
+      html += '</div>';
+    }
+
+    if (fb.comment) {
+      html += '<div class="pfb-feedback-comment">"' + escapeHtml(fb.comment) + '"</div>';
+    }
+
+    // Helpful toggle
+    html += '<button class="pfb-helpful-toggle' + (fb.isHelpful ? ' pfb-marked' : '') + '" onclick="pfbToggleHelpful(\'' + escapeHtml(fb.feedbackId) + '\', ' + (!fb.isHelpful) + ')">';
+    html += (fb.isHelpful ? '&#10003; Helpful' : '&#128077; Mark as Helpful');
+    html += '</button>';
+
+    html += '</div>'; // .pfb-feedback-card
+  }
+
+  container.innerHTML = html;
+}
+
+function pfbRenderGiven(hexId) {
+  var container = document.getElementById('pfbGivenContainer');
+  if (!container) return;
+
+  var given = pfbGivenCache[hexId] || [];
+  if (given.length === 0) return;
+
+  var html = '<div style="font-size:12px;font-weight:500;color:#475569;margin:12px 0 8px;">Reviews Given (' + given.length + ')</div>';
+  for (var i = 0; i < given.length; i++) {
+    html += '<div style="font-size:11px;color:#94a3b8;padding:4px 0;">Reviewed ' + escapeHtml(given[i].authorEmail) + ' on ' + pfbFormatDate(given[i].createdAt) + '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+function pfbCheckReviewAvailability(mapId, hexId) {
+  var container = document.getElementById('pfbReviewContainer');
+  if (!container) return;
+
+  // Check if there are peers to review
+  google.script.run
+    .withSuccessHandler(function(peer) {
+      if (peer) {
+        pfbReviewPeer = peer;
+        container.innerHTML = '<button class="pfb-review-btn" onclick="pfbStartReview(\'' + escapeHtml(mapId) + '\', \'' + escapeHtml(hexId) + '\')">&#128221; Review a Peer</button>';
+      } else {
+        container.innerHTML = '<div class="pfb-empty">No peers available for review at this time.</div>';
+      }
+    })
+    .withFailureHandler(function() {
+      container.innerHTML = '';
+    })
+    .getAvailablePeerForReview(mapId, hexId);
+}
+
+// ================================================
+// REVIEW FORM
+// ================================================
+
+function pfbStartReview(mapId, hexId) {
+  var container = document.getElementById('pfbReviewContainer');
+  if (!container || !pfbReviewPeer) return;
+
+  // Get hex peer feedback config
+  var hex = null;
+  if (currentMap && currentMap.hexes) {
+    for (var i = 0; i < currentMap.hexes.length; i++) {
+      if (currentMap.hexes[i].id === hexId) { hex = currentMap.hexes[i]; break; }
+    }
+  }
+
+  var config = (hex && hex.peerFeedbackConfig) ? hex.peerFeedbackConfig : {};
+  var criteria = config.criteria || [{ label: 'Quality', description: 'Overall quality of work' }];
+  var anonymous = config.anonymous === true;
+
+  pfbCurrentRatings = {};
+
+  var html = '<div class="pfb-review-form">';
+  html += '<div class="pfb-review-title">&#128221; Peer Review</div>';
+  html += '<div class="pfb-peer-name">Reviewing: ' + (anonymous ? 'Anonymous Classmate' : escapeHtml(pfbReviewPeer.name)) + '</div>';
+
+  for (var c = 0; c < criteria.length; c++) {
+    var crit = criteria[c];
+    html += '<div class="pfb-criterion">';
+    html += '<div class="pfb-criterion-label">' + escapeHtml(crit.label) + '</div>';
+    if (crit.description) {
+      html += '<div style="font-size:11px;color:#64748b;margin-bottom:6px;">' + escapeHtml(crit.description) + '</div>';
+    }
+    html += '<div class="pfb-rating-bar">';
+    var ratingLabels = ['Beginning', 'Developing', 'Proficient', 'Extending'];
+    for (var rv = 1; rv <= 4; rv++) {
+      html += '<button class="pfb-rating-btn" data-rating="' + rv + '" data-criterion="' + c + '" onclick="pfbSelectRating(' + c + ',' + rv + ',this)">' + rv + ' ' + ratingLabels[rv - 1] + '</button>';
+    }
+    html += '</div>';
+    html += '<input type="text" class="pfb-criterion-comment" id="pfbCritComment' + c + '" placeholder="Optional comment on ' + escapeHtml(crit.label) + '..." maxlength="200">';
+    html += '</div>';
+  }
+
+  html += '<textarea class="pfb-comment-field" id="pfbOverallComment" placeholder="Overall feedback (what worked well, suggestions for improvement)..." maxlength="500"></textarea>';
+  html += '<button class="pfb-submit-btn" id="pfbSubmitBtn" onclick="pfbSubmitReview(\'' + escapeHtml(mapId) + '\', \'' + escapeHtml(hexId) + '\', ' + anonymous + ', ' + criteria.length + ')">Submit Peer Review</button>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function pfbSelectRating(criterionIdx, rating, btn) {
+  pfbCurrentRatings[criterionIdx] = rating;
+  // Update visual state
+  var parent = btn.parentElement;
+  var buttons = parent.querySelectorAll('.pfb-rating-btn');
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].classList.remove('pfb-selected');
+  }
+  btn.classList.add('pfb-selected');
+}
+
+function pfbSubmitReview(mapId, hexId, anonymous, criteriaCount) {
+  if (pfbSubmitting || !pfbReviewPeer) return;
+
+  // Collect ratings
+  var ratings = [];
+  for (var c = 0; c < criteriaCount; c++) {
+    if (!pfbCurrentRatings[c]) {
+      showToast('Please rate all criteria before submitting.', 'error');
+      return;
+    }
+    var commentEl = document.getElementById('pfbCritComment' + c);
+    ratings.push({
+      criterion: 'Criterion ' + (c + 1), // Will be enriched with label if available
+      rating: pfbCurrentRatings[c],
+      comment: commentEl ? commentEl.value.trim() : ''
+    });
+  }
+
+  // Try to get criterion labels from the hex config
+  if (currentMap && currentMap.hexes) {
+    for (var h = 0; h < currentMap.hexes.length; h++) {
+      if (currentMap.hexes[h].id === hexId && currentMap.hexes[h].peerFeedbackConfig) {
+        var criteria = currentMap.hexes[h].peerFeedbackConfig.criteria || [];
+        for (var rc = 0; rc < ratings.length && rc < criteria.length; rc++) {
+          ratings[rc].criterion = criteria[rc].label || ratings[rc].criterion;
+        }
+        break;
+      }
+    }
+  }
+
+  var commentEl2 = document.getElementById('pfbOverallComment');
+  var comment = commentEl2 ? commentEl2.value.trim() : '';
+
+  var btn = document.getElementById('pfbSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+  pfbSubmitting = true;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      pfbSubmitting = false;
+      if (result && result.success) {
+        showToast('Peer review submitted!');
+        pfbReviewPeer = null;
+        pfbLoadGiven(mapId, hexId);
+        // Replace form with success message
+        var container = document.getElementById('pfbReviewContainer');
+        if (container) container.innerHTML = '<div style="color:#059669;font-size:13px;padding:8px 0;">&#10003; Review submitted. Thank you!</div>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      pfbSubmitting = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit Peer Review'; }
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .submitPeerFeedback(mapId, hexId, pfbReviewPeer.email, {
+      ratings: ratings,
+      comment: comment,
+      isAnonymous: anonymous
+    });
+}
+
+// ================================================
+// HELPFUL TOGGLE
+// ================================================
+
+function pfbToggleHelpful(feedbackId, helpful) {
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast(helpful ? 'Marked as helpful' : 'Removed helpful mark');
+      // Refresh received feedback
+      var hexId = null;
+      for (var key in pfbReceivedCache) {
+        var items = pfbReceivedCache[key] || [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].feedbackId === feedbackId) {
+            items[i].isHelpful = helpful;
+            hexId = key;
+            break;
+          }
+        }
+        if (hexId) break;
+      }
+      if (hexId) pfbRenderReceived(hexId);
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + escapeHtml(err.message), 'error');
+    })
+    .markFeedbackHelpful(feedbackId, helpful);
+}
+
+// ================================================
+// UTILITY
+// ================================================
+
+function pfbFormatDate(isoString) {
+  if (!isoString) return '';
+  try {
+    var d = new Date(isoString);
+    return d.toLocaleDateString();
+  } catch (e) { return isoString; }
+}
+</script>

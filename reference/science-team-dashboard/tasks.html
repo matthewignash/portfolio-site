@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Department Tasks</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f5f6f8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .app-container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 12px 16px;
+    }
+
+    /* Header */
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .app-header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0;
+      color: #1a1a2e;
+    }
+
+    .admin-controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Error banner */
+    .error-banner {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    /* Success banner */
+    .success-banner {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    /* Loading spinner */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 0;
+      color: #6c757d;
+    }
+
+    .loading-container .spinner-border {
+      width: 2.5rem;
+      height: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    /* Two-panel layout */
+    .task-panels {
+      display: flex;
+      gap: 16px;
+    }
+
+    .task-panel {
+      flex: 1;
+      min-width: 0;
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .task-panel-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f8f9fa;
+    }
+
+    .task-panel-header h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0;
+      color: #1a1a2e;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .task-panel-body {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 480px;
+    }
+
+    @media (max-width: 767px) {
+      .task-panels {
+        flex-direction: column;
+      }
+      .task-panel-body {
+        max-height: 360px;
+      }
+    }
+
+    /* Filter bar */
+    .filter-bar {
+      padding: 8px 14px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .filter-bar .btn {
+      font-size: 0.73rem;
+      padding: 2px 10px;
+    }
+
+    /* Quick-add input */
+    .quick-add {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-bottom: 1px solid #eee;
+      background: #fafbfc;
+    }
+
+    .quick-add input[type="text"] {
+      flex: 1;
+      font-size: 0.83rem;
+      min-width: 0;
+    }
+
+    .quick-add select {
+      width: auto;
+      font-size: 0.78rem;
+      max-width: 100px;
+    }
+
+    .quick-add .btn {
+      font-size: 0.78rem;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+
+    /* Task row */
+    .task-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 14px;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.1s ease;
+      position: relative;
+    }
+
+    .task-row:last-child {
+      border-bottom: none;
+    }
+
+    .task-row:hover {
+      background: #f8f9fa;
+    }
+
+    .task-row.overdue {
+      background: #fff8f6;
+    }
+
+    .task-row.overdue:hover {
+      background: #fff0ec;
+    }
+
+    .task-row.assigned-to-me {
+      border-left: 3px solid #0d6efd;
+    }
+
+    .task-row.completed-row {
+      opacity: 0.6;
+    }
+
+    /* Checkbox */
+    .task-checkbox {
+      margin-top: 3px;
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      accent-color: #0d6efd;
+    }
+
+    /* Task content */
+    .task-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .task-title {
+      font-size: 0.87rem;
+      color: #333;
+      word-break: break-word;
+      line-height: 1.35;
+    }
+
+    .task-title.done {
+      text-decoration: line-through;
+      color: #999;
+    }
+
+    .task-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 2px;
+      font-size: 0.73rem;
+      color: #6c757d;
+    }
+
+    /* Assignee badge */
+    .assignee-badge {
+      font-size: 0.68rem;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: #e9ecef;
+      color: #495057;
+      white-space: nowrap;
+    }
+
+    .assignee-badge.everyone {
+      background: #cfe2ff;
+      color: #084298;
+    }
+
+    .assignee-badge.me {
+      background: #d1e7dd;
+      color: #0f5132;
+      font-weight: 600;
+    }
+
+    /* Priority dot */
+    .priority-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .priority-dot.low { background: #adb5bd; }
+    .priority-dot.normal { background: #0d6efd; }
+    .priority-dot.high { background: #fd7e14; }
+    .priority-dot.urgent { background: #dc3545; }
+
+    /* Due date */
+    .due-date {
+      white-space: nowrap;
+    }
+
+    .due-date.overdue {
+      color: #dc3545;
+      font-weight: 600;
+    }
+
+    /* Task actions - visible on hover */
+    .task-actions-btn {
+      background: none;
+      border: none;
+      color: #adb5bd;
+      padding: 2px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      line-height: 1;
+      visibility: hidden;
+      flex-shrink: 0;
+    }
+
+    .task-row:hover .task-actions-btn {
+      visibility: visible;
+    }
+
+    .task-actions-btn:hover {
+      background: #e9ecef;
+      color: #333;
+    }
+
+    /* Completed section toggle */
+    .completed-toggle {
+      padding: 8px 14px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #6c757d;
+      cursor: pointer;
+      border-top: 1px solid #eee;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      user-select: none;
+    }
+
+    .completed-toggle:hover {
+      background: #f8f9fa;
+    }
+
+    .completed-toggle i.chevron {
+      font-size: 0.7rem;
+      transition: transform 0.15s ease;
+    }
+
+    .completed-toggle.open i.chevron {
+      transform: rotate(90deg);
+    }
+
+    /* Completion info */
+    .completion-info {
+      font-size: 0.7rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 30px 20px;
+      color: #adb5bd;
+      font-size: 0.85rem;
+    }
+
+    .empty-state i {
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    /* Stats modal table */
+    .stats-summary {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .stat-card {
+      flex: 1;
+      text-align: center;
+      padding: 10px 8px;
+      border-radius: 8px;
+      background: #f8f9fa;
+      border: 1px solid #eee;
+    }
+
+    .stat-card .stat-number {
+      font-size: 1.4rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .stat-card .stat-label {
+      font-size: 0.7rem;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .stats-table th,
+    .stats-table td {
+      font-size: 0.8rem;
+      padding: 5px 8px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Error Banner -->
+  <div class="app-container">
+    <div id="error-banner" class="alert alert-danger error-banner alert-dismissible" role="alert">
+      <span id="error-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideError()"></button>
+    </div>
+    <div id="success-banner" class="alert alert-success success-banner alert-dismissible" role="alert">
+      <span id="success-message"></span>
+      <button type="button" class="btn-close btn-sm" onclick="hideSuccess()"></button>
+    </div>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div id="loading-spinner" class="loading-container">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <div>Loading tasks...</div>
+  </div>
+
+  <!-- Main App (hidden until loaded) -->
+  <div id="app-content" class="app-container" style="display: none;">
+
+    <!-- Header -->
+    <div class="app-header">
+      <h1><i class="bi bi-clipboard-check"></i> Department Tasks</h1>
+      <div id="admin-controls" class="admin-controls"></div>
+    </div>
+
+    <!-- Two-Panel Layout -->
+    <div class="task-panels">
+      <!-- Left: Department Tasks -->
+      <div class="task-panel" id="shared-panel">
+        <div class="task-panel-header">
+          <h2><i class="bi bi-people-fill"></i> Department Tasks <span id="shared-count" class="badge bg-secondary rounded-pill" style="font-size:0.68rem;">0</span></h2>
+        </div>
+        <div id="shared-panel-content" class="task-panel-body"></div>
+      </div>
+
+      <!-- Right: My Tasks -->
+      <div class="task-panel" id="personal-panel">
+        <div class="task-panel-header">
+          <h2><i class="bi bi-person-fill"></i> My Tasks <span id="personal-count" class="badge bg-secondary rounded-pill" style="font-size:0.68rem;">0</span></h2>
+        </div>
+        <div id="personal-panel-content" class="task-panel-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Task Modal -->
+  <div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title" id="editModalTitle">Edit Task</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Title</label>
+            <input type="text" id="edit-title" class="form-control form-control-sm">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Due Date</label>
+            <input type="date" id="edit-due-date" class="form-control form-control-sm">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Priority</label>
+            <select id="edit-priority" class="form-select form-select-sm">
+              <option value="Low">Low</option>
+              <option value="Normal">Normal</option>
+              <option value="High">High</option>
+              <option value="Urgent">Urgent</option>
+            </select>
+          </div>
+          <div id="edit-assignee-group" class="mb-2" style="display:none;">
+            <label class="form-label small mb-1">Assign To</label>
+            <select id="edit-assignee" class="form-select form-select-sm"></select>
+          </div>
+          <div id="edit-notes-group" class="mb-2" style="display:none;">
+            <label class="form-label small mb-1">Notes</label>
+            <textarea id="edit-notes" class="form-control form-control-sm" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="save-edit-btn" class="btn btn-sm btn-primary" onclick="handleSaveEdit()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title">Delete Task</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body py-2">
+          <p class="mb-0 small">Are you sure you want to delete this task? This cannot be undone.</p>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="confirm-delete-btn" class="btn btn-sm btn-danger" onclick="confirmDeleteTask()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Completion Stats Modal -->
+  <div class="modal fade" id="statsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title"><i class="bi bi-bar-chart-fill"></i> Task Completion Summary</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div id="stats-body" class="modal-body py-2"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+  /* ============================================================
+     SECTION 2: APPLICATION STATE & CONFIGURATION
+     ============================================================ */
+
+  var AppState = {
+    currentUser: null,
+    sharedTasks: [],
+    personalTasks: [],
+    isLoading: true,
+    sharedFilter: 'open',
+    sharedCompletedOpen: false,
+    personalCompletedOpen: false,
+    editingTask: null,
+    pendingDeleteTask: null,
+    submittingShared: false,
+    submittingPersonal: false,
+    staffList: []
+  };
+
+  /* ============================================================
+     SECTION 3: RENDERING FUNCTIONS
+     ============================================================ */
+
+  function renderApp() {
+    var spinner = document.getElementById('loading-spinner');
+    var content = document.getElementById('app-content');
+
+    if (AppState.isLoading) {
+      spinner.style.display = 'flex';
+      content.style.display = 'none';
+      return;
+    }
+
+    spinner.style.display = 'none';
+    content.style.display = 'block';
+
+    renderAdminControls();
+    renderSharedPanel();
+    renderPersonalPanel();
+  }
+
+  function renderAdminControls() {
+    var container = document.getElementById('admin-controls');
+    if (!AppState.currentUser || !AppState.currentUser.isAdmin) {
+      container.innerHTML = '';
+      return;
+    }
+    var html = '';
+    html += '<button class="btn btn-outline-secondary btn-sm" onclick="handleShowStats()" title="Completion stats"><i class="bi bi-bar-chart-fill"></i> Stats</button>';
+    html += '<button class="btn btn-outline-secondary btn-sm" onclick="handleArchiveCompleted()" title="Archive completed shared tasks"><i class="bi bi-archive"></i> Archive</button>';
+    container.innerHTML = html;
+  }
+
+  function renderSharedPanel() {
+    var container = document.getElementById('shared-panel-content');
+    var tasks = AppState.sharedTasks;
+    var html = '';
+
+    // Filter bar
+    html += renderFilterBar();
+
+    // Quick-add (admin only)
+    if (AppState.currentUser && AppState.currentUser.isAdmin) {
+      html += renderQuickAdd('shared');
+    }
+
+    // Apply filter
+    var openTasks = [];
+    var completedTasks = [];
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].status === 'Completed') {
+        completedTasks.push(tasks[i]);
+      } else {
+        openTasks.push(tasks[i]);
+      }
+    }
+
+    var displayTasks = [];
+    if (AppState.sharedFilter === 'all') {
+      displayTasks = openTasks;
+    } else if (AppState.sharedFilter === 'open') {
+      displayTasks = openTasks;
+    } else if (AppState.sharedFilter === 'completed') {
+      displayTasks = completedTasks;
+    } else if (AppState.sharedFilter === 'overdue') {
+      displayTasks = [];
+      for (var o = 0; o < openTasks.length; o++) {
+        if (isOverdue(openTasks[o])) displayTasks.push(openTasks[o]);
+      }
+    }
+
+    // Sort: urgent/high first, then by due date
+    displayTasks.sort(function(a, b) {
+      var pOrder = { Urgent: 0, High: 1, Normal: 2, Low: 3 };
+      var pa = pOrder[a.priority] !== undefined ? pOrder[a.priority] : 2;
+      var pb = pOrder[b.priority] !== undefined ? pOrder[b.priority] : 2;
+      if (pa !== pb) return pa - pb;
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    });
+
+    // Open tasks count badge
+    var openCount = 0;
+    for (var c = 0; c < tasks.length; c++) {
+      if (tasks[c].status === 'Open') openCount++;
+    }
+    document.getElementById('shared-count').textContent = openCount;
+
+    // Render task rows
+    if (AppState.sharedFilter === 'completed') {
+      if (completedTasks.length === 0) {
+        html += '<div class="empty-state"><i class="bi bi-check-circle"></i><p>No completed tasks</p></div>';
+      }
+      for (var ct = 0; ct < completedTasks.length; ct++) {
+        html += renderTaskRow(completedTasks[ct], 'shared');
+      }
+    } else {
+      if (displayTasks.length === 0) {
+        var emptyMsg = AppState.sharedFilter === 'overdue' ? 'No overdue tasks' : 'No open tasks';
+        html += '<div class="empty-state"><i class="bi bi-clipboard-check"></i><p>' + emptyMsg + '</p></div>';
+      }
+      for (var d = 0; d < displayTasks.length; d++) {
+        html += renderTaskRow(displayTasks[d], 'shared');
+      }
+
+      // Completed toggle (only in open/all/overdue views)
+      if (AppState.sharedFilter !== 'completed' && completedTasks.length > 0) {
+        var chevClass = AppState.sharedCompletedOpen ? ' open' : '';
+        html += '<div class="completed-toggle' + chevClass + '" onclick="toggleCompleted(\'shared\')">';
+        html += '<i class="bi bi-chevron-right chevron"></i> Completed (' + completedTasks.length + ')';
+        html += '</div>';
+        if (AppState.sharedCompletedOpen) {
+          for (var sc = 0; sc < completedTasks.length; sc++) {
+            html += renderTaskRow(completedTasks[sc], 'shared');
+          }
+        }
+      }
+    }
+
+    container.innerHTML = html;
+  }
+
+  function renderPersonalPanel() {
+    var container = document.getElementById('personal-panel-content');
+    var tasks = AppState.personalTasks;
+    var html = '';
+
+    // Quick-add (always visible)
+    html += renderQuickAdd('personal');
+
+    var openTasks = [];
+    var completedTasks = [];
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].status === 'Completed') {
+        completedTasks.push(tasks[i]);
+      } else {
+        openTasks.push(tasks[i]);
+      }
+    }
+
+    // Sort open by sortOrder
+    openTasks.sort(function(a, b) { return a.sortOrder - b.sortOrder; });
+
+    // Count badge
+    document.getElementById('personal-count').textContent = openTasks.length;
+
+    if (openTasks.length === 0) {
+      html += '<div class="empty-state"><i class="bi bi-journal-check"></i><p>No personal tasks</p><p class="small">Add a task above to get started</p></div>';
+    }
+
+    for (var d = 0; d < openTasks.length; d++) {
+      html += renderTaskRow(openTasks[d], 'personal');
+    }
+
+    // Completed toggle
+    if (completedTasks.length > 0) {
+      var chevClass = AppState.personalCompletedOpen ? ' open' : '';
+      html += '<div class="completed-toggle' + chevClass + '" onclick="toggleCompleted(\'personal\')">';
+      html += '<i class="bi bi-chevron-right chevron"></i> Completed (' + completedTasks.length + ')';
+      html += '</div>';
+      if (AppState.personalCompletedOpen) {
+        for (var pc = 0; pc < completedTasks.length; pc++) {
+          html += renderTaskRow(completedTasks[pc], 'personal');
+        }
+      }
+    }
+
+    container.innerHTML = html;
+  }
+
+  function renderFilterBar() {
+    var filters = [
+      { key: 'open', label: 'Open' },
+      { key: 'overdue', label: 'Overdue' },
+      { key: 'completed', label: 'Completed' },
+      { key: 'all', label: 'All' }
+    ];
+    var html = '<div class="filter-bar"><div class="btn-group" role="group">';
+    for (var i = 0; i < filters.length; i++) {
+      var active = AppState.sharedFilter === filters[i].key ? ' active' : '';
+      var btnClass = AppState.sharedFilter === filters[i].key ? 'btn-primary' : 'btn-outline-secondary';
+      html += '<button type="button" class="btn ' + btnClass + active + '" onclick="handleFilterChange(\'' + filters[i].key + '\')">' + filters[i].label + '</button>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderQuickAdd(panelType) {
+    var id = panelType === 'shared' ? 'shared' : 'personal';
+    var placeholder = panelType === 'shared' ? 'Add a department task...' : 'Add a personal task...';
+    var submitting = panelType === 'shared' ? AppState.submittingShared : AppState.submittingPersonal;
+
+    var html = '<div class="quick-add">';
+    html += '<input type="text" id="qa-input-' + id + '" class="form-control form-control-sm" placeholder="' + placeholder + '" onkeydown="handleQuickAddKeydown(event, \'' + panelType + '\')"' + (submitting ? ' disabled' : '') + '>';
+
+    if (panelType === 'shared') {
+      html += '<select id="qa-assignee-' + id + '" class="form-select form-select-sm">';
+      html += '<option value="ALL">Everyone</option>';
+      for (var i = 0; i < AppState.staffList.length; i++) {
+        var s = AppState.staffList[i];
+        html += '<option value="' + escapeHtml(s.Email) + '">' + escapeHtml(s.DisplayName) + '</option>';
+      }
+      html += '</select>';
+    }
+
+    html += '<select id="qa-priority-' + id + '" class="form-select form-select-sm">';
+    html += '<option value="Low">Low</option>';
+    html += '<option value="Normal" selected>Normal</option>';
+    html += '<option value="High">High</option>';
+    html += '<option value="Urgent">Urgent</option>';
+    html += '</select>';
+
+    if (submitting) {
+      html += '<button class="btn btn-primary btn-sm" disabled><span class="spinner-border spinner-border-sm"></span></button>';
+    } else {
+      html += '<button class="btn btn-primary btn-sm" onclick="handleQuickAdd(\'' + panelType + '\')"><i class="bi bi-plus-lg"></i></button>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderTaskRow(task, type) {
+    var isCompleted = task.status === 'Completed';
+    var overdue = !isCompleted && isOverdue(task);
+    var isMe = AppState.currentUser && (task.assignee === AppState.currentUser.email || task.assignee === 'ALL');
+    var isAdmin = AppState.currentUser && AppState.currentUser.isAdmin;
+    var canAct = (type === 'shared' && isAdmin) || (type === 'personal');
+
+    var rowClasses = 'task-row';
+    if (isCompleted) rowClasses += ' completed-row';
+    if (overdue) rowClasses += ' overdue';
+    if (type === 'shared' && !isCompleted && isMe && task.assignee !== 'ALL') rowClasses += ' assigned-to-me';
+
+    var html = '<div class="' + rowClasses + '">';
+
+    // Checkbox
+    html += '<input type="checkbox" class="task-checkbox" ' + (isCompleted ? 'checked' : '') + ' onclick="handleToggleStatus(\'' + task.taskId + '\', \'' + type + '\')" title="' + (isCompleted ? 'Mark as open' : 'Mark as completed') + '">';
+
+    // Content
+    html += '<div class="task-content">';
+    html += '<div class="task-title' + (isCompleted ? ' done' : '') + '">' + escapeHtml(task.title) + '</div>';
+    html += '<div class="task-meta">';
+
+    // Priority dot
+    html += getPriorityDot(task.priority);
+
+    // Assignee badge (shared only)
+    if (type === 'shared') {
+      var assigneeLabel = task.assignee === 'ALL' ? 'Everyone' : getAssigneeName(task.assignee);
+      var badgeClass = 'assignee-badge';
+      if (task.assignee === 'ALL') badgeClass += ' everyone';
+      else if (AppState.currentUser && task.assignee === AppState.currentUser.email) badgeClass += ' me';
+      html += '<span class="' + badgeClass + '">' + escapeHtml(assigneeLabel) + '</span>';
+    }
+
+    // Due date
+    if (task.dueDate) {
+      var dueFmt = formatDueDate(task.dueDate);
+      var dueClass = 'due-date' + (overdue ? ' overdue' : '');
+      html += '<span class="' + dueClass + '"><i class="bi bi-calendar3"></i> ' + escapeHtml(dueFmt.display) + (overdue ? ' OVERDUE' : '') + '</span>';
+    }
+
+    // Completion info
+    if (isCompleted && task.completedBy) {
+      var completedByName = getAssigneeName(task.completedBy);
+      var completedAgo = formatRelativeTime(task.completedDate);
+      html += '<span class="completion-info">Done by ' + escapeHtml(completedByName) + ' ' + escapeHtml(completedAgo.relative) + '</span>';
+    }
+
+    html += '</div>'; // end meta
+    html += '</div>'; // end content
+
+    // Actions dropdown
+    if (canAct) {
+      html += '<div class="dropdown">';
+      html += '<button class="task-actions-btn" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>';
+      html += '<ul class="dropdown-menu dropdown-menu-end">';
+      html += '<li><a class="dropdown-item small" href="#" onclick="handleEditTask(\'' + task.taskId + '\', \'' + type + '\'); return false;"><i class="bi bi-pencil me-2"></i>Edit</a></li>';
+      html += '<li><hr class="dropdown-divider"></li>';
+      html += '<li><a class="dropdown-item small text-danger" href="#" onclick="handleDeleteTask(\'' + task.taskId + '\', \'' + type + '\'); return false;"><i class="bi bi-trash me-2"></i>Delete</a></li>';
+      html += '</ul></div>';
+    }
+
+    html += '</div>'; // end row
+    return html;
+  }
+
+  /* ============================================================
+     HELPER FUNCTIONS
+     ============================================================ */
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function formatRelativeTime(timestamp) {
+    if (!timestamp) return { relative: '', full: '' };
+    var now = new Date();
+    var date = new Date(timestamp);
+    var diffSeconds = Math.floor((now - date) / 1000);
+    var relative;
+    if (diffSeconds < 60) { relative = 'just now'; }
+    else if (diffSeconds < 3600) { var m = Math.floor(diffSeconds / 60); relative = m === 1 ? '1 minute ago' : m + ' minutes ago'; }
+    else if (diffSeconds < 86400) { var h = Math.floor(diffSeconds / 3600); relative = h === 1 ? '1 hour ago' : h + ' hours ago'; }
+    else if (diffSeconds < 604800) { var d = Math.floor(diffSeconds / 86400); relative = d === 1 ? '1 day ago' : d + ' days ago'; }
+    else { relative = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    var full = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return { relative: relative, full: full };
+  }
+
+  function getInitials(name) {
+    if (!name) return '?';
+    var parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  function getAvatarColor(email) {
+    var hash = 0;
+    for (var i = 0; i < email.length; i++) {
+      hash = email.charCodeAt(i) + ((hash << 5) - hash);
+      hash = hash & hash;
+    }
+    return 'hsl(' + (Math.abs(hash) % 360) + ', 55%, 45%)';
+  }
+
+  function isOverdue(task) {
+    if (task.status !== 'Open') return false;
+    if (!task.dueDate) return false;
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var due = new Date(task.dueDate + 'T00:00:00');
+    return due < today;
+  }
+
+  function formatDueDate(dateStr) {
+    if (!dateStr) return { display: '', isOverdue: false };
+    var due = new Date(dateStr + 'T00:00:00');
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+    var display;
+    if (diffDays === 0) display = 'Today';
+    else if (diffDays === 1) display = 'Tomorrow';
+    else if (diffDays === -1) display = 'Yesterday';
+    else if (diffDays > 1 && diffDays <= 7) display = 'In ' + diffDays + ' days';
+    else display = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { display: display, isOverdue: due < today };
+  }
+
+  function getPriorityDot(priority) {
+    var cls = (priority || 'Normal').toLowerCase();
+    return '<span class="priority-dot ' + cls + '" title="' + escapeHtml(priority) + '"></span>';
+  }
+
+  function getAssigneeName(email) {
+    if (!email || email === 'ALL') return 'Everyone';
+    for (var i = 0; i < AppState.staffList.length; i++) {
+      if (AppState.staffList[i].Email === email) return AppState.staffList[i].DisplayName;
+    }
+    var parts = email.split('@');
+    if (parts.length > 0) {
+      var name = parts[0];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+    return email;
+  }
+
+  /* ============================================================
+     SECTION 4: EVENT HANDLERS
+     ============================================================ */
+
+  function handleFilterChange(filter) {
+    AppState.sharedFilter = filter;
+    renderSharedPanel();
+  }
+
+  function toggleCompleted(panelType) {
+    if (panelType === 'shared') {
+      AppState.sharedCompletedOpen = !AppState.sharedCompletedOpen;
+      renderSharedPanel();
+    } else {
+      AppState.personalCompletedOpen = !AppState.personalCompletedOpen;
+      renderPersonalPanel();
+    }
+  }
+
+  function handleQuickAddKeydown(event, panelType) {
+    if (event.key === 'Enter' || event.keyCode === 13) {
+      event.preventDefault();
+      handleQuickAdd(panelType);
+    }
+  }
+
+  function handleQuickAdd(panelType) {
+    var id = panelType === 'shared' ? 'shared' : 'personal';
+    var input = document.getElementById('qa-input-' + id);
+    var prioritySelect = document.getElementById('qa-priority-' + id);
+    var title = input ? input.value.trim() : '';
+    var priority = prioritySelect ? prioritySelect.value : 'Normal';
+
+    if (!title) return;
+
+    if (panelType === 'shared') {
+      var assigneeSelect = document.getElementById('qa-assignee-' + id);
+      var assignee = assigneeSelect ? assigneeSelect.value : 'ALL';
+      AppState.submittingShared = true;
+      renderSharedPanel();
+
+      google.script.run
+        .withSuccessHandler(function() {
+          AppState.submittingShared = false;
+          loadSharedTasks();
+        })
+        .withFailureHandler(function(error) {
+          AppState.submittingShared = false;
+          showError(error.message || 'Failed to create task.');
+          renderSharedPanel();
+        })
+        .createSharedTask({ title: title, assignee: assignee, priority: priority });
+    } else {
+      AppState.submittingPersonal = true;
+      renderPersonalPanel();
+
+      google.script.run
+        .withSuccessHandler(function() {
+          AppState.submittingPersonal = false;
+          loadPersonalTasks();
+        })
+        .withFailureHandler(function(error) {
+          AppState.submittingPersonal = false;
+          showError(error.message || 'Failed to create task.');
+          renderPersonalPanel();
+        })
+        .createPersonalTask({ title: title, priority: priority });
+    }
+  }
+
+  function handleToggleStatus(taskId, type) {
+    var tasks = type === 'shared' ? AppState.sharedTasks : AppState.personalTasks;
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].taskId === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+
+    var newStatus = task.status === 'Completed' ? 'Open' : 'Completed';
+
+    google.script.run
+      .withSuccessHandler(function() {
+        if (type === 'shared') loadSharedTasks();
+        else loadPersonalTasks();
+      })
+      .withFailureHandler(function(error) {
+        showError(error.message || 'Failed to update task.');
+      })
+      .updateTaskStatus(taskId, type, newStatus);
+  }
+
+  function handleEditTask(taskId, type) {
+    var tasks = type === 'shared' ? AppState.sharedTasks : AppState.personalTasks;
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].taskId === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+
+    AppState.editingTask = { taskId: taskId, type: type };
+
+    document.getElementById('editModalTitle').textContent = type === 'shared' ? 'Edit Department Task' : 'Edit Personal Task';
+    document.getElementById('edit-title').value = task.title || '';
+    document.getElementById('edit-due-date').value = task.dueDate || '';
+    document.getElementById('edit-priority').value = task.priority || 'Normal';
+
+    // Shared-only fields
+    var assigneeGroup = document.getElementById('edit-assignee-group');
+    var notesGroup = document.getElementById('edit-notes-group');
+    if (type === 'shared') {
+      assigneeGroup.style.display = 'block';
+      notesGroup.style.display = 'block';
+      // Populate assignee dropdown from existing task data
+      var assigneeSelect = document.getElementById('edit-assignee');
+      var aHtml = '<option value="ALL"' + (task.assignee === 'ALL' ? ' selected' : '') + '>Everyone</option>';
+      var seenEmails = {};
+      for (var j = 0; j < AppState.staffList.length; j++) {
+        var s = AppState.staffList[j];
+        seenEmails[s.Email] = true;
+        var sel = task.assignee === s.Email ? ' selected' : '';
+        aHtml += '<option value="' + escapeHtml(s.Email) + '"' + sel + '>' + escapeHtml(s.DisplayName) + '</option>';
+      }
+      // Ensure current assignee is included even if not in staff list
+      if (task.assignee && task.assignee !== 'ALL' && !seenEmails[task.assignee]) {
+        aHtml += '<option value="' + escapeHtml(task.assignee) + '" selected>' + escapeHtml(getAssigneeName(task.assignee)) + '</option>';
+      }
+      assigneeSelect.innerHTML = aHtml;
+      document.getElementById('edit-notes').value = task.notes || '';
+    } else {
+      assigneeGroup.style.display = 'none';
+      notesGroup.style.display = 'none';
+    }
+
+    var modal = new bootstrap.Modal(document.getElementById('editModal'));
+    modal.show();
+  }
+
+  function handleSaveEdit() {
+    if (!AppState.editingTask) return;
+    var taskId = AppState.editingTask.taskId;
+    var type = AppState.editingTask.type;
+
+    var title = document.getElementById('edit-title').value.trim();
+    if (!title) { showError('Task title is required.'); return; }
+
+    var data = {
+      title: title,
+      dueDate: document.getElementById('edit-due-date').value || null,
+      priority: document.getElementById('edit-priority').value
+    };
+
+    if (type === 'shared') {
+      data.assignee = document.getElementById('edit-assignee').value;
+      data.notes = document.getElementById('edit-notes').value;
+    }
+
+    var btn = document.getElementById('save-edit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    google.script.run
+      .withSuccessHandler(function() {
+        btn.disabled = false;
+        btn.innerHTML = 'Save';
+        AppState.editingTask = null;
+        var modal = bootstrap.Modal.getInstance(document.getElementById('editModal'));
+        if (modal) modal.hide();
+        if (type === 'shared') loadSharedTasks();
+        else loadPersonalTasks();
+      })
+      .withFailureHandler(function(error) {
+        btn.disabled = false;
+        btn.innerHTML = 'Save';
+        showError(error.message || 'Failed to save changes.');
+      })
+      .editTask(taskId, type, data);
+  }
+
+  function handleDeleteTask(taskId, type) {
+    AppState.pendingDeleteTask = { taskId: taskId, type: type };
+    var modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+  }
+
+  function confirmDeleteTask() {
+    if (!AppState.pendingDeleteTask) return;
+    var taskId = AppState.pendingDeleteTask.taskId;
+    var type = AppState.pendingDeleteTask.type;
+
+    var btn = document.getElementById('confirm-delete-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    google.script.run
+      .withSuccessHandler(function() {
+        btn.disabled = false;
+        btn.innerHTML = 'Delete';
+        AppState.pendingDeleteTask = null;
+        var modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+        if (modal) modal.hide();
+        if (type === 'shared') loadSharedTasks();
+        else loadPersonalTasks();
+      })
+      .withFailureHandler(function(error) {
+        btn.disabled = false;
+        btn.innerHTML = 'Delete';
+        showError(error.message || 'Failed to delete task.');
+      })
+      .deleteTask(taskId, type);
+  }
+
+  function handleArchiveCompleted() {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        showSuccess(result.archived + ' task(s) archived.');
+        loadSharedTasks();
+      })
+      .withFailureHandler(function(error) {
+        showError(error.message || 'Failed to archive tasks.');
+      })
+      .archiveCompleted();
+  }
+
+  function handleShowStats() {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        renderCompletionSummary(data);
+        var modal = new bootstrap.Modal(document.getElementById('statsModal'));
+        modal.show();
+      })
+      .withFailureHandler(function(error) {
+        showError(error.message || 'Failed to load stats.');
+      })
+      .getCompletionSummary();
+  }
+
+  function renderCompletionSummary(data) {
+    var body = document.getElementById('stats-body');
+    var html = '';
+
+    // Summary cards
+    html += '<div class="stats-summary">';
+    html += '<div class="stat-card"><div class="stat-number text-primary">' + data.totalOpen + '</div><div class="stat-label">Open</div></div>';
+    html += '<div class="stat-card"><div class="stat-number text-success">' + data.totalCompleted + '</div><div class="stat-label">Completed</div></div>';
+    html += '<div class="stat-card"><div class="stat-number text-danger">' + data.totalOverdue + '</div><div class="stat-label">Overdue</div></div>';
+    html += '</div>';
+
+    // Per-assignee table
+    html += '<table class="table table-sm stats-table mb-0">';
+    html += '<thead><tr><th>Assignee</th><th class="text-center">Open</th><th class="text-center">Done</th><th class="text-center">Overdue</th></tr></thead>';
+    html += '<tbody>';
+    var keys = Object.keys(data.byAssignee);
+    for (var i = 0; i < keys.length; i++) {
+      var a = data.byAssignee[keys[i]];
+      html += '<tr>';
+      html += '<td>' + escapeHtml(keys[i]) + '</td>';
+      html += '<td class="text-center">' + a.open + '</td>';
+      html += '<td class="text-center">' + a.completed + '</td>';
+      html += '<td class="text-center' + (a.overdue > 0 ? ' text-danger fw-bold' : '') + '">' + a.overdue + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    body.innerHTML = html;
+  }
+
+
+  /* ============================================================
+     SECTION 5: ERROR HANDLING & UTILITIES
+     ============================================================ */
+
+  function showError(message) {
+    var banner = document.getElementById('error-banner');
+    document.getElementById('error-message').textContent = message;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 5000);
+  }
+
+  function hideError() {
+    document.getElementById('error-banner').style.display = 'none';
+  }
+
+  function showSuccess(message) {
+    var banner = document.getElementById('success-banner');
+    document.getElementById('success-message').textContent = message;
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 3000);
+  }
+
+  function hideSuccess() {
+    document.getElementById('success-banner').style.display = 'none';
+  }
+
+  /* ============================================================
+     SECTION 6: INITIALIZATION
+     ============================================================ */
+
+  var loadCount = 0;
+
+  function checkLoaded() {
+    loadCount++;
+    if (loadCount >= 4) {
+      AppState.isLoading = false;
+      renderApp();
+    }
+  }
+
+  function loadCurrentUser() {
+    google.script.run
+      .withSuccessHandler(function(user) {
+        AppState.currentUser = user;
+        if (AppState.isLoading) checkLoaded();
+        else renderApp();
+      })
+      .withFailureHandler(function(error) {
+        showError('Failed to identify user.');
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getCurrentUser();
+  }
+
+  function loadSharedTasks() {
+    google.script.run
+      .withSuccessHandler(function(tasks) {
+        AppState.sharedTasks = tasks;
+        if (AppState.isLoading) checkLoaded();
+        else renderSharedPanel();
+      })
+      .withFailureHandler(function(error) {
+        showError('Failed to load department tasks.');
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getSharedTasks();
+  }
+
+  function loadPersonalTasks() {
+    google.script.run
+      .withSuccessHandler(function(tasks) {
+        AppState.personalTasks = tasks;
+        if (AppState.isLoading) checkLoaded();
+        else renderPersonalPanel();
+      })
+      .withFailureHandler(function(error) {
+        showError('Failed to load personal tasks.');
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getPersonalTasks();
+  }
+
+  function loadStaff() {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        AppState.staffList = data || [];
+        if (AppState.isLoading) checkLoaded();
+        else renderApp();
+      })
+      .withFailureHandler(function() {
+        if (AppState.isLoading) checkLoaded();
+      })
+      .getStaff();
+  }
+
+  // Boot
+  document.addEventListener('DOMContentLoaded', function() {
+    loadCurrentUser();
+    loadSharedTasks();
+    loadPersonalTasks();
+    loadStaff();
+  });
+
+  </script>
+</body>
+</html>

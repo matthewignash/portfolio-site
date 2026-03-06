@@ -1,0 +1,399 @@
+<script>
+    // ================================================
+    // CELEBRATIONS — Milestones, Streaks, Badges
+    // ES5 only — no const, let, =>, template literals, .includes()
+    // CSS prefix: cel-
+    // ================================================
+
+    // Client-side badge definitions (mirrors backend for display)
+    var CEL_BADGE_DEFS = {
+      first_hex:     { icon: '\uD83C\uDF1F', label: 'First Steps',        description: 'Completed your first hex' },
+      hex_5:         { icon: '\u2B50',        label: 'Getting Going',      description: 'Completed 5 hexes' },
+      hex_10:        { icon: '\uD83C\uDFC6',  label: 'Double Digits',      description: 'Completed 10 hexes' },
+      hex_25:        { icon: '\uD83D\uDD25',  label: 'Quarter Century',    description: 'Completed 25 hexes' },
+      hex_50:        { icon: '\uD83D\uDCAA',  label: 'Halfway Hero',       description: 'Completed 50 hexes' },
+      hex_100:       { icon: '\uD83C\uDF89',  label: 'Century Club',       description: 'Completed 100 hexes' },
+      streak_3:      { icon: '\uD83D\uDD25',  label: '3-Day Streak',       description: '3 consecutive days of progress' },
+      streak_7:      { icon: '\uD83D\uDD25',  label: 'Week Warrior',       description: '7-day streak' },
+      streak_14:     { icon: '\uD83D\uDD25',  label: 'Two-Week Titan',     description: '14-day streak' },
+      streak_30:     { icon: '\uD83D\uDD25',  label: 'Monthly Master',     description: '30-day streak' },
+      perfect_score: { icon: '\uD83D\uDCAF',  label: 'Perfect Score',      description: 'Scored 100% on a hex' },
+      map_complete:  { icon: '\uD83C\uDFC1',  label: 'Map Complete',       description: 'Completed all hexes in a map' },
+      design_cycle_complete: { icon: '\uD83C\uDFA8', label: 'Design Cycle Complete', description: 'Completed all design phase hexes in a PBL map' },
+      lesson_complete: { icon: '\uD83D\uDCD6', label: 'Lesson Complete', description: 'Completed all activities in a lesson' }
+    };
+
+    var CEL_BADGE_ORDER = [
+      'first_hex', 'hex_5', 'hex_10', 'hex_25', 'hex_50', 'hex_100',
+      'streak_3', 'streak_7', 'streak_14', 'streak_30',
+      'perfect_score', 'map_complete', 'design_cycle_complete', 'lesson_complete'
+    ];
+
+    // Simplified badge titles for low WIDA bracket EAL students
+    var CEL_BADGE_SIMPLE = {
+      first_hex: 'First Activity Done!',
+      hex_5: '5 Activities Done!',
+      hex_10: '10 Activities Done!',
+      hex_25: '25 Activities Done!',
+      hex_50: '50 Activities Done!',
+      hex_100: '100 Activities Done!',
+      streak_3: '3-Day Streak!',
+      streak_7: '7-Day Streak!',
+      streak_14: '14-Day Streak!',
+      streak_30: '30-Day Streak!',
+      perfect_score: 'Perfect Score!',
+      map_complete: 'Map Finished!',
+      design_cycle_complete: 'Design Project Finished!',
+      lesson_complete: 'Lesson Finished!'
+    };
+
+    // Simplified growth message patterns for low bracket
+    var CEL_GROWTH_SIMPLE = [
+      { match: 'on fire', simple: 'You are doing great! Keep going!' },
+      { match: 'streak', simple: 'You have been working every day. Great job!' },
+      { match: 'halfway', simple: 'You are halfway done! Keep it up!' },
+      { match: 'almost there', simple: 'You are almost finished! You can do it!' },
+      { match: 'first step', simple: 'You started! That is the first step.' },
+      { match: 'milestone', simple: 'You reached a goal! Well done!' }
+    ];
+
+    /**
+     * Returns simplified badge title for low bracket, or null for default.
+     */
+    function celGetSimpleTitle(badgeKey) {
+      var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+      if (bracket === 'low' && CEL_BADGE_SIMPLE[badgeKey]) {
+        return CEL_BADGE_SIMPLE[badgeKey];
+      }
+      return null;
+    }
+
+    /**
+     * Simplifies growth messages for low bracket EAL students.
+     */
+    function celSimplifyGrowth(message) {
+      var bracket = (typeof getWidaBracket === 'function') ? getWidaBracket() : null;
+      if (bracket !== 'low' || !message) return message;
+      var lower = message.toLowerCase();
+      for (var i = 0; i < CEL_GROWTH_SIMPLE.length; i++) {
+        if (lower.indexOf(CEL_GROWTH_SIMPLE[i].match) !== -1) return CEL_GROWTH_SIMPLE[i].simple;
+      }
+      return message;
+    }
+
+    var celGalleryVisible = false;
+    var celScheduledTimer = null;
+    var celDataLoading = false;  // Guard against duplicate fetches
+
+    // ================================================
+    // LIFECYCLE
+    // ================================================
+
+    function loadCelebrationData() {
+      // Skip if a fetch is already in-flight
+      if (celDataLoading) return;
+      celDataLoading = true;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          celDataLoading = false;
+          celData = result;
+          updateCelDisplays();
+          // Show pending celebrations
+          if (result.pendingCelebrations && result.pendingCelebrations.length > 0) {
+            celPendingQueue = result.pendingCelebrations.slice();
+            showNextCelebration();
+          }
+        })
+        .withFailureHandler(function(err) {
+          celDataLoading = false;
+          console.error('Celebration data load error:', err);
+        })
+        .getStudentCelebrationData();
+    }
+
+    // ================================================
+    // CHECK AFTER HEX COMPLETION
+    // ================================================
+
+    function checkCelebrations(mapId, hexId, newStatus) {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (!result) return;
+
+          // Update cached data
+          if (celData) {
+            celData.streak = result.streak;
+            celData.completedCount = result.completedCount;
+            celData.growthMessage = result.growthMessage;
+          }
+
+          updateCelDisplays();
+
+          // Onboarding milestone: badge earned
+          if (result.newAchievements && result.newAchievements.length > 0 && typeof onbMarkMilestone === 'function') {
+            onbMarkMilestone('badgeEarned');
+          }
+
+          if (result.newAchievements && result.newAchievements.length > 0) {
+            // Queue new celebrations
+            for (var i = 0; i < result.newAchievements.length; i++) {
+              celPendingQueue.push(result.newAchievements[i]);
+            }
+
+            // Delay if unlock notification is showing (debounce to prevent overlap)
+            if (celScheduledTimer) clearTimeout(celScheduledTimer);
+            var unlockEl = document.getElementById('sngUnlockNotification');
+            var delay = unlockEl ? 5500 : 800;
+            celScheduledTimer = setTimeout(function() {
+              celScheduledTimer = null;
+              showNextCelebration();
+            }, delay);
+          } else if (result.growthMessage) {
+            // No new milestone but show growth message
+            renderGrowthBanner(result.growthMessage);
+          }
+        })
+        .withFailureHandler(function(err) {
+          console.error('Celebration check error:', err);
+        })
+        .checkAndAwardAchievements(mapId, hexId, newStatus);
+    }
+
+    // ================================================
+    // CELEBRATION OVERLAY
+    // ================================================
+
+    function showNextCelebration() {
+      if (celPendingQueue.length === 0) return;
+      if (celCurrentOverlay) return; // Already showing one
+
+      var achievement = celPendingQueue.shift();
+      celCurrentOverlay = buildCelebrationOverlay(achievement);
+      document.body.appendChild(celCurrentOverlay);
+
+      // Auto-dismiss after 5 seconds
+      setTimeout(function() {
+        if (celCurrentOverlay) dismissCelebration(achievement.achievementId);
+      }, 5000);
+    }
+
+    function buildCelebrationOverlay(achievement) {
+      var overlay = document.createElement('div');
+      overlay.className = 'cel-overlay';
+      overlay.id = 'celOverlay';
+      overlay.onclick = function(e) {
+        if (e.target === overlay) dismissCelebration(achievement.achievementId);
+      };
+
+      var card = document.createElement('div');
+      card.className = 'cel-card';
+
+      // Confetti particles
+      var particles = document.createElement('div');
+      particles.className = 'cel-particles';
+      for (var i = 0; i < 12; i++) {
+        var p = document.createElement('span');
+        var angle = (i / 12) * 360;
+        var dist = 80 + Math.floor(Math.random() * 60);
+        var dx = Math.round(Math.cos(angle * Math.PI / 180) * dist);
+        var dy = Math.round(Math.sin(angle * Math.PI / 180) * dist - 20);
+        p.style.cssText = '--cel-dx:' + dx + 'px;--cel-dy:' + dy + 'px;animation-delay:' + (i * 0.06) + 's;';
+        particles.appendChild(p);
+      }
+      card.appendChild(particles);
+
+      // Icon
+      var iconEl = document.createElement('div');
+      iconEl.className = 'cel-icon';
+      iconEl.textContent = achievement.icon || '\uD83C\uDFC6';
+      card.appendChild(iconEl);
+
+      // Title (bracket-adaptive for EAL)
+      var simpleTitle = celGetSimpleTitle(achievement.achievementKey || '');
+      var titleEl = document.createElement('div');
+      titleEl.className = 'cel-title';
+      titleEl.textContent = simpleTitle || achievement.label || 'Achievement Unlocked!';
+      card.appendChild(titleEl);
+
+      // Description
+      var descEl = document.createElement('div');
+      descEl.className = 'cel-description';
+      descEl.textContent = achievement.description || '';
+      card.appendChild(descEl);
+
+      // Dismiss button
+      var dismissBtn = document.createElement('button');
+      dismissBtn.className = 'cel-dismiss-btn';
+      dismissBtn.textContent = 'Awesome!';
+      dismissBtn.onclick = function() { dismissCelebration(achievement.achievementId); };
+      card.appendChild(dismissBtn);
+
+      overlay.appendChild(card);
+      return overlay;
+    }
+
+    function dismissCelebration(achievementId) {
+      if (!celCurrentOverlay) return;
+
+      celCurrentOverlay.classList.add('dismissing');
+
+      setTimeout(function() {
+        if (celCurrentOverlay && celCurrentOverlay.parentNode) {
+          celCurrentOverlay.parentNode.removeChild(celCurrentOverlay);
+        }
+        celCurrentOverlay = null;
+
+        // Acknowledge on backend
+        if (achievementId) {
+          google.script.run
+            .withSuccessHandler(function() {})
+            .withFailureHandler(function() {})
+            .acknowledgeAchievements([achievementId]);
+        }
+
+        // Show next celebration or growth banner
+        if (celPendingQueue.length > 0) {
+          setTimeout(function() { showNextCelebration(); }, 400);
+        } else if (celData && celData.growthMessage) {
+          renderGrowthBanner(celData.growthMessage);
+        }
+      }, 300);
+    }
+
+    // ================================================
+    // GROWTH BANNER
+    // ================================================
+
+    function renderGrowthBanner(message) {
+      if (!message) return;
+
+      // Simplify growth message for low WIDA bracket
+      var displayMessage = celSimplifyGrowth(message);
+
+      // Remove any existing banner
+      var existing = document.getElementById('celGrowthBanner');
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+      var banner = document.createElement('div');
+      banner.className = 'cel-growth-banner';
+      banner.id = 'celGrowthBanner';
+      banner.textContent = displayMessage;
+
+      var closeBtn = document.createElement('button');
+      closeBtn.className = 'cel-growth-banner-close';
+      closeBtn.innerHTML = '&times;';
+      closeBtn.onclick = function() { dismissGrowthBanner(); };
+      banner.appendChild(closeBtn);
+
+      document.body.appendChild(banner);
+
+      // Auto-dismiss after 8 seconds
+      setTimeout(function() { dismissGrowthBanner(); }, 8000);
+    }
+
+    function dismissGrowthBanner() {
+      var banner = document.getElementById('celGrowthBanner');
+      if (!banner) return;
+      banner.classList.add('dismissing');
+      setTimeout(function() {
+        if (banner.parentNode) banner.parentNode.removeChild(banner);
+      }, 300);
+    }
+
+    // ================================================
+    // STREAK COUNTER (Planner stat card)
+    // ================================================
+
+    function renderStreakCounter(streak) {
+      if (!streak || streak < 1) return '';
+
+      var html = '<div class="cel-streak-card">';
+      html += '<div class="cel-streak-value"><span class="cel-streak-flame">\uD83D\uDD25</span>' + streak + '</div>';
+      html += '<div class="cel-streak-label">Day Streak</div>';
+      html += '</div>';
+      return html;
+    }
+
+    // ================================================
+    // BADGE GALLERY (Planner section)
+    // ================================================
+
+    function renderBadgeGallery() {
+      var container = document.getElementById('celBadgeGallery');
+      if (!container) return;
+
+      // Build earned keys set
+      var earnedKeys = {};
+      var earnedDates = {};
+      if (celData && celData.badges) {
+        for (var b = 0; b < celData.badges.length; b++) {
+          var badge = celData.badges[b];
+          earnedKeys[badge.achievementKey] = true;
+          earnedDates[badge.achievementKey] = badge.earnedAt || '';
+        }
+      }
+
+      var earnedCount = Object.keys(earnedKeys).length;
+      if (earnedCount === 0 && !celGalleryVisible) {
+        container.style.display = 'none';
+        return;
+      }
+
+      container.style.display = 'block';
+
+      var html = '<div class="cel-gallery-section">';
+      html += '<div class="cel-gallery-header">';
+      html += '<div class="cel-gallery-title">\uD83C\uDFC5 Badges (' + earnedCount + '/' + CEL_BADGE_ORDER.length + ')</div>';
+      html += '<button class="cel-gallery-toggle" onclick="toggleBadgeGallery()">' + (celGalleryVisible ? 'Hide' : 'Show') + '</button>';
+      html += '</div>';
+
+      if (celGalleryVisible) {
+        html += '<div class="cel-badge-gallery">';
+        for (var i = 0; i < CEL_BADGE_ORDER.length; i++) {
+          var key = CEL_BADGE_ORDER[i];
+          var def = CEL_BADGE_DEFS[key] || {};
+          var isEarned = earnedKeys[key];
+          var dateStr = '';
+          if (isEarned && earnedDates[key]) {
+            var parts = earnedDates[key].split('T')[0].split('-');
+            if (parts.length === 3) {
+              var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+              dateStr = months[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10);
+            }
+          }
+
+          html += '<div class="cel-badge-item ' + (isEarned ? 'earned' : 'unearned') + '">';
+          html += '<div class="cel-badge-icon">' + (def.icon || '\uD83C\uDFC6') + '</div>';
+          var badgeLabel = celGetSimpleTitle(key) || def.label;
+          html += '<div class="cel-badge-label">' + (isEarned ? escapeHtml(badgeLabel) : '???') + '</div>';
+          if (isEarned && dateStr) {
+            html += '<div class="cel-badge-date">' + dateStr + '</div>';
+          } else if (!isEarned) {
+            html += '<div class="cel-badge-date">Not yet earned</div>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function toggleBadgeGallery() {
+      celGalleryVisible = !celGalleryVisible;
+      renderBadgeGallery();
+    }
+
+    // ================================================
+    // UPDATE DISPLAYS
+    // ================================================
+
+    function updateCelDisplays() {
+      // Re-render badge gallery
+      renderBadgeGallery();
+
+      // If planner is visible and renderPlannerView exists, it will pick up celData on next render
+      // The streak card is integrated into renderPlannerStats via the hook
+    }
+</script>

@@ -1,0 +1,368 @@
+<script>
+// ============================================================================
+// Scripts-LabRichEditor.html
+// Rich text formatting toolbar for lab report richtext sections.
+// Uses document.execCommand() on contenteditable div.
+// ES5 ONLY — no const, let, =>, template literals, .includes()
+//
+// Dependencies:
+//   labEditorOnInput (Scripts-LabEditor.html)
+//   labEditorSectionContent (Scripts-Core.html)
+//   escapeHtml (Scripts-Core.html)
+// ============================================================================
+
+
+/**
+ * Render the rich text editor (toolbar + contenteditable div) for a section.
+ *
+ * @param {string} secKey - Section key
+ * @param {string} content - Existing HTML content
+ * @param {boolean} readOnly - Whether editing is disabled
+ * @returns {string} HTML string
+ */
+function labRichRender(secKey, content, readOnly) {
+  var esc = escapeHtml(secKey);
+  var html = '<div class="lab-rich-wrap">';
+
+  // Toolbar (hidden in read-only mode)
+  if (!readOnly) {
+    html += '<div class="lab-rich-toolbar" id="labRichToolbar-' + esc + '">';
+
+    // Bold / Italic / Underline
+    html += '<button type="button" class="lab-rich-btn" data-cmd="bold" title="Bold (Ctrl+B)" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'bold\')"><b>B</b></button>';
+    html += '<button type="button" class="lab-rich-btn" data-cmd="italic" title="Italic (Ctrl+I)" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'italic\')"><i>I</i></button>';
+    html += '<button type="button" class="lab-rich-btn" data-cmd="underline" title="Underline (Ctrl+U)" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'underline\')"><u>U</u></button>';
+
+    html += '<span class="lab-rich-separator"></span>';
+
+    // Heading (H3 toggle)
+    html += '<button type="button" class="lab-rich-btn" data-cmd="heading" title="Heading" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichToggleHeading(\'' + esc + '\')">H</button>';
+
+    html += '<span class="lab-rich-separator"></span>';
+
+    // Bullet List / Numbered List
+    html += '<button type="button" class="lab-rich-btn" data-cmd="insertUnorderedList" title="Bullet List" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'insertUnorderedList\')">' +
+      '&#8226;</button>';
+    html += '<button type="button" class="lab-rich-btn" data-cmd="insertOrderedList" title="Numbered List" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'insertOrderedList\')">' +
+      '1.</button>';
+
+    html += '<span class="lab-rich-separator"></span>';
+
+    // Indent / Outdent
+    html += '<button type="button" class="lab-rich-btn" title="Indent" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'indent\')">' +
+      '&#8594;</button>';
+    html += '<button type="button" class="lab-rich-btn" title="Outdent" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'outdent\')">' +
+      '&#8592;</button>';
+
+    html += '<span class="lab-rich-separator"></span>';
+
+    // Blockquote
+    html += '<button type="button" class="lab-rich-btn" data-cmd="blockquote" title="Blockquote" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'formatBlock\',\'blockquote\')">' +
+      '&#8220;</button>';
+
+    html += '<span class="lab-rich-separator"></span>';
+
+    // Link
+    html += '<button type="button" class="lab-rich-btn" title="Insert Link" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichInsertLink(\'' + esc + '\')">' +
+      '&#128279;</button>';
+
+    // Remove Formatting
+    html += '<button type="button" class="lab-rich-btn" title="Remove Formatting" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'removeFormat\')">' +
+      '&#10005;</button>';
+
+    html += '<span class="lab-rich-separator"></span>';
+
+    // Undo / Redo
+    html += '<button type="button" class="lab-rich-btn" title="Undo (Ctrl+Z)" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'undo\')">' +
+      '&#8617;</button>';
+    html += '<button type="button" class="lab-rich-btn" title="Redo (Ctrl+Y)" ' +
+      'onmousedown="event.preventDefault()" onclick="labRichExecCmd(\'' + esc + '\',\'redo\')">' +
+      '&#8618;</button>';
+
+    html += '</div>'; // end toolbar
+  }
+
+  // Contenteditable div
+  var sanitized = labRichSanitize(content || '');
+  html += '<div class="lab-rich-editor" id="labEditorInput-' + esc + '"' +
+    ' contenteditable="' + (readOnly ? 'false' : 'true') + '"' +
+    ' data-placeholder="Start typing your response..."' +
+    (readOnly ? '' : ' oninput="labRichOnInput(\'' + esc + '\')"') +
+    (readOnly ? '' : ' onpaste="labRichOnPaste(\'' + esc + '\',event)"') +
+    '>' + sanitized + '</div>';
+
+  html += '</div>'; // end lab-rich-wrap
+
+  return html;
+}
+
+
+/**
+ * Execute a formatting command on the contenteditable div.
+ *
+ * @param {string} secKey - Section key
+ * @param {string} cmd - The execCommand command
+ * @param {string} [value] - Optional command value
+ */
+function labRichExecCmd(secKey, cmd, value) {
+  var editor = document.getElementById('labEditorInput-' + secKey);
+  if (!editor) return;
+  editor.focus();
+  document.execCommand(cmd, false, value || null);
+
+  // Update toolbar button active states after a brief delay
+  setTimeout(function() {
+    labRichUpdateBtnState(secKey);
+  }, 0);
+
+  // Trigger input handler for content change
+  labRichOnInput(secKey);
+}
+
+
+/**
+ * Toggle heading (H3) on the selected text.
+ *
+ * @param {string} secKey - Section key
+ */
+function labRichToggleHeading(secKey) {
+  var editor = document.getElementById('labEditorInput-' + secKey);
+  if (!editor) return;
+  editor.focus();
+
+  var current = '';
+  try { current = document.queryCommandValue('formatBlock'); } catch (e) {}
+
+  if (current.toLowerCase() === 'h3') {
+    document.execCommand('formatBlock', false, 'p');
+  } else {
+    document.execCommand('formatBlock', false, 'h3');
+  }
+
+  setTimeout(function() {
+    labRichUpdateBtnState(secKey);
+  }, 0);
+
+  labRichOnInput(secKey);
+}
+
+
+/**
+ * Insert a link with URL validation.
+ *
+ * @param {string} secKey - Section key
+ */
+function labRichInsertLink(secKey) {
+  var editor = document.getElementById('labEditorInput-' + secKey);
+  if (!editor) return;
+
+  var rowId = 'lrdInlineLinkRow-' + secKey;
+  if (document.getElementById(rowId)) return;
+
+  // Insert inline URL input above the editor
+  var wrap = editor.closest('.lab-rich-wrap') || editor.parentNode;
+  if (!wrap) return;
+  var row = document.createElement('div');
+  row.id = rowId;
+  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+  row.innerHTML = '<input id="lrdLinkInput-' + escapeHtml(secKey) + '" type="url" placeholder="https://..." '
+    + 'style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" '
+    + 'onkeydown="if(event.key===\'Enter\'){lrdConfirmInsertLink(\'' + escapeHtml(secKey) + '\');}if(event.key===\'Escape\'){lrdCancelInsertLink(\'' + escapeHtml(secKey) + '\');}">'
+    + '<button onclick="lrdConfirmInsertLink(\'' + escapeHtml(secKey) + '\')" style="padding:6px 10px;background:#0d9488;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Insert</button>'
+    + '<button onclick="lrdCancelInsertLink(\'' + escapeHtml(secKey) + '\')" style="padding:6px 10px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>';
+  wrap.insertBefore(row, editor);
+  document.getElementById('lrdLinkInput-' + secKey).focus();
+}
+
+function lrdConfirmInsertLink(secKey) {
+  var input = document.getElementById('lrdLinkInput-' + secKey);
+  var url = (input ? input.value : '').trim();
+  if (!url) { showToast('URL cannot be empty', 'error'); return; }
+  if (url.indexOf('http://') !== 0 && url.indexOf('https://') !== 0) {
+    showToast('URL must start with http:// or https://', 'error');
+    return;
+  }
+  var row = document.getElementById('lrdInlineLinkRow-' + secKey);
+  if (row) row.parentNode.removeChild(row);
+
+  var editor = document.getElementById('labEditorInput-' + secKey);
+  if (editor) {
+    editor.focus();
+    document.execCommand('createLink', false, url);
+    labRichOnInput(secKey);
+  }
+}
+
+function lrdCancelInsertLink(secKey) {
+  var row = document.getElementById('lrdInlineLinkRow-' + secKey);
+  if (row) row.parentNode.removeChild(row);
+}
+
+
+/**
+ * Handle input events on the contenteditable div.
+ * Reads innerHTML, sanitizes, updates cache, triggers save.
+ *
+ * @param {string} secKey - Section key
+ */
+function labRichOnInput(secKey) {
+  var editor = document.getElementById('labEditorInput-' + secKey);
+  if (!editor) return;
+
+  var html = editor.innerHTML || '';
+  var clean = labRichSanitize(html);
+
+  // Update cache
+  if (labEditorSectionContent[secKey]) {
+    labEditorSectionContent[secKey].content = clean;
+  }
+
+  // Delegate to standard lab editor input handler (word count + debounced save)
+  labEditorOnInput(secKey);
+}
+
+
+/**
+ * Handle paste events — strip formatting, paste as plain text.
+ *
+ * @param {string} secKey - Section key
+ * @param {Event} event - The paste event
+ */
+function labRichOnPaste(secKey, event) {
+  event.preventDefault();
+
+  var plainText = '';
+  if (event.clipboardData && event.clipboardData.getData) {
+    plainText = event.clipboardData.getData('text/plain');
+  }
+
+  if (plainText) {
+    document.execCommand('insertText', false, plainText);
+  }
+}
+
+
+/**
+ * Strip HTML tags and return plain text.
+ * Used by word count and required-content checks.
+ *
+ * @param {string} html - HTML string
+ * @returns {string} Plain text
+ */
+function labRichStripHtml(html) {
+  if (!html) return '';
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+}
+
+
+/**
+ * Sanitize HTML by removing dangerous elements and attributes.
+ * Allowlist approach: keeps safe formatting tags, strips everything else.
+ *
+ * @param {string} html - Raw HTML string
+ * @returns {string} Sanitized HTML
+ */
+function labRichSanitize(html) {
+  if (!html) return '';
+
+  // Remove script/style/iframe tags and their contents
+  html = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+  html = html.replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
+
+  // Remove on* event handler attributes
+  html = html.replace(/ on\w+\s*=\s*"[^"]*"/gi, '');
+  html = html.replace(/ on\w+\s*=\s*'[^']*'/gi, '');
+  html = html.replace(/ on\w+\s*=\s*[^\s>]*/gi, '');
+
+  // Remove dangerous tags (keep inner content)
+  html = html.replace(/<\/?(object|embed|form|input|button|select|textarea|applet|meta|link|base)[^>]*>/gi, '');
+
+  // Remove javascript: and data: from href/src attributes
+  html = html.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
+  html = html.replace(/href\s*=\s*'javascript:[^']*'/gi, "href='#'");
+  html = html.replace(/src\s*=\s*"javascript:[^"]*"/gi, 'src=""');
+  html = html.replace(/src\s*=\s*"data:[^"]*"/gi, 'src=""');
+
+  return html;
+}
+
+
+/**
+ * Update toolbar button active states based on current selection.
+ *
+ * @param {string} secKey - Section key
+ */
+function labRichUpdateBtnState(secKey) {
+  var toolbar = document.getElementById('labRichToolbar-' + secKey);
+  if (!toolbar) return;
+
+  var buttons = toolbar.getElementsByTagName('button');
+  for (var i = 0; i < buttons.length; i++) {
+    var btn = buttons[i];
+    var cmd = btn.getAttribute('data-cmd');
+    if (!cmd) continue;
+
+    var isActive = false;
+    try {
+      if (cmd === 'heading') {
+        var blockVal = document.queryCommandValue('formatBlock');
+        isActive = (blockVal.toLowerCase() === 'h3');
+      } else if (cmd === 'blockquote') {
+        var blockVal2 = document.queryCommandValue('formatBlock');
+        isActive = (blockVal2.toLowerCase() === 'blockquote');
+      } else {
+        isActive = document.queryCommandState(cmd);
+      }
+    } catch (e) {
+      isActive = false;
+    }
+
+    if (isActive) {
+      btn.className = 'lab-rich-btn lab-rich-btn-active';
+    } else {
+      btn.className = 'lab-rich-btn';
+    }
+  }
+}
+
+
+// Listen for selection changes to update toolbar button states
+// Use a debounced handler to avoid excessive updates
+var _labRichSelectionTimer = null;
+document.addEventListener('selectionchange', function() {
+  if (_labRichSelectionTimer) clearTimeout(_labRichSelectionTimer);
+  _labRichSelectionTimer = setTimeout(function() {
+    // Find which rich editor (if any) has focus
+    var sel = window.getSelection();
+    if (!sel || !sel.anchorNode) return;
+
+    var node = sel.anchorNode;
+    // Walk up to find the contenteditable div
+    while (node && node !== document) {
+      if (node.nodeType === 1 && node.getAttribute && node.getAttribute('contenteditable') === 'true' &&
+          node.id && node.id.indexOf('labEditorInput-') === 0) {
+        var secKey = node.id.replace('labEditorInput-', '');
+        labRichUpdateBtnState(secKey);
+        return;
+      }
+      node = node.parentNode;
+    }
+  }, 100);
+});
+
+</script>

@@ -1,0 +1,874 @@
+<script>
+/**
+ * Module_Wellness.html — Staff Wellness & Workload module
+ *
+ * Sub-navigation:
+ *   Admin:   Dashboard | Workload Overview | Alerts | Config
+ *   Teacher: My Wellness | My Workload
+ */
+
+App.ModuleRegistry.wellness = {
+  init: function(container) {
+
+    // ── State ──
+    var state = {
+      view: null, // set in onActivate based on role
+      dashboard: null,
+      workloads: null,
+      alerts: [],
+      config: {},
+      myCheckins: [],
+      myLatest: null,
+      myTrend: null,
+      myWorkload: null,
+      trendChart: null,
+      adminTrendChart: null,
+      doughnutChart: null
+    };
+
+    var isAdmin = App.getUser().role === 'admin';
+
+    // ── Helpers ──
+    function el(tag, cls, html) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (html !== undefined) e.innerHTML = html;
+      return e;
+    }
+
+    function btn(text, cls, onClick) {
+      var b = el('button', cls, text);
+      b.onclick = onClick;
+      return b;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '—';
+      var d = new Date(iso);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function timeAgo(iso) {
+      if (!iso) return '';
+      var now = new Date();
+      var then = new Date(iso);
+      var diff = Math.floor((now - then) / 1000);
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+      return formatDate(iso);
+    }
+
+    function scoreClass(val) {
+      var n = parseInt(val, 10);
+      if (n <= 1) return 'wl-score-1';
+      if (n <= 2) return 'wl-score-2';
+      if (n <= 3) return 'wl-score-3';
+      if (n <= 4) return 'wl-score-4';
+      return 'wl-score-5';
+    }
+
+    function levelColor(level) {
+      if (level === 'red') return 'red';
+      if (level === 'amber') return 'amber';
+      return 'green';
+    }
+
+    function barLevel(normalized) {
+      if (normalized >= 80) return 'red';
+      if (normalized >= 60) return 'amber';
+      return 'green';
+    }
+
+    function heatmapClass(score) {
+      if (score >= 4) return 'score-high';
+      if (score >= 3) return 'score-mid';
+      return 'score-low';
+    }
+
+    // ── Render Sub-Nav ──
+    function renderSubNav() {
+      container.innerHTML = '';
+      var nav = el('div', 'wl-sub-nav');
+      var views = isAdmin
+        ? [
+            { key: 'dashboard', label: 'Dashboard' },
+            { key: 'workload_overview', label: 'Workload Overview' },
+            { key: 'alerts', label: 'Alerts' },
+            { key: 'config', label: 'Config' }
+          ]
+        : [
+            { key: 'my_wellness', label: 'My Wellness' },
+            { key: 'my_workload', label: 'My Workload' }
+          ];
+
+      for (var i = 0; i < views.length; i++) {
+        (function(v) {
+          var b = btn(v.label, 'wl-sub-nav-btn' + (state.view === v.key ? ' active' : ''), function() {
+            state.view = v.key;
+            render();
+          });
+          nav.appendChild(b);
+        })(views[i]);
+      }
+      container.appendChild(nav);
+    }
+
+    // ── Main Render ──
+    function render() {
+      renderSubNav();
+      var content = el('div', 'wl-content');
+      container.appendChild(content);
+
+      switch (state.view) {
+        case 'dashboard': renderDashboard(content); break;
+        case 'workload_overview': renderWorkloadOverview(content); break;
+        case 'alerts': renderAlerts(content); break;
+        case 'config': renderConfig(content); break;
+        case 'my_wellness': renderMyWellness(content); break;
+        case 'my_workload': renderMyWorkload(content); break;
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // MY WELLNESS (Teacher view)
+    // ═══════════════════════════════════════════════
+
+    async function renderMyWellness(target) {
+      target.innerHTML = '<div class="loading-text">Loading wellness data...</div>';
+
+      try {
+        var results = await Promise.all([
+          ServerAPI.getMyLatestCheckin(),
+          ServerAPI.getMyWellnessTrend(12),
+          ServerAPI.getMyWellnessCheckins(20)
+        ]);
+        state.myLatest = results[0];
+        state.myTrend = results[1];
+        state.myCheckins = results[2];
+      } catch (e) {
+        target.innerHTML = '<div class="error-text">Error loading data: ' + e.message + '</div>';
+        return;
+      }
+
+      target.innerHTML = '';
+
+      // Check-in prompt
+      var needsCheckin = !state.myLatest;
+      if (state.myLatest) {
+        var lastDate = new Date(state.myLatest.checkin_date);
+        var daysSince = Math.floor((new Date() - lastDate) / 86400000);
+        if (daysSince >= 6) needsCheckin = true;
+      }
+
+      if (needsCheckin) {
+        var prompt = el('div', 'wl-prompt-card');
+        prompt.innerHTML = '<h3>Time for a Wellness Check-in!</h3><p>How are you feeling this week? Take a moment to reflect.</p>';
+        prompt.appendChild(btn('Start Check-in', 'btn btn-primary', function() {
+          renderCheckinForm(target);
+        }));
+        target.appendChild(prompt);
+      }
+
+      // Latest check-in summary
+      if (state.myLatest) {
+        renderLatestSummary(target, state.myLatest);
+      }
+
+      // Trend chart
+      if (state.myTrend && state.myTrend.weeks.length > 0) {
+        renderTrendChart(target, state.myTrend, 'myTrendChart');
+      }
+
+      // Check-in history
+      if (state.myCheckins.length > 0) {
+        renderCheckinHistory(target, state.myCheckins);
+      }
+
+      // Always show the check-in button even if not due
+      if (!needsCheckin) {
+        var addBtn = btn('New Check-in', 'btn btn-sm btn-outline', function() {
+          renderCheckinForm(target);
+        });
+        addBtn.style.marginTop = '16px';
+        target.appendChild(addBtn);
+      }
+    }
+
+    function renderCheckinForm(target) {
+      target.innerHTML = '';
+      var form = el('div', 'wl-checkin-form');
+      form.innerHTML = '<h3>Wellness Check-in</h3>';
+
+      var dimensions = [
+        { key: 'energy', label: 'Energy', desc: '1 = Exhausted, 5 = Energized' },
+        { key: 'mood', label: 'Mood', desc: '1 = Very Low, 5 = Great' },
+        { key: 'stress', label: 'Stress', desc: '1 = Very Stressed, 5 = Calm' },
+        { key: 'balance', label: 'Work-Life Balance', desc: '1 = Poor, 5 = Excellent' },
+        { key: 'satisfaction', label: 'Job Satisfaction', desc: '1 = Very Low, 5 = Very High' },
+        { key: 'developmental_comfort', label: 'Developmental Comfort', desc: 'How supported do you feel in your developmental work? (Optional)', optional: true }
+      ];
+
+      var scores = {};
+
+      for (var i = 0; i < dimensions.length; i++) {
+        (function(dim) {
+          var row = el('div', 'wl-dimension-row' + (dim.optional ? ' wl-dimension-row--optional' : ''));
+          var labelDiv = el('div', 'wl-dimension-label');
+          labelDiv.innerHTML = dim.label + (dim.optional ? ' <span class="wl-optional-tag">Optional</span>' : '') +
+            '<div class="wl-dimension-desc">' + dim.desc + '</div>';
+          row.appendChild(labelDiv);
+
+          var picker = el('div', 'wl-score-picker');
+          for (var s = 1; s <= 5; s++) {
+            (function(score) {
+              var b = el('button', 'wl-score-btn');
+              b.setAttribute('data-score', score);
+              b.textContent = score;
+              b.onclick = function() {
+                scores[dim.key] = score;
+                // Update visual selection
+                var siblings = picker.querySelectorAll('.wl-score-btn');
+                for (var x = 0; x < siblings.length; x++) siblings[x].classList.remove('selected');
+                b.classList.add('selected');
+              };
+              picker.appendChild(b);
+            })(s);
+          }
+          row.appendChild(picker);
+          form.appendChild(row);
+        })(dimensions[i]);
+      }
+
+      // Notes
+      var notesLabel = el('label', '', '<strong>Notes</strong> (optional)');
+      notesLabel.style.display = 'block';
+      notesLabel.style.marginBottom = '6px';
+      notesLabel.style.fontSize = '0.9rem';
+      form.appendChild(notesLabel);
+      var notes = el('textarea', 'wl-notes-area');
+      notes.placeholder = 'Any thoughts, concerns, or highlights from this week...';
+      form.appendChild(notes);
+
+      // Submit row
+      var submitRow = el('div', 'wl-submit-row');
+      submitRow.appendChild(btn('Cancel', 'btn btn-sm btn-outline', function() {
+        renderMyWellness(target);
+      }));
+      submitRow.appendChild(btn('Submit Check-in', 'btn btn-sm btn-primary', async function() {
+        // Validate all 5 required dimensions selected
+        if (!scores.energy || !scores.mood || !scores.stress || !scores.balance || !scores.satisfaction) {
+          Toast.warning('Please select a score for all 5 required dimensions.');
+          return;
+        }
+        try {
+          scores.notes = notes.value;
+          // Include developmental_comfort only if selected (optional 6th dimension)
+          if (scores.developmental_comfort) {
+            scores.developmental_comfort = scores.developmental_comfort;
+          }
+          await ServerAPI.submitWellnessCheckin(scores);
+          Toast.success('Check-in submitted successfully!');
+          renderMyWellness(target);
+        } catch (e) {
+          Toast.error('Error: ' + e.message);
+        }
+      }));
+      form.appendChild(submitRow);
+
+      target.appendChild(form);
+    }
+
+    function renderLatestSummary(target, latest) {
+      var card = el('div', 'wl-latest-card');
+      card.innerHTML = '<h3>Latest Check-in <span style="font-weight:400;color:var(--text-muted);font-size:0.85rem;">' + formatDate(latest.checkin_date) + '</span></h3>';
+
+      var badges = el('div', 'wl-dimension-badges');
+      var dims = [
+        { key: 'energy_score', label: 'Energy' },
+        { key: 'mood_score', label: 'Mood' },
+        { key: 'stress_score', label: 'Stress' },
+        { key: 'balance_score', label: 'Balance' },
+        { key: 'satisfaction_score', label: 'Satisfaction' }
+      ];
+
+      for (var i = 0; i < dims.length; i++) {
+        var d = dims[i];
+        var val = parseInt(latest[d.key], 10) || 0;
+        var badge = el('div', 'wl-dim-badge');
+        badge.innerHTML = '<span class="wl-dim-badge-score ' + scoreClass(val) + '">' + val + '</span>' + d.label;
+        badges.appendChild(badge);
+      }
+
+      // Developmental Comfort (optional DDO dimension)
+      var devComfort = parseInt(latest.developmental_comfort, 10) || 0;
+      if (devComfort > 0) {
+        var devBadge = el('div', 'wl-dim-badge wl-dim-badge--dev');
+        devBadge.innerHTML = '<span class="wl-dim-badge-score ' + scoreClass(devComfort) + '">' + devComfort + '</span>Dev Comfort';
+        badges.appendChild(devBadge);
+      }
+
+      // Overall
+      var overall = parseFloat(latest.overall_score) || 0;
+      var overallBadge = el('div', 'wl-dim-badge');
+      overallBadge.innerHTML = '<span class="wl-dim-badge-score ' + scoreClass(Math.round(overall)) + '">' + overall.toFixed(1) + '</span><strong>Overall</strong>';
+      badges.appendChild(overallBadge);
+
+      card.appendChild(badges);
+
+      if (latest.notes) {
+        var notesDiv = el('div', '', '');
+        notesDiv.style.marginTop = '12px';
+        notesDiv.style.fontSize = '0.85rem';
+        notesDiv.style.color = 'var(--text-muted)';
+        notesDiv.style.fontStyle = 'italic';
+        notesDiv.textContent = '"' + latest.notes + '"';
+        card.appendChild(notesDiv);
+      }
+
+      target.appendChild(card);
+    }
+
+    function renderTrendChart(target, trend, chartKey) {
+      var card = el('div', 'wl-trend-card');
+      card.innerHTML = '<h3>Wellness Trend (12 Weeks)</h3>';
+      var canvasWrap = el('div', 'wl-chart-container');
+      var canvas = document.createElement('canvas');
+      canvasWrap.appendChild(canvas);
+      card.appendChild(canvasWrap);
+      target.appendChild(card);
+
+      // Destroy old chart if exists
+      if (state[chartKey]) {
+        try { state[chartKey].destroy(); } catch(e) {}
+      }
+
+      var trendDatasets = [
+        { label: 'Overall', data: trend.overall, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.3, borderWidth: 3 },
+        { label: 'Energy', data: trend.energy, borderColor: '#f97316', tension: 0.3, borderWidth: 1.5, pointRadius: 2 },
+        { label: 'Mood', data: trend.mood, borderColor: '#eab308', tension: 0.3, borderWidth: 1.5, pointRadius: 2 },
+        { label: 'Stress', data: trend.stress, borderColor: '#ef4444', tension: 0.3, borderWidth: 1.5, pointRadius: 2 },
+        { label: 'Balance', data: trend.balance, borderColor: '#22c55e', tension: 0.3, borderWidth: 1.5, pointRadius: 2 },
+        { label: 'Satisfaction', data: trend.satisfaction, borderColor: '#3b82f6', tension: 0.3, borderWidth: 1.5, pointRadius: 2 }
+      ];
+      // Add developmental comfort trend if data exists
+      if (trend.developmental_comfort && trend.developmental_comfort.some(function(v) { return v !== null; })) {
+        trendDatasets.push({ label: 'Dev Comfort', data: trend.developmental_comfort, borderColor: '#8b5cf6', borderDash: [5, 5], tension: 0.3, borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#8b5cf6' });
+      }
+
+      state[chartKey] = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: trend.weeks,
+          datasets: trendDatasets
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            y: { min: 0, max: 5, ticks: { stepSize: 1 } }
+          },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } }
+          },
+          spanGaps: true
+        }
+      });
+    }
+
+    function renderCheckinHistory(target, checkins) {
+      var card = el('div', 'wl-latest-card');
+      card.innerHTML = '<h3>Check-in History</h3>';
+
+      // Check if any check-in has developmental_comfort to decide whether to show column
+      var hasDevComfort = checkins.some(function(c) { return c.developmental_comfort && c.developmental_comfort !== ''; });
+
+      var table = el('table', 'wl-history-table');
+      table.innerHTML = '<thead><tr><th>Date</th><th>Energy</th><th>Mood</th><th>Stress</th><th>Balance</th><th>Satisfaction</th>' +
+        (hasDevComfort ? '<th>Dev Comfort</th>' : '') +
+        '<th>Overall</th></tr></thead>';
+
+      var tbody = document.createElement('tbody');
+      for (var i = 0; i < checkins.length; i++) {
+        var c = checkins[i];
+        var devVal = parseInt(c.developmental_comfort, 10) || 0;
+        var row = document.createElement('tr');
+        row.innerHTML =
+          '<td>' + formatDate(c.checkin_date) + '</td>' +
+          '<td><span class="wl-dim-badge-score ' + scoreClass(c.energy_score) + '" style="display:inline-flex;width:24px;height:24px;font-size:0.75rem;">' + c.energy_score + '</span></td>' +
+          '<td><span class="wl-dim-badge-score ' + scoreClass(c.mood_score) + '" style="display:inline-flex;width:24px;height:24px;font-size:0.75rem;">' + c.mood_score + '</span></td>' +
+          '<td><span class="wl-dim-badge-score ' + scoreClass(c.stress_score) + '" style="display:inline-flex;width:24px;height:24px;font-size:0.75rem;">' + c.stress_score + '</span></td>' +
+          '<td><span class="wl-dim-badge-score ' + scoreClass(c.balance_score) + '" style="display:inline-flex;width:24px;height:24px;font-size:0.75rem;">' + c.balance_score + '</span></td>' +
+          '<td><span class="wl-dim-badge-score ' + scoreClass(c.satisfaction_score) + '" style="display:inline-flex;width:24px;height:24px;font-size:0.75rem;">' + c.satisfaction_score + '</span></td>' +
+          (hasDevComfort ? '<td>' + (devVal > 0 ? '<span class="wl-dim-badge-score ' + scoreClass(devVal) + '" style="display:inline-flex;width:24px;height:24px;font-size:0.75rem;">' + devVal + '</span>' : '—') + '</td>' : '') +
+          '<td><strong>' + (parseFloat(c.overall_score) || 0).toFixed(1) + '</strong></td>';
+        tbody.appendChild(row);
+      }
+      table.appendChild(tbody);
+      card.appendChild(table);
+      target.appendChild(card);
+    }
+
+    // ═══════════════════════════════════════════════
+    // MY WORKLOAD (Teacher view)
+    // ═══════════════════════════════════════════════
+
+    async function renderMyWorkload(target) {
+      target.innerHTML = '<div class="loading-text">Calculating workload...</div>';
+
+      try {
+        state.myWorkload = await ServerAPI.getMyWorkload();
+      } catch (e) {
+        target.innerHTML = '<div class="error-text">Error: ' + e.message + '</div>';
+        return;
+      }
+
+      target.innerHTML = '';
+      var wl = state.myWorkload;
+
+      // Gauge
+      var gaugeCard = el('div', 'wl-workload-card');
+      gaugeCard.innerHTML =
+        '<div class="wl-workload-score ' + levelColor(wl.level) + '">' + wl.compositeScore + '</div>' +
+        '<div class="wl-workload-level ' + levelColor(wl.level) + '">' + wl.level.toUpperCase() + ' Workload</div>' +
+        '<div style="color:var(--text-muted);font-size:0.85rem;">Composite score out of 100</div>';
+
+      // Component breakdown
+      var comps = el('div', 'wl-components');
+      var compOrder = ['teaching', 'observations', 'pd', 'meetings', 'feedback', 'growth_plan', 'developmental'];
+      var compLabels = { teaching: 'Teaching', observations: 'Observations', pd: 'PD', meetings: 'Meetings', feedback: 'Feedback', growth_plan: 'Growth Plan', developmental: 'Developmental Load' };
+
+      for (var i = 0; i < compOrder.length; i++) {
+        var key = compOrder[i];
+        var comp = wl.components[key];
+        if (!comp) continue;
+
+        var row = el('div', 'wl-component-row');
+        row.innerHTML =
+          '<div class="wl-component-label">' + compLabels[key] + '</div>' +
+          '<div class="wl-component-bar-bg"><div class="wl-component-bar-fill ' + barLevel(comp.normalized) + '" style="width:' + comp.normalized + '%"></div></div>' +
+          '<div class="wl-component-value">' + comp.label + '</div>';
+        comps.appendChild(row);
+      }
+
+      gaugeCard.appendChild(comps);
+      target.appendChild(gaugeCard);
+    }
+
+    // ═══════════════════════════════════════════════
+    // ADMIN DASHBOARD
+    // ═══════════════════════════════════════════════
+
+    async function renderDashboard(target) {
+      target.innerHTML = '<div class="loading-text">Loading dashboard...</div>';
+
+      try {
+        var results = await Promise.all([
+          ServerAPI.getWellnessAdminDashboard(),
+          ServerAPI.getAnonymizedWellnessTrends({})
+        ]);
+        state.dashboard = results[0];
+        var trends = results[1];
+      } catch (e) {
+        target.innerHTML = '<div class="error-text">Error: ' + e.message + '</div>';
+        return;
+      }
+
+      target.innerHTML = '';
+      var dash = state.dashboard;
+
+      // KPI Row
+      var kpiGrid = el('div', 'wl-admin-grid');
+      var kpis = [
+        { value: dash.avgWellness.toFixed(1) + '/5', label: 'Avg Wellness Score', cls: dash.avgWellness >= 3.5 ? 'green' : (dash.avgWellness >= 2.5 ? 'amber' : 'red') },
+        { value: dash.checkinRate + '%', label: 'Check-in Rate', cls: dash.checkinRate >= 70 ? 'green' : (dash.checkinRate >= 40 ? 'amber' : 'red') },
+        { value: dash.activeAlertCount, label: 'Active Alerts', cls: dash.activeAlertCount === 0 ? 'green' : (dash.activeAlertCount <= 3 ? 'amber' : 'red') },
+        { value: dash.avgWorkload, label: 'Avg Workload Score', cls: dash.avgWorkload < 60 ? 'green' : (dash.avgWorkload < 80 ? 'amber' : 'red') }
+      ];
+
+      for (var k = 0; k < kpis.length; k++) {
+        var kpi = el('div', 'wl-kpi-card ' + kpis[k].cls);
+        kpi.innerHTML = '<div class="wl-kpi-value">' + kpis[k].value + '</div><div class="wl-kpi-label">' + kpis[k].label + '</div>';
+        kpiGrid.appendChild(kpi);
+      }
+      target.appendChild(kpiGrid);
+
+      // Two-column layout: Heatmap + Aggregate trend
+      var twoCol = el('div', 'wl-two-col');
+
+      // Department heatmap
+      var heatmapSection = el('div', '');
+      heatmapSection.innerHTML = '<h3 style="margin:0 0 12px;font-size:1.05rem;font-weight:600;">Department Wellness</h3>';
+      var heatmap = el('div', 'wl-heatmap');
+      var hm = dash.departmentHeatmap || [];
+      for (var h = 0; h < hm.length; h++) {
+        var cell = el('div', 'wl-heatmap-cell ' + heatmapClass(hm[h].avgScore));
+        cell.innerHTML =
+          '<div class="wl-heatmap-dept">' + hm[h].department + '</div>' +
+          '<div class="wl-heatmap-score">' + (hm[h].avgScore || 0).toFixed(1) + '</div>' +
+          '<div class="wl-heatmap-meta">' + hm[h].respondents + '/' + hm[h].staffCount + ' responded</div>';
+        heatmap.appendChild(cell);
+      }
+      heatmapSection.appendChild(heatmap);
+      twoCol.appendChild(heatmapSection);
+
+      // Aggregate trend chart
+      var trendSection = el('div', '');
+      if (trends && trends.weeks && trends.weeks.length > 0) {
+        trendSection.innerHTML = '<h3 style="margin:0 0 12px;font-size:1.05rem;font-weight:600;">School-Wide Wellness Trend</h3>';
+        var canvasWrap = el('div', 'wl-chart-container');
+        var canvas = document.createElement('canvas');
+        canvasWrap.appendChild(canvas);
+        trendSection.appendChild(canvasWrap);
+
+        if (state.adminTrendChart) {
+          try { state.adminTrendChart.destroy(); } catch(e) {}
+        }
+
+        state.adminTrendChart = new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: trends.weeks,
+            datasets: [{
+              label: 'Avg Overall Wellness',
+              data: trends.avgOverall,
+              borderColor: '#6366f1',
+              backgroundColor: 'rgba(99,102,241,0.15)',
+              fill: true, tension: 0.3, borderWidth: 3, pointRadius: 4
+            }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { y: { min: 0, max: 5, ticks: { stepSize: 1 } } },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+      twoCol.appendChild(trendSection);
+      target.appendChild(twoCol);
+
+      // Staff requiring attention
+      if (dash.staffRequiringAttention && dash.staffRequiringAttention.length > 0) {
+        var attnHeader = el('div', 'wl-section-header');
+        attnHeader.innerHTML = '<h3>Staff Requiring Attention</h3>';
+        target.appendChild(attnHeader);
+
+        var attnList = el('div', 'wl-attention-list');
+        for (var a = 0; a < dash.staffRequiringAttention.length; a++) {
+          var s = dash.staffRequiringAttention[a];
+          var item = el('div', 'wl-attention-item');
+          item.innerHTML =
+            '<div class="wl-attention-avatar">' + (s.staffInitials || '??') + '</div>' +
+            '<div class="wl-attention-info">' +
+              '<div class="wl-attention-name">' + s.staffName + '</div>' +
+              '<div class="wl-attention-reason">' + (s.message || s.alertType) + '</div>' +
+            '</div>' +
+            '<span class="wl-alert-type ' + s.severity + '">' + s.severity + '</span>';
+          attnList.appendChild(item);
+        }
+        target.appendChild(attnList);
+      }
+
+      // Workload distribution summary
+      var wlDist = dash.workloadDistribution;
+      if (wlDist && wlDist.total > 0) {
+        var distHeader = el('div', 'wl-section-header');
+        distHeader.innerHTML = '<h3>Workload Distribution</h3>';
+        target.appendChild(distHeader);
+
+        var distRow = el('div', 'wl-distribution');
+        var chartWrap = el('div', 'wl-distribution-chart');
+        var dCanvas = document.createElement('canvas');
+        chartWrap.appendChild(dCanvas);
+        distRow.appendChild(chartWrap);
+
+        var legend = el('div', 'wl-distribution-legend');
+        legend.innerHTML =
+          '<div class="wl-legend-item"><span class="wl-legend-dot green"></span>Green: ' + wlDist.greenCount + ' staff</div>' +
+          '<div class="wl-legend-item"><span class="wl-legend-dot amber"></span>Amber: ' + wlDist.amberCount + ' staff</div>' +
+          '<div class="wl-legend-item"><span class="wl-legend-dot red"></span>Red: ' + wlDist.redCount + ' staff</div>';
+        distRow.appendChild(legend);
+        target.appendChild(distRow);
+
+        if (state.doughnutChart) {
+          try { state.doughnutChart.destroy(); } catch(e) {}
+        }
+
+        state.doughnutChart = new Chart(dCanvas, {
+          type: 'doughnut',
+          data: {
+            labels: ['Green', 'Amber', 'Red'],
+            datasets: [{
+              data: [wlDist.greenCount, wlDist.amberCount, wlDist.redCount],
+              backgroundColor: ['#16a34a', '#d97706', '#dc2626']
+            }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: true,
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // WORKLOAD OVERVIEW (Admin)
+    // ═══════════════════════════════════════════════
+
+    async function renderWorkloadOverview(target) {
+      target.innerHTML = '<div class="loading-text">Loading workloads...</div>';
+
+      try {
+        state.workloads = await ServerAPI.getAllStaffWorkloads();
+      } catch (e) {
+        target.innerHTML = '<div class="error-text">Error: ' + e.message + '</div>';
+        return;
+      }
+
+      target.innerHTML = '';
+      var data = state.workloads;
+
+      // Stats row
+      var stats = data.stats;
+      var statsGrid = el('div', 'wl-admin-grid');
+      var statItems = [
+        { value: stats.total, label: 'Total Staff', cls: '' },
+        { value: stats.greenCount, label: 'Green', cls: 'green' },
+        { value: stats.amberCount, label: 'Amber', cls: 'amber' },
+        { value: stats.redCount, label: 'Red', cls: 'red' }
+      ];
+      for (var si = 0; si < statItems.length; si++) {
+        var sc = el('div', 'wl-kpi-card ' + statItems[si].cls);
+        sc.innerHTML = '<div class="wl-kpi-value">' + statItems[si].value + '</div><div class="wl-kpi-label">' + statItems[si].label + '</div>';
+        statsGrid.appendChild(sc);
+      }
+      target.appendChild(statsGrid);
+
+      // Filter by department
+      var departments = {};
+      for (var d = 0; d < data.staff.length; d++) {
+        var dept = data.staff[d].department || 'Unknown';
+        departments[dept] = true;
+      }
+      var filterBar = el('div', 'wl-filter-bar');
+      var filterLabel = el('span', '', 'Filter: ');
+      filterLabel.style.fontWeight = '500';
+      filterLabel.style.fontSize = '0.85rem';
+      filterBar.appendChild(filterLabel);
+
+      var deptSelect = document.createElement('select');
+      deptSelect.className = 'input-field';
+      deptSelect.style.maxWidth = '200px';
+      deptSelect.innerHTML = '<option value="">All Departments</option>';
+      for (var dName in departments) {
+        if (departments.hasOwnProperty(dName)) {
+          deptSelect.innerHTML += '<option value="' + dName + '">' + dName + '</option>';
+        }
+      }
+      deptSelect.onchange = function() {
+        renderStaffCards(grid, data.staff, deptSelect.value);
+      };
+      filterBar.appendChild(deptSelect);
+      target.appendChild(filterBar);
+
+      // Staff cards
+      var grid = el('div', 'wl-staff-grid');
+      target.appendChild(grid);
+      renderStaffCards(grid, data.staff, '');
+    }
+
+    function renderStaffCards(grid, staff, deptFilter) {
+      grid.innerHTML = '';
+      for (var i = 0; i < staff.length; i++) {
+        var s = staff[i];
+        if (deptFilter && s.department !== deptFilter) continue;
+
+        var card = el('div', 'wl-staff-card');
+        card.innerHTML =
+          '<div class="wl-staff-score-ring ' + levelColor(s.level) + '">' + s.compositeScore + '</div>' +
+          '<div class="wl-staff-info">' +
+            '<div class="wl-staff-name">' + s.staffName + '</div>' +
+            '<div class="wl-staff-dept">' + (s.department || 'No department') + '</div>' +
+          '</div>';
+        grid.appendChild(card);
+      }
+      if (grid.children.length === 0) {
+        grid.innerHTML = '<div class="wl-empty"><div class="wl-empty-title">No staff found for this filter</div></div>';
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // ALERTS (Admin)
+    // ═══════════════════════════════════════════════
+
+    async function renderAlerts(target) {
+      target.innerHTML = '<div class="loading-text">Loading alerts...</div>';
+
+      try {
+        state.alerts = await ServerAPI.getWellnessAlerts();
+      } catch (e) {
+        target.innerHTML = '<div class="error-text">Error: ' + e.message + '</div>';
+        return;
+      }
+
+      target.innerHTML = '';
+
+      // Actions bar
+      var header = el('div', 'wl-section-header');
+      header.innerHTML = '<h3>Wellness Alerts (' + state.alerts.length + ')</h3>';
+      header.appendChild(btn('Run Burnout Scan', 'btn btn-sm btn-primary', async function() {
+        try {
+          var result = await ServerAPI.runBurnoutScan();
+          Toast.success('Scan complete: ' + result.alertsGenerated + ' alert(s) generated.');
+          renderAlerts(target);
+        } catch (e) {
+          Toast.error('Error: ' + e.message);
+        }
+      }));
+      target.appendChild(header);
+
+      if (state.alerts.length === 0) {
+        var empty = el('div', 'wl-empty');
+        empty.innerHTML = '<div class="wl-empty-icon">&#10003;</div><div class="wl-empty-title">No Active Alerts</div><p>All staff wellness indicators look good.</p>';
+        target.appendChild(empty);
+        return;
+      }
+
+      var list = el('div', 'wl-alerts-list');
+      for (var i = 0; i < state.alerts.length; i++) {
+        (function(alert) {
+          var card = el('div', 'wl-alert-card ' + alert.severity);
+          var header = el('div', 'wl-alert-header');
+          header.innerHTML =
+            '<span class="wl-alert-type ' + alert.severity + '">' + alert.alertType.replace(/_/g, ' ') + '</span>' +
+            '<span style="font-size:0.75rem;color:var(--text-muted);">' + timeAgo(alert.createdAt) + '</span>';
+          card.appendChild(header);
+
+          var msg = el('div', 'wl-alert-message', alert.message);
+          card.appendChild(msg);
+
+          if (alert.status === 'acknowledged') {
+            var meta = el('div', 'wl-alert-meta', 'Acknowledged by ' + alert.acknowledgedBy + ' ' + timeAgo(alert.acknowledgedAt));
+            card.appendChild(meta);
+          }
+
+          var actions = el('div', 'wl-alert-actions');
+          if (alert.status === 'active') {
+            actions.appendChild(btn('Acknowledge', 'btn btn-sm btn-outline', async function() {
+              try {
+                await ServerAPI.acknowledgeWellnessAlert(alert.id);
+                Toast.success('Alert acknowledged.');
+                renderAlerts(target);
+              } catch (e) {
+                Toast.error('Error: ' + e.message);
+              }
+            }));
+          }
+          if (alert.status === 'active' || alert.status === 'acknowledged') {
+            actions.appendChild(btn('Resolve', 'btn btn-sm btn-outline', async function() {
+              try {
+                await ServerAPI.resolveWellnessAlert(alert.id);
+                Toast.success('Alert resolved.');
+                renderAlerts(target);
+              } catch (e) {
+                Toast.error('Error: ' + e.message);
+              }
+            }));
+          }
+          card.appendChild(actions);
+
+          list.appendChild(card);
+        })(state.alerts[i]);
+      }
+      target.appendChild(list);
+    }
+
+    // ═══════════════════════════════════════════════
+    // CONFIG (Admin)
+    // ═══════════════════════════════════════════════
+
+    async function renderConfig(target) {
+      target.innerHTML = '<div class="loading-text">Loading configuration...</div>';
+
+      try {
+        state.config = await ServerAPI.getWellnessConfig();
+      } catch (e) {
+        target.innerHTML = '<div class="error-text">Error: ' + e.message + '</div>';
+        return;
+      }
+
+      target.innerHTML = '';
+      var cfg = state.config;
+
+      // Check-in frequency
+      var freqSection = el('div', 'wl-config-section');
+      freqSection.innerHTML = '<h3>Check-in Settings</h3>';
+      freqSection.appendChild(makeConfigRow('checkin_frequency_weeks', 'Check-in Frequency', 'How often staff should check in (weeks)', cfg.checkin_frequency_weeks, target));
+      freqSection.appendChild(makeConfigRow('no_checkin_weeks', 'Missing Check-in Alert', 'Weeks without check-in before alert', cfg.no_checkin_weeks, target));
+      target.appendChild(freqSection);
+
+      // Workload weights
+      var wlSection = el('div', 'wl-config-section');
+      wlSection.innerHTML = '<h3>Workload Weights (%)</h3><p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 12px;">Adjust how much each component contributes to the composite workload score.</p>';
+      var weightKeys = [
+        { key: 'workload_weight_teaching', label: 'Teaching' },
+        { key: 'workload_weight_observations', label: 'Observations' },
+        { key: 'workload_weight_pd', label: 'PD' },
+        { key: 'workload_weight_meetings', label: 'Meetings' },
+        { key: 'workload_weight_feedback', label: 'Feedback' },
+        { key: 'workload_weight_growth_plan', label: 'Growth Plan' }
+      ];
+
+      for (var w = 0; w < weightKeys.length; w++) {
+        wlSection.appendChild(makeConfigRow(weightKeys[w].key, weightKeys[w].label, '', cfg[weightKeys[w].key], target));
+      }
+      target.appendChild(wlSection);
+
+      // Thresholds
+      var threshSection = el('div', 'wl-config-section');
+      threshSection.innerHTML = '<h3>Threshold Settings</h3>';
+      threshSection.appendChild(makeConfigRow('green_threshold', 'Green/Amber Threshold', 'Workload score below this is green', cfg.green_threshold, target));
+      threshSection.appendChild(makeConfigRow('amber_threshold', 'Amber/Red Threshold', 'Workload score below this is amber', cfg.amber_threshold, target));
+      threshSection.appendChild(makeConfigRow('burnout_decline_weeks', 'Burnout Decline Weeks', 'Consecutive declining weeks before alert', cfg.burnout_decline_weeks, target));
+      threshSection.appendChild(makeConfigRow('low_score_threshold', 'Low Score Threshold', 'Wellness score below this triggers burnout alert', cfg.low_score_threshold, target));
+      target.appendChild(threshSection);
+    }
+
+    function makeConfigRow(key, label, desc, currentValue, parentTarget) {
+      var row = el('div', 'wl-config-row');
+      row.innerHTML = '<div class="wl-config-key">' + label + '</div>' +
+                      (desc ? '<div class="wl-config-desc">' + desc + '</div>' : '');
+      var input = document.createElement('input');
+      input.className = 'wl-config-input';
+      input.type = 'text';
+      input.value = currentValue || '';
+      input.onblur = async function() {
+        if (input.value === currentValue) return;
+        try {
+          await ServerAPI.updateWellnessConfig(key, input.value);
+          currentValue = input.value;
+          Toast.success('Config updated: ' + label);
+        } catch (e) {
+          Toast.error('Error: ' + e.message);
+          input.value = currentValue;
+        }
+      };
+      row.appendChild(input);
+      return row;
+    }
+
+    // ═══════════════════════════════════════════════
+    // Module lifecycle
+    // ═══════════════════════════════════════════════
+
+    return {
+      onActivate: function() {
+        if (!state.view) {
+          state.view = isAdmin ? 'dashboard' : 'my_wellness';
+        }
+        render();
+      }
+    };
+  }
+};
+</script>

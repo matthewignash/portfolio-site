@@ -1,0 +1,555 @@
+<script>
+// ============================================================================
+// EAL TEACHING STRATEGIES GUIDE — esg- prefix
+// Teacher-only tab: WIDA Framework, Translanguaging, Sheltered Instruction,
+// Scaffolding for EAL, Dictionary Demo, Setup Guide, Strategy Gallery
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+var esgLoaded = false;
+
+// ================================================
+// ENTRY POINT
+// ================================================
+
+function loadEALStrategiesTab() {
+  if (esgLoaded) return;
+  esgLoaded = true;
+  switchEsgSection('gettingStarted');
+}
+
+var ESG_SECTION_MAP = {
+  gettingStarted: { id: 'esgSectionGettingStarted', render: function() { return esgRenderGettingStarted(); } },
+  concepts:       { id: 'esgSectionConcepts',       render: function() { return esgRenderConceptCards(); } },
+  demo:           { id: 'esgSectionDemo',           render: function() { return esgRenderInteractiveDemo(); } },
+  setup:          { id: 'esgSectionSetup',          render: function() { return esgRenderSetupGuide(); } },
+  gallery:        { id: 'esgSectionGallery',        render: function() { return esgRenderStrategyGallery(); } }
+};
+
+function switchEsgSection(sectionName) {
+  var keys = ['gettingStarted', 'concepts', 'demo', 'setup', 'gallery'];
+  var i, key, el;
+
+  // Hide all sections
+  for (i = 0; i < keys.length; i++) {
+    key = keys[i];
+    el = document.getElementById(ESG_SECTION_MAP[key].id);
+    if (el) el.style.display = 'none';
+  }
+
+  // Update active button
+  var btns = document.querySelectorAll('#esgSubNav .esg-subnav-btn');
+  for (i = 0; i < btns.length; i++) {
+    btns[i].className = 'esg-subnav-btn' + (keys[i] === sectionName ? ' active' : '');
+  }
+
+  // Show selected section + lazy render
+  var section = ESG_SECTION_MAP[sectionName];
+  if (!section) return;
+  el = document.getElementById(section.id);
+  if (!el) return;
+  el.style.display = '';
+
+  if (!esgRenderedSections[sectionName]) {
+    esgRenderedSections[sectionName] = true;
+    el.innerHTML = '<div class="esg-container">' + section.render() + '</div>';
+  }
+
+  // Reset scroll position
+  var sc = el.closest('.scroll-container');
+  if (sc) sc.scrollTop = 0;
+}
+
+// ================================================
+// GETTING STARTED (EAL/LS Onboarding Reference)
+// ================================================
+
+function esgRenderGettingStarted() {
+  var steps = [
+    {
+      title: 'Create Support Profiles',
+      desc: 'Import or create <b>student support profiles</b> with WIDA levels, home languages, accommodations, and strategies from the Integrations tab or class roster.'
+    },
+    {
+      title: 'See Reminders While Planning',
+      desc: 'When editing a hex on an assigned map, the <b>accommodation info bar</b> shows how many students have support profiles and their key needs.'
+    },
+    {
+      title: 'Generate Differentiated Prompts',
+      desc: 'Use the <b>AI Prompt Builder</b> in the hex editor to generate instruction prompts that integrate WIDA levels, UDL strategies, and translanguaging pedagogy.'
+    },
+    {
+      title: 'Enable the Student Dictionary',
+      desc: 'Add <b>vocabulary terms</b> to units and hexes. Students see automatic translations in their home language via a floating dictionary panel.'
+    },
+    {
+      title: 'Monitor Strategy Usage',
+      desc: 'Check the <b>Support Insights</b> sub-tab in Progress to see which strategies students are using, adoption rates, and effectiveness data.'
+    }
+  ];
+
+  var html = '';
+  html += '<div class="esg-section">';
+  html += '<div class="esg-section-title">\uD83C\uDF0D Getting Started: Supporting EAL/LS Students</div>';
+  html += '<div class="esg-steps">';
+
+  for (var i = 0; i < steps.length; i++) {
+    html += '<div class="esg-step">';
+    html += '<div class="esg-step-num">' + (i + 1) + '</div>';
+    html += '<div class="esg-step-content">';
+    html += '<div class="esg-step-title">' + steps[i].title + '</div>';
+    html += '<div class="esg-step-desc">' + steps[i].desc + '</div>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .esg-steps
+  html += '<button class="tur-replay-btn" onclick="if(typeof turReplayTour===\'function\')turReplayTour()"><span class="tur-replay-icon">\u25B6</span> Replay Interactive Tour</button>';
+  html += '</div>'; // .esg-section
+  return html;
+}
+
+// ================================================
+// CONCEPT CARDS (Expandable Accordion)
+// ================================================
+
+function esgRenderConceptCards() {
+  var html = '';
+  html += '<div class="esg-section">';
+  html += '<div class="esg-section-title">Understanding EAL Support Approaches</div>';
+  html += '<div class="esg-concept-cards">';
+
+  // WIDA Framework Card
+  html += '<div class="esg-concept-card" id="esgCardWida">';
+  html += '<div class="esg-concept-header" onclick="esgToggleCard(\'esgCardWida\')">';
+  html += '<div class="esg-concept-icon esg-wida">&#127760;</div>';
+  html += '<div class="esg-concept-title">WIDA Framework<span class="esg-concept-subtitle">Proficiency levels and language domains for multilingual learners</span></div>';
+  html += '<span class="esg-concept-chevron">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="esg-concept-body">';
+  html += '<p>The WIDA Framework provides a common language for describing the English language development of multilingual learners. It defines 6 proficiency levels (1-Entering through 6-Reaching) across 4 language domains: Listening, Speaking, Reading, and Writing.</p>';
+  html += '<h4>Proficiency Levels</h4>';
+  html += '<ul>';
+  html += '<li><strong>Level 1 (Entering)</strong> — Beginning to use English. Benefits from visual supports, home language resources, and simplified text.</li>';
+  html += '<li><strong>Level 2 (Emerging)</strong> — Using phrases and short sentences. Needs graphic organizers, word banks, and structured templates.</li>';
+  html += '<li><strong>Level 3 (Developing)</strong> — Using expanded sentences with increasing detail. Responds well to sentence frames and academic vocabulary support.</li>';
+  html += '<li><strong>Level 4 (Expanding)</strong> — Using varied sentence structures. Benefits from content-area vocabulary instruction and complex text scaffolds.</li>';
+  html += '<li><strong>Level 5 (Bridging)</strong> — Using specialized academic language. Still benefits from pre-teaching key vocabulary and cross-linguistic connections.</li>';
+  html += '<li><strong>Level 6 (Reaching)</strong> — Using English comparable to English-proficient peers in academic settings.</li>';
+  html += '</ul>';
+  html += '<h4>How this system uses WIDA</h4>';
+  html += '<div class="esg-highlight">Student support profiles store WIDA levels per domain. The prompt builder uses these levels to generate differentiated instruction. The dictionary auto-translates vocabulary into each student\'s home language(s). Teacher dashboards show WIDA distribution to help plan group instruction.</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // Translanguaging Card
+  html += '<div class="esg-concept-card" id="esgCardTrans">';
+  html += '<div class="esg-concept-header" onclick="esgToggleCard(\'esgCardTrans\')">';
+  html += '<div class="esg-concept-icon esg-trans">&#128172;</div>';
+  html += '<div class="esg-concept-title">Translanguaging<span class="esg-concept-subtitle">Leveraging students\' full linguistic repertoire as a learning asset</span></div>';
+  html += '<span class="esg-concept-chevron">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="esg-concept-body">';
+  html += '<p>Translanguaging recognizes that multilingual students draw on their entire language repertoire to make meaning. Rather than separating languages, it treats all of a student\'s languages as interconnected resources for learning.</p>';
+  html += '<h4>Key principles</h4>';
+  html += '<ul>';
+  html += '<li><strong>Asset-based approach</strong> — Home languages are strengths, not deficits. Students who can think in multiple languages have cognitive advantages.</li>';
+  html += '<li><strong>Flexible language use</strong> — Students can brainstorm, annotate, and discuss in any language before producing in English.</li>';
+  html += '<li><strong>Cross-linguistic connections</strong> — Cognates, transfer strategies, and multilingual glossaries help students bridge between languages.</li>';
+  html += '<li><strong>Identity affirmation</strong> — Welcoming home languages in the classroom validates students\' cultural identities and builds belonging.</li>';
+  html += '</ul>';
+  html += '<h4>How this system supports translanguaging</h4>';
+  html += '<div class="esg-highlight">The academic vocabulary dictionary provides word-to-word translations in Japanese, Korean, French, and Tamil. Students can toggle between languages in the dictionary panel. The system encourages students to think and take notes in any language they know. Support profiles track home languages so the system can present the right translations automatically.</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // Sheltered Instruction (SIOP) Card
+  html += '<div class="esg-concept-card" id="esgCardSiop">';
+  html += '<div class="esg-concept-header" onclick="esgToggleCard(\'esgCardSiop\')">';
+  html += '<div class="esg-concept-icon esg-siop">&#128218;</div>';
+  html += '<div class="esg-concept-title">Sheltered Instruction (SIOP)<span class="esg-concept-subtitle">Making academic content comprehensible for language learners</span></div>';
+  html += '<span class="esg-concept-chevron">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="esg-concept-body">';
+  html += '<p>The Sheltered Instruction Observation Protocol (SIOP) model helps teachers make grade-level academic content accessible to English language learners while simultaneously developing their English proficiency. It has 8 interrelated components.</p>';
+  html += '<h4>8 Components of SIOP</h4>';
+  html += '<ul>';
+  html += '<li><strong>Lesson Preparation</strong> — Define both content and language objectives. Adapt content to proficiency levels.</li>';
+  html += '<li><strong>Building Background</strong> — Connect new concepts to students\' prior knowledge and experiences. Pre-teach key vocabulary.</li>';
+  html += '<li><strong>Comprehensible Input</strong> — Use clear speech, visuals, modeling, and gestures. Simplify language without simplifying content.</li>';
+  html += '<li><strong>Strategies</strong> — Teach learning strategies explicitly. Use think-alouds, graphic organizers, and study skills.</li>';
+  html += '<li><strong>Interaction</strong> — Provide structured opportunities for oral practice. Use group work with defined roles.</li>';
+  html += '<li><strong>Practice &amp; Application</strong> — Offer hands-on materials and activities. Let students practice all 4 language domains.</li>';
+  html += '<li><strong>Lesson Delivery</strong> — Engage students 90-100% of the period. Pace appropriately for language levels.</li>';
+  html += '<li><strong>Review &amp; Assessment</strong> — Review key vocabulary and concepts. Provide multiple ways to demonstrate understanding.</li>';
+  html += '</ul>';
+  html += '<h4>How this system supports SIOP</h4>';
+  html += '<div class="esg-highlight">The hex map system naturally supports SIOP by breaking content into manageable chunks (hexes), providing visual pathways (the map), and offering vocabulary support (the dictionary). The lesson editor includes language objectives, and the UDL framework aligns with comprehensible input strategies.</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // Scaffolding for EAL Card
+  html += '<div class="esg-concept-card" id="esgCardScaffold">';
+  html += '<div class="esg-concept-header" onclick="esgToggleCard(\'esgCardScaffold\')">';
+  html += '<div class="esg-concept-icon esg-scaffold">&#128736;</div>';
+  html += '<div class="esg-concept-title">Scaffolding for EAL Learners<span class="esg-concept-subtitle">Temporary supports that build toward independent learning</span></div>';
+  html += '<span class="esg-concept-chevron">&#9660;</span>';
+  html += '</div>';
+  html += '<div class="esg-concept-body">';
+  html += '<p>Scaffolding provides temporary, structured support that helps EAL students access content and complete tasks they could not manage independently. Effective scaffolds are gradually removed as proficiency grows.</p>';
+  html += '<h4>Types of scaffolds</h4>';
+  html += '<ul>';
+  html += '<li><strong>Verbal scaffolds</strong> — Sentence starters, word banks, vocabulary pre-teaching, think-pair-share, recasting student responses.</li>';
+  html += '<li><strong>Procedural scaffolds</strong> — Graphic organizers, step-by-step instructions, checklists, templates, worked examples.</li>';
+  html += '<li><strong>Instructional scaffolds</strong> — Modeling, explicit teaching of academic language, frontloading key concepts, using visuals and realia.</li>';
+  html += '<li><strong>Social scaffolds</strong> — Strategic grouping, peer buddies, collaborative tasks, home language discussion time.</li>';
+  html += '</ul>';
+  html += '<h4>Scaffolding by WIDA level</h4>';
+  html += '<ul>';
+  html += '<li><strong>Levels 1-2</strong> — Heavy scaffolding: visuals, home language support, simplified text, word banks, sentence frames.</li>';
+  html += '<li><strong>Levels 3-4</strong> — Moderate scaffolding: graphic organizers, sentence starters, academic vocabulary instruction, structured collaboration.</li>';
+  html += '<li><strong>Levels 5-6</strong> — Light scaffolding: pre-teaching specialized vocabulary, complex text strategies, writing templates for academic genres.</li>';
+  html += '</ul>';
+  html += '<div class="esg-highlight">The AI Prompt Builder generates WIDA-level-appropriate scaffolds automatically. The dictionary provides vocabulary support at all levels. Teachers can configure UDL strategies per hex, and the support dashboard tracks which scaffolds students are actually using.</div>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>'; // .esg-concept-cards
+  html += '</div>'; // .esg-section
+  return html;
+}
+
+function esgToggleCard(cardId) {
+  var card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.toggle('esg-expanded');
+}
+
+// ================================================
+// INTERACTIVE DEMO
+// ================================================
+
+function esgRenderInteractiveDemo() {
+  var html = '';
+  html += '<div class="esg-section">';
+  html += '<div class="esg-section-title">How It Works: Dictionary + Support Profiles</div>';
+  html += '<div class="esg-demo-container">';
+  html += '<div class="esg-demo-title">Integrated EAL Support in Action</div>';
+  html += '<div class="esg-demo-subtitle">This demo shows how the vocabulary dictionary, WIDA profiles, and auto-translation work together to support multilingual learners.</div>';
+
+  html += '<div class="esg-demo-flex">';
+
+  // Left side: Dictionary Preview
+  html += '<div class="esg-demo-dict-card">';
+  html += '<div class="esg-demo-dict-header">&#128218; Academic Vocabulary Dictionary</div>';
+
+  // Sample entry 1
+  html += '<div class="esg-demo-dict-entry">';
+  html += '<div class="esg-demo-dict-term">analyze</div>';
+  html += '<div class="esg-demo-dict-def">To examine something carefully by looking at its parts and how they relate to each other.';
+  html += '<div class="esg-demo-dict-translations">';
+  html += '<span class="esg-demo-lang-chip"><span class="esg-demo-lang-flag">&#127471;&#127477;</span> &#20998;&#26512;&#12377;&#12427;</span>';
+  html += '<span class="esg-demo-lang-chip"><span class="esg-demo-lang-flag">&#127472;&#127479;</span> &#48516;&#49437;&#54616;&#45796;</span>';
+  html += '<span class="esg-demo-lang-chip"><span class="esg-demo-lang-flag">&#127467;&#127479;</span> analyser</span>';
+  html += '<span class="esg-demo-lang-chip"><span class="esg-demo-lang-flag">&#127473;&#127472;</span> &#2986;&#2965;&#3009;&#2986;&#3021;&#2986;&#2974;&#3006;&#2991;&#3021;&#2997;&#3009;</span>';
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // Sample entry 2
+  html += '<div class="esg-demo-dict-entry">';
+  html += '<div class="esg-demo-dict-term">hypothesis</div>';
+  html += '<div class="esg-demo-dict-def">A proposed explanation based on limited evidence, used as a starting point for investigation.';
+  html += '<div class="esg-demo-dict-translations">';
+  html += '<span class="esg-demo-lang-chip"><span class="esg-demo-lang-flag">&#127471;&#127477;</span> &#20206;&#35500;</span>';
+  html += '<span class="esg-demo-lang-chip"><span class="esg-demo-lang-flag">&#127472;&#127479;</span> &#44032;&#49444;</span>';
+  html += '<span class="esg-demo-lang-chip"><span class="esg-demo-lang-flag">&#127467;&#127479;</span> hypoth&#232;se</span>';
+  html += '<span class="esg-demo-lang-chip"><span class="esg-demo-lang-flag">&#127473;&#127472;</span> &#2965;&#2992;&#3009;&#2980;&#3009;&#2965;&#3019;&#2995;&#3021;</span>';
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>'; // .esg-demo-dict-card
+
+  // Right side: WIDA Profile Preview
+  html += '<div class="esg-demo-profile-card">';
+  html += '<div class="esg-demo-profile-header">&#127891; Student WIDA Profile</div>';
+  html += '<div style="font-size:13px; color:#334155; margin-bottom:8px;"><strong>Yuki T.</strong> &mdash; Home Language: Japanese</div>';
+  html += '<div class="esg-demo-profile-row">';
+
+  // Domain bars
+  var domains = [
+    { label: 'Listening', level: 4, cls: 'esg-fill-l' },
+    { label: 'Speaking', level: 3, cls: 'esg-fill-s' },
+    { label: 'Reading', level: 3, cls: 'esg-fill-r' },
+    { label: 'Writing', level: 2, cls: 'esg-fill-w' }
+  ];
+  for (var d = 0; d < domains.length; d++) {
+    var dm = domains[d];
+    var pct = Math.round((dm.level / 6) * 100);
+    html += '<div class="esg-demo-domain-bar">';
+    html += '<div class="esg-demo-domain-label">' + dm.label + ' (L' + dm.level + ')</div>';
+    html += '<div class="esg-demo-domain-track">';
+    html += '<div class="esg-demo-domain-fill ' + dm.cls + '" style="width:' + pct + '%;"></div>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .esg-demo-profile-row
+  html += '<div style="font-size:12px; color:#059669; margin-top:8px;">&#10003; Dictionary shows Japanese translations automatically</div>';
+  html += '</div>'; // .esg-demo-profile-card
+
+  html += '</div>'; // .esg-demo-flex
+
+  // Annotation legend
+  html += '<div class="esg-demo-annotation">';
+  html += '<span class="esg-demo-anno-chip esg-anno-dict">&#128218; Dictionary = Academic vocabulary with translations</span>';
+  html += '<span class="esg-demo-anno-chip esg-anno-wida">&#127891; Profile = WIDA levels + home language(s)</span>';
+  html += '<span class="esg-demo-anno-chip esg-anno-translate">&#127760; Auto-translate = Google Translate on save</span>';
+  html += '</div>';
+
+  html += '</div>'; // .esg-demo-container
+  html += '</div>'; // .esg-section
+  return html;
+}
+
+// ================================================
+// STEP-BY-STEP SETUP GUIDE
+// ================================================
+
+function esgRenderSetupGuide() {
+  var steps = [
+    {
+      title: 'Create student support profiles',
+      desc: 'Go to any class roster, click "Support Profiles," and create profiles for your EAL students. Set their profile type to WIDA/ELL.',
+      tip: 'You can also bulk-import profiles from an external spreadsheet via the Integrations tab.'
+    },
+    {
+      title: 'Add home languages to profiles',
+      desc: 'In each student\'s support profile, add their home language(s). The system supports Japanese, Korean, French, and Tamil for auto-translation.',
+      tip: 'Students can also manually select their preferred dictionary language in the student view.'
+    },
+    {
+      title: 'Define vocabulary for your units',
+      desc: 'Open a unit modal and scroll to the "Vocabulary" section. Add key academic terms with definitions and optional context sentences. You can also import from the starter vocabulary list of ~130 common academic terms.',
+      tip: 'Unit-level vocabulary appears across all maps in that unit. Use hex-level vocabulary for topic-specific terms.'
+    },
+    {
+      title: 'Auto-translate on save',
+      desc: 'When you save vocabulary, the system automatically translates each term and definition into all 4 supported languages using Google Translate. This happens in the background.',
+      tip: 'Translation is cached on the vocabulary entry. Only new or changed terms are translated, not the entire list.'
+    },
+    {
+      title: 'Review and edit translations',
+      desc: 'After saving, click "Show Translations" on any term to see all 4 translations. Click the edit icon next to any translation to provide a manual override if the auto-translation is inaccurate.',
+      tip: 'Teacher overrides are preserved across future saves. The auto-translation will never overwrite your corrections.'
+    },
+    {
+      title: 'Assign maps to your classes',
+      desc: 'Assign maps as normal using the "Assign to Class" button. Students with support profiles will automatically see vocabulary translated into their home language.',
+      tip: 'Students without a support profile can still manually select a language in the dictionary panel.'
+    },
+    {
+      title: 'Monitor usage in the Support Insights dashboard',
+      desc: 'Visit the Progress tab and click "Support Insights" to see strategy usage analytics, WIDA distribution across your class, and which students are engaging with the vocabulary tools.',
+      tip: 'The Knowledge Gaps sub-tab also shows formative check data alongside vocabulary engagement for a complete picture.'
+    }
+  ];
+
+  var html = '';
+  html += '<div class="esg-section">';
+  html += '<div class="esg-section-title">Step-by-Step Setup Guide</div>';
+  html += '<div class="esg-steps">';
+
+  for (var i = 0; i < steps.length; i++) {
+    html += '<div class="esg-step">';
+    html += '<div class="esg-step-num">' + (i + 1) + '</div>';
+    html += '<div class="esg-step-content">';
+    html += '<div class="esg-step-title">' + steps[i].title + '</div>';
+    html += '<div class="esg-step-desc">' + steps[i].desc + '</div>';
+    if (steps[i].tip) {
+      html += '<div class="esg-step-tip">&#128161; ' + steps[i].tip + '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .esg-steps
+  html += '</div>'; // .esg-section
+  return html;
+}
+
+// ================================================
+// STRATEGY GALLERY
+// ================================================
+
+function esgRenderStrategyGallery() {
+  var html = '';
+  html += '<div class="esg-section">';
+  html += '<div class="esg-section-title">EAL Strategy Gallery</div>';
+  html += '<p style="color:#64748b; font-size:13px; margin-bottom:16px;">Browse strategies organized by domain. Each includes practical suggestions you can apply immediately in your classroom.</p>';
+
+  // Vocabulary Building Strategies
+  html += esgRenderStrategyDomain('Vocabulary Building', [
+    {
+      name: 'Word Walls (Multilingual)',
+      desc: 'Display key vocabulary with translations in students\' home languages. Update weekly with new academic terms from current units.',
+      tags: ['All Levels', 'Visual']
+    },
+    {
+      name: 'Vocabulary Notebooks',
+      desc: 'Students maintain personal glossaries with the term, definition, a drawing or symbol, and the translation in their home language.',
+      tags: ['Levels 1-3', 'Writing']
+    },
+    {
+      name: 'Word Sort Activities',
+      desc: 'Students categorize vocabulary by topic, word family, or part of speech. Use the dictionary categories as a starting point.',
+      tags: ['Levels 2-4', 'Interactive']
+    },
+    {
+      name: 'Frayer Model',
+      desc: 'Four-quadrant graphic organizer: definition, characteristics, examples, non-examples. Effective for deep vocabulary understanding.',
+      tags: ['Levels 3-5', 'Graphic Organizer']
+    },
+    {
+      name: 'Cognate Awareness',
+      desc: 'Help students identify words that are similar across languages (e.g., English "analyze" and French "analyser"). Builds bridges between L1 and English.',
+      tags: ['All Levels', 'Translanguaging']
+    }
+  ]);
+
+  // Reading Support Strategies
+  html += esgRenderStrategyDomain('Reading Support', [
+    {
+      name: 'Pre-Reading Preview',
+      desc: 'Before reading, preview headings, images, and key vocabulary. Activate prior knowledge with a brief partner discussion.',
+      tags: ['All Levels', 'Scaffolding']
+    },
+    {
+      name: 'Chunked Text with Annotations',
+      desc: 'Break longer texts into manageable sections. Add margin notes, simplified paraphrases, or L1 translations for key passages.',
+      tags: ['Levels 1-3', 'Scaffolding']
+    },
+    {
+      name: 'Graphic Organizers for Comprehension',
+      desc: 'Provide visual frameworks (story maps, cause-effect charts, comparison tables) to help students organize information as they read.',
+      tags: ['Levels 2-4', 'Graphic Organizer']
+    },
+    {
+      name: 'Read-Aloud with Think-Aloud',
+      desc: 'Model your thinking process while reading. Pause to explain vocabulary, make predictions, and summarize sections.',
+      tags: ['Levels 1-3', 'Modeling']
+    }
+  ]);
+
+  // Writing Support Strategies
+  html += esgRenderStrategyDomain('Writing Support', [
+    {
+      name: 'Sentence Frames and Starters',
+      desc: 'Provide structured templates like "The evidence suggests that ___" or "I agree because ___" to scaffold academic writing.',
+      tags: ['Levels 1-3', 'Scaffolding']
+    },
+    {
+      name: 'Writing Process Checklists',
+      desc: 'Break writing into explicit stages (plan, draft, revise, edit) with a checklist for each stage tailored to WIDA level.',
+      tags: ['Levels 2-4', 'Procedural']
+    },
+    {
+      name: 'Mentor Text Analysis',
+      desc: 'Analyze high-quality examples of the target writing genre. Students identify structure, language features, and vocabulary before writing their own.',
+      tags: ['Levels 3-5', 'Modeling']
+    },
+    {
+      name: 'Collaborative Writing',
+      desc: 'Pair or group students to co-write. Higher-proficiency students model language use while lower-proficiency students contribute ideas in any language.',
+      tags: ['All Levels', 'Social']
+    }
+  ]);
+
+  // Listening & Speaking Strategies
+  html += esgRenderStrategyDomain('Listening &amp; Speaking', [
+    {
+      name: 'Think-Pair-Share',
+      desc: 'Students think individually, discuss with a partner (in any language), then share in English with the class. Reduces anxiety and builds confidence.',
+      tags: ['All Levels', 'Interactive']
+    },
+    {
+      name: 'Academic Discussion Protocols',
+      desc: 'Teach explicit discussion moves: "I agree with ___ because ___", "Can you explain what you mean by ___?", "I would like to add ___".',
+      tags: ['Levels 2-4', 'Oral Language']
+    },
+    {
+      name: 'Verbal Scaffolds and Recasting',
+      desc: 'When students make language errors during speech, repeat their idea using correct grammar without explicitly correcting. Model expanded vocabulary.',
+      tags: ['All Levels', 'Feedback']
+    },
+    {
+      name: 'Recorded Listening with Replay',
+      desc: 'Provide audio recordings of key content so students can listen multiple times at their own pace. Include transcripts for reading support.',
+      tags: ['Levels 1-3', 'Multimodal']
+    }
+  ]);
+
+  // Assessment Strategies
+  html += esgRenderStrategyDomain('Assessment Strategies', [
+    {
+      name: 'Modified Assessment Formats',
+      desc: 'Offer word banks, simplified language in prompts, bilingual glossaries, and extended time for EAL learners.',
+      tags: ['All Levels', 'Accommodation']
+    },
+    {
+      name: 'Portfolio-Based Assessment',
+      desc: 'Collect student work over time to show growth. Include drafts, revisions, and reflections in any language. The iteration history in hex maps supports this naturally.',
+      tags: ['All Levels', 'Formative']
+    },
+    {
+      name: 'Oral Assessment Options',
+      desc: 'Allow students to demonstrate understanding through oral explanations, presentations, or recorded responses instead of written-only formats.',
+      tags: ['Levels 1-3', 'Multimodal']
+    },
+    {
+      name: 'Self-Assessment with L1 Reflection',
+      desc: 'Students rate their confidence and write reflections in their home language first, then translate key points to English. Uses the hex self-assessment feature.',
+      tags: ['All Levels', 'Translanguaging']
+    }
+  ]);
+
+  html += '</div>'; // .esg-section
+  return html;
+}
+
+function esgRenderStrategyDomain(domainTitle, strategies) {
+  var html = '';
+  html += '<div class="esg-strategy-domain">';
+  html += '<div class="esg-strategy-domain-title">' + domainTitle + '</div>';
+  html += '<div class="esg-strategy-cards">';
+
+  for (var i = 0; i < strategies.length; i++) {
+    var s = strategies[i];
+    html += '<div class="esg-strategy-card">';
+    html += '<div class="esg-strategy-name">' + s.name + '</div>';
+    html += '<div class="esg-strategy-desc">' + s.desc + '</div>';
+    if (s.tags && s.tags.length > 0) {
+      html += '<div class="esg-strategy-tags">';
+      for (var t = 0; t < s.tags.length; t++) {
+        var tagClass = 'esg-strategy-tag';
+        var tagLower = s.tags[t].toLowerCase();
+        if (tagLower.indexOf('1') !== -1 && tagLower.indexOf('level') !== -1) {
+          tagClass += ' esg-tag-beginner';
+        } else if (tagLower.indexOf('3') !== -1 && tagLower.indexOf('level') !== -1) {
+          tagClass += ' esg-tag-intermediate';
+        } else if (tagLower.indexOf('5') !== -1 && tagLower.indexOf('level') !== -1) {
+          tagClass += ' esg-tag-advanced';
+        }
+        html += '<span class="' + tagClass + '">' + s.tags[t] + '</span>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>'; // .esg-strategy-cards
+  html += '</div>'; // .esg-strategy-domain
+  return html;
+}
+</script>

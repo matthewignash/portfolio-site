@@ -1,0 +1,1372 @@
+<script>
+    console.log('=== UBD PLANNER MODULE LOADED ===');
+
+    // ================================================
+    // UBD PLANNER GLOBALS
+    // ================================================
+
+    var ubdPlannerData = null;       // All courses + units for browser
+    var currentUbdUnitId = null;     // Currently selected unit ID in editor
+    var currentUbdData = null;       // Full UBD data object for selected unit
+    var currentUbdMeta = null;       // Unit metadata (title, mapId, courseId, etc.)
+    var ubdSelectedStandards = [];   // Standards selected in UBD editor
+    var ubdEditorDirty = false;      // Track unsaved changes
+    var ubdReportData = null;        // Cached unit report data
+    var ubdStandardsContext = null;  // { framework, subject } from course, or null
+    var ubdStandardsShowAll = false; // Whether to show all standards (ignore course filter)
+
+    // ================================================
+    // BROWSER PANEL (Phase 2)
+    // ================================================
+
+    /**
+     * Load UBD Planner data from backend
+     */
+    function loadUbdPlannerData() {
+      var content = document.getElementById('ubdBrowserContent');
+      if (content) {
+        content.innerHTML = '<div class="loading"><span class="loading-spinner"></span>Loading UBD plans...</div>';
+      }
+      google.script.run
+        .withSuccessHandler(function(data) {
+          ubdPlannerData = data;
+          renderUbdBrowser();
+        })
+        .withFailureHandler(function(err) {
+          console.error('Error loading UBD planner data:', err);
+          if (content) {
+            content.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8;">' +
+              '<div style="font-size:36px; margin-bottom:12px;">&#9888;</div>' +
+              '<p>Error loading UBD plans: ' + escapeHtml(err.message) + '</p>' +
+              '<button class="btn btn-outline" onclick="loadUbdPlannerData()">Retry</button></div>';
+          }
+        })
+        .getUbdPlannerData();
+    }
+
+    /**
+     * Render the UBD browser panel with course accordions
+     */
+    function renderUbdBrowser() {
+      var content = document.getElementById('ubdBrowserContent');
+      if (!content) return;
+
+      if (!ubdPlannerData || !ubdPlannerData.courses || ubdPlannerData.courses.length === 0) {
+        content.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8;">' +
+          '<div style="font-size:36px; margin-bottom:12px;">&#128218;</div>' +
+          '<p style="font-size:14px;">No courses with units found.</p>' +
+          '<p style="font-size:12px;">Create courses and units in the Courses tab first.</p></div>';
+        return;
+      }
+
+      var html = '';
+      var searchVal = (document.getElementById('ubdSearchInput') || {}).value || '';
+      var searchTerm = searchVal.toLowerCase().trim();
+
+      for (var c = 0; c < ubdPlannerData.courses.length; c++) {
+        var course = ubdPlannerData.courses[c];
+        var filteredUnits = course.units;
+
+        // Apply search filter
+        if (searchTerm) {
+          filteredUnits = course.units.filter(function(u) {
+            return u.title.toLowerCase().indexOf(searchTerm) > -1 ||
+                   u.mapTitle.toLowerCase().indexOf(searchTerm) > -1 ||
+                   course.title.toLowerCase().indexOf(searchTerm) > -1;
+          });
+          if (filteredUnits.length === 0) continue;
+        }
+
+        // Calculate course-level stats
+        var totalCompleteness = 0;
+        var unitsWithMap = 0;
+        for (var ui = 0; ui < filteredUnits.length; ui++) {
+          if (filteredUnits[ui].mapId) {
+            totalCompleteness += filteredUnits[ui].completeness;
+            unitsWithMap++;
+          }
+        }
+        var avgCompleteness = unitsWithMap > 0 ? Math.round(totalCompleteness / unitsWithMap) : 0;
+
+        html += '<div class="ubd-course-card" id="ubdCourse_' + course.courseId + '">';
+        html += '<div class="ubd-course-header" onclick="expandUbdCourse(\'' + escapeHtml(course.courseId) + '\')">';
+        html += '<div>';
+        html += '<div class="ubd-course-title">' + escapeHtml(course.title) + '</div>';
+        html += '<div class="ubd-course-meta">' + filteredUnits.length + ' unit' + (filteredUnits.length !== 1 ? 's' : '');
+        if (course.department) html += ' &middot; ' + escapeHtml(course.department);
+        html += '</div>';
+        html += '</div>';
+        html += '<div style="display:flex; align-items:center; gap:10px;">';
+        html += getCompletionBadgeHtml(avgCompleteness);
+        html += '<span class="ubd-course-chevron">&#9654;</span>';
+        html += '</div>';
+        html += '</div>';
+
+        html += '<div class="ubd-course-units">';
+        for (var u = 0; u < filteredUnits.length; u++) {
+          var unit = filteredUnits[u];
+          var isSelected = currentUbdUnitId === unit.unitId;
+          var hasMap = !!unit.mapId;
+
+          html += '<div class="ubd-unit-item' + (isSelected ? ' selected' : '') + (!hasMap ? ' no-map' : '') + '" ';
+          html += 'onclick="selectUbdUnit(\'' + escapeHtml(unit.unitId) + '\')">';
+          html += '<div>';
+          html += '<div class="ubd-unit-title">' + escapeHtml(unit.title) + '</div>';
+          if (hasMap) {
+            html += '<div class="ubd-unit-map-label">&#128506; ' + escapeHtml(unit.mapTitle) + '</div>';
+          } else {
+            html += '<div class="ubd-unit-map-label"><span class="ubd-no-map-badge">No Map Linked</span></div>';
+          }
+          html += '</div>';
+          html += '<div style="display:flex; align-items:center; gap:6px;">';
+          if (hasMap) {
+            html += getCompletionBadgeHtml(unit.completeness);
+          }
+          html += '</div>';
+          html += '</div>';
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+
+      if (!html) {
+        content.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8;">' +
+          '<p style="font-size:14px;">No matching units found.</p></div>';
+        return;
+      }
+
+      content.innerHTML = html;
+
+      // Re-expand any previously expanded courses
+      var expandedCards = document.querySelectorAll('.ubd-course-card.expanded');
+      // If we have a selected unit, expand its course
+      if (currentUbdUnitId && ubdPlannerData) {
+        for (var ci = 0; ci < ubdPlannerData.courses.length; ci++) {
+          for (var uui = 0; uui < ubdPlannerData.courses[ci].units.length; uui++) {
+            if (ubdPlannerData.courses[ci].units[uui].unitId === currentUbdUnitId) {
+              var card = document.getElementById('ubdCourse_' + ubdPlannerData.courses[ci].courseId);
+              if (card) card.classList.add('expanded');
+            }
+          }
+        }
+      }
+    }
+
+    /**
+     * Get HTML for a completion badge
+     */
+    function getCompletionBadgeHtml(pct) {
+      var colorClass = 'gray';
+      if (pct > 0 && pct < 50) colorClass = 'yellow';
+      else if (pct >= 50 && pct < 100) colorClass = 'blue';
+      else if (pct >= 100) colorClass = 'green';
+      return '<span class="ubd-completion-badge ' + colorClass + '">' + pct + '%</span>';
+    }
+
+    /**
+     * Filter UBD units by search input
+     */
+    function filterUbdUnits() {
+      renderUbdBrowser();
+    }
+
+    /**
+     * Toggle expand/collapse of a course card
+     */
+    function expandUbdCourse(courseId) {
+      var card = document.getElementById('ubdCourse_' + courseId);
+      if (!card) return;
+      card.classList.toggle('expanded');
+    }
+
+    /**
+     * Select a unit to edit its UBD data
+     */
+    function selectUbdUnit(unitId) {
+      // Check for unsaved changes
+      if (ubdEditorDirty && currentUbdUnitId && currentUbdUnitId !== unitId) {
+        if (!confirm('You have unsaved changes. Switch units and discard changes?')) {
+          return;
+        }
+      }
+
+      currentUbdUnitId = unitId;
+      ubdEditorDirty = false;
+
+      // Update selection highlight in browser
+      var allItems = document.querySelectorAll('.ubd-unit-item');
+      for (var i = 0; i < allItems.length; i++) {
+        allItems[i].classList.remove('selected');
+      }
+      var clickedItem = event && event.currentTarget;
+      if (clickedItem) clickedItem.classList.add('selected');
+
+      // Show loading in editor
+      var panel = document.getElementById('ubdEditorPanel');
+      var body = document.getElementById('ubdEditorBody');
+      panel.classList.add('active');
+      body.innerHTML = '<div class="loading"><span class="loading-spinner"></span>Loading UBD data...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          currentUbdMeta = {
+            unitId: data.unitId,
+            unitTitle: data.unitTitle,
+            courseId: data.courseId,
+            mapId: data.mapId,
+            mapTitle: data.mapTitle,
+            hexesByStage: data.hexesByStage,
+            totalHexes: data.totalHexes
+          };
+          currentUbdData = data.ubdData;
+          ubdSelectedStandards = (data.ubdData && data.ubdData.stage1 && data.ubdData.stage1.standardIds) || [];
+
+          // Derive standards context from course metadata
+          ubdStandardsContext = null;
+          ubdStandardsShowAll = false;
+          if (data.courseId && coursesData) {
+            for (var ci = 0; ci < coursesData.length; ci++) {
+              if (String(coursesData[ci].courseId) === String(data.courseId)) {
+                var course = coursesData[ci];
+                if (course.standardFramework) {
+                  ubdStandardsContext = {
+                    framework: course.standardFramework,
+                    subject: course.standardSubject || ''
+                  };
+                }
+                break;
+              }
+            }
+          }
+
+          renderUbdEditor();
+        })
+        .withFailureHandler(function(err) {
+          console.error('Error loading UBD data:', err);
+          body.innerHTML = '<div class="ubd-no-map-state">' +
+            '<div class="icon">&#128279;</div>' +
+            '<p>' + escapeHtml(err.message) + '</p>' +
+            '<button class="btn btn-outline" onclick="closeUbdEditor()">Close</button></div>';
+        })
+        .getUbdDataForUnit(unitId);
+    }
+
+    // ================================================
+    // EDITOR PANEL — RENDER & SUB-TABS (Phase 3 & 4)
+    // ================================================
+
+    /**
+     * Render the full UBD editor (header + sub-tabs + body + footer)
+     */
+    function renderUbdEditor() {
+      if (!currentUbdData || !currentUbdMeta) return;
+
+      // Update header
+      var headerTitle = document.getElementById('ubdEditorTitle');
+      if (headerTitle) headerTitle.textContent = currentUbdMeta.unitTitle;
+
+      // Render the currently active sub-tab content
+      var activeSubtab = document.querySelector('.ubd-subtab.active');
+      var tab = activeSubtab ? activeSubtab.getAttribute('data-subtab') : 'overview';
+      showUbdSubtab(tab);
+    }
+
+    /**
+     * Switch between UBD editor sub-tabs
+     */
+    function showUbdSubtab(tab) {
+      // Collect current sub-tab's DOM data before switching —
+      // prevents data loss when sub-tab DOM is replaced
+      if (currentUbdData) {
+        collectUbdFormData();
+      }
+
+      // Update sub-tab buttons
+      var btns = document.querySelectorAll('.ubd-subtab');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.remove('active');
+        if (btns[i].getAttribute('data-subtab') === tab) {
+          btns[i].classList.add('active');
+        }
+      }
+
+      var body = document.getElementById('ubdEditorBody');
+      if (!body || !currentUbdData) return;
+
+      switch (tab) {
+        case 'overview': renderUbdOverview(body); break;
+        case 'stage1':   renderUbdStage1(body);   break;
+        case 'stage2':   renderUbdStage2(body);   break;
+        case 'stage3':   renderUbdStage3(body);   break;
+        case 'report':   renderUbdReport(body);   break;
+        default:         renderUbdOverview(body);
+      }
+    }
+
+    // ================================================
+    // OVERVIEW SUB-TAB
+    // ================================================
+
+    function renderUbdOverview(container) {
+      var d = currentUbdData;
+      var m = currentUbdMeta;
+
+      var html = '';
+
+      // Map indicator
+      html += '<div class="ubd-map-indicator">';
+      html += '<span style="font-size:16px;">&#128506;</span>';
+      html += '<span class="map-name">' + escapeHtml(m.mapTitle) + '</span>';
+      html += '<button class="btn btn-outline btn-small" onclick="openMapFromUbd()" title="Open in Map Builder">Open Map</button>';
+      html += '</div>';
+
+      // Completeness
+      var completeness = calculateClientCompleteness();
+      html += '<div style="margin-bottom:14px;">';
+      html += '<div style="display:flex; justify-content:space-between; align-items:center;">';
+      html += '<span style="font-size:12px; color:#64748b;">Completeness</span>';
+      html += getCompletionBadgeHtml(completeness);
+      html += '</div>';
+      html += '<div class="ubd-progress-bar"><div class="ubd-progress-fill" style="width:' + completeness + '%; background:' + getProgressColor(completeness) + ';"></div></div>';
+      html += '</div>';
+
+      // Big Idea
+      html += '<div class="ubd-section-title">Big Idea</div>';
+      html += '<div class="ubd-field">';
+      html += '<textarea id="ubdBigIdea" placeholder="What is the overarching big idea for this unit?" onchange="markUbdDirty()">' + escapeHtml(d.bigIdea || '') + '</textarea>';
+      html += '</div>';
+
+      // Story of the Unit
+      html += '<div class="ubd-field">';
+      html += '<label>Story of the Unit</label>';
+      html += '<textarea id="ubdStoryOfTheUnit" placeholder="Describe the narrative arc of this unit..." onchange="markUbdDirty()">' + escapeHtml(d.storyOfTheUnit || '') + '</textarea>';
+      html += '</div>';
+
+      // Essential Questions (dynamic list)
+      var eqs = d.essentialQuestions || [];
+      html += '<div class="ubd-section-title">Essential Questions' + (eqs.length ? '<span class="ubd-count-badge">' + eqs.length + '</span>' : '') + '</div>';
+      html += '<div class="ubd-dynamic-list" id="ubdEqList">';
+      for (var i = 0; i < eqs.length; i++) {
+        html += renderEqItem(i, eqs[i]);
+      }
+      html += '</div>';
+      html += '<button class="ubd-add-btn" onclick="addEssentialQuestionUbd()">+ Add Essential Question</button>';
+
+      // Duration & Status row
+      html += '<div class="ubd-section-title">Unit Details</div>';
+      html += '<div class="ubd-field-row">';
+      html += '<div class="ubd-field">';
+      html += '<label>Duration (weeks)</label>';
+      html += '<input type="number" id="ubdDuration" min="1" max="52" value="' + (d.durationWeeks || '') + '" placeholder="e.g., 6" onchange="markUbdDirty()">';
+      html += '</div>';
+      html += '<div class="ubd-field">';
+      html += '<label>Status</label>';
+      html += '<select id="ubdStatus" onchange="markUbdDirty()">';
+      var statuses = ['draft', 'in_review', 'approved', 'active', 'archived'];
+      var statusLabels = { draft: 'Draft', in_review: 'In Review', approved: 'Approved', active: 'Active', archived: 'Archived' };
+      for (var s = 0; s < statuses.length; s++) {
+        html += '<option value="' + statuses[s] + '"' + (d.status === statuses[s] ? ' selected' : '') + '>' + statusLabels[statuses[s]] + '</option>';
+      }
+      html += '</select>';
+      html += '</div>';
+      html += '</div>';
+
+      container.innerHTML = html;
+    }
+
+    /**
+     * Render a single essential question item
+     */
+    function renderEqItem(index, eq) {
+      var question = (typeof eq === 'string') ? eq : (eq.question || '');
+      var type = (typeof eq === 'object') ? (eq.type || '') : '';
+
+      var html = '<div class="ubd-dynamic-item">';
+      html += '<div class="item-fields">';
+      html += '<input type="text" placeholder="Essential question..." value="' + escapeHtml(question) + '" onchange="markUbdDirty()" data-eq-index="' + index + '" data-eq-field="question">';
+      html += '<select data-eq-index="' + index + '" data-eq-field="type" onchange="markUbdDirty()">';
+      html += '<option value=""' + (type === '' ? ' selected' : '') + '>Type...</option>';
+      html += '<option value="F"' + (type === 'F' ? ' selected' : '') + '>F - Factual</option>';
+      html += '<option value="C"' + (type === 'C' ? ' selected' : '') + '>C - Conceptual</option>';
+      html += '<option value="Z"' + (type === 'Z' ? ' selected' : '') + '>Z - Provocative</option>';
+      html += '<option value="D"' + (type === 'D' ? ' selected' : '') + '>D - Debatable</option>';
+      html += '</select>';
+      html += '</div>';
+      html += '<button class="ubd-remove-btn" onclick="removeEssentialQuestionUbd(' + index + ')" title="Remove">&times;</button>';
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * Scroll to the last item in a dynamic list, focus its first input, and flash highlight
+     */
+    function ubdScrollToNewItem(listId) {
+      setTimeout(function() {
+        var list = document.getElementById(listId);
+        if (!list) return;
+        var items = list.querySelectorAll('.ubd-dynamic-item');
+        if (items.length === 0) return;
+        var lastItem = items[items.length - 1];
+        lastItem.classList.add('ubd-item-new');
+        lastItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var firstInput = lastItem.querySelector('input[type="text"], textarea');
+        if (firstInput) firstInput.focus();
+      }, 50);
+    }
+
+    function addEssentialQuestionUbd() {
+      if (!currentUbdData) return;
+      if (!currentUbdData.essentialQuestions) currentUbdData.essentialQuestions = [];
+      currentUbdData.essentialQuestions.push({ question: '', type: '' });
+      markUbdDirty();
+      showUbdSubtab('overview');
+      ubdScrollToNewItem('ubdEqList');
+    }
+
+    function removeEssentialQuestionUbd(index) {
+      if (!currentUbdData || !currentUbdData.essentialQuestions) return;
+      currentUbdData.essentialQuestions.splice(index, 1);
+      markUbdDirty();
+      showUbdSubtab('overview');
+    }
+
+    // ================================================
+    // STAGE 1 SUB-TAB
+    // ================================================
+
+    function renderUbdStage1(container) {
+      var d = currentUbdData;
+      var s1 = d.stage1 || {};
+
+      var html = '';
+
+      // Standards Picker
+      html += '<div class="ubd-section-title">Standards</div>';
+      html += '<div class="ubd-standards-picker">';
+      if (ubdStandardsContext) {
+        var scopeLabel = ubdStandardsContext.subject || ubdStandardsContext.framework;
+        html += '<div class="ubd-std-scope" id="ubdStdScope">';
+        html += '<span class="ubd-std-scope-label">📋 Showing: <strong>' + escapeHtml(scopeLabel) + '</strong></span>';
+        html += '<a href="javascript:void(0)" class="ubd-std-scope-toggle" onclick="toggleUbdStandardsScope()">' + (ubdStandardsShowAll ? 'Filter to course' : 'Show all standards') + '</a>';
+        html += '</div>';
+      }
+      html += '<div class="ubd-standards-tags" id="ubdStandardsTags">';
+      html += renderUbdStandardTags();
+      html += '</div>';
+      html += '<input type="text" class="ubd-field" id="ubdStandardsSearch" placeholder="Search standards..." oninput="searchUbdStandards(this.value)" onfocus="searchUbdStandards(this.value)" style="width:100%; padding:6px 8px; border:1px solid #d1d5db; border-radius:4px; font-size:12px; box-sizing:border-box;">';
+      html += '<div class="ubd-standards-results" id="ubdStandardsResults"></div>';
+      html += '</div>';
+
+      // Additional Goals
+      html += '<div class="ubd-field">';
+      html += '<label>Additional Goals</label>';
+      html += '<textarea id="ubdAdditionalGoals" placeholder="Add any additional standards or goals..." onchange="markUbdDirty()">' + escapeHtml(s1.additionalGoals || '') + '</textarea>';
+      html += '</div>';
+
+      // Transfer Goals
+      html += '<div class="ubd-field">';
+      html += '<label>Transfer Goals</label>';
+      html += '<textarea id="ubdTransferGoals" placeholder="Students will be able to independently use their learning to..." onchange="markUbdDirty()">' + escapeHtml(s1.transferGoals || '') + '</textarea>';
+      html += '</div>';
+
+      // Enduring Understandings
+      html += '<div class="ubd-section-title">Understandings & Questions</div>';
+      html += '<div class="ubd-field">';
+      html += '<label>Enduring Understandings</label>';
+      html += '<textarea id="ubdEnduringUnderstandings" placeholder="Students will understand that..." style="min-height:80px;" onchange="markUbdDirty()">' + escapeHtml(s1.enduringUnderstandings || '') + '</textarea>';
+      html += '</div>';
+
+      // Knowledge
+      html += '<div class="ubd-section-title">Knowledge & Skills</div>';
+      html += '<div class="ubd-field">';
+      html += '<label>Knowledge - Students will know...</label>';
+      html += '<textarea id="ubdKnowledge" placeholder="Key knowledge students will acquire..." onchange="markUbdDirty()">' + escapeHtml(s1.knowledge || '') + '</textarea>';
+      html += '</div>';
+
+      // Skills
+      html += '<div class="ubd-field">';
+      html += '<label>Skills - Students will be able to...</label>';
+      html += '<textarea id="ubdSkills" placeholder="Key skills students will develop..." onchange="markUbdDirty()">' + escapeHtml(s1.skills || '') + '</textarea>';
+      html += '</div>';
+
+      container.innerHTML = html;
+      if (typeof updateStdScopeIndicators === 'function') updateStdScopeIndicators();
+    }
+
+    /**
+     * Render selected standard tags
+     */
+    function renderUbdStandardTags() {
+      if (!ubdSelectedStandards || ubdSelectedStandards.length === 0) {
+        return '<span style="font-size:11px; color:#94a3b8;">No standards selected</span>';
+      }
+      var html = '';
+      for (var i = 0; i < ubdSelectedStandards.length; i++) {
+        var sid = ubdSelectedStandards[i];
+        // Look up standard info from hexStandardsAllData
+        var stdInfo = findStandardById(sid);
+        var code = stdInfo ? (stdInfo.code || stdInfo.standardCode || sid) : sid;
+        html += '<span class="ubd-standard-tag">' + escapeHtml(code);
+        html += ' <span class="remove" onclick="removeUbdStandard(\'' + escapeHtml(sid) + '\')">&times;</span>';
+        html += '</span>';
+      }
+      return html;
+    }
+
+    /**
+     * Find a standard by ID from the global standards data
+     */
+    function findStandardById(id) {
+      if (!hexStandardsAllData) return null;
+      for (var i = 0; i < hexStandardsAllData.length; i++) {
+        if (hexStandardsAllData[i].standardId === id || hexStandardsAllData[i].id === id) {
+          return hexStandardsAllData[i];
+        }
+      }
+      return null;
+    }
+
+    /**
+     * Search standards for the UBD picker
+     */
+    function searchUbdStandards(query) {
+      var resultsDiv = document.getElementById('ubdStandardsResults');
+      if (!resultsDiv) return;
+
+      if (!query || query.trim().length < 2) {
+        resultsDiv.classList.remove('active');
+        return;
+      }
+
+      var term = query.toLowerCase().trim();
+      var results = [];
+      var useFilter = !ubdStandardsShowAll && ubdStandardsContext;
+      if (hexStandardsAllData) {
+        for (var i = 0; i < hexStandardsAllData.length; i++) {
+          var std = hexStandardsAllData[i];
+
+          // Pre-filter by course context if active
+          if (useFilter) {
+            var stdFw = (std.framework || '').toLowerCase();
+            if (stdFw !== ubdStandardsContext.framework.toLowerCase()) continue;
+            if (ubdStandardsContext.subject) {
+              var stdSubj = (std.subject || '').toLowerCase();
+              if (stdSubj !== ubdStandardsContext.subject.toLowerCase()) continue;
+            }
+          }
+
+          var code = (std.code || std.standardCode || '').toLowerCase();
+          var desc = (std.description || std.standardText || '').toLowerCase();
+          var subject = (std.subject || '').toLowerCase();
+          if (code.indexOf(term) > -1 || desc.indexOf(term) > -1 || subject.indexOf(term) > -1) {
+            results.push(std);
+          }
+          if (results.length >= 20) break;
+        }
+      }
+
+      if (results.length === 0) {
+        resultsDiv.innerHTML = '<div class="ubd-standard-result" style="color:#94a3b8;">No standards found</div>';
+        resultsDiv.classList.add('active');
+        return;
+      }
+
+      var html = '';
+      for (var r = 0; r < results.length; r++) {
+        var s = results[r];
+        var isSelected = ubdSelectedStandards.indexOf(s.standardId || s.id) > -1;
+        var stdId = s.standardId || s.id;
+        var stdCode = s.code || s.standardCode || stdId;
+        var stdDesc = s.description || s.standardText || '';
+        html += '<div class="ubd-standard-result' + (isSelected ? ' selected' : '') + '" ' +
+                'onclick="selectUbdStandard(\'' + escapeHtml(stdId) + '\')" ' +
+                'style="' + (isSelected ? 'background:#eff6ff;' : '') + '">';
+        html += '<span class="ubd-standard-code">' + escapeHtml(stdCode) + '</span> ';
+        html += escapeHtml(stdDesc.length > 100 ? stdDesc.substring(0, 100) + '...' : stdDesc);
+        html += '</div>';
+      }
+
+      resultsDiv.innerHTML = html;
+      resultsDiv.classList.add('active');
+    }
+
+    /**
+     * Toggle between course-filtered and all-standards scope
+     */
+    function toggleUbdStandardsScope() {
+      ubdStandardsShowAll = !ubdStandardsShowAll;
+      // Re-render the Stage 1 sub-tab to update scope indicator
+      showUbdSubtab('stage1');
+    }
+
+    /**
+     * Select/add a standard to the UBD editor
+     */
+    function selectUbdStandard(id) {
+      if (ubdSelectedStandards.indexOf(id) > -1) return; // already selected
+      ubdSelectedStandards.push(id);
+      markUbdDirty();
+
+      // Re-render tags
+      var tagsDiv = document.getElementById('ubdStandardsTags');
+      if (tagsDiv) tagsDiv.innerHTML = renderUbdStandardTags();
+
+      // Re-render search results to update highlighting
+      var searchInput = document.getElementById('ubdStandardsSearch');
+      if (searchInput && searchInput.value) {
+        searchUbdStandards(searchInput.value);
+      }
+    }
+
+    /**
+     * Remove a standard from the UBD editor
+     */
+    function removeUbdStandard(id) {
+      ubdSelectedStandards = ubdSelectedStandards.filter(function(s) { return s !== id; });
+      markUbdDirty();
+
+      var tagsDiv = document.getElementById('ubdStandardsTags');
+      if (tagsDiv) tagsDiv.innerHTML = renderUbdStandardTags();
+
+      var searchInput = document.getElementById('ubdStandardsSearch');
+      if (searchInput && searchInput.value) {
+        searchUbdStandards(searchInput.value);
+      }
+    }
+
+    // ================================================
+    // STAGE 2 SUB-TAB
+    // ================================================
+
+    function renderUbdStage2(container) {
+      var d = currentUbdData;
+      var s2 = d.stage2 || {};
+
+      var html = '';
+
+      // Performance Tasks
+      html += '<div class="ubd-section-title">Assessment Evidence</div>';
+      html += '<div class="ubd-field">';
+      html += '<label>Performance Tasks</label>';
+      html += '<textarea id="ubdPerformanceTasks" placeholder="Through what authentic performance tasks will students demonstrate understanding?" style="min-height:80px;" onchange="markUbdDirty()">' + escapeHtml(s2.performanceTasks || '') + '</textarea>';
+      html += '</div>';
+
+      // Other Evidence
+      html += '<div class="ubd-field">';
+      html += '<label>Other Evidence</label>';
+      html += '<textarea id="ubdOtherEvidence" placeholder="Through what other evidence will students demonstrate achievement?" onchange="markUbdDirty()">' + escapeHtml(s2.otherEvidence || '') + '</textarea>';
+      html += '</div>';
+
+      // Learning Intentions (dynamic list)
+      var lis = s2.learningIntentions || [];
+      html += '<div class="ubd-section-title">Learning Intentions' + (lis.length ? '<span class="ubd-count-badge">' + lis.length + '</span>' : '') + '</div>';
+      html += '<div class="ubd-dynamic-list" id="ubdLiList">';
+      for (var i = 0; i < lis.length; i++) {
+        html += renderLiItem(i, lis[i]);
+      }
+      html += '</div>';
+      html += '<button class="ubd-add-btn" onclick="addLearningIntention()">+ Add Learning Intention</button>';
+
+      container.innerHTML = html;
+    }
+
+    /**
+     * Render a single learning intention item
+     */
+    function renderLiItem(index, li) {
+      var html = '<div class="ubd-dynamic-item">';
+      html += '<div class="item-fields">';
+      html += '<input type="text" placeholder="Learning intention..." value="' + escapeHtml(li.intention || '') + '" onchange="markUbdDirty()" data-li-index="' + index + '" data-li-field="intention">';
+      html += '<textarea placeholder="Success criteria..." onchange="markUbdDirty()" data-li-index="' + index + '" data-li-field="successCriteria">' + escapeHtml(li.successCriteria || '') + '</textarea>';
+      html += '<select data-li-index="' + index + '" data-li-field="evidenceType" onchange="markUbdDirty()">';
+      html += '<option value=""' + (!li.evidenceType ? ' selected' : '') + '>Evidence type...</option>';
+      html += '<option value="formative"' + (li.evidenceType === 'formative' ? ' selected' : '') + '>Formative</option>';
+      html += '<option value="summative"' + (li.evidenceType === 'summative' ? ' selected' : '') + '>Summative</option>';
+      html += '<option value="diagnostic"' + (li.evidenceType === 'diagnostic' ? ' selected' : '') + '>Diagnostic</option>';
+      html += '<option value="peer"' + (li.evidenceType === 'peer' ? ' selected' : '') + '>Peer Assessment</option>';
+      html += '<option value="self"' + (li.evidenceType === 'self' ? ' selected' : '') + '>Self Assessment</option>';
+      html += '</select>';
+      html += '</div>';
+      html += '<button class="ubd-remove-btn" onclick="removeLearningIntention(' + index + ')" title="Remove">&times;</button>';
+      html += '</div>';
+      return html;
+    }
+
+    function addLearningIntention() {
+      if (!currentUbdData) return;
+      if (!currentUbdData.stage2) currentUbdData.stage2 = {};
+      if (!currentUbdData.stage2.learningIntentions) currentUbdData.stage2.learningIntentions = [];
+      currentUbdData.stage2.learningIntentions.push({ intention: '', successCriteria: '', evidenceType: '' });
+      markUbdDirty();
+      showUbdSubtab('stage2');
+      ubdScrollToNewItem('ubdLiList');
+    }
+
+    function removeLearningIntention(index) {
+      if (!currentUbdData || !currentUbdData.stage2 || !currentUbdData.stage2.learningIntentions) return;
+      currentUbdData.stage2.learningIntentions.splice(index, 1);
+      markUbdDirty();
+      showUbdSubtab('stage2');
+    }
+
+    // ================================================
+    // STAGE 3 SUB-TAB
+    // ================================================
+
+    function renderUbdStage3(container) {
+      var d = currentUbdData;
+      var s3 = d.stage3 || {};
+
+      var html = '';
+
+      // Learning Activities
+      html += '<div class="ubd-section-title">Learning Plan</div>';
+      html += '<div class="ubd-field">';
+      html += '<label>Learning Activities</label>';
+      html += '<textarea id="ubdLearningActivities" placeholder="What learning experiences and instruction will enable students to achieve the desired results?" style="min-height:120px;" onchange="markUbdDirty()">' + escapeHtml(s3.learningActivities || '') + '</textarea>';
+      html += '</div>';
+
+      // Resources
+      html += '<div class="ubd-field">';
+      html += '<label>Resources</label>';
+      html += '<textarea id="ubdResources" placeholder="What resources and materials are needed?" onchange="markUbdDirty()">' + escapeHtml(s3.resources || '') + '</textarea>';
+      html += '</div>';
+
+      // UDL Planning
+      html += '<div class="ubd-section-title">UDL Planning</div>';
+      var udlPrinciples = [
+        { key: 'representation', label: 'Representation (The "What")' },
+        { key: 'actionExpression', label: 'Action & Expression (The "How")' },
+        { key: 'engagement', label: 'Engagement (The "Why")' }
+      ];
+
+      // We define strategies client-side to match backend getUdlStrategies()
+      var udlStrategies = {
+        representation: [
+          'Visual aids and diagrams', 'Audio recordings and podcasts', 'Text-to-speech options',
+          'Multiple examples and non-examples', 'Highlighting key information', 'Vocabulary support',
+          'Video demonstrations', 'Graphic organizers'
+        ],
+        actionExpression: [
+          'Choice in assignment format', 'Scaffolded practice', 'Speech-to-text options',
+          'Progress monitoring tools', 'Multiple submission methods', 'Assistive technology',
+          'Collaborative work options', 'Self-assessment checklists'
+        ],
+        engagement: [
+          'Student choice and autonomy', 'Relevant real-world connections', 'Collaborative learning',
+          'Immediate feedback', 'Goal-setting opportunities', 'Varied difficulty levels',
+          'Cultural relevance', 'Gamification elements'
+        ]
+      };
+
+      for (var p = 0; p < udlPrinciples.length; p++) {
+        var principle = udlPrinciples[p];
+        var selectedStrategies = (d.udl && d.udl[principle.key]) || [];
+
+        html += '<div class="ubd-udl-section">';
+        html += '<div class="ubd-udl-principle-title">' + principle.label + '</div>';
+        html += '<div class="ubd-strategy-grid">';
+        var strategies = udlStrategies[principle.key] || [];
+        for (var si = 0; si < strategies.length; si++) {
+          var isSelected = selectedStrategies.indexOf(strategies[si]) > -1;
+          html += '<span class="ubd-strategy-chip' + (isSelected ? ' selected' : '') + '" ';
+          html += 'onclick="toggleUdlStrategy(\'' + principle.key + '\', \'' + escapeHtml(strategies[si]).replace(/'/g, "\\'") + '\')">';
+          html += (isSelected ? '&#10003; ' : '') + escapeHtml(strategies[si]);
+          html += '</span>';
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // UDL Notes
+      html += '<div class="ubd-field">';
+      html += '<label>Additional UDL Notes</label>';
+      html += '<textarea id="ubdUdlNotes" placeholder="Additional UDL considerations..." onchange="markUbdDirty()">' + escapeHtml((d.udl && d.udl.notes) || '') + '</textarea>';
+      html += '</div>';
+
+      // Vocabulary
+      var vocab = d.vocabulary || [];
+      html += '<div class="ubd-section-title">Vocabulary' + (vocab.length ? '<span class="ubd-count-badge">' + vocab.length + '</span>' : '') + '</div>';
+      html += '<div class="ubd-dynamic-list" id="ubdVocabList">';
+      for (var v = 0; v < vocab.length; v++) {
+        html += renderVocabItem(v, vocab[v]);
+      }
+      html += '</div>';
+      html += '<button class="ubd-add-btn" onclick="addVocabularyTerm()">+ Add Vocabulary Term</button>';
+
+      // Tier coverage summary
+      if (vocab.length > 0) {
+        var tierCounts = { 1: 0, 2: 0, 3: 0 };
+        for (var tc = 0; tc < vocab.length; tc++) {
+          var t = vocab[tc].tier || 3;
+          if (tierCounts[t] !== undefined) tierCounts[t]++;
+        }
+        html += '<div class="ubd-vocab-coverage">';
+        html += '<span class="ubd-vocab-tier-pill" style="background:#94a3b8;color:#fff;">T1: ' + tierCounts[1] + '</span>';
+        html += '<span class="ubd-vocab-tier-pill" style="background:#d97706;color:#fff;">T2: ' + tierCounts[2] + '</span>';
+        html += '<span class="ubd-vocab-tier-pill" style="background:#2563eb;color:#fff;">T3: ' + tierCounts[3] + '</span>';
+        if (tierCounts[2] === 0 && vocab.length >= 2) {
+          html += '<span class="ubd-vocab-coverage-hint">Consider adding Tier 2 academic vocabulary for cross-disciplinary transfer</span>';
+        }
+        html += '</div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    /**
+     * Render a single vocabulary item
+     */
+    function renderVocabItem(index, item) {
+      var html = '<div class="ubd-dynamic-item">';
+      html += '<div class="item-fields">';
+      // Row 1: Term + Tier (side by side)
+      html += '<div class="ubd-vocab-term-row">';
+      html += '<input type="text" placeholder="Term..." value="' + escapeHtml(item.term || '') + '" onchange="markUbdDirty()" data-vocab-index="' + index + '" data-vocab-field="term" style="flex:1;">';
+      html += '<select onchange="markUbdDirty()" data-vocab-index="' + index + '" data-vocab-field="tier" class="ubd-vocab-tier-select" aria-label="Vocabulary tier">';
+      var tiers = [{v:1,l:'T1: Everyday'},{v:2,l:'T2: Academic'},{v:3,l:'T3: Domain'}];
+      for (var t = 0; t < tiers.length; t++) {
+        var sel = ((item.tier || 3) === tiers[t].v) ? ' selected' : '';
+        html += '<option value="' + tiers[t].v + '"' + sel + '>' + tiers[t].l + '</option>';
+      }
+      html += '</select>';
+      html += '</div>';
+      // Row 2: Definition
+      html += '<textarea placeholder="Definition..." onchange="markUbdDirty()" data-vocab-index="' + index + '" data-vocab-field="definition">' + escapeHtml(item.definition || '') + '</textarea>';
+      // Row 3: Simplified Definition (optional, for EAL)
+      html += '<input type="text" placeholder="Simplified definition for EAL beginners (optional)..." value="' + escapeHtml(item.simplifiedDefinition || '') + '" onchange="markUbdDirty()" data-vocab-index="' + index + '" data-vocab-field="simplifiedDefinition" maxlength="300" class="ubd-vocab-simplified-input">';
+      // Row 4: Context
+      html += '<input type="text" placeholder="Unit context..." value="' + escapeHtml(item.context || '') + '" onchange="markUbdDirty()" data-vocab-index="' + index + '" data-vocab-field="context">';
+      html += '</div>';
+      html += '<button class="ubd-remove-btn" onclick="removeVocabularyTerm(' + index + ')" title="Remove">&times;</button>';
+      html += '</div>';
+      return html;
+    }
+
+    function addVocabularyTerm() {
+      if (!currentUbdData) return;
+      if (!currentUbdData.vocabulary) currentUbdData.vocabulary = [];
+      currentUbdData.vocabulary.push({ term: '', definition: '', context: '', tier: 3, simplifiedDefinition: '' });
+      markUbdDirty();
+      showUbdSubtab('stage3');
+      ubdScrollToNewItem('ubdVocabList');
+    }
+
+    function removeVocabularyTerm(index) {
+      if (!currentUbdData || !currentUbdData.vocabulary) return;
+      currentUbdData.vocabulary.splice(index, 1);
+      markUbdDirty();
+      showUbdSubtab('stage3');
+    }
+
+    /**
+     * Toggle a UDL strategy chip
+     */
+    function toggleUdlStrategy(principle, strategy) {
+      if (!currentUbdData) return;
+      if (!currentUbdData.udl) currentUbdData.udl = { representation: [], actionExpression: [], engagement: [], notes: '' };
+      if (!currentUbdData.udl[principle]) currentUbdData.udl[principle] = [];
+
+      var arr = currentUbdData.udl[principle];
+      var idx = arr.indexOf(strategy);
+      if (idx > -1) {
+        arr.splice(idx, 1);
+      } else {
+        arr.push(strategy);
+      }
+      markUbdDirty();
+      showUbdSubtab('stage3');
+    }
+
+    // ================================================
+    // FORM DATA COLLECTION (Phase 5)
+    // ================================================
+
+    /**
+     * Collect all form field data into a UBD data object.
+     * Reads from DOM inputs for the currently active sub-tab,
+     * and preserves data from other sub-tabs in currentUbdData.
+     */
+    function collectUbdFormData() {
+      if (!currentUbdData) return null;
+      var d = currentUbdData;
+
+      // Overview fields
+      var bigIdea = document.getElementById('ubdBigIdea');
+      if (bigIdea) d.bigIdea = bigIdea.value;
+      var story = document.getElementById('ubdStoryOfTheUnit');
+      if (story) d.storyOfTheUnit = story.value;
+      var duration = document.getElementById('ubdDuration');
+      if (duration) d.durationWeeks = duration.value ? parseInt(duration.value, 10) : null;
+      var status = document.getElementById('ubdStatus');
+      if (status) d.status = status.value;
+
+      // Essential Questions - read from DOM
+      var eqInputs = document.querySelectorAll('[data-eq-field="question"]');
+      if (eqInputs.length > 0) {
+        d.essentialQuestions = [];
+        for (var i = 0; i < eqInputs.length; i++) {
+          var idx = parseInt(eqInputs[i].getAttribute('data-eq-index'), 10);
+          var typeSelect = document.querySelector('[data-eq-index="' + idx + '"][data-eq-field="type"]');
+          d.essentialQuestions.push({
+            question: eqInputs[i].value,
+            type: typeSelect ? typeSelect.value : ''
+          });
+        }
+      }
+
+      // Ensure sub-objects exist before writing
+      if (!d.stage1) d.stage1 = {};
+      if (!d.stage2) d.stage2 = {};
+      if (!d.stage3) d.stage3 = {};
+      if (!d.udl) d.udl = { representation: [], actionExpression: [], engagement: [], notes: '' };
+
+      // Stage 1 fields
+      var addGoals = document.getElementById('ubdAdditionalGoals');
+      if (addGoals) d.stage1.additionalGoals = addGoals.value;
+      var transfer = document.getElementById('ubdTransferGoals');
+      if (transfer) d.stage1.transferGoals = transfer.value;
+      var enduring = document.getElementById('ubdEnduringUnderstandings');
+      if (enduring) d.stage1.enduringUnderstandings = enduring.value;
+      var knowledge = document.getElementById('ubdKnowledge');
+      if (knowledge) d.stage1.knowledge = knowledge.value;
+      var skills = document.getElementById('ubdSkills');
+      if (skills) d.stage1.skills = skills.value;
+      // Standards
+      d.stage1.standardIds = ubdSelectedStandards.slice();
+
+      // Stage 2 fields
+      var perfTasks = document.getElementById('ubdPerformanceTasks');
+      if (perfTasks) d.stage2.performanceTasks = perfTasks.value;
+      var otherEv = document.getElementById('ubdOtherEvidence');
+      if (otherEv) d.stage2.otherEvidence = otherEv.value;
+
+      // Learning Intentions - read from DOM
+      var liInputs = document.querySelectorAll('[data-li-field="intention"]');
+      if (liInputs.length > 0) {
+        d.stage2.learningIntentions = [];
+        for (var li = 0; li < liInputs.length; li++) {
+          var liIdx = parseInt(liInputs[li].getAttribute('data-li-index'), 10);
+          var scEl = document.querySelector('[data-li-index="' + liIdx + '"][data-li-field="successCriteria"]');
+          var etEl = document.querySelector('[data-li-index="' + liIdx + '"][data-li-field="evidenceType"]');
+          d.stage2.learningIntentions.push({
+            intention: liInputs[li].value,
+            successCriteria: scEl ? scEl.value : '',
+            evidenceType: etEl ? etEl.value : ''
+          });
+        }
+      }
+
+      // Stage 3 fields
+      var activities = document.getElementById('ubdLearningActivities');
+      if (activities) d.stage3.learningActivities = activities.value;
+      var resources = document.getElementById('ubdResources');
+      if (resources) d.stage3.resources = resources.value;
+
+      // UDL Notes
+      var udlNotes = document.getElementById('ubdUdlNotes');
+      if (udlNotes) d.udl.notes = udlNotes.value;
+
+      // Vocabulary - read from DOM
+      var vocabInputs = document.querySelectorAll('[data-vocab-field="term"]');
+      if (vocabInputs.length > 0) {
+        d.vocabulary = [];
+        for (var vi = 0; vi < vocabInputs.length; vi++) {
+          var vIdx = parseInt(vocabInputs[vi].getAttribute('data-vocab-index'), 10);
+          var defEl = document.querySelector('[data-vocab-index="' + vIdx + '"][data-vocab-field="definition"]');
+          var ctxEl = document.querySelector('[data-vocab-index="' + vIdx + '"][data-vocab-field="context"]');
+          var tierEl = document.querySelector('[data-vocab-index="' + vIdx + '"][data-vocab-field="tier"]');
+          var simpEl = document.querySelector('[data-vocab-index="' + vIdx + '"][data-vocab-field="simplifiedDefinition"]');
+          d.vocabulary.push({
+            term: vocabInputs[vi].value,
+            definition: defEl ? defEl.value : '',
+            context: ctxEl ? ctxEl.value : '',
+            tier: tierEl ? parseInt(tierEl.value, 10) || 3 : 3,
+            simplifiedDefinition: simpEl ? simpEl.value : ''
+          });
+        }
+      }
+
+      return d;
+    }
+
+    // ================================================
+    // SAVE, VALIDATE, EXPORT (Phase 5)
+    // ================================================
+
+    /**
+     * Save UBD plan
+     */
+    function saveUbdPlan() {
+      var data = collectUbdFormData();
+      if (!data || !currentUbdUnitId) {
+        showToast('No UBD data to save', 'error');
+        return;
+      }
+
+      showToast('Saving UBD plan...', 'info');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          ubdEditorDirty = false;
+          showToast('UBD plan saved! (' + result.completeness + '% complete)', 'success');
+
+          // Update the browser panel badge
+          if (ubdPlannerData && ubdPlannerData.courses) {
+            for (var c = 0; c < ubdPlannerData.courses.length; c++) {
+              for (var u = 0; u < ubdPlannerData.courses[c].units.length; u++) {
+                if (ubdPlannerData.courses[c].units[u].unitId === currentUbdUnitId) {
+                  ubdPlannerData.courses[c].units[u].completeness = result.completeness;
+                  ubdPlannerData.courses[c].units[u].ubdStatus = data.status || 'draft';
+                }
+              }
+            }
+            renderUbdBrowser();
+          }
+
+          // Update progress bar in editor
+          var activeSubtab = document.querySelector('.ubd-subtab.active');
+          if (activeSubtab && activeSubtab.getAttribute('data-subtab') === 'overview') {
+            showUbdSubtab('overview');
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error saving: ' + err.message, 'error');
+        })
+        .saveUbdPlannerData(currentUbdUnitId, data);
+    }
+
+    /**
+     * Validate UBD plan
+     */
+    function validateUbdPlan() {
+      var data = collectUbdFormData();
+      if (!data) {
+        showToast('No UBD data to validate', 'error');
+        return;
+      }
+
+      showToast('Validating...', 'info');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          // Show validation results in editor body
+          var body = document.getElementById('ubdEditorBody');
+          if (!body) return;
+
+          var html = '<div class="ubd-validation-results ' + (result.valid ? 'valid' : 'invalid') + '">';
+          html += '<div style="font-weight:600; margin-bottom:8px;">' + (result.valid ? '&#10003; Plan is valid!' : '&#10007; Validation issues found') + '</div>';
+
+          if (result.errors && result.errors.length > 0) {
+            for (var e = 0; e < result.errors.length; e++) {
+              html += '<div class="ubd-validation-item error">&#10007; ' + escapeHtml(result.errors[e]) + '</div>';
+            }
+          }
+          if (result.warnings && result.warnings.length > 0) {
+            for (var w = 0; w < result.warnings.length; w++) {
+              html += '<div class="ubd-validation-item warning">&#9888; ' + escapeHtml(result.warnings[w]) + '</div>';
+            }
+          }
+          if (result.valid && (!result.warnings || result.warnings.length === 0)) {
+            html += '<div class="ubd-validation-item" style="color:#16a34a;">All required fields are complete.</div>';
+          }
+          html += '</div>';
+
+          // Prepend to current body content
+          body.insertAdjacentHTML('afterbegin', html);
+
+          showToast(result.valid ? 'Validation passed!' : 'Validation found issues', result.valid ? 'success' : 'error');
+        })
+        .withFailureHandler(function(err) {
+          showToast('Error validating: ' + err.message, 'error');
+        })
+        .validateUbdData(data);
+    }
+
+    /**
+     * Export UBD plan to Google Doc
+     */
+    function exportUbdPlan() {
+      if (!currentUbdMeta || !currentUbdMeta.mapId) {
+        showToast('No linked map to export', 'error');
+        return;
+      }
+
+      // Save first if dirty
+      if (ubdEditorDirty) {
+        showToast('Saving before export...', 'info');
+        var data = collectUbdFormData();
+        google.script.run
+          .withSuccessHandler(function() {
+            ubdEditorDirty = false;
+            doExport();
+          })
+          .withFailureHandler(function(err) {
+            showToast('Error saving before export: ' + err.message, 'error');
+          })
+          .saveUbdPlannerData(currentUbdUnitId, data);
+      } else {
+        doExport();
+      }
+
+      function doExport() {
+        showToast('Exporting to Google Doc...', 'info');
+        google.script.run
+          .withSuccessHandler(function(url) {
+            showToast('Export complete! Opening document...', 'success');
+            window.open(url, '_blank');
+          })
+          .withFailureHandler(function(err) {
+            showToast('Error exporting: ' + err.message, 'error');
+          })
+          .exportUbdToDoc(currentUbdMeta.mapId);
+      }
+    }
+
+    // ================================================
+    // UTILITY FUNCTIONS
+    // ================================================
+
+    /**
+     * Mark the editor as having unsaved changes
+     */
+    function markUbdDirty() {
+      ubdEditorDirty = true;
+    }
+
+    /**
+     * Close the UBD editor panel
+     * @param {boolean} force - If true, skip unsaved changes prompt (used by Escape key)
+     */
+    function closeUbdEditor(force) {
+      var panel = document.getElementById('ubdEditorPanel');
+      if (!panel || !panel.classList.contains('active')) return; // Not open, nothing to do
+
+      if (!force && ubdEditorDirty) {
+        if (!confirm('You have unsaved changes. Close the editor and discard changes?')) {
+          return;
+        }
+      }
+
+      panel.classList.remove('active');
+      currentUbdUnitId = null;
+      currentUbdData = null;
+      currentUbdMeta = null;
+      ubdSelectedStandards = [];
+      ubdEditorDirty = false;
+      ubdStandardsContext = null;
+      ubdStandardsShowAll = false;
+
+      // Remove selection highlight
+      var allItems = document.querySelectorAll('.ubd-unit-item');
+      for (var i = 0; i < allItems.length; i++) {
+        allItems[i].classList.remove('selected');
+      }
+    }
+
+    /**
+     * Open the linked map in the Map Builder tab
+     */
+    function openMapFromUbd() {
+      if (!currentUbdMeta || !currentUbdMeta.mapId) return;
+
+      // Switch to builder tab and load the map
+      var builderTab = document.querySelector('[data-view="builder"]');
+      if (builderTab) {
+        switchTab(builderTab);
+        // Find and load the map
+        if (mapsData) {
+          for (var i = 0; i < mapsData.length; i++) {
+            if (mapsData[i].mapId === currentUbdMeta.mapId) {
+              loadMapIntoBuilder(mapsData[i]);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    /**
+     * Calculate completeness client-side (mirrors backend logic)
+     */
+    function calculateClientCompleteness() {
+      if (!currentUbdData) return 0;
+      var d = currentUbdData;
+
+      var checks = [
+        { value: d.bigIdea, type: 'string' },
+        { value: d.essentialQuestions, type: 'array' },
+        { value: d.storyOfTheUnit, type: 'string' },
+        { value: d.stage1 ? d.stage1.enduringUnderstandings : '', type: 'string' },
+        { value: d.stage1 ? d.stage1.knowledge : '', type: 'string' },
+        { value: d.stage1 ? d.stage1.skills : '', type: 'string' },
+        { value: d.stage1 ? d.stage1.standardIds : [], type: 'array' },
+        { value: d.stage2 ? d.stage2.performanceTasks : '', type: 'string' },
+        { value: d.stage2 ? d.stage2.otherEvidence : '', type: 'string' },
+        { value: d.stage2 ? d.stage2.learningIntentions : [], type: 'array' },
+        { value: d.stage3 ? d.stage3.learningActivities : '', type: 'string' },
+        { value: d.stage3 ? d.stage3.resources : '', type: 'string' }
+      ];
+
+      var completed = 0;
+      for (var i = 0; i < checks.length; i++) {
+        var check = checks[i];
+        if (check.type === 'array') {
+          if (check.value && check.value.length > 0) completed++;
+        } else {
+          if (check.value && check.value.trim && check.value.trim() !== '') completed++;
+        }
+      }
+
+      return Math.round((completed / checks.length) * 100);
+    }
+
+    /**
+     * Get progress bar color based on percentage
+     */
+    function getProgressColor(pct) {
+      if (pct >= 100) return '#16a34a';
+      if (pct >= 50) return '#3b82f6';
+      if (pct > 0) return '#f59e0b';
+      return '#e2e8f0';
+    }
+
+    // ================================================
+    // REPORT SUB-TAB
+    // ================================================
+
+    function renderUbdReport(container) {
+      if (!currentUbdMeta || !currentUbdUnitId) {
+        container.innerHTML = '<div class="ubd-no-map-state"><p>Select a unit to view its report.</p></div>';
+        return;
+      }
+      if (!currentUbdMeta.mapId) {
+        container.innerHTML = '<div class="ubd-no-map-state"><p>This unit has no linked map. Link a map first to generate a report.</p></div>';
+        return;
+      }
+
+      // Use cached data if available for same unit
+      if (ubdReportData && ubdReportData._unitId === currentUbdUnitId) {
+        renderUbdReportContent(container, ubdReportData);
+        return;
+      }
+
+      container.innerHTML = '<div class="ubd-no-map-state"><span class="loading-spinner"></span> Loading unit report...</div>';
+
+      var expectedUnitId = currentUbdUnitId;
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (currentUbdUnitId !== expectedUnitId) return;
+          data._unitId = expectedUnitId;
+          ubdReportData = data;
+          var body = document.getElementById('ubdEditorBody');
+          if (body) renderUbdReportContent(body, data);
+        })
+        .withFailureHandler(function(err) {
+          if (currentUbdUnitId !== expectedUnitId) return;
+          var body = document.getElementById('ubdEditorBody');
+          if (body) body.innerHTML = '<div class="ubd-no-map-state"><p style="color:#dc2626;">Error: ' + escapeHtml(err.message) + '</p></div>';
+        })
+        .getUnitReport(currentUbdUnitId);
+    }
+
+    function renderUbdReportContent(container, data) {
+      if (!data || !data.unit) {
+        container.innerHTML = '<div class="ubd-no-map-state"><p>No report data available.</p></div>';
+        return;
+      }
+
+      var html = '<div style="padding:4px 0;">';
+
+      // Stat cards
+      var coveragePct = data.coverage ? (data.coverage.coveragePercent || 0) : 0;
+      var coverageColor = coveragePct >= 80 ? '#16a34a' : (coveragePct >= 50 ? '#3b82f6' : '#f59e0b');
+
+      html += '<div class="ubd-report-cards">';
+      html += '<div class="ubd-report-card"><div class="ubd-report-value">' + data.summary.totalLessons + '</div><div class="ubd-report-label">Lessons</div></div>';
+      html += '<div class="ubd-report-card"><div class="ubd-report-value">' + data.summary.totalHexesUsed + '</div><div class="ubd-report-label">Hexes Used</div></div>';
+      html += '<div class="ubd-report-card"><div class="ubd-report-value">' + data.summary.totalStandards + '</div><div class="ubd-report-label">Standards</div></div>';
+      html += '<div class="ubd-report-card"><div class="ubd-report-value" style="color:' + coverageColor + ';">' + coveragePct + '%</div><div class="ubd-report-label">Coverage</div></div>';
+      html += '</div>';
+
+      // Lesson table
+      html += '<div class="ubd-section-title" style="margin-top:14px;">Lessons</div>';
+      if (data.lessons && data.lessons.length > 0) {
+        html += '<table class="ubd-report-table"><thead><tr>';
+        html += '<th>#</th><th>Title</th><th>Duration</th><th>Hexes</th><th>Standards</th><th>Status</th>';
+        html += '</tr></thead><tbody>';
+        for (var i = 0; i < data.lessons.length; i++) {
+          var l = data.lessons[i];
+          var statusClass = l.status === 'active' ? 'color:#16a34a;' : (l.status === 'draft' ? 'color:#64748b;' : '');
+          html += '<tr>';
+          html += '<td>' + (l.sequence || '') + '</td>';
+          html += '<td>' + escapeHtml(l.title || '') + '</td>';
+          html += '<td>' + escapeHtml(l.duration || '\u2014') + '</td>';
+          html += '<td>' + (l.hexCount || 0) + '</td>';
+          html += '<td>' + (l.standardCount || 0) + '</td>';
+          html += '<td style="' + statusClass + '">' + escapeHtml(l.status || 'draft') + '</td>';
+          html += '</tr>';
+        }
+        html += '</tbody></table>';
+      } else {
+        html += '<div style="color:#94a3b8; font-size:13px; padding:8px 0;">No lessons in this unit.</div>';
+      }
+
+      // Standards section
+      if (data.summary.standards && data.summary.standards.length > 0) {
+        html += '<div class="ubd-section-title" style="margin-top:14px;">Linked Standards (' + data.summary.standards.length + ')</div>';
+        for (var s = 0; s < data.summary.standards.length; s++) {
+          var std = data.summary.standards[s];
+          var code = std.code || std.standardCode || std.standardId || '';
+          var desc = std.description || std.standardText || '';
+          html += '<div class="ubd-report-std">';
+          html += '<span class="ubd-report-std-code">' + escapeHtml(code) + '</span>';
+          if (desc) html += '<span class="ubd-report-std-desc">' + escapeHtml(desc.length > 100 ? desc.substring(0, 97) + '...' : desc) + '</span>';
+          html += '</div>';
+        }
+      }
+
+      // Coverage gaps
+      if (data.coverage && data.coverage.gaps && data.coverage.gaps.length > 0) {
+        html += '<div class="ubd-section-title" style="margin-top:14px; color:#dc2626;">Gap Standards (' + data.coverage.gaps.length + ')</div>';
+        for (var g = 0; g < data.coverage.gaps.length; g++) {
+          var gap = data.coverage.gaps[g];
+          var gCode = gap.code || gap.standardCode || gap.standardId || '';
+          var gDesc = gap.description || gap.standardText || '';
+          html += '<div class="ubd-report-std ubd-report-gap">';
+          html += '<span class="ubd-report-std-code">' + escapeHtml(gCode) + '</span>';
+          if (gDesc) html += '<span class="ubd-report-std-desc">' + escapeHtml(gDesc.length > 100 ? gDesc.substring(0, 97) + '...' : gDesc) + '</span>';
+          html += '</div>';
+        }
+      }
+
+      // Export button
+      html += '<div style="margin-top:16px; text-align:right;">';
+      html += '<button class="btn btn-outline" onclick="exportUnitReport()">&#128196; Export to Google Doc</button>';
+      html += '</div>';
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function exportUnitReport() {
+      if (!currentUbdUnitId) return;
+      showToast('Generating report document...', 'info');
+      var expectedUnitId = currentUbdUnitId;
+      google.script.run
+        .withSuccessHandler(function(url) {
+          if (currentUbdUnitId !== expectedUnitId) return;
+          if (url) {
+            window.open(url, '_blank');
+            showToast('Report exported! Opening Google Doc.', 'success');
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (currentUbdUnitId !== expectedUnitId) return;
+          showToast('Export failed: ' + err.message, 'error');
+        })
+        .exportUnitReportToDoc(currentUbdUnitId);
+    }
+
+    console.log('=== UBD PLANNER MODULE READY ===');
+</script>

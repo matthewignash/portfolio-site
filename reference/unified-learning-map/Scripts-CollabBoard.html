@@ -1,0 +1,1636 @@
+<script>
+// ============================================================================
+// COLLABSPACE — BOARD VIEW — colab- prefix
+// Board view lifecycle, 3 layout modes, post composer, post cards,
+// comments, reactions, moderation, columns layout
+// ES5 only — no const, let, =>, template literals, .includes()
+// ============================================================================
+
+// Client-side constants
+var COLAB_REACTION_EMOJIS = {
+  thumbsup: '\uD83D\uDC4D',
+  heart:    '\u2764\uFE0F',
+  lightbulb:'\uD83D\uDCA1',
+  clap:     '\uD83D\uDC4F',
+  check:    '\u2705'
+};
+
+var COLAB_BOARD_COLUMNS = {
+  labgroup: ['Hypothesis', 'Data', 'Analysis', 'Conclusion'],
+  project:  ['To Do', 'In Progress', 'Done', 'Review']
+};
+
+var COLAB_REACTION_LABELS = {
+  thumbsup: 'thumbs up',
+  heart: 'heart',
+  lightbulb: 'lightbulb',
+  clap: 'clap',
+  check: 'check'
+};
+
+
+// ================================================
+// CORE LIFECYCLE
+// ================================================
+
+function colabOpenBoard(boardId) {
+  if (!boardId) return;
+  colabCurrentBoardId = boardId;
+  colabBoardViewLoading = true;
+  colabBoardViewData = null;
+
+  var container = document.getElementById('colabBoardListContainer');
+  if (container) {
+    container.innerHTML = '<div class="colab-board-loading">'
+      + '<div class="colab-board-spinner"></div>'
+      + '<div style="margin-top:12px;color:#64748b;">Loading board\u2026</div>'
+      + '</div>';
+  }
+
+  var expectedId = boardId;
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabBoardViewLoading = false;
+      colabBoardViewData = data;
+      colabRenderBoardView();
+      // Focus back button for keyboard users
+      var backBtn = document.querySelector('.colab-back-btn');
+      if (backBtn) backBtn.focus();
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabBoardViewLoading = false;
+      var c = document.getElementById('colabBoardListContainer');
+      if (c) {
+        c.innerHTML = '<div class="colab-board-error">'
+          + '<button class="colab-back-btn" onclick="colabCloseBoardView()">\u2190 Back to Boards</button>'
+          + '<div style="margin-top:16px;color:#ef4444;">'
+          + escapeHtml(friendlyError(err)) + '</div></div>';
+      }
+    })
+    .getBoardData(boardId);
+}
+
+
+function colabCloseBoardView() {
+  colabCurrentBoardId = null;
+  colabBoardViewData = null;
+  colabBoardViewLoading = false;
+  colabComposerOpen = false;
+  colabComposerAnon = false;
+  colabExpandedComments = {};
+  colabOpenMenuPostId = null;
+  colabSaving = false;
+  colabColumnOrder = [];
+  colabSelectedColor = '';
+
+  colabRenderBoardList();
+}
+
+
+function colabRefreshBoard() {
+  if (!colabCurrentBoardId) return;
+  var preserveComments = {};
+  for (var k in colabExpandedComments) {
+    if (colabExpandedComments.hasOwnProperty(k)) {
+      preserveComments[k] = colabExpandedComments[k];
+    }
+  }
+
+  var expectedId = colabCurrentBoardId;
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabBoardViewData = data;
+      colabExpandedComments = preserveComments;
+      colabRenderBoardView();
+    })
+    .withFailureHandler(function(err) {
+      showToast(friendlyError(err), 'error');
+    })
+    .getBoardData(colabCurrentBoardId);
+}
+
+
+// ================================================
+// BOARD VIEW RENDERER
+// ================================================
+
+function colabRenderBoardView() {
+  var container = document.getElementById('colabBoardListContainer');
+  if (!container || !colabBoardViewData) return;
+
+  var data = colabBoardViewData;
+  var board = data.board;
+  var role = data.memberRole;
+  var isModeratorPlus = (role === 'owner' || role === 'moderator');
+
+  var typeInfo = COLAB_TYPE_MAP[board.boardType] || COLAB_TYPE_MAP.freeform;
+  var layoutInfo = COLAB_LAYOUT_MAP[board.layoutMode] || COLAB_LAYOUT_MAP.wall;
+
+  // Count pending posts (moderator info)
+  var pendingCount = 0;
+  if (isModeratorPlus && board.postApproval === 'required') {
+    for (var pi = 0; pi < data.posts.length; pi++) {
+      if (!data.posts[pi].isApproved) pendingCount++;
+    }
+  }
+
+  // Count members
+  var memberCount = 0;
+  // We don't have members in getBoardData — just show the type
+
+  var html = '';
+
+  // Header bar
+  html += '<div class="colab-board-header">';
+  html += '<button class="colab-back-btn" onclick="colabCloseBoardView()">\u2190 Back to Boards</button>';
+  html += '<div class="colab-board-title-row">';
+  html += '<h2 class="colab-board-title">' + escapeHtml(board.title) + '</h2>';
+  html += '<span class="colab-board-type-badge">' + typeInfo.icon + ' ' + escapeHtml(typeInfo.label) + '</span>';
+  html += '<span class="colab-board-layout-badge">' + layoutInfo.icon + ' ' + escapeHtml(layoutInfo.label) + '</span>';
+  if (isModeratorPlus) {
+    html += '<button class="colab-settings-btn" onclick="colabOpenSettingsFromBoard()" title="Board Settings" aria-label="Board settings" aria-haspopup="dialog">&#9881;&#65039;</button>';
+  }
+  html += '</div>';
+  if (board.description) {
+    html += '<p class="colab-board-description">' + escapeHtml(board.description) + '</p>';
+  }
+  html += '</div>';
+
+  // Moderation bar
+  if (pendingCount > 0 && isModeratorPlus) {
+    html += '<div class="colab-moderation-bar">';
+    html += '<span>\u26A0\uFE0F ' + pendingCount + ' post' + (pendingCount !== 1 ? 's' : '') + ' pending approval</span>';
+    html += '</div>';
+  }
+
+  // Composer toggle
+  if (role !== 'viewer') {
+    html += '<div class="colab-composer-toggle-bar">';
+    html += '<button class="colab-composer-toggle-btn" onclick="colabToggleComposer()" aria-expanded="' + (colabComposerOpen ? 'true' : 'false') + '">'
+      + (colabComposerOpen ? '\u2716 Close' : '\u270F\uFE0F New Post') + '</button>';
+    if (isModeratorPlus) {
+      html += '<button class="cbm-members-btn" onclick="cbmOpenManager()" title="Board Members" aria-label="Manage board members">\uD83D\uDC65 Members</button>';
+    }
+    html += '<button class="colab-refresh-btn" onclick="colabRefreshBoard()" title="Refresh" aria-label="Refresh board">\uD83D\uDD04</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="colab-composer-toggle-bar">';
+    html += '<button class="colab-refresh-btn" onclick="colabRefreshBoard()" title="Refresh" aria-label="Refresh board">\uD83D\uDD04</button>';
+    html += '</div>';
+  }
+
+  // Composer (if open)
+  if (colabComposerOpen) {
+    html += colabRenderComposer(board, role);
+  }
+
+  // Layout dispatch
+  var layout = board.layoutMode || 'stream';
+  if (layout === 'wall') {
+    html += colabRenderWallLayout(data, board, role);
+  } else if (layout === 'columns') {
+    html += colabRenderColumnsLayout(data, board, role);
+  } else {
+    html += colabRenderStreamLayout(data, board, role);
+  }
+
+  // Empty state
+  if (data.posts.length === 0) {
+    html += '<div class="colab-empty-board">'
+      + '<div class="colab-empty-board-icon">\uD83D\uDCAC</div>'
+      + '<div>No posts yet. Be the first to contribute!</div>'
+      + '</div>';
+  }
+
+  container.innerHTML = html;
+
+  // Attach event listeners for reaction buttons (data-* pattern, not inline onclick)
+  colabAttachReactionListeners();
+  colabAttachCommentListeners();
+  colabAttachMenuListeners();
+  colabAttachColumnListeners();
+  colabAttachMenuKeyListeners();
+  colabAttachComposerKeyListeners();
+}
+
+
+// ================================================
+// POST COMPOSER
+// ================================================
+
+function colabRenderComposer(board, role) {
+  var html = '<div class="colab-composer">';
+  html += '<textarea id="colabComposerText" class="colab-composer-textarea" '
+    + 'placeholder="Write your post\u2026" maxlength="2000" '
+    + 'oninput="colabUpdateComposerCharCount()"></textarea>';
+  html += '<div class="colab-composer-char" id="colabComposerCharCount">0 / 2000</div>';
+
+  // Link fields (toggle)
+  html += '<div class="colab-composer-link-toggle">';
+  html += '<button type="button" class="colab-composer-link-btn" onclick="colabToggleComposerLink()">\uD83D\uDD17 Add Link</button>';
+  html += '</div>';
+  html += '<div class="colab-composer-link-fields" id="colabComposerLinkFields" style="display:none;">';
+  html += '<input type="text" id="colabComposerLinkUrl" class="colab-composer-input" placeholder="https://..." maxlength="500" />';
+  html += '<input type="text" id="colabComposerLinkLabel" class="colab-composer-input" placeholder="Link label (optional)" maxlength="100" />';
+  html += '</div>';
+
+  // Color tag chips (wall/columns layouts)
+  var layout = board.layoutMode || 'stream';
+  if (layout === 'wall' || layout === 'columns') {
+    html += '<div class="colab-color-chips">';
+    html += '<span class="colab-color-chips-label">Color:</span>';
+    var colors = ['yellow', 'blue', 'green', 'pink', 'purple', 'orange', 'gray'];
+    for (var ci = 0; ci < colors.length; ci++) {
+      html += '<button type="button" class="colab-color-chip" data-color="' + colors[ci]
+        + '" onclick="colabSelectColor(\'' + colors[ci] + '\')"'
+        + ' style="background:' + colabGetColorValue(colors[ci]) + ';"'
+        + ' aria-label="' + colors[ci].charAt(0).toUpperCase() + colors[ci].substring(1) + ' color"'
+        + '></button>';
+    }
+    html += '<button type="button" class="colab-color-chip colab-color-none" '
+      + 'onclick="colabSelectColor(\'\')" title="No color" aria-label="No color">\u2716</button>';
+    html += '</div>';
+  }
+
+  // Column selector (columns layout)
+  if (layout === 'columns') {
+    var cols = colabGetColumnsForBoard(board, colabBoardViewData ? colabBoardViewData.posts : []);
+    html += '<div class="colab-column-select">';
+    html += '<label>Column: </label>';
+    html += '<select id="colabComposerColumn" class="colab-composer-select">';
+    for (var coli = 0; coli < cols.length; coli++) {
+      var sel = (colabColumnOrder.length > 0 && colabColumnOrder[0] === cols[coli]) ? ' selected' : '';
+      html += '<option value="' + escapeHtml(cols[coli]) + '"' + sel + '>' + escapeHtml(cols[coli]) + '</option>';
+    }
+    html += '</select>';
+    html += '</div>';
+  }
+
+  // Anonymous checkbox
+  if (board.allowAnonymous) {
+    html += '<label class="colab-anon-check">';
+    html += '<input type="checkbox" id="colabComposerAnon" ' + (colabComposerAnon ? 'checked' : '') + ' onchange="colabComposerAnon=this.checked" />';
+    html += ' Post anonymously';
+    html += '</label>';
+  }
+
+  // Footer
+  html += '<div class="colab-composer-footer">';
+  html += '<button class="colab-composer-submit" onclick="colabSubmitPost()"' + (colabSaving ? ' disabled aria-disabled="true"' : '') + '>Post</button>';
+  html += '<button class="colab-composer-cancel" onclick="colabToggleComposer()">Cancel</button>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+
+function colabToggleComposer() {
+  colabComposerOpen = !colabComposerOpen;
+  colabRenderBoardView();
+  // Focus management: textarea when opening, toggle button when closing
+  if (colabComposerOpen) {
+    var textarea = document.getElementById('colabComposerText');
+    if (textarea) textarea.focus();
+  } else {
+    var toggleBtn = document.querySelector('.colab-composer-toggle-btn');
+    if (toggleBtn) toggleBtn.focus();
+  }
+}
+
+
+function colabToggleComposerLink() {
+  var fields = document.getElementById('colabComposerLinkFields');
+  if (fields) {
+    fields.style.display = fields.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+
+function colabUpdateComposerCharCount() {
+  var textarea = document.getElementById('colabComposerText');
+  var counter = document.getElementById('colabComposerCharCount');
+  if (textarea && counter) {
+    counter.textContent = textarea.value.length + ' / 2000';
+  }
+}
+
+
+function colabSelectColor(color) {
+  // Store selected color for submit
+  colabSelectedColor = color;
+  // Highlight active chip
+  var chips = document.querySelectorAll('.colab-color-chip');
+  for (var i = 0; i < chips.length; i++) {
+    var chipColor = chips[i].getAttribute('data-color') || '';
+    if (chipColor === color) {
+      chips[i].classList.add('active');
+    } else {
+      chips[i].classList.remove('active');
+    }
+  }
+  // Clear selection for "none"
+  if (!color) {
+    for (var j = 0; j < chips.length; j++) {
+      chips[j].classList.remove('active');
+    }
+  }
+}
+// colabSelectedColor declared in Scripts-Core.html with other colab* state vars
+
+
+function colabGetColorValue(tag) {
+  var map = {
+    yellow: '#fef3c7', blue: '#dbeafe', green: '#d1fae5',
+    pink: '#fce7f3', purple: '#ede9fe', orange: '#ffedd5', gray: '#f1f5f9'
+  };
+  return map[tag] || '#ffffff';
+}
+
+
+function colabSubmitPost() {
+  if (colabSaving) return;
+  var textarea = document.getElementById('colabComposerText');
+  if (!textarea || !textarea.value.trim()) {
+    showToast('Please write something before posting.', 'error');
+    return;
+  }
+
+  var postData = {
+    contentText: textarea.value.trim(),
+    contentType: 'text',
+    colorTag: colabSelectedColor || '',
+    anonymous: colabComposerAnon
+  };
+
+  // Link fields
+  var linkUrlEl = document.getElementById('colabComposerLinkUrl');
+  var linkLabelEl = document.getElementById('colabComposerLinkLabel');
+  if (linkUrlEl && linkUrlEl.value.trim()) {
+    postData.linkUrl = linkUrlEl.value.trim();
+    postData.linkLabel = linkLabelEl ? linkLabelEl.value.trim() : '';
+  }
+
+  // Column (columns layout)
+  var colSelect = document.getElementById('colabComposerColumn');
+  if (colSelect) {
+    postData.columnLabel = colSelect.value;
+  }
+
+  colabSaving = true;
+  var expectedId = colabCurrentBoardId;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      colabComposerOpen = false;
+      colabSelectedColor = '';
+      showToast('Post created!', 'success');
+      colabRefreshBoard();
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast(friendlyError(err), 'error');
+    })
+    .createPost(colabCurrentBoardId, postData);
+}
+
+
+// ================================================
+// STREAM LAYOUT
+// ================================================
+
+function colabRenderStreamLayout(data, board, role) {
+  var posts = colabSortPosts(data.posts);
+  if (posts.length === 0) return '';
+
+  var html = '<div class="colab-stream">';
+  for (var i = 0; i < posts.length; i++) {
+    html += colabRenderPostCard(posts[i], data, board, role);
+  }
+  html += '</div>';
+  return html;
+}
+
+
+// ================================================
+// WALL LAYOUT
+// ================================================
+
+function colabRenderWallLayout(data, board, role) {
+  var posts = colabSortPosts(data.posts);
+  if (posts.length === 0) return '';
+
+  var html = '<div class="colab-wall-grid">';
+  for (var i = 0; i < posts.length; i++) {
+    html += colabRenderPostCard(posts[i], data, board, role);
+  }
+  html += '</div>';
+  return html;
+}
+
+
+// ================================================
+// COLUMNS LAYOUT
+// ================================================
+
+function colabGetColumnsForBoard(board, posts) {
+  // Determine columns: persisted JSON > template defaults > post labels > fallback
+  var cols = [];
+
+  // Priority 1: custom columns from defaultColumnsJson
+  if (board.defaultColumnsJson) {
+    try {
+      var parsed = JSON.parse(board.defaultColumnsJson);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        cols = parsed.slice();
+      }
+    } catch (e) {
+      // Fall through to template defaults
+    }
+  }
+
+  // Priority 2: hardcoded template defaults
+  if (cols.length === 0) {
+    var boardType = board.boardType || '';
+    if (COLAB_BOARD_COLUMNS[boardType]) {
+      cols = COLAB_BOARD_COLUMNS[boardType].slice();
+    }
+  }
+
+  // Add any extra columns from existing posts
+  var seen = {};
+  for (var i = 0; i < cols.length; i++) seen[cols[i]] = true;
+  for (var j = 0; j < posts.length; j++) {
+    var cl = posts[j].columnLabel || '';
+    if (cl && !seen[cl]) {
+      cols.push(cl);
+      seen[cl] = true;
+    }
+  }
+
+  if (cols.length === 0) cols = ['Uncategorized'];
+  return cols;
+}
+
+
+function colabRenderColumnsLayout(data, board, role) {
+  var posts = data.posts;
+  var cols = colabGetColumnsForBoard(board, posts);
+  colabColumnOrder = cols;
+
+  // Group posts by column
+  var columnPosts = {};
+  for (var ci = 0; ci < cols.length; ci++) columnPosts[cols[ci]] = [];
+
+  for (var pi = 0; pi < posts.length; pi++) {
+    var colLabel = posts[pi].columnLabel || cols[0];
+    if (!columnPosts[colLabel]) {
+      columnPosts[colLabel] = [];
+    }
+    columnPosts[colLabel].push(posts[pi]);
+  }
+
+  var html = '<div class="colab-columns-container">';
+  for (var k = 0; k < cols.length; k++) {
+    var colName = cols[k];
+    var colPosts = colabSortPosts(columnPosts[colName] || []);
+
+    html += '<div class="colab-column">';
+    html += '<div class="colab-column-header">';
+    html += '<span class="colab-column-title">' + escapeHtml(colName) + '</span>';
+    html += '<span class="colab-column-count">' + colPosts.length + '</span>';
+    html += '</div>';
+
+    html += '<div class="colab-column-posts">';
+    for (var cp = 0; cp < colPosts.length; cp++) {
+      html += colabRenderPostCard(colPosts[cp], data, board, role);
+    }
+    html += '</div>';
+
+    // Add post button in column (data-* pattern to avoid XSS with user-created column names)
+    if (role !== 'viewer') {
+      html += '<button class="colab-column-add-btn" data-add-column="' + escapeHtml(colName) + '" aria-label="Add post to ' + escapeHtml(colName) + '">'
+        + '+ Add Post</button>';
+    }
+
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+function colabSetComposerColumn(columnLabel) {
+  colabColumnOrder = [columnLabel];
+  colabComposerOpen = true;
+  colabRenderBoardView();
+  // Scroll to composer and focus textarea
+  var composer = document.querySelector('.colab-composer');
+  if (composer) composer.scrollIntoView({ behavior: 'smooth' });
+  var ta = document.getElementById('colabComposerText');
+  if (ta) ta.focus();
+}
+
+
+function colabMovePostToColumn(postId, newColumnLabel) {
+  if (colabSaving) return;
+  colabSaving = true;
+  var expectedId = colabCurrentBoardId;
+
+  // Optimistic local update
+  if (colabBoardViewData) {
+    for (var i = 0; i < colabBoardViewData.posts.length; i++) {
+      if (String(colabBoardViewData.posts[i].postId) === String(postId)) {
+        colabBoardViewData.posts[i].columnLabel = newColumnLabel;
+        break;
+      }
+    }
+    colabRenderBoardView();
+  }
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast(friendlyError(err), 'error');
+      colabRefreshBoard();
+    })
+    .updatePost(postId, { columnLabel: newColumnLabel });
+}
+
+
+// ================================================
+// POST CARD
+// ================================================
+
+function colabRenderPostCard(post, data, board, role) {
+  var isModeratorPlus = (role === 'owner' || role === 'moderator');
+  var isAuthor = userData && post.authorEmail &&
+    String(post.authorEmail).toLowerCase() === String(userData.email).toLowerCase();
+
+  var postId = escapeHtml(String(post.postId));
+  var classes = 'colab-post-card';
+  if (post.isPinned) classes += ' pinned';
+  if (!post.isApproved) classes += ' pending';
+  if (post.colorTag) classes += ' colab-color-' + escapeHtml(post.colorTag);
+
+  var html = '<div class="' + classes + '" data-post-id="' + postId + '" role="article">';
+
+  // Header
+  html += '<div class="colab-post-header">';
+  html += '<span class="colab-post-author">'
+    + (post.isPinned ? '\uD83D\uDCCC ' : '')
+    + escapeHtml(post.authorName || 'Unknown') + '</span>';
+  html += '<span class="colab-post-date">' + colabRelativeDate(post.createdAt) + '</span>';
+
+  // Actions menu (dots button)
+  if (isAuthor || isModeratorPlus) {
+    html += '<div class="colab-post-actions-wrapper">';
+    html += '<button class="colab-post-actions-btn" data-menu-post="' + postId + '" aria-label="Post options" aria-expanded="' + (String(colabOpenMenuPostId) === String(post.postId) ? 'true' : 'false') + '">\u22EF</button>';
+    html += '<div class="colab-post-actions-menu" id="colabMenu_' + postId + '" style="display:none;" role="menu" aria-label="Post actions">';
+    if (isAuthor || isModeratorPlus) {
+      html += '<button role="menuitem" data-action="delete" data-action-post="' + postId + '">Delete</button>';
+    }
+    if (isModeratorPlus) {
+      html += '<button role="menuitem" data-action="pin" data-action-post="' + postId + '">'
+        + (post.isPinned ? 'Unpin' : 'Pin') + '</button>';
+      if (!post.isApproved) {
+        html += '<button role="menuitem" data-action="approve" data-action-post="' + postId + '">Approve</button>';
+      }
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Pending badge
+  if (!post.isApproved) {
+    html += '<div class="colab-post-pending-badge">\u23F3 Pending Approval</div>';
+  }
+
+  // Content
+  html += '<div class="colab-post-content">'
+    + escapeHtml(post.contentText || '').replace(/\n/g, '<br>')
+    + '</div>';
+
+  // Link attachment
+  if (post.linkUrl) {
+    html += '<div class="colab-post-link">';
+    html += '<a href="' + escapeHtml(post.linkUrl) + '" target="_blank" rel="noopener noreferrer">'
+      + '\uD83D\uDD17 ' + escapeHtml(post.linkLabel || post.linkUrl) + '</a>';
+    html += '</div>';
+  }
+
+  // Reactions bar
+  html += colabRenderReactions(post, data);
+
+  // Comments toggle
+  var commentCount = colabCountComments(post.postId, data);
+  html += '<button class="colab-comments-toggle" data-toggle-comments="' + postId + '"'
+    + ' aria-expanded="' + (colabExpandedComments[post.postId] ? 'true' : 'false') + '"'
+    + ' aria-label="Toggle ' + commentCount + ' comment' + (commentCount !== 1 ? 's' : '') + '">'
+    + '\uD83D\uDCAC Comments (' + commentCount + ')</button>';
+
+  // Comments section (if expanded)
+  if (colabExpandedComments[post.postId]) {
+    html += colabRenderCommentThread(post.postId, data, board, role);
+  }
+
+  html += '</div>';
+  return html;
+}
+
+
+// ================================================
+// REACTIONS
+// ================================================
+
+function colabRenderReactions(post, data) {
+  var postId = String(post.postId);
+  var userEmail = (userData && userData.email) ? userData.email.toLowerCase() : '';
+
+  // Count reactions by type for this post
+  var counts = {};
+  var userReacted = {};
+  var types = ['thumbsup', 'heart', 'lightbulb', 'clap', 'check'];
+
+  for (var t = 0; t < types.length; t++) {
+    counts[types[t]] = 0;
+    userReacted[types[t]] = false;
+  }
+
+  for (var ri = 0; ri < data.reactions.length; ri++) {
+    var r = data.reactions[ri];
+    if (String(r.postId) === postId) {
+      var rType = r.reactionType;
+      if (counts[rType] !== undefined) {
+        counts[rType]++;
+        if (String(r.authorEmail).toLowerCase() === userEmail) {
+          userReacted[rType] = true;
+        }
+      }
+    }
+  }
+
+  var html = '<div class="colab-reactions" id="colabReactions_' + escapeHtml(postId) + '" aria-live="polite">';
+  for (var ti = 0; ti < types.length; ti++) {
+    var type = types[ti];
+    var emoji = COLAB_REACTION_EMOJIS[type] || type;
+    var count = counts[type];
+    var active = userReacted[type];
+    var reactionLabel = COLAB_REACTION_LABELS[type] || type;
+
+    var btnClass = 'colab-reaction-btn';
+    if (active) btnClass += ' active';
+    if (count === 0) btnClass += ' zero';
+
+    html += '<button class="' + btnClass + '" data-reaction-post="' + escapeHtml(postId)
+      + '" data-reaction-type="' + type + '"'
+      + ' aria-label="React with ' + reactionLabel + (active ? ' (selected)' : '') + '">'
+      + emoji + (count > 0 ? ' ' + count : '')
+      + '</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+
+function colabToggleReaction(postId, reactionType) {
+  if (colabSaving) return;
+
+  // Optimistic UI update
+  if (colabBoardViewData) {
+    var userEmail = (userData && userData.email) ? userData.email.toLowerCase() : '';
+    var found = false;
+
+    for (var i = 0; i < colabBoardViewData.reactions.length; i++) {
+      var r = colabBoardViewData.reactions[i];
+      if (String(r.postId) === String(postId) &&
+          String(r.reactionType) === reactionType &&
+          String(r.authorEmail).toLowerCase() === userEmail) {
+        // Remove it locally
+        colabBoardViewData.reactions.splice(i, 1);
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      // Add it locally
+      colabBoardViewData.reactions.push({
+        reactionId: 'temp_' + Date.now(),
+        postId: String(postId),
+        boardId: colabCurrentBoardId,
+        authorEmail: userEmail,
+        reactionType: reactionType,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    // Re-render just the reactions bar for this post
+    var reactionsEl = document.getElementById('colabReactions_' + postId);
+    if (reactionsEl) {
+      // Find the post
+      for (var pi = 0; pi < colabBoardViewData.posts.length; pi++) {
+        if (String(colabBoardViewData.posts[pi].postId) === String(postId)) {
+          var tempDiv = document.createElement('div');
+          tempDiv.innerHTML = colabRenderReactions(colabBoardViewData.posts[pi], colabBoardViewData);
+          var newReactions = tempDiv.querySelector('.colab-reactions');
+          if (newReactions) {
+            reactionsEl.parentNode.replaceChild(newReactions, reactionsEl);
+            colabAttachReactionListeners();
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // Fire RPC
+  var expectedId = colabCurrentBoardId;
+  google.script.run
+    .withSuccessHandler(function() {
+      if (colabCurrentBoardId !== expectedId) return;
+      // Already updated optimistically
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      showToast(friendlyError(err), 'error');
+      colabRefreshBoard(); // Revert on failure
+    })
+    .toggleReaction(colabCurrentBoardId, postId, reactionType);
+}
+
+
+// ================================================
+// COMMENTS
+// ================================================
+
+function colabCountComments(postId, data) {
+  var count = 0;
+  for (var i = 0; i < data.comments.length; i++) {
+    if (String(data.comments[i].postId) === String(postId)) count++;
+  }
+  return count;
+}
+
+
+function colabToggleComments(postId) {
+  if (colabExpandedComments[postId]) {
+    delete colabExpandedComments[postId];
+  } else {
+    colabExpandedComments[postId] = true;
+  }
+  colabRenderBoardView();
+}
+
+
+function colabRenderCommentThread(postId, data, board, role) {
+  var isModeratorPlus = (role === 'owner' || role === 'moderator');
+  var userEmail = (userData && userData.email) ? userData.email.toLowerCase() : '';
+
+  // Get comments for this post, sorted oldest first
+  var comments = [];
+  for (var i = 0; i < data.comments.length; i++) {
+    if (String(data.comments[i].postId) === String(postId)) {
+      comments.push(data.comments[i]);
+    }
+  }
+  comments.sort(function(a, b) {
+    return (a.createdAt || '').localeCompare(b.createdAt || '');
+  });
+
+  var html = '<div class="colab-comment-thread">';
+
+  for (var ci = 0; ci < comments.length; ci++) {
+    var c = comments[ci];
+    var isCommentAuthor = String(c.authorEmail).toLowerCase() === userEmail;
+    var commentId = escapeHtml(String(c.commentId));
+
+    html += '<div class="colab-comment">';
+    html += '<div class="colab-comment-header">';
+    html += '<span class="colab-comment-author">' + escapeHtml(c.authorName || 'Unknown') + '</span>';
+    html += '<span class="colab-comment-date">' + colabRelativeDate(c.createdAt) + '</span>';
+    if (isCommentAuthor || isModeratorPlus) {
+      html += '<button class="colab-comment-delete" data-del-comment="' + commentId + '" title="Delete" aria-label="Delete comment">\u2716</button>';
+    }
+    html += '</div>';
+    html += '<div class="colab-comment-text">' + escapeHtml(c.contentText || '').replace(/\n/g, '<br>') + '</div>';
+    html += '</div>';
+  }
+
+  // Comment input
+  if (role !== 'viewer') {
+    var safePostId = escapeHtml(String(postId));
+    html += '<div class="colab-comment-input">';
+    html += '<textarea id="colabCommentText_' + safePostId + '" class="colab-comment-textarea" '
+      + 'placeholder="Write a comment\u2026" maxlength="1000"></textarea>';
+    html += '<button class="colab-comment-submit" data-submit-comment="' + safePostId + '"' + (colabSaving ? ' disabled aria-disabled="true"' : '') + '>Reply</button>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+
+function colabSubmitComment(postId) {
+  if (colabSaving) return;
+  var textarea = document.getElementById('colabCommentText_' + postId);
+  if (!textarea || !textarea.value.trim()) {
+    showToast('Please write a comment.', 'error');
+    return;
+  }
+
+  var text = textarea.value.trim();
+  colabSaving = true;
+  var expectedId = colabCurrentBoardId;
+
+  // Preserve expanded state for this post
+  colabExpandedComments[postId] = true;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      colabRefreshBoard();
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast(friendlyError(err), 'error');
+    })
+    .createComment(colabCurrentBoardId, postId, text);
+}
+
+
+function colabDeleteComment(commentId) {
+  if (!confirm('Delete this comment?')) return;
+  if (colabSaving) return;
+  colabSaving = true;
+  var expectedId = colabCurrentBoardId;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      colabRefreshBoard();
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast(friendlyError(err), 'error');
+    })
+    .deleteComment(commentId);
+}
+
+
+// ================================================
+// POST ACTIONS
+// ================================================
+
+function colabDeletePost(postId) {
+  if (!confirm('Delete this post?')) return;
+  if (colabSaving) return;
+  colabSaving = true;
+  var expectedId = colabCurrentBoardId;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast('Post deleted.', 'success');
+      colabRefreshBoard();
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast(friendlyError(err), 'error');
+    })
+    .deletePost(postId);
+}
+
+
+function colabPinPost(postId) {
+  if (colabSaving) return;
+  colabSaving = true;
+  var expectedId = colabCurrentBoardId;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast(result.isPinned ? 'Post pinned!' : 'Post unpinned.', 'success');
+      colabRefreshBoard();
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast(friendlyError(err), 'error');
+    })
+    .pinPost(postId);
+}
+
+
+function colabApprovePost(postId) {
+  if (colabSaving) return;
+  colabSaving = true;
+  var expectedId = colabCurrentBoardId;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast('Post approved!', 'success');
+      colabRefreshBoard();
+    })
+    .withFailureHandler(function(err) {
+      if (colabCurrentBoardId !== expectedId) return;
+      colabSaving = false;
+      showToast(friendlyError(err), 'error');
+    })
+    .approvePost(postId);
+}
+
+
+// ================================================
+// EVENT LISTENER ATTACHMENT (no inline onclick for XSS safety)
+// ================================================
+
+function colabAttachReactionListeners() {
+  var btns = document.querySelectorAll('.colab-reaction-btn');
+  for (var i = 0; i < btns.length; i++) {
+    (function(btn) {
+      // Avoid duplicate listeners by cloning
+      var newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var pid = newBtn.getAttribute('data-reaction-post');
+        var rtype = newBtn.getAttribute('data-reaction-type');
+        if (pid && rtype) colabToggleReaction(pid, rtype);
+      });
+    })(btns[i]);
+  }
+}
+
+
+function colabAttachCommentListeners() {
+  // Comment toggle buttons
+  var toggles = document.querySelectorAll('[data-toggle-comments]');
+  for (var i = 0; i < toggles.length; i++) {
+    (function(btn) {
+      var newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var pid = newBtn.getAttribute('data-toggle-comments');
+        if (pid) colabToggleComments(pid);
+      });
+    })(toggles[i]);
+  }
+
+  // Comment submit buttons
+  var submits = document.querySelectorAll('[data-submit-comment]');
+  for (var j = 0; j < submits.length; j++) {
+    (function(btn) {
+      var newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var pid = newBtn.getAttribute('data-submit-comment');
+        if (pid) colabSubmitComment(pid);
+      });
+    })(submits[j]);
+  }
+
+  // Comment delete buttons
+  var deletes = document.querySelectorAll('[data-del-comment]');
+  for (var k = 0; k < deletes.length; k++) {
+    (function(btn) {
+      var newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var cid = newBtn.getAttribute('data-del-comment');
+        if (cid) colabDeleteComment(cid);
+      });
+    })(deletes[k]);
+  }
+}
+
+
+function colabAttachMenuListeners() {
+  // Three-dot menu toggle buttons
+  var menuBtns = document.querySelectorAll('[data-menu-post]');
+  for (var i = 0; i < menuBtns.length; i++) {
+    (function(btn) {
+      var newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var pid = newBtn.getAttribute('data-menu-post');
+        colabTogglePostMenu(pid);
+      });
+    })(menuBtns[i]);
+  }
+
+  // Action buttons inside menus
+  var actions = document.querySelectorAll('[data-action]');
+  for (var j = 0; j < actions.length; j++) {
+    (function(btn) {
+      var newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var action = newBtn.getAttribute('data-action');
+        var pid = newBtn.getAttribute('data-action-post');
+        if (!pid) return;
+        if (action === 'delete') colabDeletePost(pid);
+        else if (action === 'pin') colabPinPost(pid);
+        else if (action === 'approve') colabApprovePost(pid);
+      });
+    })(actions[j]);
+  }
+}
+
+
+function colabAttachColumnListeners() {
+  var addBtns = document.querySelectorAll('[data-add-column]');
+  for (var i = 0; i < addBtns.length; i++) {
+    (function(btn) {
+      var newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var col = newBtn.getAttribute('data-add-column');
+        if (col) colabSetComposerColumn(col);
+      });
+    })(addBtns[i]);
+  }
+}
+
+
+function colabAttachMenuKeyListeners() {
+  var menuDivs = document.querySelectorAll('.colab-post-actions-menu');
+  for (var mi = 0; mi < menuDivs.length; mi++) {
+    (function(menuDiv) {
+      menuDiv.addEventListener('keydown', function(e) {
+        var items = menuDiv.querySelectorAll('[role="menuitem"]');
+        if (!items.length) return;
+        var idx = -1;
+        for (var fi = 0; fi < items.length; fi++) {
+          if (items[fi] === document.activeElement) { idx = fi; break; }
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          var next = (idx + 1) % items.length;
+          items[next].focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          // Wraps to last item per WAI-ARIA menu keyboard pattern
+          var prev = (idx - 1 + items.length) % items.length;
+          items[prev].focus();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          var pid = menuDiv.id.replace('colabMenu_', '');
+          colabTogglePostMenu(pid);
+        }
+      });
+    })(menuDivs[mi]);
+  }
+}
+
+
+function colabAttachComposerKeyListeners() {
+  var ta = document.getElementById('colabComposerText');
+  if (ta) {
+    ta.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        colabSubmitPost();
+      }
+    });
+  }
+}
+
+
+function colabTogglePostMenu(postId) {
+  // Close all open menus first + sync their aria-expanded
+  var menus = document.querySelectorAll('.colab-post-actions-menu');
+  for (var i = 0; i < menus.length; i++) {
+    var menuPostId = menus[i].id.replace('colabMenu_', '');
+    if (menuPostId !== postId) {
+      menus[i].style.display = 'none';
+      var otherTrigger = document.querySelector('[data-menu-post="' + menuPostId + '"]');
+      if (otherTrigger) otherTrigger.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  var menu = document.getElementById('colabMenu_' + postId);
+  if (menu) {
+    var isOpening = menu.style.display === 'none';
+    menu.style.display = isOpening ? 'block' : 'none';
+
+    // Sync aria-expanded on trigger
+    var triggerBtn = document.querySelector('[data-menu-post="' + postId + '"]');
+    if (triggerBtn) triggerBtn.setAttribute('aria-expanded', isOpening ? 'true' : 'false');
+
+    // Focus management + track open menu
+    if (isOpening) {
+      colabOpenMenuPostId = postId;
+      var firstItem = menu.querySelector('[role="menuitem"]');
+      if (firstItem) firstItem.focus();
+    } else {
+      colabOpenMenuPostId = null;
+      if (triggerBtn) triggerBtn.focus();
+    }
+  }
+}
+
+
+// Close menus on outside click
+document.addEventListener('click', function() {
+  // Return focus to trigger before clearing state
+  if (colabOpenMenuPostId) {
+    var openTrigger = document.querySelector('[data-menu-post="' + colabOpenMenuPostId + '"]');
+    if (openTrigger) openTrigger.focus();
+  }
+  var menus = document.querySelectorAll('.colab-post-actions-menu');
+  for (var i = 0; i < menus.length; i++) {
+    menus[i].style.display = 'none';
+  }
+  // Sync aria-expanded on all triggers
+  var triggers = document.querySelectorAll('[data-menu-post]');
+  for (var j = 0; j < triggers.length; j++) {
+    triggers[j].setAttribute('aria-expanded', 'false');
+  }
+  colabOpenMenuPostId = null;
+});
+
+
+// ================================================
+// HELPERS
+// ================================================
+
+function colabSortPosts(posts) {
+  // Pinned first, then newest first
+  var pinned = [];
+  var regular = [];
+  for (var i = 0; i < posts.length; i++) {
+    if (posts[i].isPinned) {
+      pinned.push(posts[i]);
+    } else {
+      regular.push(posts[i]);
+    }
+  }
+
+  var sortByDate = function(a, b) {
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  };
+
+  pinned.sort(sortByDate);
+  regular.sort(sortByDate);
+
+  return pinned.concat(regular);
+}
+
+
+function colabRelativeDate(isoStr) {
+  if (!isoStr) return '';
+  try {
+    var d = new Date(isoStr);
+    var now = new Date();
+    var diffMs = now.getTime() - d.getTime();
+    var diffSec = Math.floor(diffMs / 1000);
+    var diffMin = Math.floor(diffSec / 60);
+    var diffHr = Math.floor(diffMin / 60);
+    var diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return diffMin + 'm ago';
+    if (diffHr < 24) return diffHr + 'h ago';
+    if (diffDay === 1) return 'Yesterday';
+    if (diffDay < 7) return diffDay + 'd ago';
+
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[d.getMonth()] + ' ' + d.getDate();
+  } catch (e) {
+    return '';
+  }
+}
+
+
+// ================================================
+// BOARD MEMBER MANAGEMENT (cbm- prefix)
+// ================================================
+
+var CBM_ROLE_COLORS = {
+  owner: '#7c3aed',
+  moderator: '#0d9488',
+  member: '#64748b',
+  viewer: '#94a3b8'
+};
+
+/**
+ * cbmOpenManager — Open the member management modal
+ */
+function cbmOpenManager() {
+  if (!colabBoardViewData) return;
+  var overlay = document.getElementById('cbmOverlay');
+  if (!overlay) {
+    overlay = cbmCreateOverlayContainer();
+  }
+  colabMemberManagerOpen = true;
+  overlay.style.display = 'flex';
+  cbmLoadMembers();
+}
+
+/**
+ * cbmCreateOverlayContainer — Lazy-init the overlay DOM element
+ */
+function cbmCreateOverlayContainer() {
+  var el = document.createElement('div');
+  el.id = 'cbmOverlay';
+  el.className = 'cbm-overlay';
+  el.style.display = 'none';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-label', 'Board member manager');
+  el.onclick = function(e) { if (e.target === el) cbmCloseManager(); };
+  el.onkeydown = function(e) { if (e.key === 'Tab') a11yTrapFocus(el, e); };
+  document.body.appendChild(el);
+  return el;
+}
+
+/**
+ * cbmCloseManager — Close the member management modal
+ */
+function cbmCloseManager() {
+  colabMemberManagerOpen = false;
+  colabMemberData = null;
+  colabMemberSaving = false;
+  var overlay = document.getElementById('cbmOverlay');
+  if (overlay) overlay.style.display = 'none';
+  var btn = document.querySelector('.cbm-members-btn');
+  if (btn) btn.focus();
+}
+
+/**
+ * cbmLoadMembers — Load member list via RPC
+ */
+function cbmLoadMembers() {
+  var overlay = document.getElementById('cbmOverlay');
+  if (!overlay || !colabBoardViewData) return;
+  var boardId = colabBoardViewData.board.boardId;
+  var expectedId = boardId;
+  overlay.innerHTML = '<div class="cbm-modal"><div class="cbm-modal-header">'
+    + '<span class="cbm-modal-title">\uD83D\uDC65 Board Members</span>'
+    + '<button class="cbm-close-btn" onclick="cbmCloseManager()" aria-label="Close member manager">&times;</button>'
+    + '</div><div class="cbm-modal-body"><div style="text-align:center;padding:24px;color:#94a3b8;">Loading members\u2026</div></div></div>';
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!colabMemberManagerOpen || !colabBoardViewData || colabBoardViewData.board.boardId !== expectedId) return;
+      colabMemberData = data || [];
+      cbmRenderManager();
+    })
+    .withFailureHandler(function(err) {
+      if (!colabMemberManagerOpen || !colabBoardViewData || colabBoardViewData.board.boardId !== expectedId) return;
+      overlay = document.getElementById('cbmOverlay');
+      if (overlay) {
+        overlay.innerHTML = '<div class="cbm-modal"><div class="cbm-modal-header">'
+          + '<span class="cbm-modal-title">\uD83D\uDC65 Board Members</span>'
+          + '<button class="cbm-close-btn" onclick="cbmCloseManager()" aria-label="Close">&times;</button>'
+          + '</div><div class="cbm-modal-body"><div style="text-align:center;padding:24px;color:#ef4444;">Failed to load members: ' + escapeHtml(friendlyError(err)) + '</div></div></div>';
+      }
+    })
+    .getBoardMembers(boardId);
+}
+
+/**
+ * cbmRenderManager — Render the full modal content
+ */
+function cbmRenderManager() {
+  var overlay = document.getElementById('cbmOverlay');
+  if (!overlay || !colabMemberData || !colabBoardViewData) return;
+  var currentRole = colabBoardViewData.memberRole || '';
+  var isOwner = (currentRole === 'owner');
+  var members = colabMemberData;
+
+  var html = '<div class="cbm-modal">';
+  html += '<div class="cbm-modal-header">';
+  html += '<span class="cbm-modal-title">\uD83D\uDC65 Board Members (' + members.length + ')</span>';
+  html += '<button class="cbm-close-btn" onclick="cbmCloseManager()" aria-label="Close member manager">&times;</button>';
+  html += '</div>';
+  html += '<div class="cbm-modal-body">';
+
+  // Member list
+  if (members.length === 0) {
+    html += '<div style="text-align:center;padding:16px;color:#94a3b8;">No members found.</div>';
+  } else {
+    for (var i = 0; i < members.length; i++) {
+      html += cbmRenderMemberRow(members[i], isOwner);
+    }
+  }
+
+  // Add section (owner only)
+  if (isOwner) {
+    html += '<div class="cbm-add-section">';
+    html += '<div class="cbm-add-title">Add Member</div>';
+
+    // Manual add
+    html += '<div class="cbm-manual-row">';
+    html += '<input type="email" id="cbmManualEmail" class="cbm-manual-input" placeholder="Email address">';
+    html += '<select id="cbmManualRole" class="cbm-role-select"><option value="member">Member</option><option value="viewer">Viewer</option><option value="moderator">Moderator</option></select>';
+    html += '<button class="cbm-add-btn" onclick="cbmAddManual()"' + (colabMemberSaving ? ' disabled' : '') + '>Add</button>';
+    html += '</div>';
+
+    // Roster picker (if board has classId)
+    var classId = colabBoardViewData.board.classId;
+    if (classId) {
+      html += '<button class="cbm-roster-toggle" onclick="cbmToggleRosterPicker()" aria-label="Add from class roster" aria-expanded="false">\u25B6 Add from Class Roster</button>';
+      html += '<div id="cbmRosterPickerContainer"></div>';
+    }
+
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+  overlay.innerHTML = html;
+  // Focus close button for keyboard/screen reader users
+  setTimeout(function() {
+    var closeBtn = overlay.querySelector('.cbm-close-btn');
+    if (closeBtn) closeBtn.focus();
+  }, 50);
+}
+
+/**
+ * cbmRenderMemberRow — Render a single member row
+ */
+function cbmRenderMemberRow(member, isOwner) {
+  var email = member.memberEmail || '';
+  var role = member.memberRole || 'member';
+  var initial = email.charAt(0).toUpperCase();
+  var color = CBM_ROLE_COLORS[role] || '#64748b';
+  var roleLabel = role.charAt(0).toUpperCase() + role.substring(1);
+
+  var html = '<div class="cbm-member-row">';
+  html += '<div class="cbm-member-avatar" style="background:' + color + ';">' + escapeHtml(initial) + '</div>';
+  html += '<div class="cbm-member-info"><div class="cbm-member-email">' + escapeHtml(email) + '</div></div>';
+
+  if (role === 'owner') {
+    html += '<span class="cbm-role-badge cbm-role-owner">' + escapeHtml(roleLabel) + '</span>';
+  } else if (isOwner) {
+    // Role dropdown
+    html += '<select class="cbm-role-select" onchange="cbmChangeRole(\'' + escapeHtml(email) + '\', this.value)"' + (colabMemberSaving ? ' disabled' : '') + '>';
+    var roles = ['moderator', 'member', 'viewer'];
+    for (var i = 0; i < roles.length; i++) {
+      html += '<option value="' + roles[i] + '"' + (roles[i] === role ? ' selected' : '') + '>' + roles[i].charAt(0).toUpperCase() + roles[i].substring(1) + '</option>';
+    }
+    html += '</select>';
+    // Remove button
+    html += '<button class="cbm-remove-btn" onclick="cbmRemoveMember(\'' + escapeHtml(email) + '\')" title="Remove member"' + (colabMemberSaving ? ' disabled' : '') + '>\uD83D\uDDD1</button>';
+  } else {
+    // Moderator view — read-only badge
+    html += '<span class="cbm-role-badge cbm-role-' + escapeHtml(role) + '">' + escapeHtml(roleLabel) + '</span>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * cbmIsExistingMember — Check if email is already a member
+ */
+function cbmIsExistingMember(email) {
+  if (!colabMemberData) return false;
+  var normalizedEmail = String(email).toLowerCase().trim();
+  for (var i = 0; i < colabMemberData.length; i++) {
+    if (String(colabMemberData[i].memberEmail).toLowerCase().trim() === normalizedEmail) return true;
+  }
+  return false;
+}
+
+/**
+ * cbmChangeRole — Change a member's role
+ */
+function cbmChangeRole(email, newRole) {
+  if (colabMemberSaving || !colabBoardViewData) return;
+  var boardId = colabBoardViewData.board.boardId;
+  colabMemberSaving = true;
+  google.script.run
+    .withSuccessHandler(function() {
+      colabMemberSaving = false;
+      // Update local data
+      if (colabMemberData) {
+        for (var i = 0; i < colabMemberData.length; i++) {
+          if (String(colabMemberData[i].memberEmail).toLowerCase() === String(email).toLowerCase()) {
+            colabMemberData[i].memberRole = newRole;
+            break;
+          }
+        }
+      }
+      cbmRenderManager();
+      showToast('Role updated', 'success');
+    })
+    .withFailureHandler(function(err) {
+      colabMemberSaving = false;
+      cbmRenderManager();
+      showToast('Failed to change role: ' + escapeHtml(friendlyError(err)), 'error');
+    })
+    .changeMemberRole(boardId, email, newRole);
+}
+
+/**
+ * cbmRemoveMember — Remove a member from the board
+ */
+function cbmRemoveMember(email) {
+  if (colabMemberSaving || !colabBoardViewData) return;
+  if (!confirm('Remove ' + email + ' from this board?')) return;
+  var boardId = colabBoardViewData.board.boardId;
+  colabMemberSaving = true;
+  google.script.run
+    .withSuccessHandler(function() {
+      colabMemberSaving = false;
+      // Remove from local data
+      if (colabMemberData) {
+        colabMemberData = colabMemberData.filter(function(m) {
+          return String(m.memberEmail).toLowerCase() !== String(email).toLowerCase();
+        });
+      }
+      cbmRenderManager();
+      showToast('Member removed', 'success');
+    })
+    .withFailureHandler(function(err) {
+      colabMemberSaving = false;
+      cbmRenderManager();
+      showToast('Failed to remove: ' + escapeHtml(friendlyError(err)), 'error');
+    })
+    .removeBoardMember(boardId, email);
+}
+
+/**
+ * cbmAddManual — Add a member by email
+ */
+function cbmAddManual() {
+  if (colabMemberSaving || !colabBoardViewData) return;
+  var emailEl = document.getElementById('cbmManualEmail');
+  var roleEl = document.getElementById('cbmManualRole');
+  if (!emailEl || !roleEl) return;
+  var email = emailEl.value.trim();
+  var role = roleEl.value || 'member';
+  if (!email) { showToast('Enter an email address', 'error'); return; }
+  if (cbmIsExistingMember(email)) { showToast('Already a member', 'error'); return; }
+  var boardId = colabBoardViewData.board.boardId;
+  colabMemberSaving = true;
+  google.script.run
+    .withSuccessHandler(function() {
+      colabMemberSaving = false;
+      emailEl.value = '';
+      cbmLoadMembers();
+      showToast('Member added', 'success');
+    })
+    .withFailureHandler(function(err) {
+      colabMemberSaving = false;
+      showToast('Failed to add: ' + escapeHtml(friendlyError(err)), 'error');
+    })
+    .addBoardMember(boardId, email, role);
+}
+
+/**
+ * cbmToggleRosterPicker — Load and toggle the class roster picker
+ */
+function cbmToggleRosterPicker() {
+  var container = document.getElementById('cbmRosterPickerContainer');
+  if (!container || !colabBoardViewData) return;
+  var toggleBtn = document.querySelector('.cbm-roster-toggle');
+  // If already showing, hide it
+  if (container.innerHTML) {
+    container.innerHTML = '';
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  var classId = colabBoardViewData.board.classId;
+  if (!classId) return;
+  container.innerHTML = '<div style="padding:8px;color:#94a3b8;">Loading roster\u2026</div>';
+  getCachedRoster(classId, function(roster) {
+    if (!colabMemberManagerOpen) return;
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+    var html = '<div class="cbm-roster-picker">';
+    var count = 0;
+    for (var i = 0; i < roster.length; i++) {
+      var r = roster[i];
+      if (r.status === 'removed') continue;
+      var studentEmail = r.studentEmail || r.email || '';
+      if (!studentEmail || cbmIsExistingMember(studentEmail)) continue;
+      var studentName = r.studentName || r.name || studentEmail.split('@')[0];
+      html += '<label class="cbm-roster-item">';
+      html += '<input type="checkbox" class="cbm-roster-check" data-email="' + escapeHtml(studentEmail) + '">';
+      html += '<span>' + escapeHtml(studentName) + ' <span style="color:#94a3b8;">(' + escapeHtml(studentEmail) + ')</span></span>';
+      html += '</label>';
+      count++;
+    }
+    if (count === 0) {
+      html += '<div style="padding:8px;color:#94a3b8;">All students are already members.</div>';
+    }
+    html += '</div>';
+    if (count > 0) {
+      html += '<div class="cbm-manual-row" style="margin-top:8px;">';
+      html += '<select id="cbmRosterRole" class="cbm-role-select"><option value="member">Member</option><option value="viewer">Viewer</option><option value="moderator">Moderator</option></select>';
+      html += '<button class="cbm-add-btn" onclick="cbmAddSelectedRosterMembers()"' + (colabMemberSaving ? ' disabled' : '') + '>Add Selected</button>';
+      html += '</div>';
+    }
+    container.innerHTML = html;
+  }, function() {
+    container.innerHTML = '<div style="padding:8px;color:#ef4444;">Failed to load roster.</div>';
+  });
+}
+
+/**
+ * cbmAddSelectedRosterMembers — Add checked roster members in parallel
+ */
+function cbmAddSelectedRosterMembers() {
+  if (colabMemberSaving || !colabBoardViewData) return;
+  var checks = document.querySelectorAll('.cbm-roster-check:checked');
+  if (checks.length === 0) { showToast('Select at least one student', 'error'); return; }
+  var roleEl = document.getElementById('cbmRosterRole');
+  var role = roleEl ? roleEl.value : 'member';
+  var boardId = colabBoardViewData.board.boardId;
+  var emails = [];
+  for (var i = 0; i < checks.length; i++) {
+    emails.push(checks[i].getAttribute('data-email'));
+  }
+  colabMemberSaving = true;
+  var completed = 0;
+  var failed = 0;
+  var total = emails.length;
+  for (var j = 0; j < emails.length; j++) {
+    (function(email) {
+      google.script.run
+        .withSuccessHandler(function() {
+          completed++;
+          if (completed + failed >= total) {
+            colabMemberSaving = false;
+            cbmLoadMembers();
+            if (failed > 0) {
+              showToast('Added ' + completed + ', ' + failed + ' failed', 'error');
+            } else {
+              showToast('Added ' + completed + ' member' + (completed !== 1 ? 's' : ''), 'success');
+            }
+          }
+        })
+        .withFailureHandler(function() {
+          failed++;
+          if (completed + failed >= total) {
+            colabMemberSaving = false;
+            cbmLoadMembers();
+            showToast('Added ' + completed + ', ' + failed + ' failed', 'error');
+          }
+        })
+        .addBoardMember(boardId, email, role);
+    })(emails[j]);
+  }
+}
+
+
+// ================================================
+// BOARD SETTINGS (from board view)
+// ================================================
+
+function colabOpenSettingsFromBoard() {
+  var data = colabBoardViewData;
+  if (!data || !data.board) return;
+  var board = data.board;
+  var boardId = String(board.boardId);
+
+  // Shallow copy so edits don't mutate live data
+  var copy = {};
+  var keys = ['boardId', 'title', 'description', 'boardType', 'layoutMode',
+    'postApproval', 'maxPostsPerStudent', 'allowAnonymous', 'defaultColumnsJson'];
+  for (var i = 0; i < keys.length; i++) {
+    copy[keys[i]] = board[keys[i]] !== undefined ? board[keys[i]] : '';
+  }
+
+  // Capture trigger for focus return
+  var triggerBtn = document.querySelector('.colab-settings-btn');
+  colabSettingsTriggerEl = triggerBtn || null;
+
+  colabSettingsData = { boardId: boardId, board: copy, source: 'boardView' };
+  colabSettingsOpen = true;
+  colabInitSettingsColumns(copy);
+  colabRenderSettingsModal();
+}
+
+</script>

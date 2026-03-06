@@ -1,0 +1,277 @@
+<style>
+/* ================================================
+   STUDENT PROGRESS ANALYTICS STYLES (spa- prefix)
+   ================================================ */
+
+/* Overview summary cards (top of student progress) */
+.spa-overview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.spa-overview-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+
+.spa-overview-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #667eea;
+  line-height: 1.2;
+}
+
+.spa-overview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 4px;
+}
+
+/* Map card clickable enhancement */
+.spa-map-card-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.spa-map-card-clickable:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  transform: translateY(-1px);
+}
+
+/* Class average on map card */
+.spa-class-avg {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* Completion ring (conic gradient) */
+.spa-ring-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.spa-ring {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.spa-ring-inner {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spa-ring-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+}
+
+/* Detail section headers */
+.spa-detail-section {
+  margin-bottom: 16px;
+}
+
+.spa-detail-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* SBAR strand bars */
+.spa-sbar-section {
+  margin-bottom: 16px;
+}
+
+.spa-sbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.spa-sbar-label {
+  width: 30px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.spa-sbar-bar {
+  flex: 1;
+  height: 14px;
+  background: #f1f5f9;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.spa-sbar-fill {
+  height: 100%;
+  border-radius: 7px;
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.spa-sbar-fill.ku { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.spa-sbar-fill.tt { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.spa-sbar-fill.c  { background: linear-gradient(90deg, #10b981, #34d399); }
+
+.spa-sbar-value {
+  width: 50px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  text-align: right;
+}
+
+/* Hex list (scrollable) */
+.spa-hex-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.spa-hex-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+}
+
+.spa-hex-item:last-child {
+  border-bottom: none;
+}
+
+.spa-hex-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.spa-hex-label {
+  flex: 1;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spa-hex-score {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.spa-hex-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  text-transform: capitalize;
+}
+
+.spa-hex-status.completed { background: #d1fae5; color: #065f46; }
+.spa-hex-status.mastered { background: #a7f3d0; color: #047857; }
+.spa-hex-status.in_progress { background: #dbeafe; color: #1e40af; }
+.spa-hex-status.not_started { background: #f1f5f9; color: #94a3b8; }
+.spa-hex-status.locked { background: #f1f5f9; color: #94a3b8; }
+
+/* Status breakdown mini-bars */
+.spa-status-breakdown {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.spa-status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.spa-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.spa-status-dot.completed { background: #10b981; }
+.spa-status-dot.mastered { background: #059669; }
+.spa-status-dot.in_progress { background: #3b82f6; }
+.spa-status-dot.not_started { background: #cbd5e1; }
+
+/* SBAR loading container in detail panel */
+.spa-sbar-container {
+  min-height: 0;
+}
+
+/* ================================================
+   TEACHER PREVIEW VIEW SELECTOR (tpv- prefix)
+   ================================================ */
+
+.tpv-selector-bar {
+  display: flex;
+  gap: 16px;
+  padding: 16px 24px;
+  background: #fef3c7;
+  border-bottom: 1px solid #fde68a;
+  align-items: flex-end;
+}
+
+.tpv-selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tpv-selector-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #92400e;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tpv-selector-group select {
+  padding: 6px 10px;
+  border: 1px solid #fbbf24;
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 200px;
+  background: white;
+}
+</style>
